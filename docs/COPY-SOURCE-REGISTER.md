@@ -1,0 +1,35 @@
+# Registre des textes
+
+Date du contrôle : 23 juillet 2026
+
+## Règle
+
+- Les promesses de marque et descriptions commerciales publiées proviennent des contenus transmis par AJ Luxury.
+- Les données produit sont limitées aux informations confirmées par AJ Luxury.
+- Les textes créés pour la navigation ou pour signaler une fonction de maquette restent des libellés d’interface, pas des prises de parole de la marque.
+- Toute nouvelle proposition éditoriale doit être présentée hors du site avec la mention « piste à valider ».
+
+## Contenus AJ Luxury repris
+
+- « Reveal Your Inner Beauty »
+- « Le véritable luxe commence par ce que l’on porte au plus près de soi. »
+- « Le confort est une véritable source de confiance en soi. »
+- « Chaque détail compte. »
+- Les trois descriptions Apollon transmises pour Pourpre Impérial, Rose Velours et Lilas Céleste.
+- Les caractéristiques transmises : coupe boxer classique, 94 % modal, 6 % élasthanne, toucher doux et soyeux, matière respirante et confortable, ceinture premium de 3,5 cm, logo métallique AJ Luxury et maintien optimal au quotidien.
+
+## Données factuelles présentées
+
+- Un modèle Apollon décliné en trois coloris.
+- Coloris : Pourpre Impérial, Rose Velours et Lilas Céleste.
+- Tailles : S, M, L et XL.
+- Prix indiqué « à confirmer » tant qu’il n’est pas validé.
+- Les quantités de stock restent des données internes à la maquette commerciale.
+
+## Libellés d’interface
+
+Les éléments comme « Voir les trois coloris », « Ajouter au panier », « Compte », « Panier », « Retour en haut » ou les mentions « démonstration » servent uniquement à rendre la maquette navigable et à signaler ce qui n’est pas encore actif.
+
+## Formulation retirée
+
+- « Le confort comme signature » : proposition éditoriale non fournie par AJ Luxury, retirée du site.
