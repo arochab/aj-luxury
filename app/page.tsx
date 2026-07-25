@@ -1,7 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import MetallicField from "./components/MetallicField";
-import ProceduralDuo from "./components/ProceduralDuo";
+import HeroVideo from "./components/HeroVideo";
 import StoreFooter from "./components/StoreFooter";
 import StoreHeader from "./components/StoreHeader";
 import { getProducts } from "../lib/products";
@@ -41,23 +41,7 @@ export default function Home() {
     <main className="aj-home">
       <section className="aj-film" id="accueil" aria-label="Introduction AJ Luxury">
         <StoreHeader />
-        <div className="aj-film__metal" aria-hidden="true">
-        </div>
-        <div className="aj-film__hero-video" aria-hidden="true">
-          <video
-            autoPlay
-            loop
-            muted
-            playsInline
-            preload="auto"
-          >
-            <source src="/videos/aj-luxury-hero-loop.mp4" type="video/mp4" />
-          </video>
-        </div>
-        <ProceduralDuo />
-        <div className="aj-film__liquid-overlay" aria-hidden="true">
-          <MetallicField />
-        </div>
+        <HeroVideo />
         <div className="aj-film__grade" aria-hidden="true" />
 
         <div className="aj-film__signature">
