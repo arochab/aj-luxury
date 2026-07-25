@@ -43,6 +43,17 @@ export default function Home() {
         <StoreHeader />
         <div className="aj-film__metal" aria-hidden="true">
         </div>
+        <div className="aj-film__hero-video" aria-hidden="true">
+          <video
+            autoPlay
+            loop
+            muted
+            playsInline
+            preload="auto"
+          >
+            <source src="/videos/aj-luxury-hero-loop.mp4" type="video/mp4" />
+          </video>
+        </div>
         <ProceduralDuo />
         <div className="aj-film__liquid-overlay" aria-hidden="true">
           <MetallicField />

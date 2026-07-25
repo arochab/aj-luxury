@@ -41,9 +41,10 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
   assert.match(html, /6% élasthanne/);
   assert.match(html, /aj-film__living-duo/);
   assert.match(html, /<canvas/i);
+  assert.match(html, /videos\/aj-luxury-hero-loop\.mp4/);
   assert.doesNotMatch(
     html,
-    /<video|pika|Signature 01|Contour 02|Ligne 03|Motion 04|Libre 05|iStock|Getty/i,
+    /pika|Signature 01|Contour 02|Ligne 03|Motion 04|Libre 05|iStock|Getty/i,
   );
 });
 

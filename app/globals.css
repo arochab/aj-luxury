@@ -2842,6 +2842,7 @@ footer:not([class]) > p {
 }
 
 .aj-film__metal,
+.aj-film__hero-video,
 .aj-film__living-duo,
 .aj-film__shot,
 .aj-film__grade {
@@ -2869,6 +2870,21 @@ footer:not([class]) > p {
   mix-blend-mode: screen;
 }
 
+.aj-film__hero-video {
+  z-index: -4;
+  display: block;
+  background: #070709;
+}
+
+.aj-film__hero-video video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center center;
+  filter: contrast(1.06) brightness(0.86) saturate(0.86);
+}
+
 .aj-film__living-duo {
   z-index: -4;
   top: 50%;
@@ -2882,6 +2898,12 @@ footer:not([class]) > p {
   overflow: hidden;
   background: transparent;
   transform: translate(-50%, -50%);
+}
+
+@media (min-width: 761px) {
+  .aj-film__living-duo {
+    display: none;
+  }
 }
 
 .aj-film__duo-source--mobile {
@@ -3654,6 +3676,10 @@ footer:not([class]) > p {
 }
 
 @media (max-width: 760px) {
+  .aj-film__hero-video {
+    display: none;
+  }
+
   .aj-home {
     --aj-gutter: 16px;
   }
