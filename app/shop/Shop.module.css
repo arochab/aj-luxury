@@ -11,30 +11,42 @@
 }
 
 .intro {
-  min-height: 68vh;
-  padding: clamp(7rem, 14vh, 11rem) clamp(1.25rem, 4vw, 4.5rem) 3rem;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
+  position: relative;
+  min-height: clamp(13.5rem, 27vh, 17rem);
+  padding: clamp(2.5rem, 4.5vh, 3.5rem) clamp(1.25rem, 4vw, 4.5rem);
+  display: grid;
+  align-items: end;
+  overflow: hidden;
   border-bottom: 1px solid var(--line);
+  background: #d7d7d7;
+  isolation: isolate;
+}
+
+.intro::after {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
   background:
-    radial-gradient(circle at 83% 22%, rgba(255, 255, 255, 0.95), transparent 32%),
-    linear-gradient(132deg, #dedede 0%, #f5f5f3 42%, #c6c7ca 100%);
+    linear-gradient(90deg, rgba(245, 245, 243, 0.96) 0 40%, rgba(245, 245, 243, 0.72) 63%, rgba(245, 245, 243, 0.28)),
+    linear-gradient(0deg, rgba(243, 243, 241, 0.48), transparent 60%);
+  content: "";
 }
 
-.introTopline,
-.collectionHeader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 2rem;
+.introMetal {
+  position: absolute;
+  z-index: -2;
+  top: -54%;
+  right: -8%;
+  width: min(62vw, 920px);
+  height: 210%;
+  opacity: 0.82;
+  filter: contrast(1.32) saturate(0.32) brightness(1.18);
+  transform: rotate(-7deg);
 }
 
-.introTopline p,
 .eyebrow,
-.collectionHeader > p,
-.model,
-.specifications dt {
+.meta,
+.model {
   margin: 0;
   font-size: 0.66rem;
   font-weight: 700;
@@ -44,33 +56,30 @@
 
 .introCopy {
   display: grid;
-  grid-template-columns: minmax(9rem, 0.55fr) minmax(17rem, 1.45fr);
+  grid-template-columns: auto minmax(17rem, 1fr) auto;
   align-items: end;
-  gap: clamp(1.5rem, 5vw, 6rem);
+  gap: clamp(1.5rem, 4vw, 4rem);
 }
 
 .introCopy h1 {
   grid-column: 2;
   margin: 0;
-  font-size: clamp(4.25rem, 11vw, 10.5rem);
+  font-size: clamp(4rem, 7vw, 7rem);
   font-weight: 400;
-  line-height: 0.78;
+  line-height: 0.82;
   letter-spacing: -0.075em;
 }
 
 .introCopy > .eyebrow {
   grid-column: 1;
   grid-row: 1;
-  padding-bottom: 0.7rem;
+  padding-bottom: 0.62rem;
 }
 
-.lede {
-  grid-column: 2;
-  max-width: 35rem;
-  margin: 2rem 0 0 auto;
-  color: #3e3e43;
-  font-size: clamp(0.9rem, 1.3vw, 1.08rem);
-  line-height: 1.65;
+.meta {
+  grid-column: 3;
+  padding-bottom: 0.62rem;
+  color: #4f4f54;
 }
 
 .catalogBar {
@@ -130,16 +139,15 @@
 }
 
 .collection {
-  padding: clamp(4.5rem, 9vw, 9rem) clamp(1.25rem, 4vw, 4.5rem);
+  padding: clamp(0.5rem, 0.8vw, 0.8rem);
 }
 
 .collectionHeader {
   align-items: end;
-  margin-bottom: clamp(2.5rem, 5vw, 5rem);
+  margin-bottom: clamp(2.5rem, 3.5vw, 4rem);
 }
 
-.collectionHeader h2,
-.material h2 {
+.collectionHeader h2 {
   margin: 0.45rem 0 0;
   font-size: clamp(2.5rem, 5vw, 5.5rem);
   font-weight: 400;
@@ -189,7 +197,6 @@
   pointer-events: none;
 }
 
-.cardIndex,
 .discover {
   position: absolute;
   z-index: 1;
@@ -200,10 +207,6 @@
   text-transform: uppercase;
 }
 
-.cardIndex {
-  left: 1.2rem;
-}
-
 .discover {
   right: 1.2rem;
   padding-bottom: 0.3rem;
@@ -211,7 +214,7 @@
 }
 
 .productDetails {
-  min-height: 9.5rem;
+  min-height: 7.5rem;
   padding: 1.4rem 1.3rem 1.2rem;
   display: flex;
   align-items: flex-start;
@@ -247,80 +250,9 @@
   height: 1rem;
 }
 
-.specifications {
-  margin: 0;
-  padding: 1.2rem 1.3rem 1.5rem;
-}
-
-.specifications div {
-  padding: 0.7rem 0;
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  border-bottom: 1px solid var(--line);
-}
-
-.specifications dd {
-  margin: 0;
-  color: #515157;
-  font-size: 0.74rem;
-  text-align: right;
-}
-
-.material {
-  min-height: 72vh;
-  padding: clamp(4rem, 8vw, 8rem) clamp(1.25rem, 4vw, 4.5rem);
-  display: grid;
-  grid-template-columns: 1fr minmax(18rem, 0.9fr);
-  grid-template-rows: 1fr auto;
-  gap: 3rem;
-  background:
-    radial-gradient(circle at 75% 15%, rgba(255, 255, 255, 0.18), transparent 30%),
-    linear-gradient(145deg, #0c0c0e, #26272a 55%, #111114);
-  color: #f3f3f1;
-}
-
-.materialNumber {
-  margin: 0;
-  align-self: start;
-  color: transparent;
-  font-size: clamp(4rem, 12vw, 12rem);
-  font-weight: 400;
-  letter-spacing: -0.09em;
-  line-height: 0.8;
-  background: linear-gradient(112deg, #76777a, #fff 47%, #77787b);
-  background-clip: text;
-}
-
-.material > div {
-  align-self: center;
-}
-
-.material > div > p:last-child {
-  max-width: 32rem;
-  margin: 2rem 0 0;
-  color: #b9b9bc;
-  font-size: 0.92rem;
-  line-height: 1.7;
-}
-
-.material > a {
-  grid-column: 2;
-  width: max-content;
-  padding-bottom: 0.4rem;
-  border-bottom: 1px solid currentColor;
-  color: inherit;
-  font-size: 0.66rem;
-  font-weight: 700;
-  letter-spacing: 0.15em;
-  text-decoration: none;
-  text-transform: uppercase;
-}
-
 .catalogBar a:focus-visible,
 .productVisual:focus-visible,
-.productDetails h3 a:focus-visible,
-.material > a:focus-visible {
+.productDetails h3 a:focus-visible {
   outline: 2px solid #8b8c90;
   outline-offset: 4px;
 }
@@ -338,25 +270,41 @@
 
 @media (max-width: 860px) {
   .intro {
-    min-height: 61vh;
+    min-height: 15rem;
+    padding-top: 5.5rem;
+    padding-bottom: 2rem;
   }
 
   .introCopy {
     grid-template-columns: 1fr;
+    gap: 0.85rem;
   }
 
   .introCopy h1,
   .introCopy > .eyebrow,
-  .lede {
+  .meta {
     grid-column: 1;
   }
 
   .introCopy > .eyebrow {
     grid-row: auto;
+    padding: 0;
   }
 
-  .lede {
-    margin-left: 0;
+  .introCopy h1 {
+    grid-row: auto;
+  }
+
+  .meta {
+    padding: 0;
+  }
+
+  .introMetal {
+    top: -30%;
+    right: -40%;
+    width: 100vw;
+    height: 170%;
+    opacity: 0.66;
   }
 
   .catalogBar {
@@ -370,11 +318,16 @@
     width: 100%;
     overflow-x: auto;
     padding-bottom: 0.2rem;
+    scrollbar-width: none;
+  }
+
+  .catalogBar ul::-webkit-scrollbar {
+    display: none;
   }
 
   .productGrid {
-    grid-template-columns: 1fr;
-    gap: 1.2rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
     border: 0;
     background: transparent;
   }
@@ -391,27 +344,17 @@
     object-position: center 16%;
   }
 
-  .material {
-    grid-template-columns: 1fr;
-  }
-
-  .material > a {
-    grid-column: 1;
-  }
 }
 
 @media (max-width: 540px) {
   .intro {
-    min-height: 58vh;
-    padding-top: 6.5rem;
-  }
-
-  .introTopline p:last-child {
-    display: none;
+    min-height: 13.5rem;
+    padding-top: 5rem;
+    padding-bottom: 1.55rem;
   }
 
   .introCopy h1 {
-    font-size: clamp(3.8rem, 22vw, 6.5rem);
+    font-size: clamp(3.8rem, 19vw, 5.2rem);
   }
 
   .catalogBar ul {
@@ -427,13 +370,19 @@
     flex-direction: column;
   }
 
+  .collection {
+    padding: 5px;
+  }
+
+  .productGrid {
+    grid-template-columns: 1fr;
+    gap: 5px;
+  }
+
   .productVisual {
     aspect-ratio: 0.78;
   }
 
-  .material {
-    min-height: 65vh;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {

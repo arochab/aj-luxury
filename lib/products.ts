@@ -25,7 +25,7 @@ export type Product = {
 const benefits = [
   {
     title: "Toucher doux et soyeux",
-    text: "Composition : 94 % modal – 6 % élasthanne.",
+    text: "Un toucher doux et soyeux au contact de la peau.",
   },
   {
     title: "Matière respirante et confortable",
@@ -46,12 +46,12 @@ export const products: Product[] = [
     color: "Pourpre Impérial",
     tone: "Profond et sophistiqué",
     swatch: "#7d0f52",
-    image: "/images/client/product-card-pourpre.webp",
+    image: "/images/client/raw/product-card-pourpre.webp",
     gallery: [
-      "/images/client/product-card-pourpre.webp",
-      "/images/client/product-pourpre-detail.webp",
-      "/images/client/product-pourpre-back.webp",
-      "/images/client/product-pourpre-alt.webp",
+      "/images/client/raw/product-card-pourpre.webp",
+      "/images/client/raw/product-pourpre-detail.webp",
+      "/images/client/raw/product-pourpre-back.webp",
+      "/images/client/raw/product-pourpre-alt.webp",
     ],
     tagline: "Profond et sophistiqué",
     description:
@@ -71,12 +71,12 @@ export const products: Product[] = [
     color: "Rose Velours",
     tone: "Doux et raffiné",
     swatch: "#dda9bd",
-    image: "/images/client/product-rose-profile.webp",
+    image: "/images/client/raw/product-rose-profile.webp",
     gallery: [
-      "/images/client/product-rose-profile.webp",
-      "/images/client/product-card-rose.webp",
-      "/images/client/product-rose-detail.webp",
-      "/images/client/product-rose-front.webp",
+      "/images/client/raw/product-rose-profile.webp",
+      "/images/client/raw/product-card-rose.webp",
+      "/images/client/raw/product-rose-detail.webp",
+      "/images/client/raw/product-rose-front.webp",
     ],
     tagline: "Doux et raffiné",
     description:
@@ -96,13 +96,13 @@ export const products: Product[] = [
     color: "Lilas Céleste",
     tone: "Délicat et lumineux",
     swatch: "#a9abd9",
-    image: "/images/client/product-lilas-model.webp",
+    image: "/images/client/raw/product-lilas-model.webp",
     gallery: [
-      "/images/client/product-lilas-model.webp",
+      "/images/client/raw/product-lilas-model.webp",
       "/images/client/editorial-lilas-chair.webp",
-      "/images/client/product-lilas-detail.webp",
-      "/images/client/product-lilas-back.webp",
-      "/images/client/product-lilas-front.webp",
+      "/images/client/raw/product-lilas-detail.webp",
+      "/images/client/raw/product-lilas-back.webp",
+      "/images/client/raw/product-lilas-front.webp",
     ],
     tagline: "Délicat et lumineux",
     description:

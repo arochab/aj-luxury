@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
-import { getProducts, sizes } from "../../lib/products";
+import { getProducts } from "../../lib/products";
+import MetallicField from "../components/MetallicField";
 import StoreFooter from "../components/StoreFooter";
 import StoreHeader from "../components/StoreHeader";
 import styles from "./Shop.module.css";
@@ -19,52 +20,17 @@ export default function ShopPage() {
     <main className={styles.shop}>
       <StoreHeader />
       <section className={styles.intro} aria-labelledby="shop-title">
-        <div className={styles.introTopline}>
-          <p>AJ Luxury</p>
-          <p>{products.length} coloris</p>
+        <div className={styles.introMetal} aria-hidden="true">
+          <MetallicField motion="slow" variant="silver" />
         </div>
-
         <div className={styles.introCopy}>
-          <p className={styles.eyebrow}>Collection Apollon</p>
-          <h1 id="shop-title">Boutique</h1>
-          <p className={styles.lede}>
-            Le modèle Apollon est décliné en trois coloris. Sa coupe boxer
-            classique en 94&nbsp;% modal et 6&nbsp;% élasthanne est disponible
-            du S au XL.
-          </p>
+          <p className={styles.eyebrow}>Boutique</p>
+          <h1 id="shop-title">Apollon</h1>
+          <p className={styles.meta}>{products.length} coloris</p>
         </div>
       </section>
 
-      <nav className={styles.catalogBar} aria-label="Navigation du catalogue">
-        <p>
-          <span>Collection</span>
-          <strong>Apollon</strong>
-        </p>
-        <ul>
-          {products.map((product) => (
-            <li key={product.slug}>
-              <a href={`#${product.slug}`}>
-                <span
-                  className={styles.swatch}
-                  style={{ backgroundColor: product.swatch }}
-                  aria-hidden="true"
-                />
-                {product.name}
-              </a>
-            </li>
-          ))}
-        </ul>
-      </nav>
-
-      <section className={styles.collection} aria-labelledby="collection-title">
-        <header className={styles.collectionHeader}>
-          <div>
-            <p className={styles.eyebrow}>Le modèle Apollon</p>
-            <h2 id="collection-title">Les trois coloris</h2>
-          </div>
-          <p>{products.length} produits</p>
-        </header>
-
+      <section className={styles.collection} aria-label="Les coloris Apollon">
         <div className={styles.productGrid}>
           {products.map((product, index) => (
             <article
@@ -85,9 +51,6 @@ export default function ShopPage() {
                   sizes="(max-width: 760px) 100vw, 33vw"
                   priority={index === 0}
                 />
-                <span className={styles.cardIndex}>
-                  {String(index + 1).padStart(2, "0")}
-                </span>
                 <span className={styles.discover}>Découvrir</span>
               </Link>
 
@@ -107,33 +70,9 @@ export default function ShopPage() {
                   aria-label={`Coloris ${product.name}`}
                 />
               </div>
-
-              <dl className={styles.specifications}>
-                <div>
-                  <dt>Matière</dt>
-                  <dd>94 % modal, 6 % élasthanne</dd>
-                </div>
-                <div>
-                  <dt>Tailles</dt>
-                  <dd>{sizes.join(" · ")}</dd>
-                </div>
-              </dl>
             </article>
           ))}
         </div>
-      </section>
-
-      <section className={styles.material} aria-label="Matière et finition">
-        <p className={styles.materialNumber}>94 % modal</p>
-        <div>
-          <p className={styles.eyebrow}>La matière</p>
-          <h2>Modal et élasthanne</h2>
-          <p>
-            Un toucher doux et soyeux, une matière respirante et une ceinture
-            premium de 3,5&nbsp;cm ornée du logo métallique AJ Luxury.
-          </p>
-        </div>
-        <Link href="/#matiere">Découvrir la matière</Link>
       </section>
       <StoreFooter />
     </main>

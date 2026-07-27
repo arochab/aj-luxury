@@ -66,8 +66,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
         <p>{product.name}</p>
         <h2>{product.tagline}</h2>
         <p>
-          Coupe boxer classique. Composition : 94 % modal – 6 % élasthanne.
-          Ceinture de 3,5 cm. Logo métallique AJ Luxury.
+          Coupe boxer classique. Ceinture de 3,5 cm. Logo métallique AJ Luxury.
         </p>
       </section>
 
@@ -89,9 +88,12 @@ export default async function ProductPage({ params }: ProductPageProps) {
         <div className="product-information__details">
           <details open>
             <summary>Détails & composition</summary>
+            <p className="product-information__composition">
+              94 % modal, 6 % élasthanne
+            </p>
             <p>
-              Coupe boxer classique. 94% modal et 6% élasthanne. Ceinture
-              élastique premium de 3,5 cm avec logo métallique AJ Luxury.
+              Coupe boxer classique. Ceinture élastique premium de 3,5 cm avec
+              logo métallique AJ Luxury.
             </p>
           </details>
           <details>

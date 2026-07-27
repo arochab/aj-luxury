@@ -11,9 +11,7 @@ type StoreHeaderProps = {
 
 const navigation = [
   { href: "/shop", label: "Boutique" },
-  { href: "/#collection", label: "Apollon" },
-  { href: "/#matiere", label: "La matière" },
-  { href: "/#histoire", label: "La maison" },
+  { href: "/#histoire", label: "Notre histoire" },
 ];
 
 const accountLinks = [

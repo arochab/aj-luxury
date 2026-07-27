@@ -1,35 +1,35 @@
 import Image from "next/image";
 import Link from "next/link";
 import MetallicField from "./components/MetallicField";
-import HeroVideo from "./components/HeroVideo";
+import HeroComposition from "./components/HeroComposition";
 import StoreFooter from "./components/StoreFooter";
 import StoreHeader from "./components/StoreHeader";
 import { getProducts } from "../lib/products";
 
 const editorialImages = [
   {
-    src: "/images/client/hero-pourpre-model.webp",
-    alt: "Apollon Pourpre Impérial porté par un mannequin",
+    src: "/images/client/editorial-pourpre-chair.webp",
+    alt: "Apollon Pourpre Impérial porté par Jérémy",
     className: "aj-moodboard__item--wide",
   },
   {
-    src: "/images/client/editorial-lilas-chair.webp",
-    alt: "Apollon Lilas Céleste porté dans une composition éditoriale",
+    src: "/images/client/hero-pourpre-model.webp",
+    alt: "Apollon Pourpre Impérial porté par Alex",
     className: "aj-moodboard__item--portrait",
   },
   {
-    src: "/images/client/editorial-pourpre-chair.webp",
-    alt: "Apollon Pourpre Impérial dans une composition éditoriale",
+    src: "/images/client/campaign-duo-lilas-seated.webp",
+    alt: "Jérémy et Alex portant Apollon Lilas Céleste",
     className: "aj-moodboard__item--tall",
   },
   {
-    src: "/images/client/product-rose-front.webp",
-    alt: "Boxer Apollon Rose Velours porté, vue de face",
+    src: "/images/client/editorial-lilas-chair.webp",
+    alt: "Apollon Lilas Céleste porté par Jérémy",
     className: "aj-moodboard__item--portrait",
   },
   {
-    src: "/images/client/product-lilas-back.webp",
-    alt: "Boxer Apollon Lilas Céleste porté, vue arrière",
+    src: "/images/client/editorial-rose-profile.webp",
+    alt: "Apollon Rose Velours porté par Alex",
     className: "aj-moodboard__item--wide",
   },
 ];
@@ -41,7 +41,7 @@ export default function Home() {
     <main className="aj-home">
       <section className="aj-film" id="accueil" aria-label="Introduction AJ Luxury">
         <StoreHeader />
-        <HeroVideo />
+        <HeroComposition />
         <div className="aj-film__grade" aria-hidden="true" />
 
         <div className="aj-film__signature">
@@ -52,32 +52,29 @@ export default function Home() {
         </div>
       </section>
 
+      <div className="aj-section-break" aria-hidden="true" />
+
       <section className="aj-featured" id="apollon">
         <div className="aj-featured__metal" aria-hidden="true">
-          <MetallicField />
+          <MetallicField motion="still" variant="silver" />
         </div>
         <div className="aj-featured__glow" aria-hidden="true" />
-        <Link className="aj-featured__card" href="/products/pourpre">
+        <figure className="aj-featured__editorial">
           <div className="aj-featured__image">
             <Image
               unoptimized
-              src="/images/client/product-pourpre-front.webp"
-              alt="Boxer Apollon Pourpre Impérial porté"
+              src="/images/client/raw/product-pourpre-front.webp"
+              alt="Apollon Pourpre Impérial dans une composition éditoriale"
               fill
               sizes="(max-width: 760px) 86vw, 40vw"
             />
           </div>
-          <div className="aj-featured__caption">
-            <h1>Apollon</h1>
-            <strong>Découvrir ↗</strong>
-          </div>
-        </Link>
+        </figure>
       </section>
 
       <section className="aj-shop" id="collection">
         <div className="aj-shop__heading">
           <h2>Apollon</h2>
-          <p>Un modèle décliné en trois coloris.</p>
           <Link href="/shop">Voir toute la boutique</Link>
         </div>
 
@@ -115,73 +112,15 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="aj-duo" aria-label="Les deux mannequins AJ Luxury">
-        <figure>
-          <Image
-            unoptimized
-            src="/images/client/campaign-duo-lilas-seated.webp"
-            alt="Les deux mannequins portant Apollon Lilas Céleste"
-            fill
-            sizes="(max-width: 760px) 100vw, 50vw"
-          />
-        </figure>
-        <figure>
-          <Image
-            unoptimized
-            src="/images/client/campaign-duo-lilas-close.webp"
-            alt="Les deux mannequins portant Apollon Lilas Céleste, cadrage rapproché"
-            fill
-            sizes="(max-width: 760px) 100vw, 50vw"
-          />
-        </figure>
-      </section>
-
-      <section className="aj-detail" id="matiere">
-        <figure className="aj-detail__visual">
-          <Image
-            unoptimized
-            src="/images/client/product-pourpre-detail.webp"
-            alt="Détail de la ceinture premium et du logo métallique AJ Luxury"
-            fill
-            sizes="(max-width: 760px) 100vw, 63vw"
-          />
-        </figure>
-
-        <div className="aj-detail__copy">
-          <p className="aj-detail__eyebrow">Apollon</p>
-          <h2>94% modal<br />6% élasthanne</h2>
-          <p>
-            Une matière douce, légère et respirante, pensée pour offrir une
-            sensation de seconde peau.
-          </p>
-          <dl>
-            <div>
-              <dt>Ceinture</dt>
-              <dd>3,5 cm</dd>
-            </div>
-            <div>
-              <dt>Tailles</dt>
-              <dd>S à XL</dd>
-            </div>
-            <div>
-              <dt>Signature</dt>
-              <dd>Logo métallique AJ Luxury</dd>
-            </div>
-          </dl>
-          <Link href="/products/pourpre">Voir le produit</Link>
-        </div>
-      </section>
-
       <section className="aj-story" id="histoire">
         <div className="aj-story__metal" aria-hidden="true">
-          <MetallicField />
+          <MetallicField motion="slow" variant="dusk" />
         </div>
         <div className="aj-story__copy">
           <p>
             Chez AJ Luxury, nous sommes convaincus que le véritable luxe
             commence par ce que l’on porte au plus près de soi.
           </p>
-          <span>Reveal Your Inner Beauty</span>
         </div>
       </section>
 

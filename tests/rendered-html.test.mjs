@@ -37,11 +37,16 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
   assert.match(html, /Pourpre Impérial/);
   assert.match(html, /Rose Velours/);
   assert.match(html, /Lilas Céleste/);
-  assert.match(html, /94% modal/);
-  assert.match(html, /6% élasthanne/);
-  assert.match(html, /videos\/aj-luxury-hero-loop\.mp4/);
-  assert.match(html, /videos\/aj-luxury-hero-full-mobile\.mp4/);
-  assert.match(html, />Pause<\/button>/);
+  assert.match(html, /images\/client\/hero-duo-static\.webp/);
+  assert.match(html, /Figer le métal/);
+  assert.match(html, />Notre histoire</);
+  assert.doesNotMatch(html, /94\s*%\s*modal/i);
+  assert.doesNotMatch(html, /6\s*%\s*élasthanne/i);
+  assert.doesNotMatch(html, /Un modèle décliné en trois coloris/i);
+  assert.doesNotMatch(html, /videos\/aj-luxury-hero/i);
+  assert.doesNotMatch(html, /href="\/#collection"/);
+  assert.doesNotMatch(html, /href="\/#matiere"/);
+  assert.doesNotMatch(html, />La matière</);
   assert.doesNotMatch(html, /aj-film__living-duo|aj-film__liquid-overlay/);
   assert.doesNotMatch(
     html,
@@ -65,7 +70,7 @@ for (const [pathname, colorName] of productCases) {
     assert.match(html, new RegExp(colorName));
     assert.match(html, /Prix à confirmer/);
     assert.match(html, /Sélectionnez une taille/);
-    assert.match(html, /94% modal et 6% élasthanne/);
+    assert.match(html, /94\s*%\s*modal,\s*6\s*%\s*élasthanne/);
     assert.match(html, /ceinture de 3,5 cm/i);
     assert.doesNotMatch(html, /49,00|Prix de démonstration|iStock|Getty/i);
   });
@@ -80,7 +85,8 @@ test("server-renders the real boutique and its complete navigation", async () =>
   const response = await render("/shop");
   assert.equal(response.status, 200);
   const html = await response.text();
-  assert.match(html, /Les trois coloris/);
+  assert.match(html, /<h1[^>]*>Apollon<\/h1>/);
+  assert.match(html, /3(?:<!-- -->)? coloris/);
   assert.match(html, /Pourpre Impérial/);
   assert.match(html, /Rose Velours/);
   assert.match(html, /Lilas Céleste/);
@@ -90,6 +96,14 @@ test("server-renders the real boutique and its complete navigation", async () =>
   assert.match(html, /href="\/shipping-returns"/);
   assert.match(html, /href="\/privacy"/);
   assert.match(html, /href="\/terms"/);
+  assert.doesNotMatch(html, /94\s*%\s*modal/i);
+  assert.doesNotMatch(html, /6\s*%\s*élasthanne/i);
+  assert.doesNotMatch(html, /href="\/#matiere"/);
+  assert.doesNotMatch(html, /Les trois coloris|3 produits/);
+  assert.doesNotMatch(
+    html,
+    /<h[1-6][^>]*>(?:Collection Apollon|Les trois coloris|3 produits)<\/h[1-6]>/,
+  );
   assert.doesNotMatch(html, />\s*Best Seller\s*</i);
   assert.doesNotMatch(html, /\d+[,.]\d{2}\s*(?:€|EUR)/i);
 });
