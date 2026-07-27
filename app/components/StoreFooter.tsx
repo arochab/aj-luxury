@@ -47,6 +47,9 @@ export default function StoreFooter() {
               Informations
             </h3>
             <nav className={styles.footerLinks} aria-label="Liens informations">
+              <Link className={styles.footerLink} href="/notre-histoire">
+                Notre histoire
+              </Link>
               <Link className={styles.footerLink} href="/contact">
                 Contact
               </Link>

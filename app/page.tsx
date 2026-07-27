@@ -117,10 +117,13 @@ export default function Home() {
           <MetallicField motion="slow" variant="dusk" />
         </div>
         <div className="aj-story__copy">
-          <p>
-            Chez AJ Luxury, nous sommes convaincus que le véritable luxe
-            commence par ce que l’on porte au plus près de soi.
-          </p>
+          <div>
+            <p>
+              Chez AJ Luxury, nous sommes convaincus que le véritable luxe
+              commence par ce que l’on porte au plus près de soi.
+            </p>
+            <Link href="/notre-histoire">Découvrir notre histoire</Link>
+          </div>
         </div>
       </section>
 

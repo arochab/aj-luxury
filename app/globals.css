@@ -3447,6 +3447,22 @@ footer:not([class]) > p {
   line-height: 1.15;
 }
 
+.aj-story__copy > div {
+  display: grid;
+  max-width: 760px;
+  gap: 24px;
+}
+
+.aj-story__copy a {
+  width: fit-content;
+  padding-bottom: 5px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.74);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
 .aj-footer {
   display: grid;
   min-height: 190px;

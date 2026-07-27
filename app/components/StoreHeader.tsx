@@ -11,7 +11,7 @@ type StoreHeaderProps = {
 
 const navigation = [
   { href: "/shop", label: "Boutique" },
-  { href: "/#histoire", label: "Notre histoire" },
+  { href: "/notre-histoire", label: "Notre histoire" },
 ];
 
 const accountLinks = [
@@ -49,11 +49,7 @@ export default function StoreHeader({
               className={styles.navLink}
               href={item.href}
               key={item.label}
-              aria-current={
-                item.href === "/shop" && pathname === "/shop"
-                  ? "page"
-                  : undefined
-              }
+              aria-current={pathname === item.href ? "page" : undefined}
             >
               {item.label}
             </Link>

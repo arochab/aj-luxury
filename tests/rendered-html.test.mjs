@@ -108,6 +108,23 @@ test("server-renders the real boutique and its complete navigation", async () =>
   assert.doesNotMatch(html, /\d+[,.]\d{2}\s*(?:€|EUR)/i);
 });
 
+test("server-renders the complete AJ Luxury story", async () => {
+  const response = await render("/notre-histoire");
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /Notre histoire/);
+  assert.match(html, /Le point de départ/);
+  assert.match(html, /Une vision incarnée/);
+  assert.match(html, /Le premier chapitre/);
+  assert.match(html, /Notre définition du luxe/);
+  assert.match(html, /94\s*%\s*modal/);
+  assert.match(html, /6\s*%\s*élasthanne/);
+  assert.match(html, /campaign-duo-pourpre\.webp/);
+  assert.match(html, /campaign-duo-lilas-close\.webp/);
+  assert.match(html, /href="\/shop"/);
+  assert.doesNotMatch(html, /iStock|Getty|Lorem ipsum/i);
+});
+
 const informationCases = [
   ["/shipping-returns", /Livraison et retours/],
   ["/privacy", /Confidentialité/],
