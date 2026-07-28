@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
-import MetallicField from "../components/MetallicField";
 import StoreFooter from "../components/StoreFooter";
 import StoreHeader from "../components/StoreHeader";
 import styles from "./Story.module.css";
@@ -16,22 +15,21 @@ export default function NotreHistoirePage() {
   return (
     <main className={styles.page}>
       <section className={styles.hero} aria-labelledby="story-title">
-        <StoreHeader />
-        <div className={styles.heroMetal} aria-hidden="true">
-          <MetallicField motion="slow" variant="dusk" />
+        <div className={styles.heroTop}>
+          <StoreHeader variant="light" />
         </div>
         <figure className={styles.heroImage}>
           <Image
             unoptimized
             priority
-            src="/images/client/campaign-duo-pourpre.webp"
-            alt="Les deux fondateurs d’AJ Luxury portant le modèle Apollon"
+            src="/images/client/campaign-duo-lilas-close.webp"
+            alt="Jérémy et Alex portant Apollon Lilas Céleste, produit visible"
             fill
+            style={{ objectFit: "contain", objectPosition: "center bottom" }}
             sizes="(max-width: 760px) 100vw, 66vw"
           />
         </figure>
-        <div className={styles.heroGrade} aria-hidden="true" />
-        <div className={styles.heroCopy}>
+        <div className={styles.heroCopy} lang="fr">
           <p className={styles.eyebrow}>AJ Luxury</p>
           <h1 id="story-title">Notre histoire</h1>
           <blockquote>
@@ -40,7 +38,7 @@ export default function NotreHistoirePage() {
         </div>
       </section>
 
-      <section className={styles.origin} aria-labelledby="origin-title">
+      <section className={styles.origin} aria-labelledby="origin-title" lang="fr">
         <div>
           <p className={styles.sectionNumber}>01 · Le point de départ</p>
           <h2 className={styles.originLead} id="origin-title">
@@ -63,13 +61,14 @@ export default function NotreHistoirePage() {
         </div>
       </section>
 
-      <section className={styles.founders} aria-labelledby="founders-title">
+      <section className={styles.founders} aria-labelledby="founders-title" lang="fr">
         <figure className={styles.foundersVisual}>
           <Image
             unoptimized
-            src="/images/client/campaign-duo-lilas-close.webp"
-            alt="Les deux fondateurs et mannequins AJ Luxury"
+            src="/images/client/product-rose-model.webp"
+            alt="Alex portant Apollon Rose Velours, silhouette et produit visibles"
             fill
+            style={{ objectFit: "contain", objectPosition: "center bottom" }}
             sizes="(max-width: 760px) 100vw, 60vw"
           />
         </figure>
@@ -90,44 +89,9 @@ export default function NotreHistoirePage() {
         </div>
       </section>
 
-      <section className={styles.chapter} aria-labelledby="chapter-title">
-        <div className={styles.chapterCopy}>
-          <p className={styles.sectionNumber}>03 · Le premier chapitre</p>
-          <h2 id="chapter-title">Apollon</h2>
-          <p>
-            Un boxer masculin conçu pour réunir douceur, respirabilité, maintien
-            et liberté de mouvement, sans renoncer à une finition distinctive.
-          </p>
-          <dl className={styles.facts}>
-            <div>
-              <dt>Matière</dt>
-              <dd>94 % modal · 6 % élasthanne</dd>
-            </div>
-            <div>
-              <dt>Signature</dt>
-              <dd>Ceinture premium de 3,5 cm et logo métallique</dd>
-            </div>
-            <div>
-              <dt>Collection</dt>
-              <dd>Trois coloris · tailles S à XL</dd>
-            </div>
-          </dl>
-          <Link href="/shop">Découvrir Apollon</Link>
-        </div>
-        <figure className={styles.chapterVisual}>
-          <Image
-            unoptimized
-            src="/images/client/product-pourpre-detail.webp"
-            alt="Détail du boxer Apollon et de sa ceinture métallique AJ Luxury"
-            fill
-            sizes="(max-width: 760px) 100vw, 62vw"
-          />
-        </figure>
-      </section>
-
-      <section className={styles.definition} aria-labelledby="definition-title">
+      <section className={styles.definition} aria-labelledby="definition-title" lang="fr">
         <div className={styles.definitionCopy}>
-          <p className={styles.sectionNumber}>04 · Notre définition du luxe</p>
+          <p className={styles.sectionNumber}>03 · Notre définition du luxe</p>
           <h2 id="definition-title">
             Pas l’excès. La justesse des détails.
           </h2>
@@ -147,13 +111,16 @@ export default function NotreHistoirePage() {
       </section>
 
       <section className={styles.closing} aria-labelledby="closing-title">
-        <div className={styles.closingMetal} aria-hidden="true">
-          <MetallicField motion="slow" variant="silver" />
-        </div>
         <div className={styles.closingCopy}>
           <p>AJ Luxury</p>
           <h2 id="closing-title">Reveal Your Inner Beauty</h2>
           <Link href="/shop">Entrer dans la collection</Link>
+          <div className={styles.closingContacts} aria-label="Contacts AJ Luxury">
+            <a href="mailto:contact@ajluxurystore.com">
+              contact@ajluxurystore.com
+            </a>
+            <span>Instagram · compte officiel à confirmer</span>
+          </div>
         </div>
       </section>
 

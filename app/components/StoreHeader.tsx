@@ -3,31 +3,39 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import type { TranslationKey } from "@/lib/i18n/dictionaries";
+import SiteLanguageSwitcher from "./SiteLanguageSwitcher";
 import styles from "./StoreChrome.module.css";
 
 type StoreHeaderProps = {
-  variant?: "default" | "minimal";
+  variant?: "default" | "minimal" | "light";
 };
 
 const navigation = [
-  { href: "/shop", label: "Boutique" },
-  { href: "/notre-histoire", label: "Notre histoire" },
-];
+  { href: "/shop", labelKey: "nav.shop" },
+  { href: "/notre-histoire", labelKey: "nav.story" },
+] satisfies Array<{ href: string; labelKey: TranslationKey }>;
 
 const accountLinks = [
-  { href: "/account", label: "Compte" },
-  { href: "/cart", label: "Panier" },
-];
+  { href: "/account", labelKey: "nav.account" },
+  { href: "/cart", labelKey: "nav.cart" },
+] satisfies Array<{ href: string; labelKey: TranslationKey }>;
 
 export default function StoreHeader({
   variant = "default",
 }: StoreHeaderProps) {
   const pathname = usePathname();
+  const { t } = useI18n();
 
   return (
     <header
       className={`${styles.header} ${
-        variant === "minimal" ? styles.headerMinimal : ""
+        variant === "minimal"
+          ? styles.headerMinimal
+          : variant === "light"
+            ? styles.headerLight
+            : ""
       }`}
     >
       <Link className={styles.brand} href="/" aria-label="AJ Luxury, accueil">
@@ -43,31 +51,32 @@ export default function StoreHeader({
       </Link>
 
       {variant === "default" ? (
-        <nav className={styles.desktopNav} aria-label="Navigation principale">
+        <nav className={styles.desktopNav} aria-label={t("nav.mainLabel")}>
           {navigation.map((item) => (
             <Link
               className={styles.navLink}
               href={item.href}
-              key={item.label}
+              key={item.href}
               aria-current={pathname === item.href ? "page" : undefined}
             >
-              {item.label}
+              {t(item.labelKey)}
             </Link>
           ))}
           <span
             className={styles.socialPending}
-            aria-label="Instagram, lien officiel à confirmer"
-            title="Compte officiel à confirmer"
+            aria-label={t("nav.instagramPendingLabel")}
+            title={t("nav.instagramPendingTitle")}
           >
-            Instagram
+            {t("nav.instagram")}
           </span>
         </nav>
       ) : null}
 
       <div className={styles.actions}>
+        <SiteLanguageSwitcher placement="header" />
         {accountLinks.map((item) => (
-          <Link className={styles.actionLink} href={item.href} key={item.label}>
-            {item.label}
+          <Link className={styles.actionLink} href={item.href} key={item.href}>
+            {t(item.labelKey)}
           </Link>
         ))}
       </div>

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Manrope } from "next/font/google";
 import { headers } from "next/headers";
+import { I18nProvider } from "@/lib/i18n/I18nProvider";
 import "./globals.css";
 
 const manrope = Manrope({
@@ -42,8 +43,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="fr">
-      <body className={`${manrope.variable} antialiased`}>{children}</body>
+    <html lang="fr" suppressHydrationWarning>
+      <body className={`${manrope.variable} antialiased`}>
+        <I18nProvider>{children}</I18nProvider>
+      </body>
     </html>
   );
 }

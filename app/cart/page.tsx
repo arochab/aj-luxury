@@ -1,8 +1,11 @@
 import Image from "next/image";
 import Link from "next/link";
 import { createDemoCart } from "../../lib/commerce";
+import { getProduct } from "../../lib/products";
+import LocalizedPrice from "../components/LocalizedPrice";
 import StoreFooter from "../components/StoreFooter";
 import StoreHeader from "../components/StoreHeader";
+import { T } from "../../lib/i18n/TranslatedText";
 import styles from "./CommerceShell.module.css";
 
 export const metadata = {
@@ -18,18 +21,27 @@ export default async function CartPage({ searchParams }: CartPageProps) {
   const { variant } = await searchParams;
   const cart = await createDemoCart(variant);
   const selectedVariant = cart.lines[0]?.variant.id;
+  const subtotalCents = cart.lines.reduce(
+    (total, line) =>
+      total + (getProduct(line.variant.productSlug)?.priceCents ?? 0),
+    0,
+  );
 
   return (
     <main className={styles.shell}>
       <StoreHeader variant="minimal" />
       <aside className={styles.notice}>
-        Parcours de démonstration · aucune commande ne sera enregistrée
+        <T id="cart.demoNotice" />
       </aside>
 
       <div className={styles.main}>
         <section>
-          <p className={styles.eyebrow}>Panier · 1 article</p>
-          <h1 className={styles.title}>Votre sélection.</h1>
+          <p className={styles.eyebrow}>
+            <T id="cart.eyebrow" />
+          </p>
+          <h1 className={styles.title}>
+            <T id="cart.selectionTitle" />
+          </h1>
           {cart.lines.map((line) => (
             <article className={styles.line} key={line.id}>
               <div className={styles.lineImage}>
@@ -44,30 +56,40 @@ export default async function CartPage({ searchParams }: CartPageProps) {
               <div>
                 <h2>{line.variant.productName}</h2>
                 <p>
-                  {line.variant.color.name} · Taille {line.variant.size}
+                  {line.variant.color.name} · <T id="product.size" /> {line.variant.size}
                   <br />
-                  Référence {line.variant.sku}
+                  <T id="cart.reference" /> {line.variant.sku}
                 </p>
               </div>
-              <strong>Prix à confirmer</strong>
+              <strong>
+                <LocalizedPrice
+                  amountCents={
+                    getProduct(line.variant.productSlug)?.priceCents ?? null
+                  }
+                />
+              </strong>
             </article>
           ))}
         </section>
 
         <aside className={styles.summary}>
-          <p className={styles.eyebrow}>Récapitulatif</p>
-          <h2>Total estimé</h2>
+          <p className={styles.eyebrow}>
+            <T id="cart.summary" />
+          </p>
+          <h2>
+            <T id="cart.estimatedTotal" />
+          </h2>
           <div className={styles.row}>
-            <span>Sous-total</span>
-            <span>À confirmer</span>
+            <span><T id="cart.subtotal" /></span>
+            <span><LocalizedPrice amountCents={subtotalCents} /></span>
           </div>
           <div className={styles.row}>
-            <span>Livraison</span>
-            <span>À définir</span>
+            <span><T id="cart.shipping" /></span>
+            <span><T id="cart.toDefine" /></span>
           </div>
           <div className={`${styles.row} ${styles.total}`}>
-            <span>Total provisoire</span>
-            <span>À confirmer</span>
+            <span><T id="cart.provisionalTotal" /></span>
+            <span><LocalizedPrice amountCents={subtotalCents} /></span>
           </div>
           <Link
             className={styles.button}
@@ -77,7 +99,7 @@ export default async function CartPage({ searchParams }: CartPageProps) {
                 : "/checkout"
             }
           >
-            Simuler le checkout
+            <T id="cart.simulateCheckout" />
           </Link>
           <Link
             className={styles.secondary}
@@ -87,10 +109,10 @@ export default async function CartPage({ searchParams }: CartPageProps) {
                 : "/shop"
             }
           >
-            Modifier la sélection
+            <T id="cart.modifySelection" />
           </Link>
           <p className={styles.muted}>
-            Prix, livraison, taxes et conditions commerciales à confirmer.
+            <T id="cart.conditionsPending" />
           </p>
         </aside>
       </div>

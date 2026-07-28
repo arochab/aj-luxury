@@ -37,6 +37,8 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
   assert.match(html, /Pourpre Impérial/);
   assert.match(html, /Rose Velours/);
   assert.match(html, /Lilas Céleste/);
+  assert.match(html, /data-hero-fusion="v4"/);
+  assert.match(html, /data-hero-version="fusion-v4"/);
   assert.match(html, /images\/client\/hero-duo-static\.webp/);
   assert.match(html, /Figer le métal/);
   assert.match(html, />Notre histoire</);
@@ -55,12 +57,12 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
 });
 
 const productCases = [
-  ["/products/pourpre", "Pourpre Impérial"],
-  ["/products/rose-pale", "Rose Velours"],
-  ["/products/lilas-bleu-clair", "Lilas Céleste"],
+  ["/products/pourpre", "Pourpre Impérial", [26, 103, 87, 36]],
+  ["/products/rose-pale", "Rose Velours", [26, 103, 87, 36]],
+  ["/products/lilas-bleu-clair", "Lilas Céleste", [26, 102, 88, 36]],
 ];
 
-for (const [pathname, colorName] of productCases) {
+for (const [pathname, colorName, inventory] of productCases) {
   test(`server-renders ${pathname}`, async () => {
     const response = await render(pathname);
     assert.equal(response.status, 200);
@@ -68,11 +70,28 @@ for (const [pathname, colorName] of productCases) {
     const html = await response.text();
     assert.match(html, /Apollon/);
     assert.match(html, new RegExp(colorName));
-    assert.match(html, /Prix à confirmer/);
+    assert.match(html, /29,99(?:\s|&nbsp;|&#xA0;)*€/);
     assert.match(html, /Sélectionnez une taille/);
-    assert.match(html, /94\s*%\s*modal,\s*6\s*%\s*élasthanne/);
+    assert.match(
+      html,
+      /94\s*%\s*modal\s*(?:,|–|-|et)\s*6\s*%\s*élasthanne/,
+    );
     assert.match(html, /ceinture de 3,5 cm/i);
-    assert.doesNotMatch(html, /49,00|Prix de démonstration|iStock|Getty/i);
+    assert.match(html, /Description complète/);
+    assert.match(html, /Caractéristiques/);
+    assert.match(html, /Tailles et disponibilité/);
+    assert.match(html, /Agrandir la vue 1/);
+    for (const stock of inventory) {
+      assert.match(html, new RegExp(`${stock} en stock`));
+    }
+    assert.doesNotMatch(
+      html,
+      /Prix à confirmer|Tarif en cours de validation|49,00|Prix de démonstration|iStock|Getty/i,
+    );
+    assert.doesNotMatch(
+      html,
+      /product-story|benefit-grid|product-information/,
+    );
   });
 }
 
@@ -115,12 +134,11 @@ test("server-renders the complete AJ Luxury story", async () => {
   assert.match(html, /Notre histoire/);
   assert.match(html, /Le point de départ/);
   assert.match(html, /Une vision incarnée/);
-  assert.match(html, /Le premier chapitre/);
   assert.match(html, /Notre définition du luxe/);
-  assert.match(html, /94\s*%\s*modal/);
-  assert.match(html, /6\s*%\s*élasthanne/);
-  assert.match(html, /campaign-duo-pourpre\.webp/);
   assert.match(html, /campaign-duo-lilas-close\.webp/);
+  assert.match(html, /product-rose-model\.webp/);
+  assert.doesNotMatch(html, /Le premier chapitre/);
+  assert.doesNotMatch(html, /94\s*%\s*modal|6\s*%\s*élasthanne/);
   assert.match(html, /href="\/shop"/);
   assert.doesNotMatch(html, /iStock|Getty|Lorem ipsum/i);
 });
@@ -152,13 +170,14 @@ test("cart keeps the selected color and size", async () => {
   const html = await response.text();
   assert.match(html, /Rose Velours/);
   assert.match(html, /Taille[\s\S]*XL/);
-  assert.match(html, /Prix à confirmer/);
+  assert.match(html, /29,99(?:\s|&nbsp;|&#xA0;)*€/);
 
   const checkout = await render(
     "/checkout?variant=variant_boxer_rose-pale_xl",
   );
   const checkoutHtml = await checkout.text();
   assert.match(checkoutHtml, /Rose Velours/);
+  assert.match(checkoutHtml, /29,99(?:\s|&nbsp;|&#xA0;)*€/);
   assert.match(
     checkoutHtml,
     /\/cart\?variant=variant_boxer_rose-pale_xl/,
@@ -167,7 +186,7 @@ test("cart keeps the selected color and size", async () => {
 
 const commerceCases = [
   ["/cart", /aucune commande ne sera enregistrée/i],
-  ["/checkout", /aucun paiement, stockage ou envoi de données/i],
+  ["/checkout", /aucune commande n’est enregistrée/i],
   ["/account", /authentification non activée/i],
 ];
 

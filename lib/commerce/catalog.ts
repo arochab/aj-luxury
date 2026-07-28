@@ -25,8 +25,7 @@ export const launchVariants: ProductVariant[] = products.flatMap((product) =>
     size,
     imageUrl: product.image,
     price: {
-      // Valeur technique temporaire : aucun prix n'est affiché comme validé.
-      amountCents: 0,
+      amountCents: product.priceCents,
       currency: "EUR" as const,
     },
     availableForSale: product.inventory[size] > 0,

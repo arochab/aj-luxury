@@ -1,18 +1,19 @@
 import InfoPage from "../components/InfoPage";
+import { T } from "../../lib/i18n/TranslatedText";
 
 export const metadata = { title: "Contact | AJ Luxury" };
 
 export default function ContactPage() {
   return (
-    <InfoPage eyebrow="AJ Luxury" title="Nous contacter.">
+    <InfoPage eyebrow="AJ Luxury" title={<T id="contact.title" />}>
       <p>
-        L’adresse de contact et les horaires de réponse seront ajoutés après
-        validation par AJ Luxury.
+        <T id="contact.writeToUs" />{" "}
+        <a href="mailto:contact@ajluxurystore.com">
+          contact@ajluxurystore.com
+        </a>
       </p>
       <p>
-        Le formulaire de contact sera connecté uniquement lorsque sa
-        destination et les règles de traitement des demandes auront été
-        définies.
+        <T id="contact.instagramPending" />
       </p>
     </InfoPage>
   );

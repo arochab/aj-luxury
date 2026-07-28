@@ -1,8 +1,14 @@
+"use client";
+
 import Image from "next/image";
 import Link from "next/link";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import SiteLanguageSwitcher from "./SiteLanguageSwitcher";
 import styles from "./StoreChrome.module.css";
 
 export default function StoreFooter() {
+  const { t } = useI18n();
+
   return (
     <footer className={styles.footer}>
       <div className={styles.footerTop}>
@@ -18,55 +24,62 @@ export default function StoreFooter() {
           <h2 className={styles.footerTitle} id="footer-title">
             Reveal Your Inner Beauty
           </h2>
-          <p className={styles.footerCopy}>
+          <p className={styles.footerCopy} lang="fr">
             Sous-vêtements masculins conçus autour du confort, de la qualité et
             de la confiance en soi.
           </p>
+          <SiteLanguageSwitcher placement="footer" />
         </section>
 
         <div className={styles.footerColumns}>
           <section aria-labelledby="footer-boutique">
             <h3 className={styles.footerHeading} id="footer-boutique">
-              Boutique
+              {t("footer.shop")}
             </h3>
             <nav className={styles.footerLinks} aria-label="Liens boutique">
               <Link className={styles.footerLink} href="/shop">
-                Collection Apollon
+                {t("footer.collection")}
               </Link>
               <Link className={styles.footerLink} href="/account">
-                Mon compte
+                {t("footer.account")}
               </Link>
               <Link className={styles.footerLink} href="/shipping-returns">
-                Livraison et retours
+                {t("footer.shippingReturns")}
               </Link>
             </nav>
           </section>
 
           <section aria-labelledby="footer-informations">
             <h3 className={styles.footerHeading} id="footer-informations">
-              Informations
+              {t("footer.information")}
             </h3>
             <nav className={styles.footerLinks} aria-label="Liens informations">
               <Link className={styles.footerLink} href="/notre-histoire">
-                Notre histoire
+                {t("footer.story")}
               </Link>
               <Link className={styles.footerLink} href="/contact">
-                Contact
+                {t("footer.contact")}
               </Link>
+              <a
+                className={styles.footerLink}
+                href="mailto:contact@ajluxurystore.com"
+              >
+                contact@ajluxurystore.com
+              </a>
               <Link className={styles.footerLink} href="/privacy">
-                Confidentialité
+                {t("footer.privacy")}
               </Link>
               <Link className={styles.footerLink} href="/terms">
-                Conditions générales
+                {t("footer.terms")}
               </Link>
               <Link className={styles.footerLink} href="/legal-notice">
-                Mentions légales
+                {t("footer.legal")}
               </Link>
               <Link className={styles.footerLink} href="/cookies">
-                Cookies
+                {t("footer.cookies")}
               </Link>
               <span className={styles.instagramPending}>
-                Instagram · compte à confirmer
+                {t("footer.instagramPending")}
               </span>
             </nav>
           </section>
@@ -76,21 +89,21 @@ export default function StoreFooter() {
             aria-labelledby="footer-newsletter"
           >
             <h3 className={styles.footerHeading} id="footer-newsletter">
-              Newsletter
+              {t("footer.newsletter")}
             </h3>
             <div className={styles.newsletter} aria-describedby="newsletter-note">
               <input
                 type="email"
-                placeholder="Votre adresse e-mail"
-                aria-label="Votre adresse e-mail"
+                placeholder={t("footer.emailPlaceholder")}
+                aria-label={t("footer.emailPlaceholder")}
                 disabled
               />
               <button type="button" disabled>
-                Bientôt
+                {t("common.comingSoon")}
               </button>
             </div>
             <p className={styles.newsletterNote} id="newsletter-note">
-              Maquette uniquement. Aucune adresse n’est collectée à ce stade.
+              {t("footer.newsletterNote")}
             </p>
           </section>
         </div>

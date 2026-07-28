@@ -1,0 +1,5 @@
+{
+  "defaultLocale": "fr",
+  "supportedLocales": ["fr", "en", "es", "de", "it"],
+  "storageKey": "aj-luxury.locale.v1"
+}

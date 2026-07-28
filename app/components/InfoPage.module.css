@@ -45,6 +45,11 @@
   line-height: 1.65;
 }
 
+.copy a {
+  border-bottom: 1px solid currentColor;
+  color: inherit;
+}
+
 .status {
   color: #74747a;
   font-size: 10px;

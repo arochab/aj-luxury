@@ -1,5 +1,6 @@
 import StoreFooter from "../components/StoreFooter";
 import StoreHeader from "../components/StoreHeader";
+import { T } from "../../lib/i18n/TranslatedText";
 import styles from "../cart/CommerceShell.module.css";
 
 export const metadata = {
@@ -12,16 +13,20 @@ export default function AccountPage() {
     <main className={styles.shell}>
       <StoreHeader variant="minimal" />
       <aside className={styles.notice}>
-        Espace client conceptuel · authentification non activée
+        <T id="account.demoNotice" />
       </aside>
 
       <div className={styles.main}>
         <section>
-          <p className={styles.eyebrow}>Votre espace · Démonstration</p>
-          <h1 className={styles.title}>Bienvenue.</h1>
+          <p className={styles.eyebrow}>
+            <T id="account.eyebrow" />
+          </p>
+          <h1 className={styles.title}>
+            <T id="account.welcome" />
+          </h1>
           <form className={styles.form}>
             <label>
-              Adresse email
+              <T id="account.email" />
               <input
                 type="email"
                 autoComplete="email"
@@ -29,7 +34,7 @@ export default function AccountPage() {
               />
             </label>
             <label>
-              Mot de passe
+              <T id="account.password" />
               <input
                 type="password"
                 autoComplete="current-password"
@@ -37,7 +42,7 @@ export default function AccountPage() {
               />
             </label>
             <button className={styles.lockedButton} type="button" disabled>
-              Connexion désactivée dans la maquette
+              <T id="account.disabled" />
             </button>
           </form>
         </section>

@@ -5,6 +5,7 @@ import { getProducts } from "../../lib/products";
 import MetallicField from "../components/MetallicField";
 import StoreFooter from "../components/StoreFooter";
 import StoreHeader from "../components/StoreHeader";
+import { T } from "../../lib/i18n/TranslatedText";
 import styles from "./Shop.module.css";
 
 export const metadata: Metadata = {
@@ -24,7 +25,9 @@ export default function ShopPage() {
           <MetallicField motion="slow" variant="silver" />
         </div>
         <div className={styles.introCopy}>
-          <p className={styles.eyebrow}>Boutique</p>
+          <p className={styles.eyebrow}>
+            <T id="nav.shop" />
+          </p>
           <h1 id="shop-title">Apollon</h1>
           <p className={styles.meta}>{products.length} coloris</p>
         </div>
@@ -51,7 +54,9 @@ export default function ShopPage() {
                   sizes="(max-width: 760px) 100vw, 33vw"
                   priority={index === 0}
                 />
-                <span className={styles.discover}>Découvrir</span>
+                <span className={styles.discover}>
+                  <T id="shop.discover" />
+                </span>
               </Link>
 
               <div className={styles.productDetails}>

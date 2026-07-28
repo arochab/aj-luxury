@@ -14,7 +14,9 @@ export type Product = {
   gallery: string[];
   tagline: string;
   description: string;
-  priceCents: null;
+  details: string[];
+  features: string[];
+  priceCents: number;
   status: "launch-product";
   statusLabel: string;
   primaryModel: boolean;
@@ -37,6 +39,16 @@ const benefits = [
   },
 ];
 
+const features = [
+  "Coupe boxer classique",
+  "Composition : 94 % modal – 6 % élasthanne",
+  "Toucher doux et soyeux",
+  "Matière respirante et confortable",
+  "Ceinture premium de 3,5 cm",
+  "Logo métallique AJ Luxury",
+  "Maintien optimal au quotidien",
+];
+
 export const products: Product[] = [
   {
     slug: "pourpre",
@@ -56,7 +68,13 @@ export const products: Product[] = [
     tagline: "Profond et sophistiqué",
     description:
       "Découvrez Apollon Pourpre Impérial, un boxer masculin pensé pour ceux qui recherchent l’alliance parfaite entre élégance, confort et raffinement.",
-    priceCents: null,
+    details: [
+      "Confectionné dans un tissu doux composé de 94 % modal et 6 % élasthanne, il offre un toucher soyeux, une grande respirabilité et une sensation de seconde peau. Sa coupe boxer classique épouse naturellement les formes du corps tout en garantissant une liberté de mouvement optimale au quotidien.",
+      "Sa ceinture élastique de 3,5 cm, ornée du logo métallique AJ Luxury, apporte une signature élégante et un maintien confortable.",
+      "Son coloris Pourpre Impérial, profond et sophistiqué, incarne l’assurance et le caractère. Une pièce intemporelle qui sublime votre collection de sous-vêtements.",
+    ],
+    features,
+    priceCents: 2999,
     status: "launch-product",
     statusLabel: "Modèle Apollon",
     primaryModel: true,
@@ -81,7 +99,13 @@ export const products: Product[] = [
     tagline: "Doux et raffiné",
     description:
       "Découvrez Apollon Rose Velours, une pièce qui réinvente le sous-vêtement masculin avec subtilité et sophistication.",
-    priceCents: null,
+    details: [
+      "Conçu en 94 % modal et 6 % élasthanne, ce boxer offre une douceur incomparable, une excellente respirabilité et une élasticité idéale pour accompagner votre silhouette avec confort et élégance.",
+      "Sa ceinture élastique de 3,5 cm, ornée du logo métallique AJ Luxury, signe une finition premium et affirme l’identité de la marque.",
+      "Son coloris Rose Velours, doux et raffiné, révèle une esthétique moderne et audacieuse pour l’homme qui souhaite associer confort, style et confiance en soi.",
+    ],
+    features,
+    priceCents: 2999,
     status: "launch-product",
     statusLabel: "Modèle Apollon",
     primaryModel: true,
@@ -107,7 +131,13 @@ export const products: Product[] = [
     tagline: "Délicat et lumineux",
     description:
       "Découvrez Apollon Lilas Céleste, un boxer masculin où la douceur rencontre l’élégance contemporaine.",
-    priceCents: null,
+    details: [
+      "Fabriqué à partir d’un mélange premium de 94 % modal et 6 % élasthanne, il procure un confort exceptionnel grâce à une matière légère, respirante et agréable au contact de la peau. Sa coupe boxer classique accompagne chaque mouvement tout en offrant un ajustement parfait.",
+      "La ceinture de 3,5 cm, sublimée par le logo métallique AJ Luxury, apporte une finition luxueuse et une identité forte à cette création.",
+      "Son coloris Lilas Céleste, délicat et lumineux, apporte une touche de modernité et d’originalité tout en conservant une élégance masculine assumée.",
+    ],
+    features,
+    priceCents: 2999,
     status: "launch-product",
     statusLabel: "Modèle Apollon",
     primaryModel: true,
@@ -132,12 +162,24 @@ export function getProductVariants(modelId: string) {
   return products.filter((product) => product.modelId === modelId);
 }
 
-export function formatPrice(priceCents: number | null) {
+const numberFormatLocales = {
+  fr: "fr-FR",
+  en: "en-GB",
+  es: "es-ES",
+  de: "de-DE",
+  it: "it-IT",
+} as const;
+
+export function formatPrice(
+  priceCents: number | null,
+  locale: keyof typeof numberFormatLocales = "fr",
+) {
   if (priceCents === null) return "Prix à confirmer";
 
-  return new Intl.NumberFormat("fr-FR", {
+  return new Intl.NumberFormat(numberFormatLocales[locale], {
     style: "currency",
     currency: "EUR",
-    maximumFractionDigits: 0,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   }).format(priceCents / 100);
 }

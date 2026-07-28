@@ -1,11 +1,19 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useState } from "react";
-import MetallicField from "./MetallicField";
+import { useCallback, useEffect, useState } from "react";
+import { HERO_FUSION_VERSION } from "../../lib/hero-fusion";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import HeroFusionField from "./HeroFusionField";
 
 export default function HeroComposition() {
+  const { t } = useI18n();
   const [playing, setPlaying] = useState(true);
+  const [fusionReady, setFusionReady] = useState(false);
+
+  const handleFusionReady = useCallback(() => {
+    setFusionReady(true);
+  }, []);
 
   useEffect(() => {
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -21,10 +29,14 @@ export default function HeroComposition() {
 
   return (
     <>
-      <div className="aj-film__hero-scene">
-        <div className="aj-film__color-wash" aria-hidden="true" />
-
-        <div className="aj-film__photo-backdrop" aria-hidden="true">
+      <div
+        className="aj-film__hero-scene"
+        data-hero-version={`fusion-${HERO_FUSION_VERSION}`}
+      >
+        <div
+          className={`aj-film__hero-photo-base${fusionReady ? " is-ready" : ""}`}
+          aria-hidden="true"
+        >
           <Image
             unoptimized
             priority
@@ -32,40 +44,21 @@ export default function HeroComposition() {
             alt=""
             fill
             sizes="100vw"
-            style={{ objectFit: "cover", objectPosition: "center 46%" }}
+            style={{ objectFit: "contain", objectPosition: "center center" }}
           />
         </div>
 
-        <div className="aj-film__liquid-metal" aria-hidden="true">
-          <MetallicField
-            motion={playing ? "normal" : "still"}
-            variant="reference"
-          />
-        </div>
+        <HeroFusionField playing={playing} onReady={handleFusionReady} />
 
-        <div className="aj-film__photo-plate" aria-hidden="true">
+        <figure className="aj-film__portrait aj-film__portrait--sr">
           <Image
             unoptimized
             priority
             src="/images/client/hero-duo-static.webp"
-            alt=""
-            fill
-            sizes="100vw"
-            style={{ objectFit: "contain", objectPosition: "center bottom" }}
-          />
-        </div>
-
-        <div className="aj-film__studio-light" aria-hidden="true" />
-
-        <figure className="aj-film__portrait">
-          <Image
-            unoptimized
-            priority
-            src="/images/client/hero-duo-cutout.png"
             alt="Les deux fondateurs et mannequins AJ Luxury portant Apollon Lilas Céleste"
             fill
             sizes="100vw"
-            style={{ objectFit: "contain", objectPosition: "center bottom" }}
+            style={{ objectFit: "contain", objectPosition: "center center" }}
           />
         </figure>
       </div>
@@ -75,7 +68,7 @@ export default function HeroComposition() {
         className="aj-film__motion-toggle"
         onClick={() => setPlaying((current) => !current)}
       >
-        {playing ? "Figer le métal" : "Animer le métal"}
+        {playing ? t("hero.pauseMetal") : t("hero.playMetal")}
       </button>
     </>
   );

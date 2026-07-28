@@ -3,8 +3,8 @@ import StoreHeader from "./StoreHeader";
 import styles from "./InfoPage.module.css";
 
 type InfoPageProps = {
-  eyebrow: string;
-  title: string;
+  eyebrow: React.ReactNode;
+  title: React.ReactNode;
   children: React.ReactNode;
 };
 

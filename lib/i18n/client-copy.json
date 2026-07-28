@@ -1,0 +1,16 @@
+{
+  "brandStory": {
+    "sourceLocale": "fr",
+    "fallbackLocale": "fr",
+    "status": "source-only",
+    "source": "Chez AJ Luxury, nous sommes convaincus que le véritable luxe commence par ce que l’on porte au plus près de soi.",
+    "translations": {}
+  },
+  "brandPromise": {
+    "sourceLocale": "fr",
+    "fallbackLocale": "fr",
+    "status": "source-only",
+    "source": "Reveal Your Inner Beauty.",
+    "translations": {}
+  }
+}

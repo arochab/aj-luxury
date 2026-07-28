@@ -2,6 +2,8 @@
 
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import styles from "./ProductPage.module.css";
 
 type ProductGalleryZoomProps = {
   images: string[];
@@ -15,6 +17,7 @@ export default function ProductGalleryZoom({
   color,
 }: ProductGalleryZoomProps) {
   const [zoomedIndex, setZoomedIndex] = useState<number | null>(null);
+  const { t } = useI18n();
   const dialogRef = useRef<HTMLDivElement>(null);
   const triggerRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const lastTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -30,6 +33,20 @@ export default function ProductGalleryZoom({
     const handleKeyboard = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setZoomedIndex(null);
+        return;
+      }
+
+      if (event.key === "ArrowLeft") {
+        setZoomedIndex((current) =>
+          current === null ? null : (current - 1 + images.length) % images.length,
+        );
+        return;
+      }
+
+      if (event.key === "ArrowRight") {
+        setZoomedIndex((current) =>
+          current === null ? null : (current + 1) % images.length,
+        );
         return;
       }
 
@@ -55,18 +72,20 @@ export default function ProductGalleryZoom({
       window.removeEventListener("keydown", handleKeyboard);
       lastTriggerRef.current?.focus();
     };
-  }, [isOpen]);
+  }, [images.length, isOpen]);
 
   return (
     <>
-      <div className="product-gallery" aria-label={`Galerie ${color}`}>
+      <div className={styles.gallery} aria-label={`${t("product.gallery")} ${color}`}>
         {images.map((image, index) => (
           <figure
-            className={index === 0 ? "product-gallery__main" : ""}
+            className={`${styles.galleryItem} ${
+              index === 0 ? styles.galleryMain : ""
+            }`}
             key={image}
           >
             <button
-              className="product-gallery__zoom-trigger"
+              className={styles.zoomTrigger}
               type="button"
               ref={(node) => {
                 triggerRefs.current[index] = node;
@@ -75,21 +94,24 @@ export default function ProductGalleryZoom({
                 lastTriggerRef.current = triggerRefs.current[index];
                 setZoomedIndex(index);
               }}
-              aria-label={`Agrandir la vue ${index + 1} du ${model} ${color}`}
-            >
+              aria-label={`${t("product.enlargeView")} ${index + 1} · ${model} ${color}`}
+              >
               <Image
                 unoptimized
                 src={image}
                 alt={
                   index === 0
-                    ? `${model} ${color} porté par un mannequin adulte`
-                    : `Vue ${index + 1} du ${model} ${color}`
+                    ? `${model} ${color} ${t("product.wornByModel")}`
+                    : `${t("product.view")} ${index + 1} · ${model} ${color}`
                 }
                 fill
                 priority={index === 0}
                 sizes="(max-width: 900px) 100vw, 32vw"
+                style={{ objectFit: "contain" }}
               />
-              <span aria-hidden="true">Agrandir</span>
+              <span className={styles.zoomLabel} aria-hidden="true">
+                {t("product.enlarge")}
+              </span>
             </button>
           </figure>
         ))}
@@ -97,38 +119,39 @@ export default function ProductGalleryZoom({
 
       {zoomedIndex !== null && (
         <div
-          className="product-zoom"
+          className={styles.zoomOverlay}
           ref={dialogRef}
           role="dialog"
           aria-modal="true"
-          aria-label={`Vue agrandie du ${model} ${color}`}
+          aria-label={`${t("product.zoomedView")} · ${model} ${color}`}
         >
           <button
-            className="product-zoom__close"
+            className={styles.zoomClose}
             type="button"
             onClick={() => setZoomedIndex(null)}
           >
-            Fermer
+            {t("product.close")}
           </button>
 
-          <div className="product-zoom__image">
+          <div className={styles.zoomImage}>
             <Image
               unoptimized
               src={images[zoomedIndex]}
-              alt={`Vue agrandie ${zoomedIndex + 1} du ${model} ${color}`}
+              alt={`${t("product.zoomedView")} ${zoomedIndex + 1} · ${model} ${color}`}
               fill
               sizes="100vw"
               priority
+              style={{ objectFit: "contain" }}
             />
           </div>
 
-          <div className="product-zoom__controls">
+          <div className={styles.zoomControls}>
             <button
               type="button"
               onClick={() =>
                 setZoomedIndex((zoomedIndex - 1 + images.length) % images.length)
               }
-              aria-label="Vue précédente"
+              aria-label={t("product.previous")}
             >
               ←
             </button>
@@ -139,7 +162,7 @@ export default function ProductGalleryZoom({
             <button
               type="button"
               onClick={() => setZoomedIndex((zoomedIndex + 1) % images.length)}
-              aria-label="Vue suivante"
+              aria-label={t("product.next")}
             >
               →
             </button>
