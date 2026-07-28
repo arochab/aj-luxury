@@ -3185,7 +3185,7 @@ footer:not([class]) > p {
 
 .aj-featured__image {
   position: relative;
-  aspect-ratio: 3 / 4;
+  aspect-ratio: 2 / 3;
   margin: 0;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.34);
@@ -3202,14 +3202,14 @@ footer:not([class]) > p {
 
 .aj-featured__image img {
   object-fit: cover;
-  object-position: center 55%;
+  object-position: center;
   transition:
     filter 800ms ease,
     transform 1000ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .aj-featured__image--lead img {
-  object-position: center 42%;
+  object-position: center;
 }
 
 .aj-featured__editorial:hover .aj-featured__image:not(:hover) {
@@ -3223,7 +3223,7 @@ footer:not([class]) > p {
 
 .aj-featured__image:hover img {
   filter: saturate(1.04) contrast(1.02);
-  transform: scale(1.035);
+  transform: scale(1.015);
 }
 
 .aj-featured__caption {
@@ -3260,7 +3260,8 @@ footer:not([class]) > p {
   display: grid;
   width: min(1440px, 100%);
   min-width: 100%;
-  grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.16fr) minmax(0, 0.92fr);
+  grid-template-columns: minmax(0, 0.717fr) minmax(0, 1.063fr) minmax(0, 0.666fr);
+  align-items: start;
   gap: clamp(14px, 1.6vw, 24px);
   margin: 0 auto;
   padding: 0 var(--aj-gutter);
@@ -3274,7 +3275,7 @@ footer:not([class]) > p {
   position: relative;
   width: auto;
   min-width: 0;
-  height: clamp(430px, 42vw, 660px);
+  height: auto;
   margin: 0;
   overflow: hidden;
   background: #cac9c7;
@@ -3290,14 +3291,26 @@ footer:not([class]) > p {
   width: auto;
 }
 
+.aj-moodboard__item--portrait-left {
+  aspect-ratio: 1864 / 2600;
+}
+
+.aj-moodboard__item--duo {
+  aspect-ratio: 2000 / 1882;
+}
+
+.aj-moodboard__item--portrait-right {
+  aspect-ratio: 1731 / 2600;
+}
+
 .aj-moodboard__item img {
   object-fit: cover;
-  object-position: center 58%;
+  object-position: center;
   transition: transform 900ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .aj-moodboard__item:hover img {
-  transform: scale(1.025);
+  transform: scale(1.012);
 }
 
 .aj-shop {
@@ -3356,12 +3369,12 @@ footer:not([class]) > p {
 
 .aj-product-card__image img {
   object-fit: cover;
-  object-position: center 64%;
+  object-position: center 28%;
   transition: transform 900ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .aj-product-card:hover img {
-  transform: scale(1.025);
+  transform: scale(1.015);
 }
 
 .aj-product-card__caption {
@@ -3659,12 +3672,12 @@ footer:not([class]) > p {
     flex: 0 0 78vw;
     width: 78vw;
     min-width: 78vw;
-    aspect-ratio: 3 / 4;
+    aspect-ratio: 2 / 3;
     scroll-snap-align: center;
   }
 
   .aj-featured__image--lead {
-    aspect-ratio: 3 / 4;
+    aspect-ratio: 2 / 3;
   }
 
   .aj-featured__editorial:hover .aj-featured__image:not(:hover) {
@@ -3703,7 +3716,7 @@ footer:not([class]) > p {
     flex: 0 0 78vw;
     width: 78vw;
     min-width: 78vw;
-    height: 108vw;
+    height: auto;
     min-height: 0;
     grid-column: auto;
     scroll-snap-align: start;

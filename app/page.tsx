@@ -13,14 +13,17 @@ const featuredEditorialImages = [
   {
     src: "/images/client/editorial-lilas-chair.webp",
     alt: "Jérémy portant Apollon Lilas Céleste, assis",
+    crop: "portrait-left",
   },
   {
     src: "/images/client/campaign-duo-lilas-seated.webp",
     alt: "Jérémy et Alex portant Apollon Lilas Céleste",
+    crop: "duo",
   },
   {
     src: "/images/client/hero-pourpre-model.webp",
     alt: "Alex portant Apollon Pourpre Impérial",
+    crop: "portrait-right",
   },
 ];
 
@@ -55,7 +58,9 @@ export default function Home() {
         >
           {featuredEditorialImages.map((image, index) => (
             <figure
-              className={`aj-featured__image${index === 1 ? " aj-featured__image--lead" : ""}`}
+              className={`aj-featured__image aj-featured__image--${image.crop}${
+                index === 1 ? " aj-featured__image--lead" : ""
+              }`}
               key={image.src}
             >
               <Image
@@ -107,7 +112,10 @@ export default function Home() {
       <section className="aj-moodboard" aria-label="Campagne AJ Luxury avec les deux mannequins">
         <div className="aj-moodboard__track">
           {editorialMoodboardImages.map((image) => (
-            <figure className="aj-moodboard__item" key={image.src}>
+            <figure
+              className={`aj-moodboard__item aj-moodboard__item--${image.crop}`}
+              key={image.src}
+            >
               <Image
                 unoptimized
                 src={image.src}
