@@ -172,6 +172,7 @@ test("legal notice exposes the required pre-launch checklist without invented co
   assert.match(html, /Direction de la publication/);
   assert.match(html, /Cloudflare, Inc\./);
   assert.match(html, /contact@ajluxurystore\.com/);
+  assert.match(html, /Numéro de contact de l’entreprise/);
   assert.match(html, /à confirmer/i);
 });
 

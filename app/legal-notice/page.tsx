@@ -44,6 +44,10 @@ export default function LegalNoticePage() {
               </a>
             </dd>
           </div>
+          <div>
+            <dt>Téléphone</dt>
+            <dd>Numéro de contact de l’entreprise · à confirmer</dd>
+          </div>
         </dl>
       </section>
 
