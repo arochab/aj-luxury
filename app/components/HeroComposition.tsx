@@ -11,9 +11,7 @@ export default function HeroComposition() {
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
     function applyPreference() {
-      if (reducedMotion.matches) {
-        setPlaying(false);
-      }
+      if (reducedMotion.matches) setPlaying(false);
     }
 
     applyPreference();
@@ -24,23 +22,54 @@ export default function HeroComposition() {
   return (
     <>
       <div className="aj-film__hero-scene">
+        <div className="aj-film__color-wash" aria-hidden="true" />
+
+        <div className="aj-film__photo-backdrop" aria-hidden="true">
+          <Image
+            unoptimized
+            priority
+            src="/images/client/hero-duo-static.webp"
+            alt=""
+            fill
+            sizes="100vw"
+            style={{ objectFit: "cover", objectPosition: "center 46%" }}
+          />
+        </div>
+
         <div className="aj-film__liquid-metal" aria-hidden="true">
           <MetallicField
             motion={playing ? "normal" : "still"}
             variant="reference"
           />
         </div>
-        <figure className="aj-film__portrait">
+
+        <div className="aj-film__photo-plate" aria-hidden="true">
           <Image
             unoptimized
             priority
             src="/images/client/hero-duo-static.webp"
-            alt="Les deux fondateurs et mannequins AJ Luxury portant Apollon Pourpre Impérial"
+            alt=""
             fill
-            sizes="(max-width: 760px) 100vw, 72vw"
+            sizes="100vw"
+            style={{ objectFit: "contain", objectPosition: "center bottom" }}
+          />
+        </div>
+
+        <div className="aj-film__studio-light" aria-hidden="true" />
+
+        <figure className="aj-film__portrait">
+          <Image
+            unoptimized
+            priority
+            src="/images/client/hero-duo-cutout.png"
+            alt="Les deux fondateurs et mannequins AJ Luxury portant Apollon Lilas Céleste"
+            fill
+            sizes="100vw"
+            style={{ objectFit: "contain", objectPosition: "center bottom" }}
           />
         </figure>
       </div>
+
       <button
         type="button"
         className="aj-film__motion-toggle"

@@ -2882,52 +2882,113 @@ footer:not([class]) > p {
 
 .aj-film__hero-scene {
   z-index: -4;
-  display: grid;
-  place-items: center;
-  background: #070709;
+  overflow: hidden;
+  background: #777680;
 }
 
+.aj-film__color-wash,
+.aj-film__photo-backdrop,
 .aj-film__liquid-metal {
   position: absolute;
   inset: 0;
+  pointer-events: none;
+}
+
+.aj-film__color-wash {
+  z-index: 0;
+  background:
+    radial-gradient(circle at 48% 39%, rgba(210, 208, 221, 0.48) 0 8%, transparent 34%),
+    linear-gradient(108deg, #57556e 0%, #767486 38%, #99999f 70%, #bfc0c2 100%);
+}
+
+.aj-film__photo-backdrop {
+  z-index: 1;
+  opacity: 0.36;
+  mix-blend-mode: luminosity;
+}
+
+.aj-film__photo-backdrop img {
+  filter: blur(26px) saturate(0.38) contrast(0.88);
+  transform: scale(1.12);
+}
+
+.aj-film__liquid-metal {
+  z-index: 2;
+  opacity: 0.64;
+  mix-blend-mode: soft-light;
   filter: contrast(1.06) saturate(0.18) brightness(0.94);
+  transform: scale(1.1) rotate(-2deg);
+  -webkit-mask-image: radial-gradient(
+    ellipse 76% 88% at 50% 50%,
+    rgba(0, 0, 0, 0.32) 0 35%,
+    #000 72% 100%
+  );
+  mask-image: radial-gradient(
+    ellipse 76% 88% at 50% 50%,
+    rgba(0, 0, 0, 0.32) 0 35%,
+    #000 72% 100%
+  );
 }
 
 .aj-film__liquid-metal::after {
   position: absolute;
   inset: 0;
-  background:
-    radial-gradient(circle at 50% 44%, rgba(9, 9, 12, 0.26), transparent 35%),
-    linear-gradient(
-      90deg,
-      rgba(3, 3, 5, 0.1),
-      transparent 22% 78%,
-      rgba(3, 3, 5, 0.12)
-    );
+  background: radial-gradient(ellipse at 50% 48%, transparent 32%, rgba(64, 62, 72, 0.12));
   content: "";
   pointer-events: none;
 }
 
+.aj-film__photo-plate,
+.aj-film__studio-light {
+  position: absolute;
+  inset: 5.75rem 0 0;
+  pointer-events: none;
+}
+
+.aj-film__photo-plate {
+  z-index: 3;
+  opacity: 0.57;
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    transparent 33.2%,
+    #000 44% 56%,
+    transparent 66.8%
+  );
+  mask-image: linear-gradient(
+    90deg,
+    transparent 33.2%,
+    #000 44% 56%,
+    transparent 66.8%
+  );
+}
+
+.aj-film__photo-plate img {
+  filter: saturate(0.98) contrast(0.98);
+  transform: scale(1.025);
+  transform-origin: center bottom;
+}
+
+.aj-film__studio-light {
+  z-index: 4;
+  background:
+    radial-gradient(ellipse 44% 67% at 50% 49%, rgba(225, 220, 236, 0.19), transparent 68%),
+    linear-gradient(180deg, transparent 72%, rgba(57, 53, 66, 0.24));
+}
+
 .aj-film__portrait {
   position: absolute;
-  top: 7rem;
-  left: 50%;
-  width: auto;
-  height: calc(100% - 12.75rem);
-  aspect-ratio: 671 / 1008;
+  z-index: 5;
+  inset: 5.75rem 0 0;
   margin: 0;
-  overflow: hidden;
-  border: 1px solid rgba(245, 246, 248, 0.18);
-  background: #2a292f;
-  box-shadow:
-    0 2.8rem 9rem rgba(8, 7, 11, 0.38),
-    0 0 0 1px rgba(255, 255, 255, 0.035);
-  transform: translateX(-50%);
+  filter: drop-shadow(0 22px 26px rgba(20, 10, 29, 0.28));
 }
 
 .aj-film__portrait img {
   object-fit: contain;
-  object-position: center;
+  object-position: center bottom;
+  filter: saturate(1.04) contrast(1.015);
+  transform: scale(1.025);
+  transform-origin: center bottom;
 }
 
 .aj-film__motion-toggle {
@@ -3563,12 +3624,12 @@ footer:not([class]) > p {
   }
 
   .aj-film__portrait {
-    top: 8.6rem;
-    left: 50%;
-    width: auto;
-    height: calc(100% - 14rem);
-    max-width: calc(100% - 20px);
-    transform: translateX(-50%);
+    inset: 7.1rem -18vw 0;
+  }
+
+  .aj-film__photo-plate,
+  .aj-film__studio-light {
+    inset: 7.1rem -18vw 0;
   }
 
   .aj-home {
