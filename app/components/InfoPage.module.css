@@ -45,6 +45,51 @@
   line-height: 1.65;
 }
 
+.copy section {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.copy h2 {
+  margin: 0;
+  color: #1c1c20;
+  font-size: clamp(20px, 2vw, 28px);
+  font-weight: 520;
+  letter-spacing: -0.025em;
+  line-height: 1.2;
+}
+
+.copy dl {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  border-top: 1px solid rgba(12, 12, 14, 0.14);
+}
+
+.copy dl div {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.8fr) minmax(0, 1.2fr);
+  gap: 20px;
+  padding: 14px 0;
+  border-bottom: 1px solid rgba(12, 12, 14, 0.14);
+}
+
+.copy dt,
+.copy dd {
+  margin: 0;
+  font-size: clamp(14px, 1.15vw, 16px);
+  line-height: 1.5;
+}
+
+.copy dt {
+  color: #727278;
+}
+
+.copy dd {
+  color: #242428;
+}
+
 .copy a {
   border-bottom: 1px solid currentColor;
   color: inherit;
@@ -62,5 +107,10 @@
   .main {
     width: min(100% - 36px, 1180px);
     padding-top: 110px;
+  }
+
+  .copy dl div {
+    grid-template-columns: 1fr;
+    gap: 5px;
   }
 }

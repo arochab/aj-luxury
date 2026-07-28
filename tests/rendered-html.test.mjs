@@ -162,6 +162,19 @@ for (const [pathname, marker] of informationCases) {
   });
 }
 
+test("legal notice exposes the required pre-launch checklist without invented company data", async () => {
+  const response = await render("/legal-notice");
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /Éditeur du site/);
+  assert.match(html, /Adresse officielle de domiciliation/);
+  assert.match(html, /SIREN, SIRET et RCS\/RNE/);
+  assert.match(html, /Direction de la publication/);
+  assert.match(html, /Cloudflare, Inc\./);
+  assert.match(html, /contact@ajluxurystore\.com/);
+  assert.match(html, /à confirmer/i);
+});
+
 test("cart keeps the selected color and size", async () => {
   const response = await render(
     "/cart?variant=variant_boxer_rose-pale_xl",
