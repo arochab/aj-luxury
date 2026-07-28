@@ -2890,7 +2890,22 @@ footer:not([class]) > p {
 .aj-film__liquid-metal {
   position: absolute;
   inset: 0;
-  filter: contrast(1.08) saturate(0.52) brightness(0.9);
+  filter: contrast(1.06) saturate(0.18) brightness(0.94);
+}
+
+.aj-film__liquid-metal::after {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 50% 44%, rgba(9, 9, 12, 0.26), transparent 35%),
+    linear-gradient(
+      90deg,
+      rgba(3, 3, 5, 0.1),
+      transparent 22% 78%,
+      rgba(3, 3, 5, 0.12)
+    );
+  content: "";
+  pointer-events: none;
 }
 
 .aj-film__portrait {

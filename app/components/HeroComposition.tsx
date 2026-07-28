@@ -27,7 +27,7 @@ export default function HeroComposition() {
         <div className="aj-film__liquid-metal" aria-hidden="true">
           <MetallicField
             motion={playing ? "normal" : "still"}
-            variant="graphite"
+            variant="reference"
           />
         </div>
         <figure className="aj-film__portrait">

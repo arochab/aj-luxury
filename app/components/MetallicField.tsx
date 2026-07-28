@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 
 export type MetallicFieldMotion = "normal" | "slow" | "still";
-export type MetallicFieldVariant = "graphite" | "silver" | "dusk";
+export type MetallicFieldVariant = "graphite" | "silver" | "dusk" | "reference";
 
 type MetallicFieldProps = {
   className?: string;
@@ -12,7 +12,7 @@ type MetallicFieldProps = {
 };
 
 const STATIC_PHASE = 1.35;
-const NORMAL_LOOP_SECONDS = 38;
+const NORMAL_LOOP_SECONDS = 34;
 const SLOW_LOOP_SECONDS = 62;
 const MAX_FPS = 30;
 
@@ -28,10 +28,18 @@ export default function MetallicField({
     if (!canvas) return;
 
     const applyFallback = () => {
-      canvas.style.background = [
-        "linear-gradient(132deg, transparent 0 20%, rgba(197,198,204,.42) 38%, rgba(103,103,112,.36) 54%, transparent 70%)",
-        "linear-gradient(42deg, #121217 0%, #393940 30%, #898990 48%, #b8b8bd 57%, #55545d 72%, #17171c 100%)",
-      ].join(",");
+      canvas.style.background =
+        variant === "reference"
+          ? [
+              "radial-gradient(circle at 12% 32%, rgba(238,238,239,.88) 0 3%, rgba(82,82,86,.58) 7%, transparent 13%)",
+              "radial-gradient(circle at 88% 68%, rgba(230,230,232,.74) 0 5%, rgba(62,62,67,.68) 10%, transparent 18%)",
+              "linear-gradient(132deg, transparent 0 15%, rgba(222,222,225,.5) 34%, rgba(78,78,84,.58) 52%, rgba(207,207,210,.44) 68%, transparent 86%)",
+              "linear-gradient(42deg, #09090b 0%, #29292d 28%, #747478 48%, #a9a9ac 58%, #36363b 75%, #0b0b0d 100%)",
+            ].join(",")
+          : [
+              "linear-gradient(132deg, transparent 0 20%, rgba(197,198,204,.42) 38%, rgba(103,103,112,.36) 54%, transparent 70%)",
+              "linear-gradient(42deg, #121217 0%, #393940 30%, #898990 48%, #b8b8bd 57%, #55545d 72%, #17171c 100%)",
+            ].join(",");
     };
 
     const context = canvas.getContext("webgl", {
@@ -91,6 +99,28 @@ export default function MetallicField({
         return value;
       }
 
+      vec2 chromeOrb(vec2 p, vec2 center, float radius, float offset) {
+        vec2 local = (p - center) / radius;
+        float radiusSquared = dot(local, local);
+        float mask = 1.0 - smoothstep(0.88, 1.02, radiusSquared);
+        float z = sqrt(max(0.0, 1.0 - radiusSquared));
+        vec3 normal = normalize(vec3(local, z));
+
+        float horizon = smoothstep(-0.56, 0.72, normal.y);
+        float sweep = sin(normal.y * 5.2 + offset + u_phase * 0.24) * 0.5 + 0.5;
+        float highlight = pow(
+          max(0.0, dot(normal, normalize(vec3(-0.48, 0.58, 0.78)))),
+          10.0
+        );
+        float rim = smoothstep(0.54, 0.98, radiusSquared);
+        float shade = mix(0.035, 0.66, horizon);
+        shade = mix(shade, 0.96, smoothstep(0.72, 0.96, sweep) * 0.44);
+        shade += highlight * 0.54 + rim * 0.12;
+        shade *= 0.82 + z * 0.18;
+
+        return vec2(mask, clamp(shade, 0.0, 1.0));
+      }
+
       float liquidHeight(vec2 p) {
         float phase = u_phase + u_variant * 0.74;
         vec2 driftA = vec2(cos(phase), sin(phase)) * 0.34;
@@ -118,6 +148,33 @@ export default function MetallicField({
           warpX * 0.66 +
           warpY * 0.40 +
           longFold * 0.28;
+      }
+
+      float referenceHeight(vec2 p) {
+        float phase = u_phase;
+        vec2 drift = vec2(cos(phase * 0.72), sin(phase * 0.72)) * 0.18;
+        float fieldA = lowFrequencyNoise(p * 1.34 + drift + vec2(2.1, 7.4));
+        float fieldB = lowFrequencyNoise(
+          vec2(-p.y, p.x) * 1.12 -
+          drift +
+          vec2(9.2, 1.7)
+        );
+        vec2 warped = p + (vec2(fieldA, fieldB) - 0.5) * 0.94;
+
+        float foldA = sin(
+          warped.x * 2.15 +
+          warped.y * 0.84 +
+          fieldB * 3.4 +
+          phase * 0.14
+        );
+        float foldB = sin(
+          warped.y * 2.52 -
+          warped.x * 0.58 +
+          fieldA * 2.8 -
+          phase * 0.11
+        );
+
+        return fieldA * 0.50 + fieldB * 0.32 + foldA * 0.24 + foldB * 0.16;
       }
 
       void main() {
@@ -200,6 +257,152 @@ export default function MetallicField({
         material += plumReflection * (0.04 + 0.03 * (1.0 - uv.y) + duskVariant * 0.13);
         material *= 1.0 - duskVariant * 0.08;
 
+        float referenceVariant = step(2.5, u_variant);
+        if (referenceVariant > 0.5) {
+          /*
+           * The homepage treatment translates the four motion references chosen
+           * by the client: broad liquid folds, a sculptural chrome mass, floating
+           * metallic droplets and a softer fluid membrane. Everything remains
+           * procedural so the result is original, seamless and watermark-free.
+           */
+          vec2 scene = (uv - 0.5) * vec2(aspect, 1.0);
+          float edgePresence = smoothstep(0.08, 0.48, abs(uv.x - 0.5));
+
+          float referenceSurface = referenceHeight(p);
+          float referenceSurfaceX = referenceHeight(p + vec2(epsilon, 0.0));
+          float referenceSurfaceY = referenceHeight(p + vec2(0.0, epsilon));
+          vec2 referenceGradient = vec2(
+            referenceSurfaceX - referenceSurface,
+            referenceSurfaceY - referenceSurface
+          ) / epsilon;
+          vec3 referenceNormal = normalize(vec3(-referenceGradient * 0.78, 1.0));
+          vec3 referenceReflection = reflect(
+            -viewDirection,
+            referenceNormal
+          );
+          float referenceEnvironment = clamp(
+            referenceReflection.y * 0.52 +
+            referenceReflection.x * 0.18 +
+            0.5,
+            0.0,
+            1.0
+          );
+          float membrane = sin(
+            referenceSurface * 8.4 +
+            referenceReflection.x * 2.6 +
+            u_phase * 0.12
+          ) * 0.5 + 0.5;
+          float membraneLight = smoothstep(0.48, 0.78, membrane);
+          float membraneShadow = 1.0 - smoothstep(0.20, 0.48, membrane);
+          vec3 referenceBase = mix(
+            vec3(0.02, 0.021, 0.025),
+            vec3(0.82, 0.825, 0.84),
+            referenceEnvironment * 0.62 + membraneLight * 0.32
+          );
+          referenceBase = mix(
+            referenceBase,
+            vec3(0.04, 0.041, 0.047),
+            membraneShadow * 0.42
+          );
+          float liquidHighlight = smoothstep(0.74, 0.86, membrane);
+          referenceBase = mix(
+            referenceBase,
+            vec3(0.985, 0.987, 0.99),
+            liquidHighlight * 0.48
+          );
+          referenceBase = mix(
+            referenceBase,
+            vec3(0.96, 0.965, 0.97),
+            pow(
+              max(
+                0.0,
+                dot(
+                  referenceNormal,
+                  normalize(vec3(-0.52, 0.58, 0.76))
+                )
+              ),
+              2.2
+            ) * 0.34
+          );
+          float referenceDepth = smoothstep(0.08, 0.88, referenceSurface);
+          referenceBase *= 0.68 + referenceDepth * 0.40;
+          referenceBase = smoothstep(
+            vec3(0.045),
+            vec3(0.91),
+            referenceBase
+          );
+
+          vec2 orbA = chromeOrb(
+            scene,
+            vec2(-0.86 + cos(u_phase) * 0.06, 0.34 + sin(u_phase) * 0.05),
+            0.12,
+            0.4
+          );
+          vec2 orbB = chromeOrb(
+            scene,
+            vec2(0.89 + sin(u_phase) * 0.06, -0.28 + cos(u_phase) * 0.04),
+            0.15,
+            2.1
+          );
+          vec2 orbC = chromeOrb(
+            scene,
+            vec2(-1.02 + sin(u_phase + 1.8) * 0.04, -0.40),
+            0.07,
+            4.0
+          );
+          vec2 orbD = chromeOrb(
+            scene,
+            vec2(1.04, 0.38 + cos(u_phase + 0.8) * 0.04),
+            0.08,
+            5.2
+          );
+
+          float orbMask = max(max(orbA.x, orbB.x), max(orbC.x, orbD.x));
+          float orbShade =
+            orbA.y * orbA.x +
+            orbB.y * orbB.x +
+            orbC.y * orbC.x +
+            orbD.y * orbD.x;
+          orbShade /= max(0.001, orbA.x + orbB.x + orbC.x + orbD.x);
+          vec3 orbColor = mix(
+            vec3(0.045, 0.047, 0.052),
+            vec3(0.96, 0.965, 0.97),
+            orbShade
+          );
+          referenceBase = mix(
+            referenceBase,
+            orbColor,
+            orbMask * (0.34 + edgePresence * 0.48)
+          );
+
+          float sculpture =
+            0.20 / (dot(scene - vec2(-0.48, -0.04), scene - vec2(-0.48, -0.04)) + 0.05) +
+            0.16 / (dot(scene - vec2(-0.20, 0.20), scene - vec2(-0.20, 0.20)) + 0.05) +
+            0.18 / (dot(scene - vec2(0.44, 0.10), scene - vec2(0.44, 0.10)) + 0.06) +
+            0.15 / (dot(scene - vec2(0.60, -0.20), scene - vec2(0.60, -0.20)) + 0.05);
+          float sculptureMask = smoothstep(1.08, 1.78, sculpture) * edgePresence;
+          float sculptureTone = sin(
+            sculpture * 2.4 +
+            scene.y * 6.0 -
+            scene.x * 2.4 +
+            u_phase * 0.18
+          ) * 0.5 + 0.5;
+          vec3 sculptureColor = mix(
+            vec3(0.035, 0.036, 0.041),
+            vec3(0.84, 0.845, 0.86),
+            smoothstep(0.18, 0.88, sculptureTone)
+          );
+          referenceBase = mix(
+            referenceBase,
+            sculptureColor,
+            sculptureMask * 0.30
+          );
+
+          float calmCenter = 1.0 - smoothstep(0.08, 0.34, abs(uv.x - 0.5));
+          referenceBase *= 1.0 - calmCenter * 0.19;
+          material = referenceBase;
+        }
+
         float textileGrain =
           (hash(floor(gl_FragCoord.xy * vec2(0.32, 0.72))) - 0.5) * 0.012 +
           sin(gl_FragCoord.y * 0.72) * 0.0035;
@@ -207,7 +410,7 @@ export default function MetallicField({
 
         float depth = smoothstep(0.12, 0.90, height);
         vec3 color = material * (0.80 + depth * 0.28);
-        color *= 0.76 + flowingLight * 0.34;
+        color *= mix(0.76 + flowingLight * 0.34, 1.0, referenceVariant);
         float vignette = smoothstep(1.24, 0.16, length((uv - 0.5) * vec2(0.78, 1.0)));
         color *= 0.88 + vignette * 0.13;
 
@@ -284,7 +487,13 @@ export default function MetallicField({
     const phase = gl.getUniformLocation(program, "u_phase");
     const variantUniform = gl.getUniformLocation(program, "u_variant");
     const variantValue =
-      variant === "silver" ? 1 : variant === "dusk" ? 2 : 0;
+      variant === "silver"
+        ? 1
+        : variant === "dusk"
+          ? 2
+          : variant === "reference"
+            ? 3
+            : 0;
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
     const loopSeconds = motion === "slow" ? SLOW_LOOP_SECONDS : NORMAL_LOOP_SECONDS;
     const frameInterval = 1000 / MAX_FPS;
