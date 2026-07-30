@@ -157,7 +157,7 @@ export default function ProductPurchase({
           </div>
         </details>
 
-        <details open>
+        <details>
           <summary>{t("product.features")}</summary>
           <div className={styles.detailsContent} lang="fr">
             <ul className={styles.featureList}>

@@ -12,15 +12,21 @@
 .breadcrumb {
   display: flex;
   max-width: 100rem;
+  min-height: 3.25rem;
   align-items: center;
   gap: 0.62rem;
   margin: 0 auto;
-  padding: 1rem clamp(1rem, 3vw, 3.5rem);
+  padding: 0.25rem clamp(1rem, 3vw, 3.5rem);
   color: var(--pdp-muted);
   font-size: 0.65rem;
 }
 
 .breadcrumb a {
+  display: inline-flex;
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  align-items: center;
+  justify-content: center;
   color: inherit;
   text-decoration: none;
 }
@@ -36,25 +42,35 @@
 }
 
 .gallery {
-  display: grid;
+  --gallery-gap: clamp(0.38rem, 0.55vw, 0.58rem);
+  display: flex;
   min-width: 0;
+  flex-direction: column;
+  gap: var(--gallery-gap);
+}
+
+.gallerySecondary {
+  display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.4rem;
+  align-content: start;
+  align-items: stretch;
+  gap: var(--gallery-gap);
 }
 
 .galleryItem {
   position: relative;
+  width: 100%;
   min-height: 0;
   aspect-ratio: 2 / 3;
   margin: 0;
+  align-self: stretch;
   overflow: hidden;
   background: #17171a;
 }
 
 .galleryMain {
-  height: min(63vw, 55rem);
-  grid-column: 1 / -1;
-  aspect-ratio: auto;
+  height: auto;
+  aspect-ratio: 1;
 }
 
 .galleryLandscape {
@@ -62,8 +78,8 @@
   aspect-ratio: 3 / 2;
 }
 
-.galleryPortraitWide {
-  aspect-ratio: 2000 / 2571;
+.galleryPortrait {
+  aspect-ratio: 2 / 3;
 }
 
 .zoomTrigger {
@@ -109,7 +125,7 @@
   position: sticky;
   top: 1.25rem;
   min-width: 0;
-  padding-top: clamp(1rem, 2.8vw, 3rem);
+  padding-top: 0;
 }
 
 .eyebrow {
@@ -442,7 +458,7 @@
 .otherColorsGrid {
   display: grid;
   max-width: 93rem;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.45rem;
   margin: 0 auto;
 }
@@ -578,13 +594,16 @@
     display: contents;
   }
 
-  .galleryItem {
+  .gallerySecondary {
     order: 3;
+    margin-top: var(--gallery-gap);
   }
 
   .galleryMain {
     order: 1;
-    height: min(122vw, 52rem);
+    height: auto;
+    aspect-ratio: 4 / 5;
+    margin-top: 0;
   }
 
   .purchasePanel {
@@ -595,7 +614,9 @@
   }
 
   .otherColorsGrid {
-    grid-template-columns: repeat(3, 78vw);
+    grid-auto-columns: min(78vw, 32rem);
+    grid-auto-flow: column;
+    grid-template-columns: none;
     overflow-x: auto;
     margin-right: -1rem;
     padding-right: 1rem;
@@ -618,26 +639,16 @@
     white-space: nowrap;
   }
 
-  .gallery {
-    grid-template-columns: 1fr;
-  }
-
-  .galleryMain {
-    height: 128vw;
-    grid-column: 1;
-  }
-
-  .galleryItem:not(.galleryMain) {
+  .galleryItem:not(.galleryMain):not(.galleryLandscape) {
     aspect-ratio: 2 / 3;
   }
 
-  .galleryLandscape {
-    grid-column: 1;
-    aspect-ratio: 3 / 2;
+  .gallerySecondary {
+    grid-template-columns: 1fr;
   }
 
-  .galleryPortraitWide {
-    aspect-ratio: 2000 / 2571;
+  .galleryItem.galleryLandscape {
+    aspect-ratio: 3 / 2;
   }
 
   .purchasePanel h1 {
@@ -658,10 +669,13 @@
   }
 }
 
-@media (max-height: 780px) and (min-width: 901px) {
+@media (max-height: 55rem) and (min-width: 901px) {
   .purchasePanel {
-    position: relative;
-    top: auto;
+    /*
+     * Tall sticky pattern: the panel first scrolls naturally, then its bottom
+     * remains visible. This avoids both a nested scrollbar and a dead column.
+     */
+    top: calc(100svh - 55rem);
   }
 }
 

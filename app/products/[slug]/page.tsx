@@ -43,6 +43,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
   if (!product) notFound();
 
   const availability = getPublicStockBySize(product.slug);
+  const otherProducts = products.filter((item) => item.slug !== product.slug);
 
   return (
     <main className={styles.page}>
@@ -78,12 +79,11 @@ export default async function ProductPage({ params }: ProductPageProps) {
           </div>
         </div>
         <div className={styles.otherColorsGrid}>
-          {products.map((item) => (
+          {otherProducts.map((item) => (
             <Link
               className={styles.otherColor}
               href={`/products/${item.slug}`}
               key={item.slug}
-              aria-current={item.slug === product.slug ? "page" : undefined}
             >
               <div className={styles.otherColorImage}>
                 <Image

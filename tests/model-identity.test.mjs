@@ -47,6 +47,6 @@ test("story and moodboard identities match the photographed founders", () => {
 
 test("the requested extra Pourpre view is Jérémy", () => {
   assert.match(products, /gallery:[\s\S]*editorial-pourpre-chair\.webp/);
-  assert.match(gallery, /image\.includes\("editorial-pourpre-chair"\)[\s\S]*Jérémy portant/);
+  assert.match(gallery, /image\.src\.includes\("editorial-pourpre-chair"\)[\s\S]*Jérémy portant/);
   assert.doesNotMatch(products, /gallery:[\s\S]*hero-pourpre-model\.webp/);
 });

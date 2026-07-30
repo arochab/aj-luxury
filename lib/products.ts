@@ -2,6 +2,12 @@ export const sizes = ["S", "M", "L", "XL"] as const;
 
 export type ProductSize = (typeof sizes)[number];
 
+export type ProductMedia = {
+  src: string;
+  frame: "main" | "portrait" | "landscape";
+  objectPosition?: string;
+};
+
 export type Product = {
   slug: string;
   modelId: "boxer-aj-luxury";
@@ -11,7 +17,7 @@ export type Product = {
   tone: string;
   swatch: string;
   image: string;
-  gallery: string[];
+  gallery: ProductMedia[];
   tagline: string;
   description: string;
   details: string[];
@@ -59,11 +65,15 @@ export const products: Product[] = [
     swatch: "#7d0f52",
     image: "/images/client/raw/product-card-pourpre.webp",
     gallery: [
-      "/images/client/raw/product-card-pourpre.webp",
-      "/images/client/raw/product-pourpre-detail.webp",
-      "/images/client/raw/product-pourpre-back.webp",
-      "/images/client/raw/product-pourpre-alt.webp",
-      "/images/client/editorial-pourpre-chair.webp",
+      {
+        src: "/images/client/raw/product-card-pourpre.webp",
+        frame: "main",
+        objectPosition: "center 30%",
+      },
+      { src: "/images/client/raw/product-pourpre-detail.webp", frame: "portrait" },
+      { src: "/images/client/raw/product-pourpre-back.webp", frame: "portrait" },
+      { src: "/images/client/raw/product-pourpre-alt.webp", frame: "portrait" },
+      { src: "/images/client/editorial-pourpre-chair.webp", frame: "portrait" },
     ],
     tagline: "Profond et sophistiqué",
     description:
@@ -90,10 +100,14 @@ export const products: Product[] = [
     swatch: "#dda9bd",
     image: "/images/client/raw/product-rose-profile.webp",
     gallery: [
-      "/images/client/raw/product-rose-profile.webp",
-      "/images/client/raw/product-card-rose.webp",
-      "/images/client/raw/product-rose-front.webp",
-      "/images/client/raw/product-rose-detail.webp",
+      {
+        src: "/images/client/raw/product-rose-profile.webp",
+        frame: "main",
+        objectPosition: "center 30%",
+      },
+      { src: "/images/client/raw/product-card-rose.webp", frame: "portrait" },
+      { src: "/images/client/raw/product-rose-front.webp", frame: "portrait" },
+      { src: "/images/client/raw/product-rose-detail.webp", frame: "landscape" },
     ],
     tagline: "Doux et raffiné",
     description:
@@ -120,11 +134,15 @@ export const products: Product[] = [
     swatch: "#a9abd9",
     image: "/images/client/raw/product-lilas-model.webp",
     gallery: [
-      "/images/client/raw/product-lilas-model.webp",
-      "/images/client/editorial-lilas-chair.webp",
-      "/images/client/raw/product-lilas-detail.webp",
-      "/images/client/raw/product-lilas-back.webp",
-      "/images/client/raw/product-lilas-front.webp",
+      {
+        src: "/images/client/raw/product-lilas-model.webp",
+        frame: "main",
+        objectPosition: "center 30%",
+      },
+      { src: "/images/client/editorial-lilas-chair.webp", frame: "portrait" },
+      { src: "/images/client/raw/product-lilas-detail.webp", frame: "portrait" },
+      { src: "/images/client/raw/product-lilas-back.webp", frame: "portrait" },
+      { src: "/images/client/raw/product-lilas-front.webp", frame: "portrait" },
     ],
     tagline: "Délicat et lumineux",
     description:
