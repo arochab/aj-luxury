@@ -13,6 +13,7 @@ type StoreHeaderProps = {
 };
 
 const navigation = [
+  { href: "/", labelKey: "nav.home" },
   { href: "/shop", labelKey: "nav.shop" },
   { href: "/notre-histoire", labelKey: "nav.story" },
 ] satisfies Array<{ href: string; labelKey: TranslationKey }>;
@@ -21,6 +22,14 @@ const accountLinks = [
   { href: "/account", labelKey: "nav.account" },
   { href: "/cart", labelKey: "nav.cart" },
 ] satisfies Array<{ href: string; labelKey: TranslationKey }>;
+
+function isCurrentNavigationItem(pathname: string, href: string) {
+  if (href === "/") return pathname === "/";
+  if (href === "/shop") {
+    return pathname === "/shop" || pathname.startsWith("/products/");
+  }
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
 
 export default function StoreHeader({
   variant = "default",
@@ -38,7 +47,11 @@ export default function StoreHeader({
             : ""
       }`}
     >
-      <Link className={styles.brand} href="/" aria-label="AJ Luxury, accueil">
+      <Link
+        className={styles.brand}
+        href="/"
+        aria-label={`AJ Luxury · ${t("nav.home")}`}
+      >
         <Image
           className={styles.brandImage}
           src="/images/aj-luxury-logo.webp"
@@ -50,14 +63,18 @@ export default function StoreHeader({
         />
       </Link>
 
-      {variant === "default" ? (
+      {variant !== "minimal" ? (
         <nav className={styles.desktopNav} aria-label={t("nav.mainLabel")}>
           {navigation.map((item) => (
             <Link
               className={styles.navLink}
               href={item.href}
               key={item.href}
-              aria-current={pathname === item.href ? "page" : undefined}
+              aria-current={
+                isCurrentNavigationItem(pathname, item.href)
+                  ? "page"
+                  : undefined
+              }
             >
               {t(item.labelKey)}
             </Link>

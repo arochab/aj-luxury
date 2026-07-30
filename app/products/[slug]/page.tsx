@@ -46,7 +46,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
 
   return (
     <main className={styles.page}>
-      <StoreHeader variant="minimal" />
+      <StoreHeader />
 
       <nav className={styles.breadcrumb} aria-label="Fil d’Ariane">
         <Link href="/">Accueil</Link>

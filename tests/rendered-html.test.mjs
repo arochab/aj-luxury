@@ -41,6 +41,7 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
   assert.match(html, /data-hero-version="fusion-v4"/);
   assert.match(html, /images\/client\/hero-duo-static\.webp/);
   assert.match(html, /Figer le métal/);
+  assert.match(html, /href="\/"[^>]*aria-current="page"[^>]*>Accueil</);
   assert.match(html, />Notre histoire</);
   assert.doesNotMatch(html, /94\s*%\s*modal/i);
   assert.doesNotMatch(html, /6\s*%\s*élasthanne/i);
@@ -82,6 +83,11 @@ for (const [pathname, colorName] of productCases) {
     assert.match(html, /Tailles et disponibilité/);
     assert.match(html, /Agrandir la vue 1/);
     assert.match(html, /Disponible/);
+    assert.match(html, />Accueil</);
+    assert.match(
+      html,
+      /href="\/shop"[^>]*aria-current="page"[^>]*>Boutique</,
+    );
     assert.doesNotMatch(
       html,
       /(?:26|36|87|88|102|103)\s+(?:en stock|disponibles?)/i,
@@ -118,6 +124,11 @@ test("server-renders the real boutique and its complete navigation", async () =>
   assert.match(html, /href="\/products\/pourpre"/);
   assert.match(html, /href="\/products\/rose-pale"/);
   assert.match(html, /href="\/products\/lilas-bleu-clair"/);
+  assert.match(html, />Accueil</);
+  assert.match(
+    html,
+    /href="\/shop"[^>]*aria-current="page"[^>]*>Boutique</,
+  );
   assert.match(html, /href="\/shipping-returns"/);
   assert.match(html, /href="\/privacy"/);
   assert.match(html, /href="\/terms"/);
@@ -145,6 +156,11 @@ test("server-renders the complete AJ Luxury story", async () => {
   assert.match(html, /editorial-rose-jeremy\.webp/);
   assert.match(html, /product-rose-model\.webp/);
   assert.match(html, /product-pourpre-detail\.webp/);
+  assert.match(html, />Accueil</);
+  assert.match(
+    html,
+    /href="\/notre-histoire"[^>]*aria-current="page"[^>]*>Notre histoire</,
+  );
   assert.doesNotMatch(html, /Le premier chapitre/);
   assert.doesNotMatch(html, /94\s*%\s*modal|6\s*%\s*élasthanne/);
   assert.doesNotMatch(
