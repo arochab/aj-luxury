@@ -8,17 +8,17 @@ export type EditorialMoodboardImage = {
 export const editorialMoodboardImages: EditorialMoodboardImage[] = [
   {
     src: "/images/client/editorial-pourpre-chair.webp",
-    alt: "Alex portant Apollon Pourpre Impérial, assis",
+    alt: "Jérémy portant Apollon Pourpre Impérial, assis",
     crop: "portrait-left",
   },
   {
     src: "/images/client/campaign-duo-pourpre.webp",
-    alt: "Alex et Jérémy portant Apollon Pourpre Impérial",
+    alt: "Jérémy et Alex portant Apollon Pourpre Impérial",
     crop: "duo",
   },
   {
     src: "/images/client/editorial-rose-profile.webp",
-    alt: "Jérémy portant Apollon Rose Velours, de profil",
+    alt: "Alex portant Apollon Rose Velours, de profil",
     crop: "portrait-right",
   },
 ];

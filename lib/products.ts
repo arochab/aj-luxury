@@ -63,7 +63,7 @@ export const products: Product[] = [
       "/images/client/raw/product-pourpre-detail.webp",
       "/images/client/raw/product-pourpre-back.webp",
       "/images/client/raw/product-pourpre-alt.webp",
-      "/images/client/hero-pourpre-model.webp",
+      "/images/client/editorial-pourpre-chair.webp",
     ],
     tagline: "Profond et sophistiqué",
     description:

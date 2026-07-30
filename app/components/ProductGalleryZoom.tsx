@@ -31,7 +31,7 @@ export default function ProductGalleryZoom({
   }
 
   function getImageAlt(image: string, index: number) {
-    if (image.includes("hero-pourpre-model")) {
+    if (image.includes("editorial-pourpre-chair")) {
       return `Jérémy portant ${model} ${color}`;
     }
 

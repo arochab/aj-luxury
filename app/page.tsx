@@ -11,18 +11,18 @@ import { editorialMoodboardImages } from "../lib/editorial-moodboard";
 
 const featuredEditorialImages = [
   {
-    src: "/images/client/editorial-rose-alex.webp",
-    alt: "Alex portant Apollon Rose Velours",
+    src: "/images/client/editorial-rose-profile.webp",
+    alt: "Alex portant Apollon Rose Velours, de profil",
     crop: "portrait-left",
   },
   {
     src: "/images/client/campaign-duo-lilas-seated.webp",
-    alt: "Alex et Jérémy portant Apollon Lilas Céleste",
+    alt: "Jérémy et Alex portant Apollon Lilas Céleste",
     crop: "duo",
   },
   {
-    src: "/images/client/hero-pourpre-model.webp",
-    alt: "Jérémy portant Apollon Pourpre Impérial",
+    src: "/images/client/editorial-pourpre-chair.webp",
+    alt: "Jérémy portant Apollon Pourpre Impérial, assis",
     crop: "portrait-right",
   },
 ];
@@ -54,7 +54,7 @@ export default function Home() {
         <div className="aj-featured__glow" aria-hidden="true" />
         <div
           className="aj-featured__editorial"
-          aria-label="Éditorial AJ Luxury avec Jérémy et Alex"
+          aria-label="Éditorial AJ Luxury avec Alex et Jérémy"
         >
           {featuredEditorialImages.map((image, index) => (
             <figure

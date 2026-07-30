@@ -13,6 +13,14 @@ un livrable visuel.
 - Version de référence auditée : prévisualisation AJ Luxury publiée avant ce lot.
 - Responsabilité de mise en œuvre et de recette : Adam CHABBI.
 
+## Référentiel d’identité vérifié
+
+- **Jérémy** : peau claire, cheveux lâchés, tatouage sur le haut du torse.
+- **Alex** : peau mate, cheveux longs attachés, barbe.
+- Ce référentiel prévaut sur les anciens noms de fichiers techniques. Toutes les
+  associations visibles et tous les textes alternatifs ont été revérifiés photo
+  par photo le 30 juillet 2026.
+
 ## Éléments validés à préserver
 
 | ID | Validation client | Critère de non-régression |

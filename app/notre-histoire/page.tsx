@@ -66,7 +66,7 @@ export default function NotreHistoirePage() {
           <Image
             unoptimized
             src="/images/client/product-rose-model.webp"
-            alt="Jérémy portant Apollon Rose Velours, silhouette et produit visibles"
+            alt="Alex portant Apollon Rose Velours, silhouette et produit visibles"
             fill
             sizes="(max-width: 760px) 100vw, 60vw"
           />
