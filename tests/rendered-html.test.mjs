@@ -157,11 +157,12 @@ test("server-renders the complete AJ Luxury story", async () => {
 
 const informationCases = [
   ["/shipping-returns", /Livraison et retours/],
-  ["/privacy", /Confidentialité/],
-  ["/terms", /Conditions générales/],
+  ["/privacy", /Politique de confidentialité/],
+  ["/terms", /Conditions générales de vente/],
   ["/contact", /Nous contacter/],
   ["/legal-notice", /Mentions légales/],
   ["/cookies", /Cookies/],
+  ["/withdrawal", /Renoncer au contrat ici/],
 ];
 
 for (const [pathname, marker] of informationCases) {
@@ -170,7 +171,6 @@ for (const [pathname, marker] of informationCases) {
     assert.equal(response.status, 200);
     const html = await response.text();
     assert.match(html, marker);
-    assert.match(html, /Contenu à valider avant mise en ligne/);
   });
 }
 
@@ -179,13 +179,59 @@ test("legal notice exposes the required pre-launch checklist without invented co
   assert.equal(response.status, 200);
   const html = await response.text();
   assert.match(html, /Éditeur du site/);
-  assert.match(html, /Adresse officielle de domiciliation/);
-  assert.match(html, /SIREN, SIRET et RCS\/RNE/);
+  assert.match(html, /adresse du siège ou de domiciliation/);
+  assert.match(html, /SIREN, SIRET et mention RCS\/RNE/);
   assert.match(html, /Direction de la publication/);
   assert.match(html, /Cloudflare, Inc\./);
+  assert.match(html, /\+33 1 73 01 52 44/);
   assert.match(html, /contact@ajluxurystore\.com/);
-  assert.match(html, /Numéro de contact de l’entreprise/);
-  assert.match(html, /à confirmer/i);
+  assert.match(html, /À compléter avant l’ouverture des ventes/);
+  assert.match(html, /à compléter/i);
+});
+
+test("terms cover the 2026 consumer baseline without a blanket underwear exclusion", async () => {
+  const response = await render("/terms");
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /quatorze jours calendaires/i);
+  assert.match(html, /deux ans à compter de la délivrance/i);
+  assert.match(html, /prolongée de six mois/i);
+  assert.match(html, /renouvelée pour deux ans/i);
+  assert.match(html, /Renoncer au contrat ici/);
+  assert.match(html, /accusé de réception/i);
+  assert.match(html, /n’est pas exclu du seul fait que le produit est un sous-vêtement/i);
+  assert.match(html, /médiateur conventionné/i);
+  assert.doesNotMatch(html, /plateforme (?:européenne )?(?:de )?règlement en ligne|ec\.europa\.eu\/consumers\/odr/i);
+});
+
+test("privacy and cookies describe the actual preview storage and no fictitious tracker", async () => {
+  const privacyResponse = await render("/privacy");
+  const privacyHtml = await privacyResponse.text();
+  assert.match(privacyHtml, /prévisualisation ne permet pas encore/i);
+  assert.match(privacyHtml, /Facturation et comptabilité/);
+  assert.match(privacyHtml, /10 ans/);
+  assert.match(privacyHtml, /CNIL/);
+  assert.match(privacyHtml, /ne conserve pas le cryptogramme/i);
+
+  const cookiesResponse = await render("/cookies");
+  const cookiesHtml = await cookiesResponse.text();
+  assert.match(cookiesHtml, /aj-luxury\.locale\.v1/);
+  assert.match(cookiesHtml, /aj-luxury-intro-seen/);
+  assert.match(cookiesHtml, /aucun outil publicitaire/i);
+  assert.match(cookiesHtml, /tout accepter/i);
+  assert.match(cookiesHtml, /tout refuser/i);
+  assert.match(cookiesHtml, /six mois/i);
+  assert.doesNotMatch(cookiesHtml, /Google Analytics|Meta Pixel|TikTok Pixel/i);
+});
+
+test("withdrawal route is visible but cannot fake a live order workflow", async () => {
+  const response = await render("/withdrawal");
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /Aucune commande réelle ne peut avoir été conclue/i);
+  assert.match(html, /accusé horodaté/i);
+  assert.match(html, /accessible sans connexion et sans frais/i);
+  assert.match(html, /contact@ajluxurystore\.com/);
 });
 
 test("cart keeps the selected color and size", async () => {

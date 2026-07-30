@@ -46,6 +46,9 @@ export default function StoreFooter() {
               <Link className={styles.footerLink} href="/shipping-returns">
                 {t("footer.shippingReturns")}
               </Link>
+              <Link className={styles.footerLink} href="/withdrawal">
+                Renoncer au contrat ici
+              </Link>
             </nav>
           </section>
 

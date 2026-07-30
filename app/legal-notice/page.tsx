@@ -1,95 +1,142 @@
-import InfoPage from "../components/InfoPage";
+import InfoPage, { InfoNotice } from "../components/InfoPage";
+import {
+  HOSTING_PROVIDER,
+  LEGAL_CONTACT,
+  LEGAL_VERSION,
+  SELLER_IDENTITY,
+} from "@/lib/legal";
 
 export const metadata = { title: "Mentions légales | AJ Luxury" };
 
 export default function LegalNoticePage() {
   return (
-    <InfoPage eyebrow="Informations légales" title="Mentions légales.">
-      <p>
-        Cette page est structurée pour l’ouverture de la boutique. Les données
-        signalées « à confirmer » devront être remplacées par les informations
-        officielles de l’entreprise avant l’activation des ventes.
-      </p>
+    <InfoPage
+      eyebrow={`Informations légales · version du ${LEGAL_VERSION}`}
+      title="Mentions légales."
+      status="Pré-lancement · les champs signalés doivent être remplacés par les données officielles avant toute vente"
+    >
+      <InfoNotice warning>
+        <p>
+          <strong>Identité à finaliser.</strong> La marque et le contact sont
+          connus ; la dénomination légale, l’immatriculation, le siège, le
+          téléphone et le directeur de publication doivent encore être fournis
+          par AJ Luxury. La boutique ne doit pas accepter de paiement avant leur
+          publication.
+        </p>
+      </InfoNotice>
 
       <section>
-        <h2>Éditeur du site</h2>
+        <h2>1. Éditeur du site</h2>
         <dl>
           <div>
-            <dt>Nom ou raison sociale</dt>
-            <dd>AJ Luxury · à confirmer</dd>
+            <dt>Marque</dt>
+            <dd>{LEGAL_CONTACT.brand}</dd>
           </div>
           <div>
-            <dt>Forme juridique et capital social</dt>
-            <dd>À confirmer</dd>
+            <dt>Nom ou raison sociale</dt>
+            <dd>{SELLER_IDENTITY.legalName}</dd>
+          </div>
+          <div>
+            <dt>Forme juridique et capital</dt>
+            <dd>{SELLER_IDENTITY.legalForm}</dd>
           </div>
           <div>
             <dt>Siège social</dt>
-            <dd>
-              Adresse officielle de domiciliation d’AJ Luxury · à confirmer
-            </dd>
+            <dd>{SELLER_IDENTITY.registeredOffice}</dd>
           </div>
           <div>
             <dt>Immatriculation</dt>
-            <dd>SIREN, SIRET et RCS/RNE · à confirmer</dd>
+            <dd>{SELLER_IDENTITY.registration}</dd>
           </div>
           <div>
             <dt>TVA intracommunautaire</dt>
-            <dd>À confirmer, si applicable</dd>
+            <dd>{SELLER_IDENTITY.vatNumber}</dd>
           </div>
           <div>
-            <dt>Contact</dt>
+            <dt>E-mail</dt>
             <dd>
-              <a href="mailto:contact@ajluxurystore.com">
-                contact@ajluxurystore.com
-              </a>
+              <a href={`mailto:${LEGAL_CONTACT.email}`}>{LEGAL_CONTACT.email}</a>
             </dd>
           </div>
           <div>
             <dt>Téléphone</dt>
-            <dd>Numéro de contact de l’entreprise · à confirmer</dd>
+            <dd>{LEGAL_CONTACT.phone}</dd>
           </div>
         </dl>
       </section>
 
       <section>
-        <h2>Direction de la publication</h2>
+        <h2>2. Direction de la publication</h2>
+        <p>{SELLER_IDENTITY.publicationDirector}.</p>
+      </section>
+
+      <section>
+        <h2>3. Hébergement</h2>
+        <dl>
+          <div>
+            <dt>Hébergeur</dt>
+            <dd>{HOSTING_PROVIDER.name}</dd>
+          </div>
+          <div>
+            <dt>Adresse</dt>
+            <dd>{HOSTING_PROVIDER.address}</dd>
+          </div>
+          <div>
+            <dt>Téléphone</dt>
+            <dd>{HOSTING_PROVIDER.phone}</dd>
+          </div>
+          <div>
+            <dt>Site</dt>
+            <dd>
+              <a href={HOSTING_PROVIDER.website} rel="noreferrer">
+                cloudflare.com
+              </a>
+            </dd>
+          </div>
+        </dl>
         <p>
-          Nom du représentant légal ou du responsable de publication d’AJ
-          Luxury · à confirmer.
+          Ces informations décrivent l’hébergement de la prévisualisation et
+          devront être actualisées si l’environnement de production change.
         </p>
       </section>
 
       <section>
-        <h2>Hébergement de la prévisualisation</h2>
+        <h2>4. Propriété intellectuelle</h2>
         <p>
-          Cloudflare, Inc. · 101 Townsend Street, San Francisco, California
-          94107, États-Unis ·{" "}
-          <a href="https://www.cloudflare.com" rel="noreferrer">
-            cloudflare.com
-          </a>
+          La structure du site, les textes, photographies, vidéos, créations
+          graphiques, marques et logos sont protégés par les droits de propriété
+          intellectuelle de leurs titulaires. Toute reproduction, représentation,
+          adaptation ou exploitation non autorisée, totale ou partielle, est
+          interdite.
         </p>
         <p>
-          Ces coordonnées devront être actualisées si l’hébergeur retenu pour
-          la boutique finale diffère de celui de la prévisualisation.
-        </p>
-      </section>
-
-      <section>
-        <h2>Propriété intellectuelle</h2>
-        <p>
-          Les textes, photographies, vidéos, marques, logos et éléments
-          graphiques présentés sur ce site restent la propriété de leurs
-          titulaires respectifs. Toute reproduction ou utilisation non
-          autorisée est interdite.
+          Les droits sur les contenus remis par AJ Luxury restent soumis aux
+          accords conclus avec leurs auteurs, photographes, modèles ou
+          prestataires. Toute demande d’autorisation doit être adressée à{" "}
+          <a href={`mailto:${LEGAL_CONTACT.email}`}>{LEGAL_CONTACT.email}</a>.
         </p>
       </section>
 
       <section>
-        <h2>Données personnelles</h2>
+        <h2>5. Responsabilité et liens</h2>
         <p>
-          Les modalités de traitement des données seront détaillées dans la
-          politique de confidentialité avant l’activation des comptes clients,
-          du paiement, de la newsletter ou de tout outil de mesure d’audience.
+          AJ Luxury s’efforce de maintenir des informations exactes et un accès
+          sécurisé. Elle ne peut toutefois garantir une disponibilité
+          ininterrompue. Les liens vers des sites tiers sont fournis à titre
+          informatif ; AJ Luxury n’en contrôle ni le contenu ni les pratiques.
+          Aucune clause de cette page ne limite les droits impératifs des
+          consommateurs.
+        </p>
+      </section>
+
+      <section>
+        <h2>6. Données et réclamations</h2>
+        <p>
+          Les traitements sont décrits dans la{" "}
+          <a href="/privacy">politique de confidentialité</a> et la{" "}
+          <a href="/cookies">politique cookies</a>. Les règles commerciales et
+          le règlement des litiges figurent dans les{" "}
+          <a href="/terms">conditions générales de vente</a>.
         </p>
       </section>
     </InfoPage>
