@@ -12,9 +12,6 @@ export default function ContactPage() {
           contact@ajluxurystore.com
         </a>
       </p>
-      <p>
-        <T id="contact.instagramPending" />
-      </p>
     </InfoPage>
   );
 }

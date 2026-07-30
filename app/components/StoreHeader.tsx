@@ -62,13 +62,6 @@ export default function StoreHeader({
               {t(item.labelKey)}
             </Link>
           ))}
-          <span
-            className={styles.socialPending}
-            aria-label={t("nav.instagramPendingLabel")}
-            title={t("nav.instagramPendingTitle")}
-          >
-            {t("nav.instagram")}
-          </span>
         </nav>
       ) : null}
 

@@ -139,12 +139,18 @@ test("server-renders the complete AJ Luxury story", async () => {
   const html = await response.text();
   assert.match(html, /Notre histoire/);
   assert.match(html, /Le point de départ/);
-  assert.match(html, /Une vision incarnée/);
-  assert.match(html, /Notre définition du luxe/);
-  assert.match(html, /campaign-duo-lilas-close\.webp/);
+  assert.match(html, /Jérémy &amp; Alex/);
+  assert.match(html, /Pas d’excès\. Simplement la justesse des détails\./);
+  assert.match(html, /campaign-duo-lilas-seated\.webp/);
+  assert.match(html, /editorial-rose-jeremy\.webp/);
   assert.match(html, /product-rose-model\.webp/);
+  assert.match(html, /product-pourpre-detail\.webp/);
   assert.doesNotMatch(html, /Le premier chapitre/);
   assert.doesNotMatch(html, /94\s*%\s*modal|6\s*%\s*élasthanne/);
+  assert.doesNotMatch(
+    html,
+    /intention d’image|casting|futurs? shootings?|compte officiel à confirmer/i,
+  );
   assert.match(html, /href="\/shop"/);
   assert.doesNotMatch(html, /iStock|Getty|Lorem ipsum/i);
 });

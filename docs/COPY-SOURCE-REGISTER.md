@@ -14,6 +14,10 @@ Date du contrôle : 23 juillet 2026
 - « Reveal Your Inner Beauty »
 - « Le véritable luxe commence par ce que l’on porte au plus près de soi. »
 - « Le confort est une véritable source de confiance en soi. »
+- « Tout est parti d’un constat simple : les sous-vêtements sont souvent considérés comme un simple basique, alors qu’ils sont le premier vêtement que l’on enfile chaque matin. Pourtant, ils influencent notre confort, notre assurance et notre bien-être tout au long de la journée. »
+- « C’est de cette conviction qu’est née AJ Luxury. »
+- « Notre ambition est de réinventer cet essentiel du quotidien en créant des sous-vêtements qui allient élégance, confort et qualité, sans jamais faire de compromis. »
+- « Pas d’excès. Simplement la justesse des détails. »
 - « Chaque détail compte. »
 - Les trois descriptions Apollon transmises pour Pourpre Impérial, Rose Velours et Lilas Céleste.
 - Les caractéristiques transmises : coupe boxer classique, 94 % modal, 6 % élasthanne, toucher doux et soyeux, matière respirante et confortable, ceinture premium de 3,5 cm, logo métallique AJ Luxury et maintien optimal au quotidien.
@@ -25,6 +29,7 @@ Date du contrôle : 23 juillet 2026
 - Tailles : S, M, L et XL.
 - Prix indiqué « à confirmer » tant qu’il n’est pas validé.
 - Les quantités de stock restent des données internes à la maquette commerciale.
+- Jérémy et Alex sont les cofondateurs d’AJ Luxury et les deux visages de la première campagne.
 
 ## Libellés d’interface
 

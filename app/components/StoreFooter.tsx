@@ -21,7 +21,7 @@ export default function StoreFooter() {
             height={92}
             unoptimized
           />
-          <h2 className={styles.footerTitle} id="footer-title">
+          <h2 className={styles.footerTitle} id="footer-title" lang="en">
             Reveal Your Inner Beauty
           </h2>
           <p className={styles.footerCopy} lang="fr">
@@ -78,40 +78,14 @@ export default function StoreFooter() {
               <Link className={styles.footerLink} href="/cookies">
                 {t("footer.cookies")}
               </Link>
-              <span className={styles.instagramPending}>
-                {t("footer.instagramPending")}
-              </span>
             </nav>
-          </section>
-
-          <section
-            className={styles.newsletterColumn}
-            aria-labelledby="footer-newsletter"
-          >
-            <h3 className={styles.footerHeading} id="footer-newsletter">
-              {t("footer.newsletter")}
-            </h3>
-            <div className={styles.newsletter} aria-describedby="newsletter-note">
-              <input
-                type="email"
-                placeholder={t("footer.emailPlaceholder")}
-                aria-label={t("footer.emailPlaceholder")}
-                disabled
-              />
-              <button type="button" disabled>
-                {t("common.comingSoon")}
-              </button>
-            </div>
-            <p className={styles.newsletterNote} id="newsletter-note">
-              {t("footer.newsletterNote")}
-            </p>
           </section>
         </div>
       </div>
 
       <div className={styles.footerBottom}>
         <span>© {new Date().getFullYear()} AJ Luxury</span>
-        <span>Reveal Your Inner Beauty</span>
+        <span lang="en">Reveal Your Inner Beauty</span>
       </div>
     </footer>
   );
