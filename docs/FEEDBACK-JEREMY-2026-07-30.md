@@ -78,8 +78,8 @@ volontairement séparée du code et soumise à validation avant intégration.
 ## Preuves d’exécution avant publication
 
 - **Code :** build de production et lint sans erreur.
-- **Tests automatisés :** 38 tests réussis, dont 4 contrôles dédiés à la
-  confidentialité du stock.
+- **Tests automatisés :** 41 tests réussis, dont 4 contrôles dédiés à la
+  confidentialité du stock et 3 contrôles dédiés à l’identité des mannequins.
 - **Données publiques :** bundle client, HTML produit, panier et checkout
   contrôlés ; aucune quantité métier exacte n’est transmise.
 - **Responsive :** 36 combinaisons contrôlées, soit 6 pages sur 6 largeurs
@@ -96,15 +96,29 @@ volontairement séparée du code et soumise à validation avant intégration.
 ## Preuves de publication
 
 - **Commit de l’implémentation validée :**
-  `70a9bfda3dcc75f78a860d54a7d8d95ea44b1a59`.
+  `287540d384478895909c6bde9bc7f9a577fade9b`.
 - **Cloudflare public :**
   `https://aj-luxury-preview.adam-chabbi94.workers.dev/`.
 - **Cloudflare Version ID :**
-  `2e0f919c-5847-415c-85aa-af4547f924aa`.
-- **Sites, version 13 :**
+  `0ecaff53-48d6-4206-969d-ccee9f03f0c6`.
+- **Sites, version 14 :**
   `https://aj-luxury-preview.arochab.chatgpt.site`.
 - Les deux environnements ont été construits à partir du même commit et la
   version Cloudflare a fait l’objet d’un contrôle public mobile et ultra-large.
+
+## Contre-audit correctif d’identité
+
+| Zone | Jérémy | Alex | Résultat publié |
+| --- | --- | --- | --- |
+| Référentiel | Peau claire, cheveux lâchés, tatouage haut du torse | Peau mate, cheveux attachés, barbe | **Vérifié sur les sources HD** |
+| Accueil | Portrait Pourpre à droite | Profil Rose à gauche | **Conforme au retour client** |
+| Duo Lilas | Au premier plan, à gauche dans la photo | À l’arrière-plan, à droite dans la photo | **Texte alternatif corrigé** |
+| Notre Histoire | Présent dans le duo d’ouverture | Porte le Rose dans la section incarnée | **Identités corrigées** |
+| Fiche Pourpre | Cinquième vue ajoutée | Non attribuée à tort | **Conforme à la demande de Jérémy** |
+
+Les quatre contrôles publics ciblés — accueil sur les deux environnements,
+fiche Pourpre sur Cloudflare et Notre Histoire sur Sites — répondent en HTTP 200
+et exposent les bonnes identités.
 
 ## Jury final indépendant
 
