@@ -97,12 +97,12 @@ volontairement séparée du code et soumise à validation avant intégration.
 ## Preuves de publication
 
 - **Commit de l’implémentation validée :**
-  `287540d384478895909c6bde9bc7f9a577fade9b`.
+  `88fc8a643e9cd95074c8e76cecbc67c8aec41be3`.
 - **Cloudflare public :**
   `https://aj-luxury-preview.adam-chabbi94.workers.dev/`.
 - **Cloudflare Version ID :**
-  `0ecaff53-48d6-4206-969d-ccee9f03f0c6`.
-- **Sites, version 14 :**
+  `490d6621-9834-4a7f-b1a2-0d4c17c602fc`.
+- **Sites, version 15 :**
   `https://aj-luxury-preview.arochab.chatgpt.site`.
 - Les deux environnements ont été construits à partir du même commit et la
   version Cloudflare a fait l’objet d’un contrôle public mobile et ultra-large.
@@ -112,7 +112,7 @@ volontairement séparée du code et soumise à validation avant intégration.
 | Zone | Jérémy | Alex | Résultat publié |
 | --- | --- | --- | --- |
 | Référentiel | Peau claire, cheveux lâchés, tatouage haut du torse | Peau mate, cheveux attachés, barbe | **Vérifié sur les sources HD** |
-| Accueil | Portrait Pourpre à droite | Profil Rose à gauche | **Conforme au retour client** |
+| Accueil | Nouveau profil Pourpre à droite | Nouvelle pose Rose à gauche | **Trois prises inédites et trois coloris distincts** |
 | Duo Lilas | Au premier plan, à gauche dans la photo | À l’arrière-plan, à droite dans la photo | **Texte alternatif corrigé** |
 | Notre Histoire | Présent dans le duo d’ouverture | Porte le Rose dans la section incarnée | **Identités corrigées** |
 | Fiche Pourpre | Cinquième vue ajoutée | Non attribuée à tort | **Conforme à la demande de Jérémy** |
