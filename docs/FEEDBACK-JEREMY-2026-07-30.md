@@ -87,8 +87,16 @@ volontairement séparée du code et soumise à validation avant intégration.
 
 ## Preuves de publication
 
-À compléter avec le commit final et les deux URL synchronisées après le verdict
-du jury.
+- **Commit de l’implémentation validée :**
+  `70a9bfda3dcc75f78a860d54a7d8d95ea44b1a59`.
+- **Cloudflare public :**
+  `https://aj-luxury-preview.adam-chabbi94.workers.dev/`.
+- **Cloudflare Version ID :**
+  `2e0f919c-5847-415c-85aa-af4547f924aa`.
+- **Sites, version 13 :**
+  `https://aj-luxury-preview.arochab.chatgpt.site`.
+- Les deux environnements ont été construits à partir du même commit et la
+  version Cloudflare a fait l’objet d’un contrôle public mobile et ultra-large.
 
 ## Jury final indépendant
 
