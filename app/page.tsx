@@ -11,18 +11,18 @@ import { editorialMoodboardImages } from "../lib/editorial-moodboard";
 
 const featuredEditorialImages = [
   {
-    src: "/images/client/editorial-rose-profile.webp",
-    alt: "Alex portant Apollon Rose Velours, de profil",
+    src: "/images/client/editorial-rose-alex-standing.webp",
+    alt: "Alex portant Apollon Rose Velours",
     crop: "portrait-left",
   },
   {
-    src: "/images/client/campaign-duo-lilas-seated.webp",
-    alt: "Jérémy et Alex portant Apollon Lilas Céleste",
+    src: "/images/client/editorial-lilas-product-focus.webp",
+    alt: "Détail porté d’Apollon Lilas Céleste",
     crop: "duo",
   },
   {
-    src: "/images/client/editorial-pourpre-chair.webp",
-    alt: "Jérémy portant Apollon Pourpre Impérial, assis",
+    src: "/images/client/editorial-pourpre-jeremy-profile.webp",
+    alt: "Jérémy portant Apollon Pourpre Impérial, de profil",
     crop: "portrait-right",
   },
 ];
@@ -54,7 +54,7 @@ export default function Home() {
         <div className="aj-featured__glow" aria-hidden="true" />
         <div
           className="aj-featured__editorial"
-          aria-label="Éditorial AJ Luxury avec Alex et Jérémy"
+          aria-label="Éditorial des trois coloris AJ Luxury avec Alex et Jérémy"
         >
           {featuredEditorialImages.map((image, index) => (
             <figure

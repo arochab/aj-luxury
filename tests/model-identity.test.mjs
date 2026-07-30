@@ -10,14 +10,24 @@ const [home, story, moodboard, products, gallery] = await Promise.all([
   readFile(new URL("../app/components/ProductGalleryZoom.tsx", import.meta.url), "utf8"),
 ]);
 
-test("the homepage keeps Alex left and Jérémy right with verified assets", () => {
-  const alexIndex = home.indexOf("/images/client/editorial-rose-profile.webp");
-  const jeremyIndex = home.indexOf("/images/client/editorial-pourpre-chair.webp");
+test("the homepage keeps Alex left and Jérémy right with three unused colorway assets", () => {
+  const alexIndex = home.indexOf(
+    "/images/client/editorial-rose-alex-standing.webp",
+  );
+  const lilasIndex = home.indexOf(
+    "/images/client/editorial-lilas-product-focus.webp",
+  );
+  const jeremyIndex = home.indexOf(
+    "/images/client/editorial-pourpre-jeremy-profile.webp",
+  );
 
   assert.ok(alexIndex >= 0, "Alex's verified Rose profile must be present");
-  assert.ok(jeremyIndex > alexIndex, "Jérémy's verified Pourpre portrait must be on the right");
-  assert.match(home, /Alex portant Apollon Rose Velours, de profil/);
-  assert.match(home, /Jérémy portant Apollon Pourpre Impérial, assis/);
+  assert.ok(lilasIndex > alexIndex, "the Lilas product focus must be centered");
+  assert.ok(jeremyIndex > lilasIndex, "Jérémy's verified Pourpre portrait must be on the right");
+  assert.match(home, /Alex portant Apollon Rose Velours/);
+  assert.match(home, /Détail porté d’Apollon Lilas Céleste/);
+  assert.match(home, /Jérémy portant Apollon Pourpre Impérial, de profil/);
+  assert.doesNotMatch(home, /campaign-duo-lilas-seated\.webp/);
 });
 
 test("story and moodboard identities match the photographed founders", () => {

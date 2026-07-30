@@ -45,6 +45,7 @@ un livrable visuel.
 | FB-07 | Fiche Pourpre | Ajouter une photo supplémentaire de Jérémy | Ajouter une vue pertinente sans supprimer les vues techniques | **Appliqué et testé : 5 vues** |
 | FB-08 | Fiche Rose | Agrandir les photos et supprimer les bandes grises | Reprendre ratios, cadres et points focaux ; conserver deux photos de chaque fondateur | **Appliqué et testé : 4 vues** |
 | FB-09 | Fiche Lilas | Supprimer les bandes grises | Même traitement que Rose, sans recadrage destructeur | **Appliqué et testé : 5 vues** |
+| FB-10 | Accueil, triptyque éditorial | Montrer les trois coloris avec des photos encore absentes du site | Alex en Rose à gauche, détail porté Lilas au centre et Jérémy en Pourpre à droite, à partir des fichiers HD `IMG_5609`, `IMG_5539` et `IMG_5520` | **Appliqué et testé** |
 
 ## Règle métier stock
 
