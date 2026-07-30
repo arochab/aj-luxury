@@ -3,6 +3,7 @@
   --muted: #74747a;
   --line: rgba(17, 17, 20, 0.16);
   --silver: #c8c9cc;
+  --editorial-label-size: clamp(0.78rem, 0.72vw, 0.88rem);
   min-height: 100vh;
   overflow: clip;
   background: #f3f3f1;
@@ -48,7 +49,7 @@
 .meta,
 .model {
   margin: 0;
-  font-size: 0.66rem;
+  font-size: var(--editorial-label-size);
   font-weight: 700;
   letter-spacing: 0.17em;
   text-transform: uppercase;
