@@ -3369,7 +3369,8 @@ footer:not([class]) > p {
 
 .aj-product-card__image img {
   object-fit: cover;
-  object-position: center 28%;
+  object-position: center top;
+  transform-origin: 50% 0%;
   transition: transform 900ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 

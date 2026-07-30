@@ -18,6 +18,10 @@ const productPage = await readFile(
   new URL("../app/products/[slug]/page.tsx", import.meta.url),
   "utf8",
 );
+const globalStyles = await readFile(
+  new URL("../app/globals.css", import.meta.url),
+  "utf8",
+);
 
 test("paired portrait media share one 2:3 frame", () => {
   assert.match(css, /\.galleryPortrait\s*\{[^}]*aspect-ratio:\s*2\s*\/\s*3/s);
@@ -61,5 +65,16 @@ test("recommendations exclude the product currently viewed", () => {
   assert.match(
     productPage,
     /products\.filter\(\(item\) => item\.slug !== product\.slug\)/,
+  );
+});
+
+test("homepage product portraits preserve the full head area", () => {
+  assert.match(
+    globalStyles,
+    /\.aj-product-card__image img\s*\{[^}]*object-position:\s*center top;[^}]*transform-origin:\s*50% 0%;/s,
+  );
+  assert.doesNotMatch(
+    globalStyles,
+    /\.aj-product-card__image img\s*\{[^}]*object-position:\s*center 28%;/s,
   );
 });
