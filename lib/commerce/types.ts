@@ -29,6 +29,7 @@ export type ProductVariant = {
   price: Money;
   availableForSale: boolean;
   inventoryPolicy: InventoryPolicy;
+  /** Quantité interne disponible à la vente. Ne jamais exposer au navigateur. */
   inventoryQuantity: number | null;
 };
 

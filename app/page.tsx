@@ -11,18 +11,18 @@ import { editorialMoodboardImages } from "../lib/editorial-moodboard";
 
 const featuredEditorialImages = [
   {
-    src: "/images/client/editorial-lilas-chair.webp",
-    alt: "Jérémy portant Apollon Lilas Céleste, assis",
+    src: "/images/client/editorial-rose-alex.webp",
+    alt: "Alex portant Apollon Rose Velours",
     crop: "portrait-left",
   },
   {
     src: "/images/client/campaign-duo-lilas-seated.webp",
-    alt: "Jérémy et Alex portant Apollon Lilas Céleste",
+    alt: "Alex et Jérémy portant Apollon Lilas Céleste",
     crop: "duo",
   },
   {
     src: "/images/client/hero-pourpre-model.webp",
-    alt: "Alex portant Apollon Pourpre Impérial",
+    alt: "Jérémy portant Apollon Pourpre Impérial",
     crop: "portrait-right",
   },
 ];

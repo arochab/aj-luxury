@@ -20,7 +20,6 @@ export type Product = {
   status: "launch-product";
   statusLabel: string;
   primaryModel: boolean;
-  inventory: Record<ProductSize, number>;
   benefits: Array<{ title: string; text: string }>;
 };
 
@@ -64,6 +63,7 @@ export const products: Product[] = [
       "/images/client/raw/product-pourpre-detail.webp",
       "/images/client/raw/product-pourpre-back.webp",
       "/images/client/raw/product-pourpre-alt.webp",
+      "/images/client/hero-pourpre-model.webp",
     ],
     tagline: "Profond et sophistiqué",
     description:
@@ -78,7 +78,6 @@ export const products: Product[] = [
     status: "launch-product",
     statusLabel: "Modèle Apollon",
     primaryModel: true,
-    inventory: { S: 26, M: 103, L: 87, XL: 36 },
     benefits,
   },
   {
@@ -93,8 +92,8 @@ export const products: Product[] = [
     gallery: [
       "/images/client/raw/product-rose-profile.webp",
       "/images/client/raw/product-card-rose.webp",
-      "/images/client/raw/product-rose-detail.webp",
       "/images/client/raw/product-rose-front.webp",
+      "/images/client/raw/product-rose-detail.webp",
     ],
     tagline: "Doux et raffiné",
     description:
@@ -109,7 +108,6 @@ export const products: Product[] = [
     status: "launch-product",
     statusLabel: "Modèle Apollon",
     primaryModel: true,
-    inventory: { S: 26, M: 103, L: 87, XL: 36 },
     benefits,
   },
   {
@@ -141,7 +139,6 @@ export const products: Product[] = [
     status: "launch-product",
     statusLabel: "Modèle Apollon",
     primaryModel: true,
-    inventory: { S: 26, M: 102, L: 88, XL: 36 },
     benefits,
   },
 ];

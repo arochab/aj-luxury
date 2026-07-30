@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useI18n } from "@/lib/i18n/I18nProvider";
+import type { PublicStockBySize } from "../../lib/commerce/public-stock";
 import type { Product, ProductSize } from "../../lib/products";
 import { formatPrice, sizes } from "../../lib/products";
 import styles from "./ProductPage.module.css";
@@ -10,19 +11,40 @@ import styles from "./ProductPage.module.css";
 type ProductPurchaseProps = {
   product: Product;
   products: Product[];
+  availability: PublicStockBySize;
 };
 
 export default function ProductPurchase({
   product,
   products,
+  availability,
 }: ProductPurchaseProps) {
   const [selectedSize, setSelectedSize] = useState<ProductSize | null>(null);
   const [added, setAdded] = useState(false);
   const { locale, t } = useI18n();
 
   function selectSize(size: ProductSize) {
+    if (availability[size].state === "sold-out") return;
+
     setSelectedSize(size);
     setAdded(false);
+  }
+
+  function stockLabel(size: ProductSize) {
+    const stock = availability[size];
+
+    if (stock.state === "sold-out") {
+      return t("product.soldOut");
+    }
+
+    if (stock.state === "low-stock") {
+      return t("product.onlyLeft").replace(
+        "{count}",
+        String(stock.remaining),
+      );
+    }
+
+    return t("product.available");
   }
 
   return (
@@ -75,18 +97,25 @@ export default function ProductPurchase({
           <a href="#guide-tailles">{t("product.sizeGuide")}</a>
         </legend>
         <div className={styles.sizeOptions}>
-          {sizes.map((size) => (
-            <button
-              className={styles.sizeButton}
-              type="button"
-              key={size}
-              aria-pressed={selectedSize === size}
-              aria-label={`${t("product.size")} ${size}, ${product.inventory[size]} ${t("product.inStock")}`}
-              onClick={() => selectSize(size)}
-            >
-              {size}
-            </button>
-          ))}
+          {sizes.map((size) => {
+            const label = stockLabel(size);
+            const soldOut = availability[size].state === "sold-out";
+
+            return (
+              <button
+                className={styles.sizeButton}
+                type="button"
+                key={size}
+                aria-pressed={selectedSize === size}
+                aria-label={`${t("product.size")} ${size}, ${label}`}
+                disabled={soldOut}
+                onClick={() => selectSize(size)}
+              >
+                <span>{size}</span>
+                <span className={styles.sizeAvailability}>{label}</span>
+              </button>
+            );
+          })}
         </div>
       </fieldset>
 
@@ -146,9 +175,7 @@ export default function ProductPurchase({
               {sizes.map((size) => (
                 <li key={size}>
                   <strong>{size}</strong>
-                  <span>
-                    {product.inventory[size]} {t("product.inStock")}
-                  </span>
+                  <span>{stockLabel(size)}</span>
                 </li>
               ))}
             </ul>

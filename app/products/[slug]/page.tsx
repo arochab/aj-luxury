@@ -7,6 +7,7 @@ import ProductPurchase from "../../components/ProductPurchase";
 import StoreFooter from "../../components/StoreFooter";
 import StoreHeader from "../../components/StoreHeader";
 import styles from "../../components/ProductPage.module.css";
+import { getPublicStockBySize } from "../../../lib/commerce/internal-stock";
 import { getProduct, getProducts } from "../../../lib/products";
 
 type ProductPageProps = {
@@ -41,6 +42,8 @@ export default async function ProductPage({ params }: ProductPageProps) {
 
   if (!product) notFound();
 
+  const availability = getPublicStockBySize(product.slug);
+
   return (
     <main className={styles.page}>
       <StoreHeader variant="minimal" />
@@ -60,7 +63,11 @@ export default async function ProductPage({ params }: ProductPageProps) {
           color={product.name}
         />
 
-        <ProductPurchase product={product} products={products} />
+        <ProductPurchase
+          product={product}
+          products={products}
+          availability={availability}
+        />
       </section>
 
       <section className={styles.otherColors}>

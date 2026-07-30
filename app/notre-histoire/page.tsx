@@ -66,9 +66,8 @@ export default function NotreHistoirePage() {
           <Image
             unoptimized
             src="/images/client/product-rose-model.webp"
-            alt="Alex portant Apollon Rose Velours, silhouette et produit visibles"
+            alt="Jérémy portant Apollon Rose Velours, silhouette et produit visibles"
             fill
-            style={{ objectFit: "contain", objectPosition: "center bottom" }}
             sizes="(max-width: 760px) 100vw, 60vw"
           />
         </figure>
@@ -76,15 +75,17 @@ export default function NotreHistoirePage() {
           <p className={styles.sectionNumber}>02 · Une vision incarnée</p>
           <h2 id="founders-title">Portée par ceux qui la construisent.</h2>
           <p>
-            Les fondateurs d’AJ Luxury apparaissent eux-mêmes dans les premières
-            images de la maison. Un choix volontaire : donner un visage réel au
-            projet et présenter le produit sur deux silhouettes différentes,
-            sans le dissocier de ceux qui portent sa vision.
+            Ce bloc pose une intention d’image : montrer le produit porté, dans
+            des attitudes naturelles, sans enfermer AJ Luxury dans un casting ou
+            une mise en scène unique. Les visuels actuels servent de point de
+            départ à un langage sobre, incarné et centré sur le vêtement.
           </p>
           <p>
-            Cette proximité guide la marque : observer le vêtement dans le
-            mouvement, soigner sa présence et construire une identité masculine
-            à la fois sobre, assumée et contemporaine.
+            À mesure que la maison évoluera, de futurs shootings et
+            collaborations pourront élargir les silhouettes, les regards et les
+            contextes. Cette ouverture permettra d’enrichir l’univers de la
+            marque tout en conservant une même exigence de coupe, de présence et
+            de justesse.
           </p>
         </div>
       </section>
@@ -93,7 +94,7 @@ export default function NotreHistoirePage() {
         <div className={styles.definitionCopy}>
           <p className={styles.sectionNumber}>03 · Notre définition du luxe</p>
           <h2 id="definition-title">
-            Pas l’excès. La justesse des détails.
+            Pas d’excès. Simplement la justesse des détails.
           </h2>
         </div>
         <div className={styles.definitionText}>
@@ -112,7 +113,14 @@ export default function NotreHistoirePage() {
 
       <section className={styles.closing} aria-labelledby="closing-title">
         <div className={styles.closingCopy}>
-          <p>AJ Luxury</p>
+          <Image
+            unoptimized
+            className={styles.closingLogo}
+            src="/images/aj-luxury-logo.webp"
+            alt="AJ Luxury"
+            width={280}
+            height={202}
+          />
           <h2 id="closing-title">Reveal Your Inner Beauty</h2>
           <Link href="/shop">Entrer dans la collection</Link>
           <div className={styles.closingContacts} aria-label="Contacts AJ Luxury">

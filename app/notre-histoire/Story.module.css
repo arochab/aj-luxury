@@ -164,15 +164,15 @@
 
 .foundersVisual {
   position: relative;
-  min-height: clamp(460px, 44vw, 620px);
+  min-height: clamp(620px, 58vw, 820px);
   margin: 0;
   overflow: hidden;
   background: #2b2a35;
 }
 
 .foundersVisual img {
-  object-fit: contain;
-  object-position: center bottom;
+  object-fit: cover;
+  object-position: center top;
 }
 
 .foundersCopy {
@@ -286,13 +286,16 @@
   padding: 56px var(--aj-gutter);
 }
 
-.closingCopy p {
-  margin: 0;
-  color: var(--story-pourpre);
-  font-size: 10px;
-  font-weight: 650;
-  letter-spacing: 0.19em;
-  text-transform: uppercase;
+.closingLogo {
+  width: clamp(190px, 18vw, 280px);
+  height: auto;
+  opacity: 0.94;
+  filter:
+    grayscale(1)
+    saturate(0)
+    contrast(1.08)
+    brightness(0.94)
+    drop-shadow(0 12px 26px rgba(73, 77, 85, 0.16));
 }
 
 .closingCopy h2 {
@@ -403,7 +406,7 @@
   }
 
   .foundersVisual {
-    min-height: 118vw;
+    min-height: min(118vw, 590px);
   }
 
   .foundersCopy {
@@ -437,6 +440,10 @@
 
   .closingCopy h2 {
     font-size: clamp(50px, 15vw, 72px);
+  }
+
+  .closingLogo {
+    width: clamp(190px, 58vw, 240px);
   }
 
   .closingContacts {

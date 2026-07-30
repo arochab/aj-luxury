@@ -57,12 +57,12 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
 });
 
 const productCases = [
-  ["/products/pourpre", "Pourpre Impérial", [26, 103, 87, 36]],
-  ["/products/rose-pale", "Rose Velours", [26, 103, 87, 36]],
-  ["/products/lilas-bleu-clair", "Lilas Céleste", [26, 102, 88, 36]],
+  ["/products/pourpre", "Pourpre Impérial"],
+  ["/products/rose-pale", "Rose Velours"],
+  ["/products/lilas-bleu-clair", "Lilas Céleste"],
 ];
 
-for (const [pathname, colorName, inventory] of productCases) {
+for (const [pathname, colorName] of productCases) {
   test(`server-renders ${pathname}`, async () => {
     const response = await render(pathname);
     assert.equal(response.status, 200);
@@ -81,9 +81,15 @@ for (const [pathname, colorName, inventory] of productCases) {
     assert.match(html, /Caractéristiques/);
     assert.match(html, /Tailles et disponibilité/);
     assert.match(html, /Agrandir la vue 1/);
-    for (const stock of inventory) {
-      assert.match(html, new RegExp(`${stock} en stock`));
-    }
+    assert.match(html, /Disponible/);
+    assert.doesNotMatch(
+      html,
+      /(?:26|36|87|88|102|103)\s+(?:en stock|disponibles?)/i,
+    );
+    assert.doesNotMatch(
+      html,
+      /(?:physical|reserved|availableToSell|inventoryQuantity|inventory)(?:\\?&quot;|\\?")?\s*:\s*(?:26|36|87|88|102|103)/i,
+    );
     assert.doesNotMatch(
       html,
       /Prix à confirmer|Tarif en cours de validation|49,00|Prix de démonstration|iStock|Getty/i,

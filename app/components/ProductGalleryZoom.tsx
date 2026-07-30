@@ -23,6 +23,23 @@ export default function ProductGalleryZoom({
   const lastTriggerRef = useRef<HTMLButtonElement | null>(null);
   const isOpen = zoomedIndex !== null;
 
+  function getFrameClass(image: string, index: number) {
+    if (index === 0) return styles.galleryMain;
+    if (image.includes("product-rose-detail")) return styles.galleryLandscape;
+    if (image.includes("product-rose-front")) return styles.galleryPortraitWide;
+    return "";
+  }
+
+  function getImageAlt(image: string, index: number) {
+    if (image.includes("hero-pourpre-model")) {
+      return `Jérémy portant ${model} ${color}`;
+    }
+
+    return index === 0
+      ? `${model} ${color} ${t("product.wornByModel")}`
+      : `${t("product.view")} ${index + 1} · ${model} ${color}`;
+  }
+
   useEffect(() => {
     if (!isOpen) return;
 
@@ -79,9 +96,7 @@ export default function ProductGalleryZoom({
       <div className={styles.gallery} aria-label={`${t("product.gallery")} ${color}`}>
         {images.map((image, index) => (
           <figure
-            className={`${styles.galleryItem} ${
-              index === 0 ? styles.galleryMain : ""
-            }`}
+            className={`${styles.galleryItem} ${getFrameClass(image, index)}`}
             key={image}
           >
             <button
@@ -99,15 +114,10 @@ export default function ProductGalleryZoom({
               <Image
                 unoptimized
                 src={image}
-                alt={
-                  index === 0
-                    ? `${model} ${color} ${t("product.wornByModel")}`
-                    : `${t("product.view")} ${index + 1} · ${model} ${color}`
-                }
+                alt={getImageAlt(image, index)}
                 fill
                 priority={index === 0}
                 sizes="(max-width: 900px) 100vw, 32vw"
-                style={{ objectFit: "contain" }}
               />
               <span className={styles.zoomLabel} aria-hidden="true">
                 {t("product.enlarge")}
