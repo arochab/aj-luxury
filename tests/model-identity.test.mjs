@@ -24,29 +24,29 @@ test("the homepage keeps Alex left and Jérémy right with three unused colorway
   assert.ok(alexIndex >= 0, "Alex's verified Rose profile must be present");
   assert.ok(lilasIndex > alexIndex, "the Lilas product focus must be centered");
   assert.ok(jeremyIndex > lilasIndex, "Jérémy's verified Pourpre portrait must be on the right");
-  assert.match(home, /Alex portant Apollon Rose Velours/);
-  assert.match(home, /Détail porté d’Apollon Lilas Céleste/);
-  assert.match(home, /Jérémy portant Apollon Pourpre Impérial, de profil/);
+  assert.match(home, /AJ Luxury — Alex — Apollon Rose Velours/);
+  assert.match(home, /AJ Luxury — Apollon Lilas Céleste/);
+  assert.match(home, /AJ Luxury — Jérémy — Apollon Pourpre Impérial/);
   assert.doesNotMatch(home, /campaign-duo-lilas-seated\.webp/);
 });
 
 test("story and moodboard identities match the photographed founders", () => {
   assert.match(
     story,
-    /product-rose-model\.webp"[\s\S]*alt="Alex portant Apollon Rose Velours/,
+    /product-rose-model\.webp"[\s\S]*alt="AJ Luxury — Alex — Apollon Rose Velours/,
   );
   assert.match(
     moodboard,
-    /editorial-pourpre-chair\.webp"[\s\S]*alt: "Jérémy portant Apollon Pourpre Impérial/,
+    /editorial-pourpre-chair\.webp"[\s\S]*alt: "AJ Luxury — Jérémy — Apollon Pourpre Impérial/,
   );
   assert.match(
     moodboard,
-    /editorial-rose-profile\.webp"[\s\S]*alt: "Alex portant Apollon Rose Velours/,
+    /editorial-rose-profile\.webp"[\s\S]*alt: "AJ Luxury — Alex — Apollon Rose Velours/,
   );
 });
 
 test("the requested extra Pourpre view is Jérémy", () => {
   assert.match(products, /gallery:[\s\S]*editorial-pourpre-chair\.webp/);
-  assert.match(gallery, /image\.src\.includes\("editorial-pourpre-chair"\)[\s\S]*Jérémy portant/);
+  assert.match(gallery, /image\.src\.includes\("editorial-pourpre-chair"\)[\s\S]*Jérémy —/);
   assert.doesNotMatch(products, /gallery:[\s\S]*hero-pourpre-model\.webp/);
 });

@@ -1,12 +1,15 @@
 import StoreFooter from "./StoreFooter";
 import StoreHeader from "./StoreHeader";
 import styles from "./InfoPage.module.css";
+import LocalizedInfoContent from "./LocalizedInfoContent";
+import { T } from "@/lib/i18n/TranslatedText";
 
 type InfoPageProps = {
   eyebrow: React.ReactNode;
   title: React.ReactNode;
   children: React.ReactNode;
   status?: React.ReactNode | false;
+  officialFrenchOnly?: boolean;
 };
 
 export function InfoNotice({
@@ -29,7 +32,8 @@ export default function InfoPage({
   eyebrow,
   title,
   children,
-  status = "Contenu à valider avant mise en ligne",
+  status = <T id="info.defaultStatus" />,
+  officialFrenchOnly = false,
 }: InfoPageProps) {
   return (
     <main className={styles.page}>
@@ -38,8 +42,14 @@ export default function InfoPage({
         <p className={styles.eyebrow}>{eyebrow}</p>
         <h1>{title}</h1>
         <div className={styles.copy}>
-          {children}
-          {status && <span className={styles.status}>{status}</span>}
+          <LocalizedInfoContent
+            status={
+              status ? <span className={styles.status}>{status}</span> : false
+            }
+            officialFrenchOnly={officialFrenchOnly}
+          >
+            {children}
+          </LocalizedInfoContent>
         </div>
       </section>
       <StoreFooter />

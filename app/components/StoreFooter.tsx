@@ -24,10 +24,7 @@ export default function StoreFooter() {
           <h2 className={styles.footerTitle} id="footer-title" lang="en">
             Reveal Your Inner Beauty
           </h2>
-          <p className={styles.footerCopy} lang="fr">
-            Sous-vêtements masculins conçus autour du confort, de la qualité et
-            de la confiance en soi.
-          </p>
+          <p className={styles.footerCopy}>{t("footer.description")}</p>
           <SiteLanguageSwitcher placement="footer" />
         </section>
 
@@ -36,7 +33,7 @@ export default function StoreFooter() {
             <h3 className={styles.footerHeading} id="footer-boutique">
               {t("footer.shop")}
             </h3>
-            <nav className={styles.footerLinks} aria-label="Liens boutique">
+            <nav className={styles.footerLinks} aria-label={t("footer.shopLinksLabel")}>
               <Link className={styles.footerLink} href="/shop">
                 {t("footer.collection")}
               </Link>
@@ -47,7 +44,7 @@ export default function StoreFooter() {
                 {t("footer.shippingReturns")}
               </Link>
               <Link className={styles.footerLink} href="/withdrawal">
-                Renoncer au contrat ici
+                {t("footer.withdrawal")}
               </Link>
             </nav>
           </section>
@@ -56,7 +53,7 @@ export default function StoreFooter() {
             <h3 className={styles.footerHeading} id="footer-informations">
               {t("footer.information")}
             </h3>
-            <nav className={styles.footerLinks} aria-label="Liens informations">
+            <nav className={styles.footerLinks} aria-label={t("footer.informationLinksLabel")}>
               <Link className={styles.footerLink} href="/notre-histoire">
                 {t("footer.story")}
               </Link>

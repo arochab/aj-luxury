@@ -6,7 +6,7 @@ export type LocaleMetadata = {
   htmlLang: string;
 };
 
-export type ClientCopyStatus = "source-only" | "client-approved";
+export type ClientCopyStatus = "source-only" | "localized" | "client-approved";
 
 export type LocalizedClientCopy = {
   sourceLocale: "fr";

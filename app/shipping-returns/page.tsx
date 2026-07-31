@@ -1,14 +1,16 @@
 import InfoPage, { InfoNotice } from "../components/InfoPage";
 import { LEGAL_CONTACT, LEGAL_VERSION } from "@/lib/legal";
+import { T } from "@/lib/i18n/TranslatedText";
 
 export const metadata = { title: "Livraison et retours | AJ Luxury" };
 
 export default function ShippingReturnsPage() {
   return (
     <InfoPage
-      eyebrow={`Service client · version du ${LEGAL_VERSION}`}
-      title="Livraison et retours."
-      status="Pré-lancement · transporteurs, zones, tarifs, délais et adresse de retour à confirmer"
+      eyebrow={<T id="info.shipping.eyebrow" values={{ version: LEGAL_VERSION }} />}
+      title={<T id="info.shipping.title" />}
+      status={<T id="info.shipping.status" />}
+      officialFrenchOnly
     >
       <InfoNotice warning>
         <p>

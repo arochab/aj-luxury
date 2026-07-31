@@ -6,6 +6,7 @@ import MetallicField from "../components/MetallicField";
 import StoreFooter from "../components/StoreFooter";
 import StoreHeader from "../components/StoreHeader";
 import { T } from "../../lib/i18n/TranslatedText";
+import LocalizedProductText from "../components/LocalizedProductText";
 import styles from "./Shop.module.css";
 
 export const metadata: Metadata = {
@@ -29,11 +30,13 @@ export default function ShopPage() {
             <T id="nav.shop" />
           </p>
           <h1 id="shop-title">Apollon</h1>
-          <p className={styles.meta}>{products.length} coloris</p>
+          <p className={styles.meta}>
+            <T id="common.colorCount" values={{ count: products.length }} />
+          </p>
         </div>
       </section>
 
-      <section className={styles.collection} aria-label="Les coloris Apollon">
+      <section className={styles.collection} aria-labelledby="shop-title">
         <div className={styles.productGrid}>
           {products.map((product, index) => (
             <article
@@ -44,12 +47,12 @@ export default function ShopPage() {
               <Link
                 className={styles.productVisual}
                 href={`/products/${product.slug}`}
-                aria-label={`Découvrir Apollon ${product.name}`}
+                aria-label={`${product.model} ${product.name}`}
               >
                 <Image
                   unoptimized
                   src={product.image}
-                  alt={`Boxer Apollon, coloris ${product.name}`}
+                  alt={`${product.model} ${product.name}`}
                   fill
                   sizes="(max-width: 760px) 100vw, 33vw"
                   priority={index === 0}
@@ -67,12 +70,14 @@ export default function ShopPage() {
                       {product.name}
                     </Link>
                   </h3>
-                  <p className={styles.tone}>{product.tone}</p>
+                  <p className={styles.tone}>
+                    <LocalizedProductText slug={product.slug} field="tone" />
+                  </p>
                 </div>
                 <span
                   className={styles.detailSwatch}
                   style={{ backgroundColor: product.swatch }}
-                  aria-label={`Coloris ${product.name}`}
+                  aria-hidden="true"
                 />
               </div>
             </article>

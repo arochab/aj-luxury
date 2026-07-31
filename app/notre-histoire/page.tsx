@@ -3,6 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 import StoreFooter from "../components/StoreFooter";
 import StoreHeader from "../components/StoreHeader";
+import { T } from "../../lib/i18n/TranslatedText";
 import styles from "./Story.module.css";
 
 export const metadata: Metadata = {
@@ -20,11 +21,11 @@ export default function NotreHistoirePage() {
         </div>
 
         <div className={styles.heroBody}>
-          <div className={styles.heroCopy} lang="fr">
+          <div className={styles.heroCopy}>
             <p className={styles.eyebrow}>AJ Luxury</p>
-            <h1 id="story-title">Notre histoire</h1>
+            <h1 id="story-title"><T id="story.title" /></h1>
             <blockquote>
-              Le véritable luxe commence par ce que l’on porte au plus près de soi.
+              <T id="story.quote" />
             </blockquote>
           </div>
 
@@ -33,7 +34,7 @@ export default function NotreHistoirePage() {
               unoptimized
               priority
               src="/images/client/campaign-duo-lilas-seated.webp"
-              alt="Jérémy et Alex portant Apollon Lilas Céleste"
+              alt="AJ Luxury — Jérémy, Alex — Apollon Lilas Céleste"
               fill
               sizes="(max-width: 760px) 100vw, 62vw"
             />
@@ -41,34 +42,25 @@ export default function NotreHistoirePage() {
         </div>
       </section>
 
-      <section className={styles.origin} aria-labelledby="origin-title" lang="fr">
+      <section className={styles.origin} aria-labelledby="origin-title">
         <div className={styles.actHeading}>
           <p className={styles.actIndex}>01</p>
-          <h2 id="origin-title">Le point de départ</h2>
+          <h2 id="origin-title"><T id="story.originTitle" /></h2>
         </div>
 
         <div className={styles.originCopy}>
-          <p>
-            Tout est parti d’un constat simple : les sous-vêtements sont souvent
-            considérés comme un simple basique, alors qu’ils sont le premier
-            vêtement que l’on enfile chaque matin. Pourtant, ils influencent
-            notre confort, notre assurance et notre bien-être tout au long de la
-            journée.
-          </p>
-          <p>C’est de cette conviction qu’est née AJ Luxury.</p>
+          <p><T id="story.originP1" /></p>
+          <p><T id="story.originP2" /></p>
         </div>
       </section>
 
-      <section className={styles.people} aria-labelledby="people-title" lang="fr">
+      <section className={styles.people} aria-labelledby="people-title">
         <div className={styles.peopleHeader}>
           <div className={styles.actHeading}>
             <p className={styles.actIndex}>02</p>
             <h2 id="people-title">Jérémy &amp; Alex</h2>
           </div>
-          <p className={styles.peopleStatement}>
-            Jérémy et Alex sont les cofondateurs d’AJ Luxury et les deux visages
-            de la première campagne.
-          </p>
+          <p className={styles.peopleStatement}><T id="story.peopleStatement" /></p>
         </div>
 
         <div className={styles.portraitGrid}>
@@ -76,7 +68,7 @@ export default function NotreHistoirePage() {
             <Image
               unoptimized
               src="/images/client/editorial-rose-jeremy.webp"
-              alt="Jérémy portant Apollon Rose Velours"
+              alt="AJ Luxury — Jérémy — Apollon Rose Velours"
               fill
               sizes="(max-width: 760px) 50vw, 44vw"
             />
@@ -87,7 +79,7 @@ export default function NotreHistoirePage() {
             <Image
               unoptimized
               src="/images/client/product-rose-model.webp"
-              alt="Alex portant Apollon Rose Velours"
+              alt="AJ Luxury — Alex — Apollon Rose Velours"
               fill
               sizes="(max-width: 760px) 50vw, 44vw"
             />
@@ -99,23 +91,18 @@ export default function NotreHistoirePage() {
       <section
         className={styles.definition}
         aria-labelledby="definition-title"
-        lang="fr"
       >
         <div className={styles.definitionCopy}>
           <div className={styles.actHeading}>
             <p className={styles.actIndex}>03</p>
             <h2 id="definition-title">
-              Pas d’excès. Simplement la justesse des détails.
+              <T id="story.definitionTitle" />
             </h2>
           </div>
 
           <div className={styles.definitionText}>
-            <p>
-              Notre ambition est de réinventer cet essentiel du quotidien en
-              créant des sous-vêtements qui allient élégance, confort et qualité,
-              sans jamais faire de compromis.
-            </p>
-            <p>Le confort est une véritable source de confiance en soi.</p>
+            <p><T id="story.definitionP1" /></p>
+            <p><T id="story.definitionP2" /></p>
           </div>
         </div>
 
@@ -123,7 +110,7 @@ export default function NotreHistoirePage() {
           <Image
             unoptimized
             src="/images/client/product-pourpre-detail.webp"
-            alt="Détail du boxer Apollon Pourpre Impérial et de sa ceinture AJ Luxury"
+            alt="AJ Luxury — Apollon Pourpre Impérial"
             fill
             sizes="(max-width: 760px) 100vw, 40vw"
           />
@@ -134,7 +121,7 @@ export default function NotreHistoirePage() {
         <h2 id="closing-title" lang="en">
           Reveal Your Inner Beauty
         </h2>
-        <Link href="/shop">Découvrir la collection</Link>
+        <Link href="/shop"><T id="story.discoverCollection" /></Link>
       </section>
 
       <StoreFooter />

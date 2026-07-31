@@ -12,17 +12,17 @@ import { editorialMoodboardImages } from "../lib/editorial-moodboard";
 const featuredEditorialImages = [
   {
     src: "/images/client/editorial-rose-alex-standing.webp",
-    alt: "Alex portant Apollon Rose Velours",
+    alt: "AJ Luxury — Alex — Apollon Rose Velours",
     crop: "portrait-left",
   },
   {
     src: "/images/client/editorial-lilas-product-focus.webp",
-    alt: "Détail porté d’Apollon Lilas Céleste",
+    alt: "AJ Luxury — Apollon Lilas Céleste",
     crop: "duo",
   },
   {
     src: "/images/client/editorial-pourpre-jeremy-profile.webp",
-    alt: "Jérémy portant Apollon Pourpre Impérial, de profil",
+    alt: "AJ Luxury — Jérémy — Apollon Pourpre Impérial",
     crop: "portrait-right",
   },
 ];
@@ -32,14 +32,14 @@ export default function Home() {
 
   return (
     <main className="aj-home">
-      <section className="aj-film" id="accueil" aria-label="Introduction AJ Luxury">
+      <section className="aj-film" id="accueil" aria-label="AJ Luxury">
         <StoreHeader />
         <HeroComposition />
         <div className="aj-film__grade" aria-hidden="true" />
 
         <div className="aj-film__signature">
           <p>Reveal Your Inner Beauty</p>
-          <a href="#apollon" aria-label="Découvrir Apollon">
+          <a href="#apollon">
             <T id="hero.discover" /> <span aria-hidden="true">↓</span>
           </a>
         </div>
@@ -54,7 +54,7 @@ export default function Home() {
         <div className="aj-featured__glow" aria-hidden="true" />
         <div
           className="aj-featured__editorial"
-          aria-label="Éditorial des trois coloris AJ Luxury avec Alex et Jérémy"
+          aria-label="AJ Luxury — Alex, Jérémy — Apollon"
         >
           {featuredEditorialImages.map((image, index) => (
             <figure
@@ -90,7 +90,7 @@ export default function Home() {
                 <Image
                   unoptimized
                   src={product.image}
-                  alt={`${product.model}, coloris ${product.name}, porté par un mannequin adulte`}
+                  alt={`${product.model} ${product.name}`}
                   fill
                   sizes="(max-width: 760px) 78vw, 31vw"
                 />
@@ -109,7 +109,7 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="aj-moodboard" aria-label="Campagne AJ Luxury avec les deux mannequins">
+      <section className="aj-moodboard" aria-label="AJ Luxury — Jérémy, Alex">
         <div className="aj-moodboard__track">
           {editorialMoodboardImages.map((image) => (
             <figure

@@ -33,8 +33,9 @@ test("all supported locales have complete, non-empty dictionaries", async () => 
   }
 });
 
-test("unapproved long client copy falls back explicitly to French", async () => {
+test("client copy preserves the French source and localizes every supported language", async () => {
   const entries = await readJson("lib/i18n/client-copy.json");
+  const expectedTranslations = ["en", "es", "de", "it"];
 
   for (const [key, entry] of Object.entries(entries)) {
     assert.equal(entry.sourceLocale, "fr", `${key}: source must remain French`);
@@ -45,12 +46,68 @@ test("unapproved long client copy falls back explicitly to French", async () => 
     );
     assert.notEqual(entry.source.trim(), "", `${key}: source must not be empty`);
 
-    if (entry.status === "source-only") {
-      assert.deepEqual(
-        entry.translations,
-        {},
-        `${key}: unapproved translations must not be invented`,
+    assert.equal(entry.status, "localized", `${key}: localization status`);
+
+    for (const locale of expectedTranslations) {
+      assert.equal(
+        typeof entry.translations[locale],
+        "string",
+        `${key}.${locale}: translation must exist`,
+      );
+      assert.notEqual(
+        entry.translations[locale].trim(),
+        "",
+        `${key}.${locale}: translation must not be empty`,
       );
     }
   }
+});
+
+test("commercial and editorial copy is genuinely localized", async () => {
+  const manifest = await readJson("lib/i18n/manifest.json");
+  const french = await readJson("lib/i18n/dictionaries/fr.json");
+  const localizedPrefixes = [
+    "story.",
+    "product.tone.",
+    "product.description.",
+    "product.detail.",
+    "product.feature.",
+    "footer.description",
+    "account.orders",
+    "account.profile",
+    "account.security",
+  ];
+  const localizedKeys = Object.keys(french).filter((key) =>
+    localizedPrefixes.some((prefix) => key.startsWith(prefix)) &&
+    !key.endsWith("Label"),
+  );
+
+  for (const locale of manifest.supportedLocales.filter((item) => item !== "fr")) {
+    const dictionary = await readJson(`lib/i18n/dictionaries/${locale}.json`);
+
+    for (const key of localizedKeys) {
+      assert.notEqual(
+        dictionary[key],
+        french[key],
+        `${locale}.${key}: must not fall back to French`,
+      );
+    }
+  }
+});
+
+test("customer-facing components do not pin translated copy to French", async () => {
+  const [purchase, footer, story, infoPage] = await Promise.all([
+    readFile(new URL("app/components/ProductPurchase.tsx", projectRoot), "utf8"),
+    readFile(new URL("app/components/StoreFooter.tsx", projectRoot), "utf8"),
+    readFile(new URL("app/notre-histoire/page.tsx", projectRoot), "utf8"),
+    readFile(new URL("app/components/InfoPage.tsx", projectRoot), "utf8"),
+  ]);
+
+  assert.doesNotMatch(
+    purchase,
+    /lang="fr"|\{product\.description\}|\{product\.details|\{product\.features/,
+  );
+  assert.doesNotMatch(footer, /lang="fr"|Sous-vêtements masculins|Renoncer au contrat ici/);
+  assert.doesNotMatch(story, /lang="fr"/);
+  assert.match(infoPage, /officialFrenchOnly/);
 });

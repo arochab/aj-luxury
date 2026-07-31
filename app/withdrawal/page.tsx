@@ -1,14 +1,16 @@
 import InfoPage, { InfoNotice } from "../components/InfoPage";
 import { LEGAL_CONTACT, LEGAL_VERSION } from "@/lib/legal";
+import { T } from "@/lib/i18n/TranslatedText";
 
 export const metadata = { title: "Renoncer au contrat | AJ Luxury" };
 
 export default function WithdrawalPage() {
   return (
     <InfoPage
-      eyebrow={`Rétractation · version du ${LEGAL_VERSION}`}
-      title="Renoncer au contrat ici."
-      status="Fonction préparée · connexion au système de commandes et aux e-mails requise avant l’ouverture"
+      eyebrow={<T id="info.withdrawal.eyebrow" values={{ version: LEGAL_VERSION }} />}
+      title={<T id="info.withdrawal.title" />}
+      status={<T id="info.withdrawal.status" />}
+      officialFrenchOnly
     >
       <InfoNotice warning>
         <p>

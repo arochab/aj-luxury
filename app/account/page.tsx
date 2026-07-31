@@ -30,7 +30,6 @@ export default function AccountPage() {
               <input
                 type="email"
                 autoComplete="email"
-                placeholder="vous@exemple.fr"
               />
             </label>
             <label>
@@ -49,28 +48,19 @@ export default function AccountPage() {
 
         <aside className={styles.cards}>
           <article className={styles.card}>
-            <span>01 · Commandes</span>
-            <h2>Suivre sans friction.</h2>
-            <p>
-              Historique, statut d’expédition et accès aux demandes de retour
-              pourront être réunis ici.
-            </p>
+            <span><T id="account.ordersLabel" /></span>
+            <h2><T id="account.ordersTitle" /></h2>
+            <p><T id="account.ordersBody" /></p>
           </article>
           <article className={styles.card}>
-            <span>02 · Profil</span>
-            <h2>Vos préférences.</h2>
-            <p>
-              Coordonnées, adresses et consentements resteront modifiables par
-              le client.
-            </p>
+            <span><T id="account.profileLabel" /></span>
+            <h2><T id="account.profileTitle" /></h2>
+            <p><T id="account.profileBody" /></p>
           </article>
           <article className={styles.card}>
-            <span>03 · Sécurité</span>
-            <h2>Accès à définir.</h2>
-            <p>
-              Le mode d’authentification sera choisi avec la plateforme
-              e-commerce, avant toute collecte de données.
-            </p>
+            <span><T id="account.securityLabel" /></span>
+            <h2><T id="account.securityTitle" /></h2>
+            <p><T id="account.securityBody" /></p>
           </article>
         </aside>
       </div>

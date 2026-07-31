@@ -5,6 +5,7 @@ import {
   MEDIATOR,
   SELLER_IDENTITY,
 } from "@/lib/legal";
+import { T } from "@/lib/i18n/TranslatedText";
 
 export const metadata = {
   title: "Conditions générales de vente | AJ Luxury",
@@ -13,9 +14,10 @@ export const metadata = {
 export default function TermsPage() {
   return (
     <InfoPage
-      eyebrow={`Informations légales · version du ${LEGAL_VERSION}`}
-      title="Conditions générales de vente."
-      status="Socle juridique de pré-lancement · validation finale requise avant l’ouverture des ventes"
+      eyebrow={<T id="info.terms.eyebrow" values={{ version: LEGAL_VERSION }} />}
+      title={<T id="info.terms.title" />}
+      status={<T id="info.terms.status" />}
+      officialFrenchOnly
     >
       <InfoNotice warning>
         <p>

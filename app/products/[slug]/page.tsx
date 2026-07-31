@@ -9,6 +9,7 @@ import StoreHeader from "../../components/StoreHeader";
 import styles from "../../components/ProductPage.module.css";
 import { getPublicStockBySize } from "../../../lib/commerce/internal-stock";
 import { getProduct, getProducts } from "../../../lib/products";
+import { T } from "../../../lib/i18n/TranslatedText";
 
 type ProductPageProps = {
   params: Promise<{ slug: string }>;
@@ -49,10 +50,10 @@ export default async function ProductPage({ params }: ProductPageProps) {
     <main className={styles.page}>
       <StoreHeader />
 
-      <nav className={styles.breadcrumb} aria-label="Fil d’Ariane">
-        <Link href="/">Accueil</Link>
+      <nav className={styles.breadcrumb} aria-label="Breadcrumb">
+        <Link href="/"><T id="nav.home" /></Link>
         <span>/</span>
-        <Link href="/shop">Collection</Link>
+        <Link href="/shop"><T id="common.collection" /></Link>
         <span>/</span>
         <span aria-current="page">{product.name}</span>
       </nav>
@@ -74,8 +75,8 @@ export default async function ProductPage({ params }: ProductPageProps) {
       <section className={styles.otherColors}>
         <div className={styles.otherColorsHeader}>
           <div>
-            <p className={styles.eyebrow}>La collection</p>
-            <h2>Découvrir aussi</h2>
+            <p className={styles.eyebrow}><T id="shop.title" /></p>
+            <h2><T id="common.discoverAlso" /></h2>
           </div>
         </div>
         <div className={styles.otherColorsGrid}>
@@ -89,7 +90,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
                 <Image
                   unoptimized
                   src={item.image}
-                  alt={`${item.model}, coloris ${item.name}`}
+                  alt={`${item.model} ${item.name}`}
                   fill
                   sizes="(max-width: 760px) 100vw, 33vw"
                 />

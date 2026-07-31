@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useI18n } from "@/lib/i18n/I18nProvider";
+import { getLocalizedProductCopy } from "@/lib/i18n/product-copy";
 import type { PublicStockBySize } from "../../lib/commerce/public-stock";
 import type { Product, ProductSize } from "../../lib/products";
 import { formatPrice, sizes } from "../../lib/products";
@@ -22,6 +23,7 @@ export default function ProductPurchase({
   const [selectedSize, setSelectedSize] = useState<ProductSize | null>(null);
   const [added, setAdded] = useState(false);
   const { locale, t } = useI18n();
+  const localizedProduct = getLocalizedProductCopy(t, product.slug);
 
   function selectSize(size: ProductSize) {
     if (availability[size].state === "sold-out") return;
@@ -52,7 +54,7 @@ export default function ProductPurchase({
       className={styles.purchasePanel}
       aria-label={t("product.purchaseInfoLabel")}
     >
-      <p className={styles.eyebrow}>{product.statusLabel}</p>
+      <p className={styles.eyebrow}>{t("product.status")}</p>
       <h1>{product.model}</h1>
       <p className={styles.colorName}>{product.name}</p>
 
@@ -61,8 +63,8 @@ export default function ProductPurchase({
         <span>{t("product.priceLabel")}</span>
       </div>
 
-      <p className={styles.description} lang="fr">
-        {product.description}
+      <p className={styles.description}>
+        {localizedProduct.description}
       </p>
 
       <div className={styles.selector}>
@@ -150,8 +152,8 @@ export default function ProductPurchase({
       <div className={styles.details}>
         <details>
           <summary>{t("product.fullDescription")}</summary>
-          <div className={styles.detailsContent} lang="fr">
-            {product.details.map((paragraph) => (
+          <div className={styles.detailsContent}>
+            {localizedProduct.details.map((paragraph) => (
               <p key={paragraph}>{paragraph}</p>
             ))}
           </div>
@@ -159,9 +161,9 @@ export default function ProductPurchase({
 
         <details>
           <summary>{t("product.features")}</summary>
-          <div className={styles.detailsContent} lang="fr">
+          <div className={styles.detailsContent}>
             <ul className={styles.featureList}>
-              {product.features.map((feature) => (
+              {localizedProduct.features.map((feature) => (
                 <li key={feature}>{feature}</li>
               ))}
             </ul>

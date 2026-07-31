@@ -5,15 +5,17 @@ import {
   LEGAL_VERSION,
   SELLER_IDENTITY,
 } from "@/lib/legal";
+import { T } from "@/lib/i18n/TranslatedText";
 
 export const metadata = { title: "Mentions légales | AJ Luxury" };
 
 export default function LegalNoticePage() {
   return (
     <InfoPage
-      eyebrow={`Informations légales · version du ${LEGAL_VERSION}`}
-      title="Mentions légales."
-      status="Pré-lancement · les champs signalés doivent être remplacés par les données officielles avant toute vente"
+      eyebrow={<T id="info.legal.eyebrow" values={{ version: LEGAL_VERSION }} />}
+      title={<T id="info.legal.title" />}
+      status={<T id="info.legal.status" />}
+      officialFrenchOnly
     >
       <InfoNotice warning>
         <p>

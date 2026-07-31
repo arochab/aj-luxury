@@ -5,6 +5,7 @@ import {
   LEGAL_VERSION,
   SELLER_IDENTITY,
 } from "@/lib/legal";
+import { T } from "@/lib/i18n/TranslatedText";
 
 export const metadata = {
   title: "Politique de confidentialité | AJ Luxury",
@@ -13,9 +14,10 @@ export const metadata = {
 export default function PrivacyPage() {
   return (
     <InfoPage
-      eyebrow={`Données personnelles · version du ${LEGAL_VERSION}`}
-      title="Politique de confidentialité."
-      status="Version de pré-lancement · liste des prestataires à actualiser avant toute collecte commerciale"
+      eyebrow={<T id="info.privacy.eyebrow" values={{ version: LEGAL_VERSION }} />}
+      title={<T id="info.privacy.title" />}
+      status={<T id="info.privacy.status" />}
+      officialFrenchOnly
     >
       <InfoNotice>
         <p>

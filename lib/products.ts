@@ -189,7 +189,15 @@ export function formatPrice(
   priceCents: number | null,
   locale: keyof typeof numberFormatLocales = "fr",
 ) {
-  if (priceCents === null) return "Prix à confirmer";
+  if (priceCents === null) {
+    return {
+      fr: "Prix à confirmer",
+      en: "Price to be confirmed",
+      es: "Precio por confirmar",
+      de: "Preis noch zu bestätigen",
+      it: "Prezzo da confermare",
+    }[locale];
+  }
 
   return new Intl.NumberFormat(numberFormatLocales[locale], {
     style: "currency",

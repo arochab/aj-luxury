@@ -55,7 +55,7 @@ export default function HeroComposition() {
             unoptimized
             priority
             src="/images/client/hero-duo-static.webp"
-            alt="Les deux fondateurs et mannequins AJ Luxury portant Apollon Lilas Céleste"
+            alt="AJ Luxury — Jérémy, Alex — Apollon Lilas Céleste"
             fill
             sizes="100vw"
             style={{ objectFit: "contain", objectPosition: "center center" }}

@@ -1,14 +1,16 @@
 import InfoPage, { InfoNotice, InfoTable } from "../components/InfoPage";
 import { LEGAL_CONTACT, LEGAL_VERSION } from "@/lib/legal";
+import { T } from "@/lib/i18n/TranslatedText";
 
 export const metadata = { title: "Cookies et traceurs | AJ Luxury" };
 
 export default function CookiesPage() {
   return (
     <InfoPage
-      eyebrow={`Confidentialité · version du ${LEGAL_VERSION}`}
-      title="Cookies et traceurs."
-      status="État réel de la prévisualisation · à réviser lors de l’ajout d’un outil tiers"
+      eyebrow={<T id="info.cookies.eyebrow" values={{ version: LEGAL_VERSION }} />}
+      title={<T id="info.cookies.title" />}
+      status={<T id="info.cookies.status" />}
+      officialFrenchOnly
     >
       <InfoNotice>
         <p>
