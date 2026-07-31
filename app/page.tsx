@@ -11,18 +11,18 @@ import { editorialMoodboardImages } from "../lib/editorial-moodboard";
 
 const featuredEditorialImages = [
   {
-    src: "/images/client/editorial-rose-alex-standing.webp",
+    src: "/images/client/product-rose-model.webp",
     alt: "AJ Luxury — Alex — Apollon Rose Velours",
     crop: "portrait-left",
   },
   {
-    src: "/images/client/editorial-lilas-product-focus.webp",
-    alt: "AJ Luxury — Apollon Lilas Céleste",
+    src: "/images/client/campaign-duo-pourpre.webp",
+    alt: "AJ Luxury — Jérémy et Alex — Apollon Pourpre Impérial",
     crop: "duo",
   },
   {
-    src: "/images/client/editorial-pourpre-jeremy-profile.webp",
-    alt: "AJ Luxury — Jérémy — Apollon Pourpre Impérial",
+    src: "/images/client/editorial-lilas-chair.webp",
+    alt: "AJ Luxury — Jérémy — Apollon Lilas Céleste",
     crop: "portrait-right",
   },
 ];

@@ -1,6 +1,6 @@
 # Registre des textes
 
-Date du contrôle : 23 juillet 2026
+Date du contrôle : 31 juillet 2026
 
 ## Règle
 
@@ -27,9 +27,9 @@ Date du contrôle : 23 juillet 2026
 - Un modèle Apollon décliné en trois coloris.
 - Coloris : Pourpre Impérial, Rose Velours et Lilas Céleste.
 - Tailles : S, M, L et XL.
-- Prix indiqué « à confirmer » tant qu’il n’est pas validé.
+- Prix validé : 29,99 € pour chacun des trois coloris.
 - Les quantités de stock restent des données internes à la maquette commerciale.
-- Jérémy et Alex sont les cofondateurs d’AJ Luxury et les deux visages de la première campagne.
+- Alex et Jérémy sont les cofondateurs d’AJ Luxury. Ensemble, ils imaginent les collections et construisent l’univers de la marque.
 
 ## Libellés d’interface
 

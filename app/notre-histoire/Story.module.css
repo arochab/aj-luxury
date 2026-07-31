@@ -4,6 +4,7 @@
   --story-silver: #a9adb5;
   --story-line-dark: rgba(255, 255, 255, 0.18);
   --story-line-light: rgba(11, 11, 13, 0.16);
+  --story-sequence-gap: clamp(1.25rem, 1.8vw, 2rem);
   min-width: 0;
   overflow: clip;
   background: var(--story-paper);
@@ -215,6 +216,7 @@
   display: grid;
   min-width: 0;
   grid-template-columns: minmax(0, 0.61fr) minmax(20rem, 0.39fr);
+  border-top: var(--story-sequence-gap) solid var(--story-paper);
   border-bottom: 1px solid var(--story-line-light);
   background: #fff;
 }
@@ -271,15 +273,18 @@
   justify-content: space-between;
   gap: clamp(2rem, 6vw, 8rem);
   padding: clamp(3rem, 6vw, 6rem) clamp(1.25rem, 5vw, 6rem);
-  border-bottom: 1px solid var(--story-line-dark);
-  background: var(--story-ink);
-  color: #f7f7f5;
+  border-top: var(--story-sequence-gap) solid var(--story-paper);
+  border-bottom: 1px solid rgba(11, 11, 13, 0.22);
+  background:
+    linear-gradient(112deg, transparent 0 23%, rgba(255, 255, 255, 0.68) 42%, transparent 59%),
+    linear-gradient(165deg, #8d9096 0%, #e6e7e8 31%, #a8abb0 61%, #f0f0ef 100%);
+  color: var(--story-ink);
 }
 
 .closing h2 {
   max-width: 13ch;
   margin: 0;
-  color: #d7d8db;
+  color: var(--story-ink);
   font-size: clamp(2.75rem, 6vw, 7.25rem);
   font-weight: 300;
   letter-spacing: -0.07em;
@@ -293,8 +298,8 @@
   align-items: center;
   justify-content: center;
   padding: 0.85rem 1.25rem;
-  border: 1px solid rgba(255, 255, 255, 0.54);
-  color: #fff;
+  border: 1px solid rgba(11, 11, 13, 0.58);
+  color: var(--story-ink);
   font-size: 0.75rem;
   font-weight: 650;
   letter-spacing: 0.13em;
@@ -308,13 +313,13 @@
 }
 
 .closing a:hover {
-  border-color: #fff;
-  background: #fff;
-  color: var(--story-ink);
+  border-color: var(--story-ink);
+  background: var(--story-ink);
+  color: #fff;
 }
 
 .closing a:focus-visible {
-  outline: 2px solid #fff;
+  outline: 2px solid var(--story-ink);
   outline-offset: 0.35rem;
 }
 
@@ -329,6 +334,9 @@
 }
 
 @media (max-width: 760px) {
+  .page {
+    --story-sequence-gap: 0.875rem;
+  }
   .hero {
     min-height: 0;
   }
@@ -431,12 +439,7 @@
   }
 
   .definitionVisual {
-    min-height: 0;
-    aspect-ratio: 16 / 7;
-  }
-
-  .definitionVisual img {
-    object-position: 50% 61%;
+    display: none;
   }
 
   .closing {

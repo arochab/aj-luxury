@@ -22,6 +22,14 @@ const globalStyles = await readFile(
   new URL("../app/globals.css", import.meta.url),
   "utf8",
 );
+const purchase = await readFile(
+  new URL("../app/components/ProductPurchase.tsx", import.meta.url),
+  "utf8",
+);
+const storyStyles = await readFile(
+  new URL("../app/notre-histoire/Story.module.css", import.meta.url),
+  "utf8",
+);
 
 test("paired portrait media share one 2:3 frame", () => {
   assert.match(css, /\.galleryPortrait\s*\{[^}]*aspect-ratio:\s*2\s*\/\s*3/s);
@@ -76,5 +84,25 @@ test("homepage product portraits preserve the full head area", () => {
   assert.doesNotMatch(
     globalStyles,
     /\.aj-product-card__image img\s*\{[^}]*object-position:\s*center 28%;/s,
+  );
+});
+
+test("the size guide restores focus after every close path", () => {
+  assert.match(purchase, /const restoreSizeGuideFocus = useRef\(false\)/);
+  assert.match(
+    purchase,
+    /if \(sizeGuideOpen \|\| !restoreSizeGuideFocus\.current\) return;[\s\S]*sizeGuideTrigger\.current\?\.focus\(\{ preventScroll: true \}\)/,
+  );
+  assert.match(
+    purchase,
+    /function closeSizeGuide\(\) \{[\s\S]*restoreSizeGuideFocus\.current = true;[\s\S]*setSizeGuideOpen\(false\)/,
+  );
+  assert.doesNotMatch(purchase, /requestAnimationFrame\([\s\S]*trigger\?\.focus/);
+});
+
+test("the mobile story removes the empty definition visual spacer", () => {
+  assert.match(
+    storyStyles,
+    /@media \(max-width: 760px\)[\s\S]*?\.definitionVisual\s*\{[^}]*display:\s*none;/s,
   );
 });

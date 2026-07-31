@@ -200,13 +200,23 @@
   font-weight: 650;
 }
 
-.selectorHeading a {
+.selectorHeading a,
+.sizeGuideTrigger {
   display: inline-flex;
   min-height: 2.75rem;
   align-items: center;
   padding: 0.45rem 0;
   border-bottom: 1px solid currentColor;
   color: inherit;
+}
+
+.sizeGuideTrigger {
+  border-top: 0;
+  border-right: 0;
+  border-left: 0;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
 }
 
 .variantOptions {
@@ -432,6 +442,102 @@
   font-size: 0.62rem;
 }
 
+.sizeGuideOverlay {
+  position: fixed;
+  z-index: 120;
+  inset: 0;
+  display: grid;
+  padding: 1rem;
+  overflow: auto;
+  place-items: center;
+  background: rgba(7, 7, 9, 0.78);
+  backdrop-filter: blur(0.35rem);
+}
+
+.sizeGuideDialog {
+  width: min(calc(100vw - 2rem), 42rem);
+  max-height: min(90svh, 48rem);
+  padding: clamp(1.5rem, 4vw, 3rem);
+  overflow: auto;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background:
+    radial-gradient(circle at 85% 0%, rgba(220, 222, 227, 0.12), transparent 18rem),
+    #111114;
+  color: #f7f7f5;
+  box-shadow: 0 2rem 6rem rgba(0, 0, 0, 0.44);
+}
+
+.sizeGuideHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 2rem;
+}
+
+.sizeGuideHeader h2 {
+  margin: 0.55rem 0 0;
+  font-size: clamp(2.25rem, 6vw, 4.5rem);
+  font-weight: 350;
+  letter-spacing: -0.06em;
+  line-height: 0.95;
+}
+
+.sizeGuideClose {
+  display: grid;
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: 300 1.5rem/1 var(--font-manrope), Arial, sans-serif;
+}
+
+.sizeGuideIntro,
+.sizeGuideNote {
+  max-width: 34rem;
+  color: #c3c4c8;
+  font-size: 0.78rem;
+  line-height: 1.65;
+}
+
+.sizeGuideIntro {
+  margin: 1.5rem 0 2rem;
+}
+
+.sizeGuideNote {
+  margin: 1.25rem 0 0;
+}
+
+.sizeGuideTableWrap {
+  overflow-x: auto;
+}
+
+.sizeGuideTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+}
+
+.sizeGuideTable th,
+.sizeGuideTable td {
+  padding: 0.9rem 0.75rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.18);
+  text-align: left;
+}
+
+.sizeGuideTable thead th {
+  color: #a9adb5;
+  font-size: 0.65rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.sizeGuideTable tbody th {
+  font-size: 1rem;
+}
+
 .otherColors {
   padding: clamp(4rem, 7vw, 7rem) clamp(1rem, 3vw, 3.5rem);
   border-top: 1px solid var(--pdp-line);
@@ -570,6 +676,12 @@
 .zoomClose:focus-visible,
 .zoomControls button:focus-visible {
   outline: 2px solid #7f8187;
+  outline-offset: 3px;
+}
+
+.sizeGuideTrigger:focus-visible,
+.sizeGuideClose:focus-visible {
+  outline: 2px solid #d9dadd;
   outline-offset: 3px;
 }
 

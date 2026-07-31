@@ -58,23 +58,12 @@ export default function NotreHistoirePage() {
         <div className={styles.peopleHeader}>
           <div className={styles.actHeading}>
             <p className={styles.actIndex}>02</p>
-            <h2 id="people-title">Jérémy &amp; Alex</h2>
+            <h2 id="people-title">Alex &amp; Jérémy</h2>
           </div>
           <p className={styles.peopleStatement}><T id="story.peopleStatement" /></p>
         </div>
 
         <div className={styles.portraitGrid}>
-          <figure className={styles.portrait}>
-            <Image
-              unoptimized
-              src="/images/client/editorial-rose-jeremy.webp"
-              alt="AJ Luxury — Jérémy — Apollon Rose Velours"
-              fill
-              sizes="(max-width: 760px) 50vw, 44vw"
-            />
-            <figcaption>Jérémy</figcaption>
-          </figure>
-
           <figure className={styles.portrait}>
             <Image
               unoptimized
@@ -84,6 +73,17 @@ export default function NotreHistoirePage() {
               sizes="(max-width: 760px) 50vw, 44vw"
             />
             <figcaption>Alex</figcaption>
+          </figure>
+
+          <figure className={styles.portrait}>
+            <Image
+              unoptimized
+              src="/images/client/story-jeremy-retouched.jpeg"
+              alt="AJ Luxury — Jérémy — Apollon Rose Velours"
+              fill
+              sizes="(max-width: 760px) 50vw, 44vw"
+            />
+            <figcaption>Jérémy</figcaption>
           </figure>
         </div>
       </section>

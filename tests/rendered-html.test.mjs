@@ -80,7 +80,7 @@ for (const [pathname, colorName] of productCases) {
     assert.match(html, /ceinture de 3,5 cm/i);
     assert.match(html, /Description complète/);
     assert.match(html, /Caractéristiques/);
-    assert.match(html, /Tailles et disponibilité/);
+    assert.match(html, /Guide des tailles/);
     assert.match(html, /Agrandir la vue 1/);
     assert.match(html, /Disponible/);
     assert.match(html, />Accueil</);
@@ -150,11 +150,11 @@ test("server-renders the complete AJ Luxury story", async () => {
   const html = await response.text();
   assert.match(html, /Notre histoire/);
   assert.match(html, /Le point de départ/);
-  assert.match(html, /Jérémy &amp; Alex/);
+  assert.match(html, /Alex &amp; Jérémy/);
   assert.match(html, /Pas d’excès\. Simplement la justesse des détails\./);
   assert.match(html, /campaign-duo-lilas-seated\.webp/);
-  assert.match(html, /editorial-rose-jeremy\.webp/);
   assert.match(html, /product-rose-model\.webp/);
+  assert.match(html, /story-jeremy-retouched\.jpeg/);
   assert.match(html, /product-pourpre-detail\.webp/);
   assert.match(html, />Accueil</);
   assert.match(

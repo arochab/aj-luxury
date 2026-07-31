@@ -6,7 +6,7 @@
   color: #f7f7f5;
   display: grid;
   font-family: var(--font-manrope), Arial, sans-serif;
-  grid-template-columns: 9.5rem minmax(0, 1fr) minmax(16rem, auto);
+  grid-template-columns: minmax(16rem, 1fr) auto minmax(16rem, 1fr);
   min-height: 5.75rem;
   padding: 0 2rem;
   position: relative;
@@ -475,7 +475,7 @@
     gap: 0.85rem;
     grid-column: 1 / -1;
     grid-row: 2;
-    justify-content: flex-start;
+    justify-content: center;
     margin: 0 -1rem;
     overflow-x: auto;
     padding: 0.78rem 0.75rem;
