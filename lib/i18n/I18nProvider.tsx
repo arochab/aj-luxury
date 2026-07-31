@@ -9,6 +9,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { usePathname } from "next/navigation";
 import { defaultLocale, localeMetadata } from "./config";
 import {
   persistLocale,
@@ -16,6 +17,21 @@ import {
 } from "./client";
 import { translate, type TranslationKey } from "./dictionaries";
 import type { SupportedLocale } from "./types";
+
+const PAGE_TITLE_KEYS: Record<string, TranslationKey> = {
+  "/shop": "nav.shop",
+  "/notre-histoire": "nav.story",
+  "/account": "nav.account",
+  "/cart": "cart.title",
+  "/checkout": "checkout.demoLabel",
+  "/contact": "nav.contact",
+  "/shipping-returns": "info.shipping.title",
+  "/privacy": "info.privacy.title",
+  "/terms": "info.terms.title",
+  "/legal-notice": "info.legal.title",
+  "/cookies": "info.cookies.title",
+  "/withdrawal": "info.withdrawal.title",
+};
 
 type I18nContextValue = {
   locale: SupportedLocale;
@@ -34,6 +50,7 @@ export function I18nProvider({
   children,
   initialLocale = defaultLocale,
 }: I18nProviderProps) {
+  const pathname = usePathname();
   const [locale, setLocaleState] =
     useState<SupportedLocale>(initialLocale);
 
@@ -52,6 +69,16 @@ export function I18nProvider({
   useEffect(() => {
     document.documentElement.lang = localeMetadata[locale].htmlLang;
   }, [locale]);
+
+  useEffect(() => {
+    if (!pathname) return;
+
+    const titleKey = PAGE_TITLE_KEYS[pathname];
+    if (!titleKey) return;
+
+    const localizedTitle = translate(locale, titleKey).replace(/\.$/, "");
+    document.title = `${localizedTitle} | AJ Luxury`;
+  }, [locale, pathname]);
 
   const setLocale = useCallback((nextLocale: SupportedLocale) => {
     persistLocale(nextLocale);

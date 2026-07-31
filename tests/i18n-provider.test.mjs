@@ -16,7 +16,7 @@ test("the root layout installs the i18n provider without changing page content",
   assert.doesNotMatch(layout, /StoreHeader|StoreFooter|LanguageSwitcher/);
 });
 
-test("the provider detects preference, persists explicit choices and updates html lang", async () => {
+test("the provider localizes preference, html lang and the browser title", async () => {
   const provider = await readSource("lib/i18n/I18nProvider.tsx");
 
   assert.match(provider, /resolvePreferredLocale\(\)/);
@@ -25,6 +25,8 @@ test("the provider detects preference, persists explicit choices and updates htm
     provider,
     /document\.documentElement\.lang = localeMetadata\[locale\]\.htmlLang/,
   );
+  assert.match(provider, /PAGE_TITLE_KEYS\[pathname\]/);
+  assert.match(provider, /document\.title = `\$\{localizedTitle\} \| AJ Luxury`/);
   assert.match(provider, /useI18n must be used inside I18nProvider/);
 });
 

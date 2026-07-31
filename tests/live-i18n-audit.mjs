@@ -44,6 +44,9 @@ await navigate("/");
 const cases = {
   en: {
     shop: "Shop",
+    storyTitle: "Our story",
+    accountTitle: "Account",
+    legalTitle: "Terms and conditions of sale",
     tone: "Deep and sophisticated",
     size: "Select a size",
     feature: "Classic boxer cut",
@@ -53,6 +56,9 @@ const cases = {
   },
   es: {
     shop: "Tienda",
+    storyTitle: "Nuestra historia",
+    accountTitle: "Cuenta",
+    legalTitle: "Condiciones generales de venta",
     tone: "Profundo y sofisticado",
     size: "Elegir una talla",
     feature: "Corte bóxer clásico",
@@ -62,6 +68,9 @@ const cases = {
   },
   de: {
     shop: "Shop",
+    storyTitle: "Unsere Geschichte",
+    accountTitle: "Konto",
+    legalTitle: "Allgemeine Verkaufsbedingungen",
     tone: "Tief und raffiniert",
     size: "Größe auswählen",
     feature: "Klassischer Boxerschnitt",
@@ -71,6 +80,9 @@ const cases = {
   },
   it: {
     shop: "Boutique",
+    storyTitle: "La nostra storia",
+    accountTitle: "Account",
+    legalTitle: "Condizioni generali di vendita",
     tone: "Profondo e sofisticato",
     size: "Scegli una taglia",
     feature: "Classico taglio boxer",
@@ -95,14 +107,14 @@ for (const [locale, markers] of Object.entries(cases)) {
   });
 
   const routes = [
-    ["/shop", [markers.shop, markers.tone]],
-    ["/products/pourpre", [markers.size, markers.feature]],
-    ["/notre-histoire", [markers.story]],
-    ["/account", [markers.account]],
-    ["/terms", [markers.legal]],
+    ["/shop", [markers.shop, markers.tone], markers.shop],
+    ["/products/pourpre", [markers.size, markers.feature], null],
+    ["/notre-histoire", [markers.story], markers.storyTitle],
+    ["/account", [markers.account], markers.accountTitle],
+    ["/terms", [markers.legal], markers.legalTitle],
   ];
 
-  for (const [pathname, expected] of routes) {
+  for (const [pathname, expected, expectedTitle] of routes) {
     await navigate(pathname);
     const result = await send("Runtime.evaluate", {
       expression: `(() => {
@@ -110,6 +122,7 @@ for (const [locale, markers] of Object.entries(cases)) {
         visibleDom.querySelectorAll("script, style, noscript").forEach((node) => node.remove());
         return JSON.stringify({
           text: visibleDom.textContent,
+          title: document.title,
           lang: document.documentElement.lang,
           overflow: document.documentElement.scrollWidth > window.innerWidth
         });
@@ -123,6 +136,11 @@ for (const [locale, markers] of Object.entries(cases)) {
     }
     if (snapshot.overflow) {
       throw new Error(`${locale}${pathname}: horizontal overflow`);
+    }
+    if (expectedTitle && !snapshot.title.startsWith(expectedTitle)) {
+      throw new Error(
+        `${locale}${pathname}: expected localized title (${expectedTitle}), got (${snapshot.title})`,
+      );
     }
     for (const marker of expected) {
       if (!new RegExp(marker, "i").test(snapshot.text)) {
