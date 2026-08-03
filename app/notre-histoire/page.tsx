@@ -67,8 +67,8 @@ export default function NotreHistoirePage() {
           <figure className={styles.portrait}>
             <Image
               unoptimized
-              src="/images/client/product-rose-model.webp"
-              alt="AJ Luxury — Alex — Apollon Rose Velours"
+              src="/images/client/product-lilas-model.webp"
+              alt="AJ Luxury — Alex — Apollon Lilas Céleste"
               fill
               sizes="(max-width: 760px) 50vw, 44vw"
             />

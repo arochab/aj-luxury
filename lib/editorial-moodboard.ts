@@ -2,9 +2,14 @@ export type EditorialMoodboardImage = {
   src: string;
   alt: string;
   crop: "portrait-left" | "duo" | "portrait-right";
+  objectPosition?: string;
 };
 
-/** Campagne éditoriale resserrée — un solo de chaque fondateur et une image duo. */
+/**
+ * Campagne éditoriale resserrée : trois coloris distincts, un solo de chaque
+ * fondateur et une image duo. L'ordre évite toute répétition de coloris dans
+ * une même séquence visuelle.
+ */
 export const editorialMoodboardImages: EditorialMoodboardImage[] = [
   {
     src: "/images/client/editorial-pourpre-chair.webp",
@@ -12,9 +17,10 @@ export const editorialMoodboardImages: EditorialMoodboardImage[] = [
     crop: "portrait-left",
   },
   {
-    src: "/images/client/campaign-duo-pourpre.webp",
-    alt: "AJ Luxury — Jérémy, Alex — Apollon Pourpre Impérial",
+    src: "/images/client/campaign-duo-lilas-seated.webp",
+    alt: "AJ Luxury — Alex et Jérémy — Apollon Lilas Céleste",
     crop: "duo",
+    objectPosition: "50% 22%",
   },
   {
     src: "/images/client/editorial-rose-profile.webp",

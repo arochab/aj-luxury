@@ -153,7 +153,7 @@ test("server-renders the complete AJ Luxury story", async () => {
   assert.match(html, /Alex &amp; Jérémy/);
   assert.match(html, /Pas d’excès\. Simplement la justesse des détails\./);
   assert.match(html, /campaign-duo-lilas-seated\.webp/);
-  assert.match(html, /product-rose-model\.webp/);
+  assert.match(html, /product-lilas-model\.webp/);
   assert.match(html, /story-jeremy-retouched\.jpeg/);
   assert.match(html, /product-pourpre-detail\.webp/);
   assert.match(html, />Accueil</);

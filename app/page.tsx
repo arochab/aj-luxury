@@ -122,6 +122,11 @@ export default function Home() {
                 alt={image.alt}
                 fill
                 sizes="(max-width: 760px) 74vw, 46vw"
+                style={
+                  image.objectPosition
+                    ? { objectPosition: image.objectPosition }
+                    : undefined
+                }
               />
             </figure>
           ))}
