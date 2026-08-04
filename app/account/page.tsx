@@ -11,7 +11,7 @@ export const metadata = {
 export default function AccountPage() {
   return (
     <main className={styles.shell}>
-      <StoreHeader variant="minimal" />
+      <StoreHeader />
       <aside className={styles.notice}>
         <T id="account.demoNotice" />
       </aside>

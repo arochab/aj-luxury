@@ -1,4 +1,4 @@
-export const LEGAL_VERSION = "30 juillet 2026";
+export const LEGAL_VERSION = "2026-07-30";
 
 export const LEGAL_CONTACT = {
   brand: "AJ Luxury",

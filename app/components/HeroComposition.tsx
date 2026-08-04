@@ -67,8 +67,15 @@ export default function HeroComposition() {
         type="button"
         className="aj-film__motion-toggle"
         onClick={() => setPlaying((current) => !current)}
+        aria-label={playing ? t("hero.pauseMetal") : t("hero.playMetal")}
+        aria-pressed={!playing}
       >
-        {playing ? t("hero.pauseMetal") : t("hero.playMetal")}
+        <span className="aj-film__motion-toggle-icon" aria-hidden="true">
+          {playing ? "Ⅱ" : "▶"}
+        </span>
+        <span className="aj-film__motion-toggle-text">
+          {playing ? t("hero.pauseMetal") : t("hero.playMetal")}
+        </span>
       </button>
     </>
   );

@@ -238,12 +238,10 @@
   }
 
   .header > :first-child {
-    font-size: 0;
-  }
-
-  .header > :first-child::after {
-    content: "Retour";
     font-size: 9px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
   }
 
   .line {

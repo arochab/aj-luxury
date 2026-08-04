@@ -29,7 +29,7 @@ export default async function CartPage({ searchParams }: CartPageProps) {
 
   return (
     <main className={styles.shell}>
-      <StoreHeader variant="minimal" />
+      <StoreHeader />
       <aside className={styles.notice}>
         <T id="cart.demoNotice" />
       </aside>

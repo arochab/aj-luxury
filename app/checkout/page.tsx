@@ -28,8 +28,8 @@ export default async function CheckoutPage({
 
   return (
     <main className={styles.shell}>
-      <StoreHeader variant="minimal" />
-      <div className={styles.header} aria-label="Navigation du paiement">
+      <StoreHeader />
+      <div className={styles.header} aria-label="Checkout">
         <Link
           href={
             variant
@@ -56,7 +56,7 @@ export default async function CheckoutPage({
               <input
                 type="email"
                 autoComplete="email"
-                placeholder="vous@exemple.fr"
+                placeholder="email@example.com"
               />
             </label>
             <div className={styles.formGrid}>
@@ -80,7 +80,7 @@ export default async function CheckoutPage({
               </label>
               <label>
                 <T id="checkout.city" />
-                <input autoComplete="address-level2" placeholder="Paris" />
+                <input autoComplete="address-level2" />
               </label>
             </div>
             <button className={styles.lockedButton} type="button" disabled>

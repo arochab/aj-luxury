@@ -207,18 +207,22 @@ const FRAGMENT_SHADER = `
     vec2 photoUV = containPhotoUV(uv, u_photoAspect, screenAspect);
     vec2 clampedUV = clamp(photoUV, 0.001, 0.999);
 
-    vec4 photo = texture2D(u_photo, clampedUV);
-    float subject = texture2D(u_mask, clampedUV).a;
+    bool insidePhoto =
+      photoUV.x >= 0.0 && photoUV.x <= 1.0 &&
+      photoUV.y >= 0.0 && photoUV.y <= 1.0;
+    float subject = insidePhoto ? texture2D(u_mask, clampedUV).a : 0.0;
 
     vec2 p = (uv - 0.5) * vec2(screenAspect, 1.0) * 2.0;
     vec3 metal = liquidMetal(uv, p, u_phase);
-    vec3 violetEdge = sampleVioletEdge(photoUV, rect, uv);
-    vec3 bridgedMetal = mix(metal, violetEdge, 0.64);
+    vec3 studioViolet = vec3(0.31, 0.30, 0.37);
+    vec3 bridgedMetal = mix(studioViolet, metal, 0.7);
 
     float mixAmount = subtleFusionMix(uv, rect, subject, u_metalMix);
-    vec3 fused = mix(photo.rgb, bridgedMetal, mixAmount);
+    float outside = outsidePhotoDistance(uv, rect);
+    float outsideAlpha = mix(0.82, 1.0, smoothstepRange(0.0, 0.62, outside));
+    float layerAlpha = outside > 0.0 ? outsideAlpha : mixAmount * 0.24;
 
-    gl_FragColor = vec4(fused, 1.0);
+    gl_FragColor = vec4(bridgedMetal, layerAlpha);
   }
 `;
 
@@ -263,9 +267,10 @@ export default function HeroFusionField({
 
     async function init() {
       const context = canvas.getContext("webgl", {
-        alpha: false,
+        alpha: true,
         antialias: false,
         depth: false,
+        premultipliedAlpha: true,
         powerPreference: "high-performance",
       });
       if (!context || disposed) return;
