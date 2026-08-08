@@ -1,54 +1,52 @@
 "use client";
 
 import Image from "next/image";
-import { useCallback, useEffect, useState } from "react";
-import { HERO_FUSION_VERSION } from "../../lib/hero-fusion";
+import { useCallback, useState } from "react";
+import { HERO_VIDEO_VERSION } from "../../lib/hero-video";
 import { useI18n } from "@/lib/i18n/I18nProvider";
-import HeroFusionField from "./HeroFusionField";
+import HeroBackgroundVideo from "./HeroBackgroundVideo";
 
 export default function HeroComposition() {
   const { t } = useI18n();
   const [playing, setPlaying] = useState(true);
-  const [fusionReady, setFusionReady] = useState(false);
 
-  const handleFusionReady = useCallback(() => {
-    setFusionReady(true);
-  }, []);
-
-  useEffect(() => {
-    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
-
-    function applyPreference() {
-      if (reducedMotion.matches) setPlaying(false);
-    }
-
-    applyPreference();
-    reducedMotion.addEventListener("change", applyPreference);
-    return () => reducedMotion.removeEventListener("change", applyPreference);
+  const handlePlaybackIntentChange = useCallback((nextPlaying: boolean) => {
+    setPlaying(nextPlaying);
   }, []);
 
   return (
     <>
       <div
         className="aj-film__hero-scene"
-        data-hero-version={`fusion-${HERO_FUSION_VERSION}`}
+        data-hero-version={`video-${HERO_VIDEO_VERSION}`}
       >
-        <div
-          className={`aj-film__hero-photo-base${fusionReady ? " is-ready" : ""}`}
-          aria-hidden="true"
-        >
-          <Image
-            unoptimized
-            priority
-            src="/images/client/hero-duo-static.webp"
-            alt=""
-            fill
-            sizes="100vw"
-            style={{ objectFit: "contain", objectPosition: "center center" }}
-          />
-        </div>
+        <HeroBackgroundVideo
+          playing={playing}
+          onPlaybackIntentChange={handlePlaybackIntentChange}
+        />
 
-        <HeroFusionField playing={playing} onReady={handleFusionReady} />
+        <div className="aj-film__hero-photo-base" aria-hidden="true">
+          <div className="aj-film__hero-photo-frame aj-film__hero-photo-frame--background">
+            <Image
+              unoptimized
+              priority
+              src="/images/client/hero-duo-static.webp"
+              alt=""
+              fill
+              sizes="(max-aspect-ratio: 1464/2200) 100vw, 67vh"
+            />
+          </div>
+          <div className="aj-film__hero-photo-frame aj-film__hero-photo-frame--subjects">
+            <Image
+              unoptimized
+              priority
+              src="/images/client/hero-duo-cutout.png"
+              alt=""
+              fill
+              sizes="(max-aspect-ratio: 1464/2200) 100vw, 67vh"
+            />
+          </div>
+        </div>
 
         <figure className="aj-film__portrait aj-film__portrait--sr">
           <Image
@@ -66,7 +64,7 @@ export default function HeroComposition() {
       <button
         type="button"
         className="aj-film__motion-toggle"
-        onClick={() => setPlaying((current) => !current)}
+        onClick={() => handlePlaybackIntentChange(!playing)}
         aria-label={playing ? t("hero.pauseMetal") : t("hero.playMetal")}
         aria-pressed={!playing}
       >

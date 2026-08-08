@@ -1,8 +1,13 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import {
+  nextLazyMountState,
+  shouldAnimateMetallicField,
+  type MetallicFieldMotion,
+} from "../../lib/motion-policy";
 
-export type MetallicFieldMotion = "normal" | "slow" | "still";
+export type { MetallicFieldMotion } from "../../lib/motion-policy";
 export type MetallicFieldVariant = "graphite" | "silver" | "dusk" | "reference";
 
 type MetallicFieldProps = {
@@ -16,11 +21,24 @@ const NORMAL_LOOP_SECONDS = 34;
 const SLOW_LOOP_SECONDS = 62;
 const MAX_FPS = 30;
 
-export default function MetallicField({
-  className = "",
-  motion = "normal",
-  variant = "graphite",
-}: MetallicFieldProps) {
+function metallicFallback(variant: MetallicFieldVariant) {
+  return variant === "reference"
+    ? [
+        "radial-gradient(circle at 12% 32%, rgba(238,238,239,.88) 0 3%, rgba(82,82,86,.58) 7%, transparent 13%)",
+        "radial-gradient(circle at 88% 68%, rgba(230,230,232,.74) 0 5%, rgba(62,62,67,.68) 10%, transparent 18%)",
+        "linear-gradient(132deg, transparent 0 15%, rgba(222,222,225,.5) 34%, rgba(78,78,84,.58) 52%, rgba(207,207,210,.44) 68%, transparent 86%)",
+        "linear-gradient(42deg, #09090b 0%, #29292d 28%, #747478 48%, #a9a9ac 58%, #36363b 75%, #0b0b0d 100%)",
+      ].join(",")
+    : [
+        "linear-gradient(132deg, transparent 0 20%, rgba(197,198,204,.42) 38%, rgba(103,103,112,.36) 54%, transparent 70%)",
+        "linear-gradient(42deg, #121217 0%, #393940 30%, #898990 48%, #b8b8bd 57%, #55545d 72%, #17171c 100%)",
+      ].join(",");
+}
+
+function MetallicCanvas({
+  motion,
+  variant,
+}: Required<Pick<MetallicFieldProps, "motion" | "variant">>) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -28,18 +46,7 @@ export default function MetallicField({
     if (!canvas) return;
 
     const applyFallback = () => {
-      canvas.style.background =
-        variant === "reference"
-          ? [
-              "radial-gradient(circle at 12% 32%, rgba(238,238,239,.88) 0 3%, rgba(82,82,86,.58) 7%, transparent 13%)",
-              "radial-gradient(circle at 88% 68%, rgba(230,230,232,.74) 0 5%, rgba(62,62,67,.68) 10%, transparent 18%)",
-              "linear-gradient(132deg, transparent 0 15%, rgba(222,222,225,.5) 34%, rgba(78,78,84,.58) 52%, rgba(207,207,210,.44) 68%, transparent 86%)",
-              "linear-gradient(42deg, #09090b 0%, #29292d 28%, #747478 48%, #a9a9ac 58%, #36363b 75%, #0b0b0d 100%)",
-            ].join(",")
-          : [
-              "linear-gradient(132deg, transparent 0 20%, rgba(197,198,204,.42) 38%, rgba(103,103,112,.36) 54%, transparent 70%)",
-              "linear-gradient(42deg, #121217 0%, #393940 30%, #898990 48%, #b8b8bd 57%, #55545d 72%, #17171c 100%)",
-            ].join(",");
+      canvas.style.background = metallicFallback(variant);
     };
 
     const context = canvas.getContext("webgl", {
@@ -502,11 +509,17 @@ export default function MetallicField({
     let animationFrame = 0;
     let lastPaint = -frameInterval;
     let needsResize = true;
-    let isVisible = true;
+    let isVisible = false;
     let pageIsVisible = !document.hidden;
     let contextLost = false;
 
-    const shouldAnimate = () => motion !== "still" && !reducedMotion.matches;
+    const shouldAnimate = () =>
+      shouldAnimateMetallicField({
+        motion,
+        reducedMotion: reducedMotion.matches,
+        inViewport: isVisible,
+        pageVisible: pageIsVisible,
+      });
 
     const resizeCanvas = () => {
       const dprCap = window.innerWidth < 768 ? 1 : 1.25;
@@ -572,21 +585,28 @@ export default function MetallicField({
       paint(performance.now());
     };
 
-    const intersectionObserver = new IntersectionObserver(
-      ([entry]) => {
-        isVisible = entry.isIntersecting;
+    const handleIntersection = (visible: boolean) => {
+      isVisible = visible;
 
-        if (!isVisible) {
-          stop();
-        } else if (shouldAnimate()) {
-          schedule();
-        } else {
-          renderStill();
-        }
-      },
-      { threshold: 0.01 },
-    );
-    intersectionObserver.observe(canvas);
+      if (!isVisible) {
+        stop();
+      } else if (shouldAnimate()) {
+        schedule();
+      } else {
+        renderStill();
+      }
+    };
+
+    const intersectionObserver =
+      typeof IntersectionObserver === "undefined"
+        ? null
+        : new IntersectionObserver(
+            ([entry]) => handleIntersection(entry.isIntersecting),
+            { threshold: 0.01 },
+          );
+
+    if (intersectionObserver) intersectionObserver.observe(canvas);
+    else handleIntersection(true);
 
     const resizeObserver =
       typeof ResizeObserver === "undefined"
@@ -633,12 +653,9 @@ export default function MetallicField({
     };
     canvas.addEventListener("webglcontextlost", handleContextLost);
 
-    paint(performance.now());
-    schedule();
-
     return () => {
       stop();
-      intersectionObserver.disconnect();
+      intersectionObserver?.disconnect();
       resizeObserver?.disconnect();
       if (!resizeObserver) window.removeEventListener("resize", handleWindowResize);
       document.removeEventListener("visibilitychange", handleVisibility);
@@ -657,8 +674,53 @@ export default function MetallicField({
   return (
     <canvas
       ref={canvasRef}
-      className={`metallic-field ${className}`.trim()}
+      className="metallic-field__canvas"
       aria-hidden="true"
     />
+  );
+}
+
+export default function MetallicField({
+  className = "",
+  motion = "normal",
+  variant = "graphite",
+}: MetallicFieldProps) {
+  const hostRef = useRef<HTMLDivElement>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+
+    if (typeof IntersectionObserver === "undefined") {
+      const fallbackMount = window.setTimeout(() => setMounted(true), 0);
+      return () => window.clearTimeout(fallbackMount);
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry.isIntersecting) return;
+        setMounted((current) =>
+          nextLazyMountState(current, entry.isIntersecting),
+        );
+        observer.disconnect();
+      },
+      { rootMargin: "0px", threshold: 0.01 },
+    );
+    observer.observe(host);
+
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div
+      ref={hostRef}
+      className={`metallic-field ${className}`.trim()}
+      style={{ background: metallicFallback(variant) }}
+      data-metallic-mounted={mounted ? "true" : "false"}
+      aria-hidden="true"
+    >
+      {mounted ? <MetallicCanvas motion={motion} variant={variant} /> : null}
+    </div>
   );
 }

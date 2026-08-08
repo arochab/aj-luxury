@@ -10,7 +10,7 @@
     "build": "vinext build",
     "start": "vinext start",
     "deploy:preview": "npm run build && wrangler deploy --config dist/server/wrangler.json --name aj-luxury-preview",
-    "test": "npm run build && node --experimental-strip-types --test tests/hero-fusion.test.mjs tests/commerce-pricing.test.mjs tests/stock-privacy.test.mjs && node --test tests/i18n-dictionaries.test.mjs tests/i18n-provider.test.mjs tests/model-identity.test.mjs tests/product-gallery-layout.test.mjs tests/rendered-html.test.mjs",
+    "test": "npm run build && node --experimental-strip-types --test tests/hero-video.test.mjs tests/motion-lifecycle.test.mjs tests/commerce-pricing.test.mjs tests/stock-privacy.test.mjs && node --test tests/i18n-dictionaries.test.mjs tests/i18n-provider.test.mjs tests/model-identity.test.mjs tests/product-gallery-layout.test.mjs tests/rendered-html.test.mjs",
     "lint": "eslint app lib tests --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate"
   },

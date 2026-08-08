@@ -37,16 +37,25 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
   assert.match(html, /Pourpre Impérial/);
   assert.match(html, /Rose Velours/);
   assert.match(html, /Lilas Céleste/);
-  assert.match(html, /data-hero-fusion="v4"/);
-  assert.match(html, /data-hero-version="fusion-v4"/);
+  assert.match(html, /data-hero-version="video-v1"/);
+  assert.match(html, /class="aj-film__hero-video"/);
+  assert.match(html, /poster="\/images\/client\/hero-metal-poster\.webp"/);
+  assert.match(html, /<video[^>]*muted=""[^>]*loop=""[^>]*playsInline=""/);
   assert.match(html, /images\/client\/hero-duo-static\.webp/);
+  assert.match(html, /images\/client\/hero-duo-cutout\.png/);
+  assert.equal(
+    (html.match(/data-metallic-mounted="false"/g) ?? []).length,
+    2,
+    "homepage metallic fields must remain unmounted during initial hero render",
+  );
+  assert.doesNotMatch(html, /class="metallic-field__canvas"/);
   assert.match(html, /Figer le métal/);
   assert.match(html, /href="\/"[^>]*aria-current="page"[^>]*>Accueil</);
   assert.match(html, />Notre histoire</);
   assert.doesNotMatch(html, /94\s*%\s*modal/i);
   assert.doesNotMatch(html, /6\s*%\s*élasthanne/i);
   assert.doesNotMatch(html, /Un modèle décliné en trois coloris/i);
-  assert.doesNotMatch(html, /videos\/aj-luxury-hero/i);
+  assert.doesNotMatch(html, /data-hero-fusion/);
   assert.doesNotMatch(html, /href="\/#collection"/);
   assert.doesNotMatch(html, /href="\/#matiere"/);
   assert.doesNotMatch(html, />La matière</);
