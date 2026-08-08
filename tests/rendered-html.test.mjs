@@ -52,6 +52,7 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
   assert.match(html, /Figer le métal/);
   assert.match(html, /href="\/"[^>]*aria-current="page"[^>]*>Accueil</);
   assert.match(html, />Notre histoire</);
+  assert.match(html, /href="\/shop"[^>]*>Découvrir la collection</);
   assert.doesNotMatch(html, /94\s*%\s*modal/i);
   assert.doesNotMatch(html, /6\s*%\s*élasthanne/i);
   assert.doesNotMatch(html, /Un modèle décliné en trois coloris/i);
@@ -181,13 +182,13 @@ test("server-renders the complete AJ Luxury story", async () => {
 });
 
 const informationCases = [
-  ["/shipping-returns", /Livraison et retours/],
+  ["/shipping-returns", /Livraison internationale et retours/],
   ["/privacy", /Politique de confidentialité/],
   ["/terms", /Conditions générales de vente/],
   ["/contact", /Nous contacter/],
   ["/legal-notice", /Mentions légales/],
   ["/cookies", /Cookies/],
-  ["/withdrawal", /Renoncer au contrat ici/],
+  ["/withdrawal", /Droit de rétractation/],
 ];
 
 for (const [pathname, marker] of informationCases) {
@@ -222,7 +223,7 @@ test("terms cover the 2026 consumer baseline without a blanket underwear exclusi
   assert.match(html, /deux ans à compter de la délivrance/i);
   assert.match(html, /prolongée de six mois/i);
   assert.match(html, /renouvelée pour deux ans/i);
-  assert.match(html, /Renoncer au contrat ici/);
+  assert.match(html, /accéder au formulaire de rétractation/);
   assert.match(html, /accusé de réception/i);
   assert.match(html, /n’est pas exclu du seul fait que le produit est un sous-vêtement/i);
   assert.match(html, /médiateur conventionné/i);

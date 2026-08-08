@@ -94,6 +94,7 @@
   font: 650 0.62rem/1.2 var(--font-manrope), Arial, sans-serif;
   letter-spacing: 0.09em;
   min-height: 2.75rem;
+  min-width: 2.75rem;
   padding: 0.55rem 1.25rem 0.55rem 0.55rem;
   text-transform: uppercase;
 }

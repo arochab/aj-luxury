@@ -142,9 +142,14 @@ export default function Home() {
             <p>
               <ClientCopyText copyKey="brandStory" />
             </p>
-            <Link href="/notre-histoire">
-              <T id="home.discoverStory" />
-            </Link>
+            <div className="aj-story__actions">
+              <Link href="/notre-histoire">
+                <T id="home.discoverStory" />
+              </Link>
+              <Link href="/shop">
+                <T id="story.discoverCollection" />
+              </Link>
+            </div>
           </div>
         </div>
       </section>

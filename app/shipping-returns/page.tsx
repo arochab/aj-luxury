@@ -2,7 +2,7 @@ import InfoPage, { InfoNotice } from "../components/InfoPage";
 import { LEGAL_CONTACT, LEGAL_VERSION } from "@/lib/legal";
 import { T } from "@/lib/i18n/TranslatedText";
 
-export const metadata = { title: "Livraison et retours | AJ Luxury" };
+export const metadata = { title: "Livraison internationale et retours | AJ Luxury" };
 
 export default function ShippingReturnsPage() {
   return (
@@ -56,7 +56,7 @@ export default function ShippingReturnsPage() {
           Le client dispose de quatorze jours à compter de la réception pour
           notifier sa rétractation, puis de quatorze jours pour expédier le
           produit. La démarche pourra être initiée depuis{" "}
-          <a href="/withdrawal">Renoncer au contrat ici</a>. Les frais directs de
+          <a href="/withdrawal">Accéder au formulaire de rétractation</a>. Les frais directs de
           retour sont à la charge du client, sauf défaut, non-conformité ou erreur
           d’AJ Luxury.
         </p>

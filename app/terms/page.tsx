@@ -127,7 +127,7 @@ export default function TermsPage() {
           Le client dispose de <strong>quatorze jours calendaires</strong> à
           compter de la réception du produit pour notifier sa décision, sans
           justification. Il peut utiliser la fonctionnalité{" "}
-          <a href="/withdrawal">Renoncer au contrat ici</a>, le modèle ci-dessous
+          <a href="/withdrawal">accéder au formulaire de rétractation</a>, le modèle ci-dessous
           ou toute déclaration dénuée d’ambiguïté. Un accusé de réception lui est
           adressé sur un support durable.
         </p>
