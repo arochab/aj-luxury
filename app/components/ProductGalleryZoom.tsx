@@ -1,6 +1,7 @@
 "use client";
 
-import Image from "next/image";
+/* eslint-disable @next/next/no-img-element -- source pixels are pre-optimized and client runtime cost is intentionally avoided */
+
 import { useEffect, useRef, useState } from "react";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import type { ProductMedia } from "@/lib/products";
@@ -11,6 +12,146 @@ type ProductGalleryZoomProps = {
   model: string;
   color: string;
 };
+
+type DeferredGalleryMediaProps = {
+  image: ProductMedia;
+  alt: string;
+  eager: boolean;
+};
+
+function galleryPlaceholderSrc(src: string): string {
+  return `${src.replace(/\.[^.]+$/, "-placeholder-v1.webp")}?v=v1`;
+}
+
+function DeferredGalleryMedia({
+  image,
+  alt,
+  eager,
+}: DeferredGalleryMediaProps) {
+  const sentinelRef = useRef<HTMLSpanElement>(null);
+  const [visible, setVisible] = useState(eager);
+  const [criticalPathComplete, setCriticalPathComplete] = useState(eager);
+
+  useEffect(() => {
+    if (eager) return;
+
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return;
+    if (!("IntersectionObserver" in window)) {
+      const fallbackHandle = globalThis.setTimeout(() => setVisible(true), 0);
+      return () => globalThis.clearTimeout(fallbackHandle);
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry.isIntersecting) return;
+        setVisible(true);
+        observer.disconnect();
+      },
+      { rootMargin: "320px 0px", threshold: 0.01 },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [eager]);
+
+  useEffect(() => {
+    if (eager) return;
+
+    let idleHandle: number | null = null;
+    let timeoutHandle: ReturnType<typeof globalThis.setTimeout> | null = null;
+    const interactionEvents: Array<keyof WindowEventMap> = [
+      "wheel",
+      "touchstart",
+      "pointerdown",
+      "keydown",
+    ];
+
+    const unlock = () => setCriticalPathComplete(true);
+    const removeInteractionListeners = () => {
+      for (const eventName of interactionEvents) {
+        window.removeEventListener(eventName, unlockFromIntent);
+      }
+    };
+    const unlockFromIntent = () => {
+      removeInteractionListeners();
+      unlock();
+    };
+    const scheduleUnlock = () => {
+      if ("requestIdleCallback" in window) {
+        idleHandle = window.requestIdleCallback(unlock, { timeout: 1200 });
+        return;
+      }
+      timeoutHandle = globalThis.setTimeout(unlock, 200);
+    };
+
+    for (const eventName of interactionEvents) {
+      window.addEventListener(eventName, unlockFromIntent, {
+        once: true,
+        passive: eventName !== "keydown",
+      });
+    }
+    if (document.readyState === "complete") scheduleUnlock();
+    else window.addEventListener("load", scheduleUnlock, { once: true });
+
+    return () => {
+      window.removeEventListener("load", scheduleUnlock);
+      removeInteractionListeners();
+      if (idleHandle !== null && "cancelIdleCallback" in window) {
+        window.cancelIdleCallback(idleHandle);
+      }
+      if (timeoutHandle !== null) globalThis.clearTimeout(timeoutHandle);
+    };
+  }, [eager]);
+
+  const ready = eager || (visible && criticalPathComplete);
+
+  return (
+    <>
+      <span
+        ref={sentinelRef}
+        className={styles.galleryMediaSentinel}
+        aria-hidden="true"
+      />
+      {ready ? (
+        <img
+          className={styles.galleryMedia}
+          data-gallery-media="full"
+          src={image.src}
+          alt={alt}
+          width={1600}
+          height={2400}
+          loading={eager ? "eager" : "lazy"}
+          fetchPriority={eager ? "high" : "low"}
+          decoding="async"
+          sizes="(max-width: 560px) 100vw, (max-width: 900px) 50vw, 32vw"
+          style={
+            image.objectPosition
+              ? { objectPosition: image.objectPosition }
+              : undefined
+          }
+        />
+      ) : null}
+      <img
+        className={styles.galleryPlaceholder}
+        data-gallery-media="placeholder"
+        src={galleryPlaceholderSrc(image.src)}
+        alt=""
+        aria-hidden="true"
+        width={48}
+        height={72}
+        loading={eager ? "eager" : "lazy"}
+        fetchPriority="low"
+        decoding="async"
+        sizes="(max-width: 560px) 100vw, (max-width: 900px) 50vw, 32vw"
+        style={
+          image.objectPosition
+            ? { objectPosition: image.objectPosition }
+            : undefined
+        }
+      />
+    </>
+  );
+}
 
 export default function ProductGalleryZoom({
   images,
@@ -54,18 +195,10 @@ export default function ProductGalleryZoom({
           }}
           aria-label={`${t("product.enlargeView")} ${index + 1} · ${model} ${color}`}
         >
-          <Image
-            unoptimized
-            src={image.src}
+          <DeferredGalleryMedia
+            image={image}
             alt={getImageAlt(image, index)}
-            fill
-            priority={index === 0}
-            sizes="(max-width: 560px) 100vw, (max-width: 900px) 50vw, 32vw"
-            style={
-              image.objectPosition
-                ? { objectPosition: image.objectPosition }
-                : undefined
-            }
+            eager={index === 0}
           />
           <span className={styles.zoomLabel} aria-hidden="true">
             {t("product.enlarge")}
@@ -155,13 +288,15 @@ export default function ProductGalleryZoom({
           </button>
 
           <div className={styles.zoomImage}>
-            <Image
-              unoptimized
+            <img
               src={images[zoomedIndex].src}
               alt={`${t("product.zoomedView")} ${zoomedIndex + 1} · ${model} ${color}`}
-              fill
+              width={1600}
+              height={2400}
+              loading="eager"
+              fetchPriority="high"
+              decoding="async"
               sizes="100vw"
-              priority
               style={{ objectFit: "contain" }}
             />
           </div>

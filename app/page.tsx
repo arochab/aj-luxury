@@ -1,6 +1,7 @@
-import Image from "next/image";
+/* eslint-disable @next/next/no-img-element -- pre-optimized client-owned media avoids an unnecessary image runtime */
+
 import Link from "next/link";
-import MetallicField from "./components/MetallicField";
+import DeferredMetallicField from "./components/DeferredMetallicField";
 import HeroComposition from "./components/HeroComposition";
 import StoreFooter from "./components/StoreFooter";
 import StoreHeader from "./components/StoreHeader";
@@ -49,7 +50,7 @@ export default function Home() {
 
       <section className="aj-featured" id="apollon">
         <div className="aj-featured__metal" aria-hidden="true">
-          <MetallicField motion="still" variant="silver" />
+          <DeferredMetallicField motion="still" variant="silver" />
         </div>
         <div className="aj-featured__glow" aria-hidden="true" />
         <div
@@ -63,11 +64,14 @@ export default function Home() {
               }`}
               key={image.src}
             >
-              <Image
-                unoptimized
+              <img
                 src={image.src}
                 alt={image.alt}
-                fill
+                width={1600}
+                height={2400}
+                loading="lazy"
+                fetchPriority="low"
+                decoding="async"
                 sizes="(max-width: 760px) 78vw, 31vw"
               />
             </figure>
@@ -87,11 +91,14 @@ export default function Home() {
           {products.map((product) => (
             <article className="aj-product-card" key={product.slug}>
               <Link className="aj-product-card__image" href={`/products/${product.slug}`}>
-                <Image
-                  unoptimized
+                <img
                   src={product.image}
                   alt={`${product.model} ${product.name}`}
-                  fill
+                  width={1600}
+                  height={2000}
+                  loading="lazy"
+                  fetchPriority="low"
+                  decoding="async"
                   sizes="(max-width: 760px) 78vw, 31vw"
                 />
               </Link>
@@ -116,11 +123,14 @@ export default function Home() {
               className={`aj-moodboard__item aj-moodboard__item--${image.crop}`}
               key={image.src}
             >
-              <Image
-                unoptimized
+              <img
                 src={image.src}
                 alt={image.alt}
-                fill
+                width={1600}
+                height={2400}
+                loading="lazy"
+                fetchPriority="low"
+                decoding="async"
                 sizes="(max-width: 760px) 74vw, 46vw"
                 style={
                   image.objectPosition
@@ -135,7 +145,7 @@ export default function Home() {
 
       <section className="aj-story" id="histoire">
         <div className="aj-story__metal" aria-hidden="true">
-          <MetallicField motion="slow" variant="dusk" />
+          <DeferredMetallicField motion="slow" variant="dusk" />
         </div>
         <div className="aj-story__copy">
           <div>

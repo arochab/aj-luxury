@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { preload } from "react-dom";
 import {
   HERO_VIDEO_ASSETS,
   selectHeroVideoAsset,
@@ -17,10 +18,22 @@ export default function HeroBackgroundVideo({
   playing,
   onPlaybackIntentChange,
 }: HeroBackgroundVideoProps) {
+  preload(HERO_VIDEO_ASSETS.mobile.poster, {
+    as: "image",
+    fetchPriority: "high",
+    media: "(max-width: 600px)",
+  });
+  preload(HERO_VIDEO_ASSETS.desktop.poster, {
+    as: "image",
+    fetchPriority: "high",
+    media: "(min-width: 601px)",
+  });
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const visibleRef = useRef(true);
   const pageVisibleRef = useRef(true);
   const [reducedMotion, setReducedMotion] = useState(false);
+  const [sourceEnabled, setSourceEnabled] = useState(false);
   const [asset, setAsset] = useState<HeroVideoAsset | null>(null);
 
   const syncPlayback = useCallback(async () => {
@@ -48,6 +61,33 @@ export default function HeroBackgroundVideo({
   }, [asset, onPlaybackIntentChange, playing, reducedMotion]);
 
   useEffect(() => {
+    let idleHandle: number | null = null;
+    let timeoutHandle: ReturnType<typeof globalThis.setTimeout> | null = null;
+
+    const enableSource = () => setSourceEnabled(true);
+    const scheduleSource = () => {
+      if ("requestIdleCallback" in window) {
+        idleHandle = window.requestIdleCallback(enableSource, { timeout: 1800 });
+        return;
+      }
+      timeoutHandle = globalThis.setTimeout(enableSource, 250);
+    };
+
+    if (document.readyState === "complete") scheduleSource();
+    else window.addEventListener("load", scheduleSource, { once: true });
+
+    return () => {
+      window.removeEventListener("load", scheduleSource);
+      if (idleHandle !== null && "cancelIdleCallback" in window) {
+        window.cancelIdleCallback(idleHandle);
+      }
+      if (timeoutHandle !== null) globalThis.clearTimeout(timeoutHandle);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!sourceEnabled || reducedMotion) return;
+
     const updateAsset = () => {
       const nextAsset = selectHeroVideoAsset(window.innerWidth);
       setAsset((current) =>
@@ -67,7 +107,7 @@ export default function HeroBackgroundVideo({
       mobileQuery.removeEventListener("change", updateAsset);
       tabletQuery.removeEventListener("change", updateAsset);
     };
-  }, []);
+  }, [reducedMotion, sourceEnabled]);
 
   useEffect(() => {
     const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -113,23 +153,39 @@ export default function HeroBackgroundVideo({
   }, [asset, syncPlayback]);
 
   return (
-    <video
-      ref={videoRef}
-      className="aj-film__hero-video"
-      src={asset?.src}
-      poster={asset?.poster ?? HERO_VIDEO_ASSETS.desktop.poster}
-      width={asset?.width ?? HERO_VIDEO_ASSETS.desktop.width}
-      height={asset?.height ?? HERO_VIDEO_ASSETS.desktop.height}
-      muted
-      loop
-      playsInline
-      preload="metadata"
-      aria-hidden="true"
-      tabIndex={-1}
-      disablePictureInPicture
-      controlsList="nodownload noplaybackrate noremoteplayback"
-      onCanPlay={() => void syncPlayback()}
-      onError={() => onPlaybackIntentChange(false)}
-    />
+    <>
+      <picture className="aj-film__hero-poster">
+        <source
+          media="(max-width: 600px)"
+          srcSet={HERO_VIDEO_ASSETS.mobile.poster}
+        />
+        <img
+          src={HERO_VIDEO_ASSETS.desktop.poster}
+          alt=""
+          width={HERO_VIDEO_ASSETS.desktop.width}
+          height={HERO_VIDEO_ASSETS.desktop.height}
+          loading="eager"
+          fetchPriority="high"
+          decoding="async"
+        />
+      </picture>
+      <video
+        ref={videoRef}
+        className="aj-film__hero-video"
+        src={asset?.src}
+        width={asset?.width ?? HERO_VIDEO_ASSETS.desktop.width}
+        height={asset?.height ?? HERO_VIDEO_ASSETS.desktop.height}
+        muted
+        loop
+        playsInline
+        preload="none"
+        aria-hidden="true"
+        tabIndex={-1}
+        disablePictureInPicture
+        controlsList="nodownload noplaybackrate noremoteplayback"
+        onCanPlay={() => void syncPlayback()}
+        onError={() => onPlaybackIntentChange(false)}
+      />
+    </>
   );
 }

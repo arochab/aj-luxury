@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-async function render(pathname = "/") {
+async function render(pathname = "/", headers = {}) {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
   workerUrl.searchParams.set(
     "test",
@@ -11,7 +11,7 @@ async function render(pathname = "/") {
 
   return worker.fetch(
     new Request(`http://localhost${pathname}`, {
-      headers: { accept: "text/html" },
+      headers: { accept: "text/html", ...headers },
     }),
     {
       ASSETS: {
@@ -25,10 +25,65 @@ async function render(pathname = "/") {
   );
 }
 
+test("public HTML uses the versioned edge cache while private context bypasses it", async () => {
+  const entries = new Map();
+  const originalCaches = Object.getOwnPropertyDescriptor(globalThis, "caches");
+  Object.defineProperty(globalThis, "caches", {
+    configurable: true,
+    value: {
+      default: {
+        async match(request) {
+          return entries.get(request.url)?.clone();
+        },
+        async put(request, response) {
+          entries.set(request.url, response.clone());
+        },
+      },
+    },
+  });
+
+  try {
+    const miss = await render("/");
+    assert.equal(miss.headers.get("x-aj-edge-cache"), "MISS");
+    await miss.text();
+
+    const hit = await render("/");
+    assert.equal(hit.headers.get("x-aj-edge-cache"), "HIT");
+    assert.match(hit.headers.get("cache-control") ?? "", /s-maxage=300/);
+    await hit.text();
+
+    const refreshed = await render("/", { "cache-control": "no-cache" });
+    assert.equal(refreshed.headers.get("x-aj-edge-cache"), "MISS");
+    await refreshed.text();
+
+    const privateResponse = await render("/", { cookie: "session=private" });
+    assert.equal(privateResponse.headers.get("x-aj-edge-cache"), null);
+    assert.doesNotMatch(
+      privateResponse.headers.get("cache-control") ?? "",
+      /s-maxage/i,
+    );
+    await privateResponse.text();
+
+    assert.ok(
+      [...entries.keys()].every((key) =>
+        key.includes("__aj_html_cache=2026-08-08-v1"),
+      ),
+    );
+  } finally {
+    if (originalCaches) {
+      Object.defineProperty(globalThis, "caches", originalCaches);
+    } else {
+      delete globalThis.caches;
+    }
+  }
+});
+
 test("server-renders the real AJ Luxury launch homepage", async () => {
   const response = await render();
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
+  assert.match(response.headers.get("cache-control") ?? "", /s-maxage=300/);
+  assert.equal(response.headers.get("x-aj-edge-cache"), "MISS");
 
   const html = await response.text();
   assert.match(html, /<html lang="fr">/i);
@@ -39,10 +94,18 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
   assert.match(html, /Lilas Céleste/);
   assert.match(html, /data-hero-version="video-v1"/);
   assert.match(html, /class="aj-film__hero-video"/);
-  assert.match(html, /poster="\/images\/client\/hero-metal-poster\.webp"/);
-  assert.match(html, /<video[^>]*muted=""[^>]*loop=""[^>]*playsInline=""/);
+  assert.match(html, /class="aj-film__hero-poster"/);
+  assert.match(html, /hero-metal-poster-mobile\.webp\?v=v1/);
+  assert.match(html, /hero-metal-poster\.webp\?v=v1/);
+  assert.match(
+    html,
+    /<video[^>]*muted=""[^>]*loop=""[^>]*playsInline=""[^>]*preload="none"/,
+  );
+  assert.doesNotMatch(html, /<video[^>]*\ssrc=/);
+  assert.doesNotMatch(html, /<video[^>]*\sposter=/);
   assert.match(html, /images\/client\/hero-duo-static\.webp/);
-  assert.match(html, /images\/client\/hero-duo-cutout\.png/);
+  assert.match(html, /images\/client\/hero-duo-cutout-v1\.webp/);
+  assert.match(html, /hero-duo-cutout-768-v1\.webp 768w/);
   assert.equal(
     (html.match(/data-metallic-mounted="false"/g) ?? []).length,
     2,
@@ -92,6 +155,15 @@ for (const [pathname, colorName] of productCases) {
     assert.match(html, /Caractéristiques/);
     assert.match(html, /Guide des tailles/);
     assert.match(html, /Agrandir la vue 1/);
+    assert.equal(
+      (html.match(/data-gallery-media="full"/g) ?? []).length,
+      1,
+      "initial HTML keeps only the full-resolution lead gallery image",
+    );
+    assert.ok(
+      (html.match(/data-gallery-media="placeholder"/g) ?? []).length >= 4,
+      "every gallery frame keeps a lightweight visual placeholder",
+    );
     assert.match(html, /Disponible/);
     assert.match(html, />Accueil</);
     assert.match(
@@ -292,6 +364,8 @@ for (const [pathname, marker] of commerceCases) {
   test(`server-renders the simulated commerce route ${pathname}`, async () => {
     const response = await render(pathname);
     assert.equal(response.status, 200);
+    assert.doesNotMatch(response.headers.get("cache-control") ?? "", /s-maxage/i);
+    assert.equal(response.headers.get("x-aj-edge-cache"), null);
     const html = await response.text();
     assert.match(html, marker);
     assert.doesNotMatch(html, /sk_live_|pk_live_|password=/i);

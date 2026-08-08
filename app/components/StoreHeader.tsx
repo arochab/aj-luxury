@@ -1,6 +1,7 @@
 "use client";
 
-import Image from "next/image";
+/* eslint-disable @next/next/no-img-element -- the fixed local logo needs no image-loader runtime */
+
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useI18n } from "@/lib/i18n/I18nProvider";
@@ -52,14 +53,15 @@ export default function StoreHeader({
         href="/"
         aria-label={`AJ Luxury · ${t("nav.home")}`}
       >
-        <Image
+        <img
           className={styles.brandImage}
           src="/images/aj-luxury-logo.webp"
           alt=""
           width={180}
           height={92}
-          priority
-          unoptimized
+          loading="eager"
+          fetchPriority="high"
+          decoding="async"
         />
       </Link>
 

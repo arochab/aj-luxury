@@ -1,5 +1,7 @@
 export const HERO_VIDEO_VERSION = "v1";
 
+const versioned = (path: string) => `${path}?v=${HERO_VIDEO_VERSION}`;
+
 export const HERO_VIDEO_BREAKPOINTS = {
   mobileMax: 600,
   tabletMax: 1199,
@@ -14,20 +16,20 @@ export type HeroVideoAsset = {
 
 export const HERO_VIDEO_ASSETS = {
   mobile: {
-    src: "/videos/aj-luxury-hero-mobile.mp4",
-    poster: "/images/client/hero-metal-poster-mobile.webp",
+    src: versioned("/videos/aj-luxury-hero-mobile.mp4"),
+    poster: versioned("/images/client/hero-metal-poster-mobile.webp"),
     width: 720,
     height: 1280,
   },
   tablet: {
-    src: "/videos/aj-luxury-hero-tablet.mp4",
-    poster: "/images/client/hero-metal-poster.webp",
+    src: versioned("/videos/aj-luxury-hero-tablet.mp4"),
+    poster: versioned("/images/client/hero-metal-poster.webp"),
     width: 1280,
     height: 720,
   },
   desktop: {
-    src: "/videos/aj-luxury-hero-desktop.mp4",
-    poster: "/images/client/hero-metal-poster.webp",
+    src: versioned("/videos/aj-luxury-hero-desktop.mp4"),
+    poster: versioned("/images/client/hero-metal-poster.webp"),
     width: 1920,
     height: 1080,
   },

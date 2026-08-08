@@ -1,5 +1,6 @@
+/* eslint-disable @next/next/no-img-element -- pre-optimized client-owned media avoids an unnecessary image runtime */
+
 import type { Metadata } from "next";
-import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import ProductGalleryZoom from "../../components/ProductGalleryZoom";
@@ -87,11 +88,14 @@ export default async function ProductPage({ params }: ProductPageProps) {
               key={item.slug}
             >
               <div className={styles.otherColorImage}>
-                <Image
-                  unoptimized
+                <img
                   src={item.image}
                   alt={`${item.model} ${item.name}`}
-                  fill
+                  width={1600}
+                  height={2000}
+                  loading="lazy"
+                  fetchPriority="low"
+                  decoding="async"
                   sizes="(max-width: 760px) 100vw, 33vw"
                 />
               </div>
