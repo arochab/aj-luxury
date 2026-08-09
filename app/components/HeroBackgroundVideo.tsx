@@ -14,20 +14,90 @@ type HeroBackgroundVideoProps = {
   onPlaybackIntentChange: (playing: boolean) => void;
 };
 
+const HERO_POSTER_MEDIA = {
+  portrait: "(max-aspect-ratio: 4 / 5)",
+  tablet: "(min-aspect-ratio: 801 / 1000) and (max-width: 1440px)",
+  desktop:
+    "(min-aspect-ratio: 801 / 1000) and (min-width: 1441px) and (max-width: 2199px)",
+  xl: "(min-aspect-ratio: 801 / 1000) and (min-width: 2200px)",
+} as const;
+
+const PORTRAIT_POSTER_SRC_SET = `${HERO_VIDEO_ASSETS.portrait.posterCompact} 480w, ${HERO_VIDEO_ASSETS.portrait.poster} 720w`;
+const PORTRAIT_POSTER_SIZES =
+  "min(100vw, calc(70svh * 720 / 934))";
+
+type HeroPosterProps = {
+  className: string;
+  priority: "high" | "auto";
+};
+
+function HeroPoster({ className, priority }: HeroPosterProps) {
+  return (
+    <picture className={className}>
+      <source
+        media={HERO_POSTER_MEDIA.portrait}
+        srcSet={PORTRAIT_POSTER_SRC_SET}
+        sizes={PORTRAIT_POSTER_SIZES}
+      />
+      <source
+        type="image/avif"
+        media={HERO_POSTER_MEDIA.xl}
+        srcSet={HERO_VIDEO_ASSETS.xl.posterAvif}
+      />
+      <source
+        media={HERO_POSTER_MEDIA.xl}
+        srcSet={HERO_VIDEO_ASSETS.xl.poster}
+      />
+      <source
+        type="image/avif"
+        media={HERO_POSTER_MEDIA.desktop}
+        srcSet={HERO_VIDEO_ASSETS.desktop.posterAvif}
+      />
+      <source
+        media={HERO_POSTER_MEDIA.desktop}
+        srcSet={HERO_VIDEO_ASSETS.desktop.poster}
+      />
+      <source
+        type="image/avif"
+        media={HERO_POSTER_MEDIA.tablet}
+        srcSet={HERO_VIDEO_ASSETS.tablet.posterAvif}
+      />
+      <source
+        media={HERO_POSTER_MEDIA.tablet}
+        srcSet={HERO_VIDEO_ASSETS.tablet.poster}
+      />
+      <img
+        src={HERO_VIDEO_ASSETS.tablet.poster}
+        alt=""
+        width={HERO_VIDEO_ASSETS.tablet.width}
+        height={HERO_VIDEO_ASSETS.tablet.height}
+        loading="eager"
+        fetchPriority={priority}
+        decoding="async"
+      />
+    </picture>
+  );
+}
+
 export default function HeroBackgroundVideo({
   playing,
   onPlaybackIntentChange,
 }: HeroBackgroundVideoProps) {
-  preload(HERO_VIDEO_ASSETS.mobile.poster, {
+  preload(HERO_VIDEO_ASSETS.portrait.posterCompact, {
     as: "image",
     fetchPriority: "high",
-    media: "(max-width: 600px)",
+    media: HERO_POSTER_MEDIA.portrait,
+    imageSrcSet: PORTRAIT_POSTER_SRC_SET,
+    imageSizes: PORTRAIT_POSTER_SIZES,
   });
-  preload(HERO_VIDEO_ASSETS.desktop.poster, {
-    as: "image",
-    fetchPriority: "high",
-    media: "(min-width: 601px)",
-  });
+  for (const role of ["tablet", "desktop", "xl"] as const) {
+    preload(HERO_VIDEO_ASSETS[role].posterAvif, {
+      as: "image",
+      type: "image/avif",
+      fetchPriority: "high",
+      media: HERO_POSTER_MEDIA[role],
+    });
+  }
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const visibleRef = useRef(true);
@@ -89,23 +159,29 @@ export default function HeroBackgroundVideo({
     if (!sourceEnabled || reducedMotion) return;
 
     const updateAsset = () => {
-      const nextAsset = selectHeroVideoAsset(window.innerWidth);
+      const nextAsset = selectHeroVideoAsset(
+        window.innerWidth,
+        window.innerHeight,
+      );
       setAsset((current) =>
         current?.src === nextAsset.src ? current : nextAsset,
       );
     };
 
     updateAsset();
-    const mobileQuery = window.matchMedia("(max-width: 600px)");
-    const tabletQuery = window.matchMedia(
-      "(min-width: 601px) and (max-width: 1199px)",
-    );
-    mobileQuery.addEventListener("change", updateAsset);
-    tabletQuery.addEventListener("change", updateAsset);
+    const responsiveQueries = [
+      window.matchMedia(HERO_POSTER_MEDIA.portrait),
+      window.matchMedia("(max-width: 1440px)"),
+      window.matchMedia("(max-width: 2199px)"),
+    ];
+    for (const query of responsiveQueries) {
+      query.addEventListener("change", updateAsset);
+    }
 
     return () => {
-      mobileQuery.removeEventListener("change", updateAsset);
-      tabletQuery.removeEventListener("change", updateAsset);
+      for (const query of responsiveQueries) {
+        query.removeEventListener("change", updateAsset);
+      }
     };
   }, [reducedMotion, sourceEnabled]);
 
@@ -153,39 +229,29 @@ export default function HeroBackgroundVideo({
   }, [asset, syncPlayback]);
 
   return (
-    <>
-      <picture className="aj-film__hero-poster">
-        <source
-          media="(max-width: 600px)"
-          srcSet={HERO_VIDEO_ASSETS.mobile.poster}
+    <div className="aj-film__hero-media">
+      <HeroPoster className="aj-film__hero-backdrop" priority="auto" />
+
+      <div className="aj-film__hero-stage">
+        <HeroPoster className="aj-film__hero-poster" priority="high" />
+        <video
+          ref={videoRef}
+          className="aj-film__hero-video"
+          src={asset?.src}
+          width={asset?.width ?? HERO_VIDEO_ASSETS.desktop.width}
+          height={asset?.height ?? HERO_VIDEO_ASSETS.desktop.height}
+          muted
+          loop
+          playsInline
+          preload="none"
+          aria-hidden="true"
+          tabIndex={-1}
+          disablePictureInPicture
+          controlsList="nodownload noplaybackrate noremoteplayback"
+          onCanPlay={() => void syncPlayback()}
+          onError={() => onPlaybackIntentChange(false)}
         />
-        <img
-          src={HERO_VIDEO_ASSETS.desktop.poster}
-          alt=""
-          width={HERO_VIDEO_ASSETS.desktop.width}
-          height={HERO_VIDEO_ASSETS.desktop.height}
-          loading="eager"
-          fetchPriority="high"
-          decoding="async"
-        />
-      </picture>
-      <video
-        ref={videoRef}
-        className="aj-film__hero-video"
-        src={asset?.src}
-        width={asset?.width ?? HERO_VIDEO_ASSETS.desktop.width}
-        height={asset?.height ?? HERO_VIDEO_ASSETS.desktop.height}
-        muted
-        loop
-        playsInline
-        preload="none"
-        aria-hidden="true"
-        tabIndex={-1}
-        disablePictureInPicture
-        controlsList="nodownload noplaybackrate noremoteplayback"
-        onCanPlay={() => void syncPlayback()}
-        onError={() => onPlaybackIntentChange(false)}
-      />
-    </>
+      </div>
+    </div>
   );
 }

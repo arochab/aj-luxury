@@ -21,6 +21,10 @@ test("the provider localizes preference, html lang and the browser title", async
 
   assert.match(provider, /resolvePreferredLocale\(\)/);
   assert.match(provider, /persistLocale\(nextLocale\)/);
+  assert.match(provider, /fetch\(`\/i18n\/\$\{locale\}\.json\?v=v3`/);
+  assert.match(provider, /dictionaryCache/);
+  assert.doesNotMatch(provider, /import \{ translate,/);
+  assert.doesNotMatch(provider, /import\("\.\/dictionaries\//);
   assert.match(
     provider,
     /document\.documentElement\.lang = localeMetadata\[locale\]\.htmlLang/,
@@ -28,6 +32,16 @@ test("the provider localizes preference, html lang and the browser title", async
   assert.match(provider, /PAGE_TITLE_KEYS\[pathname\]/);
   assert.match(provider, /document\.title = `\$\{localizedTitle\} \| AJ Luxury`/);
   assert.match(provider, /useI18n must be used inside I18nProvider/);
+});
+
+test("non-French dictionaries are fetched on demand from exact static copies", async () => {
+  for (const locale of ["de", "en", "es", "it"]) {
+    const [source, publicCopy] = await Promise.all([
+      readSource(`lib/i18n/dictionaries/${locale}.json`),
+      readSource(`public/i18n/${locale}.json`),
+    ]);
+    assert.deepEqual(JSON.parse(publicCopy), JSON.parse(source));
+  }
 });
 
 test("header and footer expose the connected language selector", async () => {

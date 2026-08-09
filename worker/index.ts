@@ -22,7 +22,13 @@ interface ExecutionContext {
   passThroughOnException(): void;
 }
 
-const STATIC_ASSET_PREFIXES = ["/assets/", "/fonts/", "/images/", "/videos/"];
+const STATIC_ASSET_PREFIXES = [
+  "/assets/",
+  "/fonts/",
+  "/i18n/",
+  "/images/",
+  "/videos/",
+];
 const CACHEABLE_HTML_ROUTES = new Set([
   "/",
   "/contact",
@@ -37,7 +43,7 @@ const CACHEABLE_HTML_ROUTES = new Set([
 ]);
 // Bump this namespace whenever cacheable server-rendered content changes so a
 // deployment never inherits HTML written by an older Worker version.
-const HTML_CACHE_VERSION = "2026-08-08-v1";
+const HTML_CACHE_VERSION = "2026-08-09-v3";
 
 declare global {
   interface CacheStorage {
@@ -50,9 +56,11 @@ function isStaticAsset(pathname: string): boolean {
 }
 
 function contentTypeFor(pathname: string): string | null {
+  if (pathname.endsWith(".avif")) return "image/avif";
   if (pathname.endsWith(".webp")) return "image/webp";
   if (pathname.endsWith(".woff2")) return "font/woff2";
   if (pathname.endsWith(".mp4")) return "video/mp4";
+  if (pathname.endsWith(".json")) return "application/json; charset=utf-8";
   return null;
 }
 
@@ -135,12 +143,11 @@ async function serveStaticAsset(
   const response = await assets.fetch(request);
   const headers = new Headers(response.headers);
   const contentType = contentTypeFor(url.pathname);
+  const assetVersion = url.searchParams.get("v");
   const immutable =
     url.pathname.startsWith("/assets/") ||
     url.pathname.startsWith("/fonts/") ||
-    (url.pathname.startsWith("/images/client/hero-duo-cutout") &&
-      url.pathname.endsWith("-v1.webp")) ||
-    url.searchParams.get("v") === "v1";
+    /^v\d+$/.test(assetVersion ?? "");
 
   if (contentType) headers.set("Content-Type", contentType);
   headers.set("X-Content-Type-Options", "nosniff");

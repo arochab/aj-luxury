@@ -22,6 +22,9 @@ export const metadata: Metadata = {
       "Chez AJ Luxury, nous sommes convaincus que le véritable luxe commence par ce que l’on porte au plus près de soi.",
     images: ["/og.png"],
   },
+  icons: {
+    icon: "/favicon.svg",
+  },
 };
 
 export default function RootLayout({

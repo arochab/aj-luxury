@@ -66,7 +66,7 @@ test("public HTML uses the versioned edge cache while private context bypasses i
 
     assert.ok(
       [...entries.keys()].every((key) =>
-        key.includes("__aj_html_cache=2026-08-08-v1"),
+        key.includes("__aj_html_cache=2026-08-09-v3"),
       ),
     );
   } finally {
@@ -88,24 +88,36 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
   const html = await response.text();
   assert.match(html, /<html lang="fr">/i);
   assert.match(html, /<title>AJ Luxury \| Reveal Your Inner Beauty<\/title>/i);
+  assert.match(
+    html,
+    /<link rel="icon" href="(?:https:\/\/ajluxurystore\.com)?\/favicon\.svg"/i,
+  );
   assert.match(html, /Apollon/);
   assert.match(html, /Pourpre Impérial/);
   assert.match(html, /Rose Velours/);
   assert.match(html, /Lilas Céleste/);
-  assert.match(html, /data-hero-version="video-v1"/);
+  assert.match(html, /data-hero-version="video-v3"/);
   assert.match(html, /class="aj-film__hero-video"/);
+  assert.match(html, /class="aj-film__hero-backdrop"/);
+  assert.match(html, /class="aj-film__hero-stage"/);
   assert.match(html, /class="aj-film__hero-poster"/);
-  assert.match(html, /hero-metal-poster-mobile\.webp\?v=v1/);
-  assert.match(html, /hero-metal-poster\.webp\?v=v1/);
+  assert.match(html, /hero-v3-portrait-720x934-poster\.webp\?v=v3/);
+  assert.match(html, /hero-v3-portrait-480x623-poster\.webp\?v=v3/);
+  assert.doesNotMatch(html, /hero-v3-portrait-720x934-poster\.avif\?v=v3/);
+  assert.match(html, /type="image\/avif"/);
+  assert.match(html, /hero-v3-tablet-1440x810-poster\.webp\?v=v3/);
+  assert.match(html, /hero-v3-tablet-1440x810-poster\.avif\?v=v3/);
+  assert.match(html, /hero-v3-desktop-1920x1080-poster\.webp\?v=v3/);
+  assert.match(html, /hero-v3-desktop-1920x1080-poster\.avif\?v=v3/);
+  assert.match(html, /hero-v3-xl-2560x1440-poster\.webp\?v=v3/);
+  assert.match(html, /hero-v3-xl-2560x1440-poster\.avif\?v=v3/);
   assert.match(
     html,
     /<video[^>]*muted=""[^>]*loop=""[^>]*playsInline=""[^>]*preload="none"/,
   );
   assert.doesNotMatch(html, /<video[^>]*\ssrc=/);
   assert.doesNotMatch(html, /<video[^>]*\sposter=/);
-  assert.match(html, /images\/client\/hero-duo-static\.webp/);
-  assert.match(html, /images\/client\/hero-duo-cutout-v1\.webp/);
-  assert.match(html, /hero-duo-cutout-768-v1\.webp 768w/);
+  assert.doesNotMatch(html, /images\/client\/hero-duo-(?:static|cutout)/);
   assert.equal(
     (html.match(/data-metallic-mounted="false"/g) ?? []).length,
     2,

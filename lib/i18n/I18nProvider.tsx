@@ -15,8 +15,44 @@ import {
   persistLocale,
   resolvePreferredLocale,
 } from "./client";
-import { translate, type TranslationKey } from "./dictionaries";
+import fr from "./dictionaries/fr.json";
+import type { Dictionary, TranslationKey } from "./dictionaries";
 import type { SupportedLocale } from "./types";
+
+const dictionaryCache = new Map<SupportedLocale, Dictionary>([["fr", fr]]);
+
+async function loadDictionary(
+  locale: SupportedLocale,
+): Promise<Dictionary | null> {
+  const cached = dictionaryCache.get(locale);
+  if (cached) return cached;
+
+  try {
+    const response = await fetch(`/i18n/${locale}.json?v=v3`, {
+      cache: "force-cache",
+    });
+    if (!response.ok) return null;
+
+    const candidate = (await response.json()) as Partial<Dictionary>;
+    const complete = (Object.keys(fr) as TranslationKey[]).every(
+      (key) => typeof candidate[key] === "string",
+    );
+    if (!complete) return null;
+
+    const dictionary = candidate as Dictionary;
+    dictionaryCache.set(locale, dictionary);
+    return dictionary;
+  } catch {
+    return null;
+  }
+}
+
+function translateFrom(
+  dictionary: Dictionary,
+  key: TranslationKey,
+): string {
+  return dictionary[key] ?? fr[key];
+}
 
 const PAGE_TITLE_KEYS: Record<string, TranslationKey> = {
   "/shop": "nav.shop",
@@ -53,17 +89,26 @@ export function I18nProvider({
   const pathname = usePathname();
   const [locale, setLocaleState] =
     useState<SupportedLocale>(initialLocale);
+  const [dictionary, setDictionary] = useState<Dictionary>(fr);
 
   useEffect(() => {
     const preferredLocale = resolvePreferredLocale();
 
     if (preferredLocale === initialLocale) return;
 
+    let active = true;
     const updateId = window.setTimeout(() => {
-      setLocaleState(preferredLocale);
+      void loadDictionary(preferredLocale).then((preferredDictionary) => {
+        if (!active || !preferredDictionary) return;
+        setDictionary(preferredDictionary);
+        setLocaleState(preferredLocale);
+      });
     }, 0);
 
-    return () => window.clearTimeout(updateId);
+    return () => {
+      active = false;
+      window.clearTimeout(updateId);
+    };
   }, [initialLocale]);
 
   useEffect(() => {
@@ -76,18 +121,22 @@ export function I18nProvider({
     const titleKey = PAGE_TITLE_KEYS[pathname];
     if (!titleKey) return;
 
-    const localizedTitle = translate(locale, titleKey).replace(/\.$/, "");
+    const localizedTitle = translateFrom(dictionary, titleKey).replace(/\.$/, "");
     document.title = `${localizedTitle} | AJ Luxury`;
-  }, [locale, pathname]);
+  }, [dictionary, pathname]);
 
   const setLocale = useCallback((nextLocale: SupportedLocale) => {
-    persistLocale(nextLocale);
-    setLocaleState(nextLocale);
+    void loadDictionary(nextLocale).then((nextDictionary) => {
+      if (!nextDictionary) return;
+      persistLocale(nextLocale);
+      setDictionary(nextDictionary);
+      setLocaleState(nextLocale);
+    });
   }, []);
 
   const t = useCallback(
-    (key: TranslationKey) => translate(locale, key),
-    [locale],
+    (key: TranslationKey) => translateFrom(dictionary, key),
+    [dictionary],
   );
 
   const contextValue = useMemo(

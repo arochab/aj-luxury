@@ -12,20 +12,29 @@ const projectFile = (path) => new URL(`../${path}`, import.meta.url);
 const publicAssetFile = (url) => projectFile(`public${url.split("?")[0]}`);
 
 test("hero video asset selection is deterministic at every breakpoint", () => {
-  assert.equal(HERO_VIDEO_VERSION, "v1");
-  assert.equal(selectHeroVideoAsset(320), HERO_VIDEO_ASSETS.mobile);
-  assert.equal(selectHeroVideoAsset(600), HERO_VIDEO_ASSETS.mobile);
-  assert.equal(selectHeroVideoAsset(601), HERO_VIDEO_ASSETS.tablet);
-  assert.equal(selectHeroVideoAsset(1199), HERO_VIDEO_ASSETS.tablet);
-  assert.equal(selectHeroVideoAsset(1200), HERO_VIDEO_ASSETS.desktop);
-  assert.equal(selectHeroVideoAsset(3840), HERO_VIDEO_ASSETS.desktop);
+  assert.equal(HERO_VIDEO_VERSION, "v3");
+  assert.equal(selectHeroVideoAsset(390, 844), HERO_VIDEO_ASSETS.portrait);
+  assert.equal(selectHeroVideoAsset(768, 1024), HERO_VIDEO_ASSETS.portrait);
+  assert.equal(selectHeroVideoAsset(800, 1000), HERO_VIDEO_ASSETS.portrait);
+  assert.equal(selectHeroVideoAsset(801, 1000), HERO_VIDEO_ASSETS.tablet);
+  assert.equal(selectHeroVideoAsset(1440, 900), HERO_VIDEO_ASSETS.tablet);
+  assert.equal(selectHeroVideoAsset(1441, 900), HERO_VIDEO_ASSETS.desktop);
+  assert.equal(selectHeroVideoAsset(2199, 1200), HERO_VIDEO_ASSETS.desktop);
+  assert.equal(selectHeroVideoAsset(2200, 1200), HERO_VIDEO_ASSETS.xl);
+  assert.equal(selectHeroVideoAsset(3840, 2160), HERO_VIDEO_ASSETS.xl);
+  assert.equal(
+    new Set(Object.values(HERO_VIDEO_ASSETS).map((asset) => asset.src)).size,
+    4,
+    "every responsive role must have a dedicated HD rendition",
+  );
 });
 
-test("responsive MP4 variants exist, stay bounded and are fast-start files", async () => {
+test("the responsive HD MP4 set stays bounded and starts progressively", async () => {
   const limits = {
-    mobile: 2.5 * 1024 * 1024,
-    tablet: 2.5 * 1024 * 1024,
-    desktop: 5 * 1024 * 1024,
+    portrait: 1.1 * 1024 * 1024,
+    tablet: 2.2 * 1024 * 1024,
+    desktop: 2.9 * 1024 * 1024,
+    xl: 5 * 1024 * 1024,
   };
 
   for (const [name, asset] of Object.entries(HERO_VIDEO_ASSETS)) {
@@ -41,37 +50,67 @@ test("responsive MP4 variants exist, stay bounded and are fast-start files", asy
     assert.ok(ftyp >= 0 && ftyp < 32, `${name} has no valid MP4 header`);
     assert.ok(moov > ftyp, `${name} has no moov atom`);
     assert.ok(mdat > moov, `${name} is not optimized for progressive start`);
-    assert.match(asset.src, /\?v=v1$/);
+    assert.match(asset.src, /aj-luxury-hero-v3-[\w-]+\.mp4\?v=v3$/);
   }
 });
 
-test("video posters are lightweight and available before playback", async () => {
+test("responsive first-frame posters stay within explicit byte budgets", async () => {
+  const limits = {
+    portrait: 160 * 1024,
+    tablet: 230 * 1024,
+    desktop: 350 * 1024,
+    xl: 550 * 1024,
+  };
   const posters = new Set(
     Object.values(HERO_VIDEO_ASSETS).map((asset) => asset.poster),
   );
+  assert.equal(posters.size, 4);
 
-  for (const poster of posters) {
-    const info = await stat(publicAssetFile(poster));
-    assert.ok(info.size > 8 * 1024, `${poster} is unexpectedly small`);
-    assert.ok(info.size < 160 * 1024, `${poster} exceeds the poster byte budget`);
-    assert.match(poster, /\?v=v1$/);
+  for (const [role, asset] of Object.entries(HERO_VIDEO_ASSETS)) {
+    const info = await stat(publicAssetFile(asset.poster));
+    assert.ok(info.size > 32 * 1024, `${role} poster is unexpectedly small`);
+    assert.ok(info.size <= limits[role], `${role} poster exceeds its byte budget`);
+    assert.match(asset.poster, /hero-v3-[\w-]+-poster\.webp\?v=v3$/);
   }
+
+  const avifMinimums = {
+    tablet: 96 * 1024,
+    desktop: 144 * 1024,
+    xl: 220 * 1024,
+  };
+
+  for (const [role, asset] of Object.entries(HERO_VIDEO_ASSETS).filter(
+    ([, candidate]) => candidate.posterAvif,
+  )) {
+    const [webpInfo, avifInfo] = await Promise.all([
+      stat(publicAssetFile(asset.poster)),
+      stat(publicAssetFile(asset.posterAvif)),
+    ]);
+    assert.ok(avifInfo.size > avifMinimums[role]);
+    assert.ok(
+      avifInfo.size <= webpInfo.size * 0.5,
+      `${role} AVIF exceeds its WebP-relative byte budget`,
+    );
+    assert.match(asset.posterAvif, /hero-v3-[\w-]+-poster\.avif\?v=v3$/);
+  }
+
+  const compactPortrait = HERO_VIDEO_ASSETS.portrait.posterCompact;
+  const compactInfo = await stat(publicAssetFile(compactPortrait));
+  assert.ok(compactInfo.size > 60 * 1024);
+  assert.ok(compactInfo.size < 66 * 1024);
+  assert.match(compactPortrait, /hero-v3-portrait-480x623-poster\.webp\?v=v3$/);
 });
 
-test("the lossless hero cutout stays below its critical byte budget", async () => {
-  const [source, optimized, mobile, tablet, retina] = await Promise.all([
-    stat(projectFile("public/images/client/hero-duo-cutout.png")),
-    stat(projectFile("public/images/client/hero-duo-cutout-v1.webp")),
-    stat(projectFile("public/images/client/hero-duo-cutout-768-v1.webp")),
-    stat(projectFile("public/images/client/hero-duo-cutout-1024-v1.webp")),
-    stat(projectFile("public/images/client/hero-duo-cutout-1280-v1.webp")),
-  ]);
-
-  assert.ok(optimized.size < 1.5 * 1024 * 1024);
-  assert.ok(optimized.size < source.size * 0.65);
-  assert.ok(mobile.size < 600 * 1024);
-  assert.ok(tablet.size < 950 * 1024);
-  assert.ok(retina.size < optimized.size);
+test("every runtime rendition contains video only", async () => {
+  for (const [role, asset] of Object.entries(HERO_VIDEO_ASSETS)) {
+    const bytes = await readFile(publicAssetFile(asset.src));
+    assert.ok(
+      bytes.indexOf(Buffer.from("avc1")) >= 0,
+      `${role} H.264 track is missing`,
+    );
+    assert.equal(bytes.indexOf(Buffer.from("mp4a")), -1, `${role} has audio`);
+    assert.equal(bytes.indexOf(Buffer.from("soun")), -1, `${role} has audio`);
+  }
 });
 
 test("product blur-up placeholders preserve continuity at a negligible byte cost", async () => {
@@ -104,36 +143,32 @@ test("hero playback is accessible, resource-aware and subject-safe", async () =>
   assert.match(videoComponent, /requestIdleCallback/);
   assert.match(videoComponent, /document\.readyState === "complete"/);
   assert.match(videoComponent, /preload="none"/);
-  assert.match(videoComponent, /<picture className="aj-film__hero-poster"/);
-  assert.match(videoComponent, /HERO_VIDEO_ASSETS\.mobile\.poster/);
-  assert.match(videoComponent, /media: "\(max-width: 600px\)"/);
-  assert.match(videoComponent, /media: "\(min-width: 601px\)"/);
+  assert.match(videoComponent, /className="aj-film__hero-backdrop"/);
+  assert.match(videoComponent, /className="aj-film__hero-stage"/);
+  assert.match(videoComponent, /<picture className=\{className\}>/);
+  assert.match(videoComponent, /HERO_VIDEO_ASSETS\.portrait\.poster/);
+  assert.match(videoComponent, /type="image\/avif"/);
+  assert.match(videoComponent, /HERO_VIDEO_ASSETS\.portrait\.posterCompact/);
+  assert.match(videoComponent, /HERO_VIDEO_ASSETS\.tablet\.posterAvif/);
+  assert.match(videoComponent, /HERO_VIDEO_ASSETS\.desktop\.posterAvif/);
+  assert.match(videoComponent, /HERO_VIDEO_ASSETS\.xl\.posterAvif/);
+  assert.match(videoComponent, /type: "image\/avif"/);
+  assert.match(videoComponent, /HERO_VIDEO_ASSETS\.xl\.poster/);
+  assert.match(videoComponent, /HERO_VIDEO_ASSETS\[role\]\.posterAvif/);
+  assert.match(videoComponent, /imageSrcSet: PORTRAIT_POSTER_SRC_SET/);
+  assert.match(videoComponent, /imageSizes: PORTRAIT_POSTER_SIZES/);
+  assert.match(videoComponent, /media: HERO_POSTER_MEDIA\[role\]/);
+  assert.match(videoComponent, /selectHeroVideoAsset\([\s\S]*window\.innerHeight/);
   assert.match(videoComponent, /src=\{asset\?\.src\}/);
   assert.doesNotMatch(videoComponent, /SOURCE_LOAD_CEILING|ceilingHandle/);
   assert.doesNotMatch(videoComponent, /autoPlay/);
-  assert.match(heroComponent, /hero-duo-cutout-v1\.webp/);
-  assert.match(heroComponent, /hero-duo-cutout-768-v1\.webp 768w/);
-  assert.equal(
-    heroComponent.match(/fetchPriority="auto"/g)?.length,
-    2,
-    "poster priority must precede the two subject layers",
-  );
-  assert.doesNotMatch(heroComponent, /next\/image/);
+  assert.doesNotMatch(heroComponent, /hero-duo-(?:static|cutout)/);
   assert.match(heroComponent, /<figcaption>/);
-  assert.equal(
-    heroComponent.match(/hero-duo-static\.webp/g)?.length,
-    1,
-    "the accessible caption must not trigger a duplicate priority image",
-  );
   assert.match(stylesheet, /\.aj-film__hero-video[\s\S]*object-fit: cover/);
-  assert.match(stylesheet, /\.aj-film__hero-photo-frame--subjects/);
-  assert.match(stylesheet, /@media \(max-aspect-ratio: 1464 \/ 2200\)/);
-  assert.match(stylesheet, /ellipse 78% 65% at 50% 35%/);
-  assert.match(stylesheet, /transparent 92%,\s*transparent 100%/);
-  assert.match(
-    stylesheet,
-    /\.aj-film__hero-photo-frame--subjects[\s\S]*transparent 100%/,
-  );
+  assert.match(stylesheet, /@media \(max-aspect-ratio: 4 \/ 5\)/);
+  assert.match(stylesheet, /aspect-ratio: 720 \/ 934/);
+  assert.match(stylesheet, /width: min\(100%, calc\(70svh \* 720 \/ 934\)\)/);
+  assert.match(stylesheet, /filter: blur\(18px\) brightness\(0\.44\)/);
 });
 
 test("critical fonts and static assets keep an explicit cache contract", async () => {
@@ -152,6 +187,7 @@ test("critical fonts and static assets keep an explicit cache contract", async (
   assert.match(stylesheet, /@font-face[\s\S]*font-family: "AJ Manrope"/);
   assert.ok(font.size < 32 * 1024);
   assert.match(worker, /max-age=31536000, immutable/);
+  assert.match(worker, /endsWith\("\.avif"\).*"image\/avif"/);
   assert.match(worker, /stale-while-revalidate=86400/);
   assert.match(worker, /s-maxage=300/);
   assert.match(worker, /HTML_CACHE_VERSION/);
@@ -161,6 +197,7 @@ test("critical fonts and static assets keep an explicit cache contract", async (
   assert.match(worker, /ctx\.waitUntil\(/);
   assert.match(worker, /cache\.put\(cacheKey, publicResponse\.clone\(\)\)/);
   assert.match(worker, /X-AJ-Edge-Cache/);
+  assert.match(worker, /\/\^v\\d\+\$\/\.test\(assetVersion/);
   assert.match(worker, /no-cache/);
   assert.match(worker, /no-store/);
   assert.match(worker, /hasPrivateContext/);
@@ -171,6 +208,7 @@ test("critical fonts and static assets keep an explicit cache contract", async (
   assert.match(worker, /env\?\.ASSETS/);
   assert.match(worker, /returnsHtml/);
   assert.match(viteConfig, /run_worker_first/);
+  assert.match(viteConfig, /"\/i18n\/\*"/);
 });
 
 test("noncritical visual media stays outside the initial render path", async () => {
