@@ -21,7 +21,10 @@ test("the provider localizes preference, html lang and the browser title", async
 
   assert.match(provider, /resolvePreferredLocale\(\)/);
   assert.match(provider, /persistLocale\(nextLocale\)/);
-  assert.match(provider, /fetch\(`\/i18n\/\$\{locale\}\.json\?v=v3`/);
+  assert.match(
+    provider,
+    /fetch\(`\/media\/i18n\/\$\{locale\}\.json\?v=v3`/,
+  );
   assert.match(provider, /dictionaryCache/);
   assert.doesNotMatch(provider, /import \{ translate,/);
   assert.doesNotMatch(provider, /import\("\.\/dictionaries\//);

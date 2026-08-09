@@ -14,12 +14,16 @@ responsive visual QA, and a clean runtime-reference audit.
 
 ## Production verification
 
-After deployment, verify the public domain on a cold request and then a warm
-request:
+After deployment, verify the public domain:
 
 - the expected release marker is present in HTML;
-- the first HTML response reports `X-AJ-Edge-Cache: MISS`, then `HIT`;
-- hero poster and video URLs respond successfully at each breakpoint;
+- public HTML carries the expected shared `Cache-Control` policy without any
+  `caches.default` permission error in the Worker logs;
+- every hero URL uses `/media/`; posters respond successfully and an MP4
+  request with `Range: bytes=0-1023` returns `206`, `Content-Range`,
+  `Accept-Ranges: bytes` and exactly 1,024 bytes;
+- `/media/i18n/en.json?v=v3` is immutable JSON with `nosniff`;
+- `/images/review/*` and `/media/images/review/*` do not expose review proofs;
 - no console error, broken image, horizontal overflow or language regression;
 - private commerce routes remain excluded from shared HTML caching.
 
@@ -30,12 +34,13 @@ checks pass on `https://ajluxurystore.com`.
 
 If a blocking regression appears, redeploy the immediately previous successful
 Sites version recorded in the release handoff. Do not rebuild it and do not
-change DNS. Its Worker bundle, static assets and HTML cache namespace must be
+change DNS. Its Worker bundle, static assets and HTML cache policy must be
 restored together as one immutable unit.
 
-Then repeat the cold/warm cache and responsive smoke checks above. Keep the
-failed commit and Sites version available for diagnosis; remediate through a new
-commit and a new Sites version rather than mutating an existing release.
+Then repeat the media Range, cache-policy and responsive smoke checks above.
+Keep the failed commit and Sites version available for diagnosis; remediate
+through a new commit and a new Sites version rather than mutating an existing
+release.
 
 ## DNS rollback
 

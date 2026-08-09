@@ -9,7 +9,8 @@ import {
 import { products } from "../lib/products.ts";
 
 const projectFile = (path) => new URL(`../${path}`, import.meta.url);
-const publicAssetFile = (url) => projectFile(`public${url.split("?")[0]}`);
+const publicAssetFile = (url) =>
+  projectFile(`public${url.split("?")[0].replace(/^\/media/, "")}`);
 
 test("hero video asset selection is deterministic at every breakpoint", () => {
   assert.equal(HERO_VIDEO_VERSION, "v3");
@@ -27,6 +28,14 @@ test("hero video asset selection is deterministic at every breakpoint", () => {
     4,
     "every responsive role must have a dedicated HD rendition",
   );
+  for (const asset of Object.values(HERO_VIDEO_ASSETS)) {
+    assert.match(asset.src, /^\/media\/videos\//);
+    assert.match(asset.poster, /^\/media\/images\//);
+    if (asset.posterAvif) assert.match(asset.posterAvif, /^\/media\/images\//);
+    if (asset.posterCompact) {
+      assert.match(asset.posterCompact, /^\/media\/images\//);
+    }
+  }
 });
 
 test("the responsive HD MP4 set stays bounded and starts progressively", async () => {
@@ -193,22 +202,34 @@ test("critical fonts and static assets keep an explicit cache contract", async (
   assert.match(worker, /HTML_CACHE_VERSION/);
   assert.match(worker, /CACHEABLE_HTML_ROUTES/);
   assert.match(worker, /pathname\.startsWith\("\/products\/"\)/);
-  assert.match(worker, /cache\.match\(cacheKey\)/);
-  assert.match(worker, /ctx\.waitUntil\(/);
-  assert.match(worker, /cache\.put\(cacheKey, publicResponse\.clone\(\)\)/);
-  assert.match(worker, /X-AJ-Edge-Cache/);
+  assert.doesNotMatch(worker, /caches\.default|cache\.match\(|cache\.put\(/);
+  assert.match(worker, /MEDIA_ASSET_PREFIX/);
+  assert.match(worker, /serveMp4Range/);
+  assert.match(worker, /Content-Range/);
+  assert.match(worker, /status: 206/);
+  assert.match(worker, /status: 416/);
   assert.match(worker, /\/\^v\\d\+\$\/\.test\(assetVersion/);
-  assert.match(worker, /no-cache/);
   assert.match(worker, /no-store/);
   assert.match(worker, /hasPrivateContext/);
   assert.match(worker, /createStaticFileSignal/);
   assert.match(worker, /process\.platform === "win32"/);
-  assert.match(worker, /localStaticPath\(url\.pathname\)/);
+  assert.match(worker, /localStaticPath\(physicalPath\)/);
   assert.match(worker, /env === undefined/);
   assert.match(worker, /env\?\.ASSETS/);
   assert.match(worker, /returnsHtml/);
   assert.match(viteConfig, /run_worker_first/);
-  assert.match(viteConfig, /"\/i18n\/\*"/);
+  assert.match(viteConfig, /"\/media\/\*"/);
+});
+
+test("review proofs never enter the Sites artifact", async () => {
+  const plugin = await readFile(projectFile("build/sites-vite-plugin.ts"), "utf8");
+
+  await assert.rejects(
+    stat(projectFile("dist/client/images/review")),
+    (error) => error?.code === "ENOENT",
+  );
+  assert.match(plugin, /dist", "client", "images", "review/);
+  assert.match(plugin, /rm\(reviewOutput, \{ recursive: true, force: true \}\)/);
 });
 
 test("noncritical visual media stays outside the initial render path", async () => {

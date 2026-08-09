@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-async function render(pathname = "/", headers = {}) {
+async function invokeWorker(
+  pathname = "/",
+  { method = "GET", headers = {}, assets } = {},
+) {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
   workerUrl.searchParams.set(
     "test",
@@ -11,12 +14,15 @@ async function render(pathname = "/", headers = {}) {
 
   return worker.fetch(
     new Request(`http://localhost${pathname}`, {
-      headers: { accept: "text/html", ...headers },
+      method,
+      headers,
     }),
     {
-      ASSETS: {
-        fetch: async () => new Response("Not found", { status: 404 }),
-      },
+      ASSETS:
+        assets ??
+        ({
+          fetch: async () => new Response("Not found", { status: 404 }),
+        }),
     },
     {
       waitUntil() {},
@@ -25,36 +31,37 @@ async function render(pathname = "/", headers = {}) {
   );
 }
 
-test("public HTML uses the versioned edge cache while private context bypasses it", async () => {
-  const entries = new Map();
+async function render(pathname = "/", headers = {}) {
+  return invokeWorker(pathname, {
+    headers: { accept: "text/html", ...headers },
+  });
+}
+
+test("public HTML advertises shared caching without using the forbidden Cache API", async () => {
+  let cacheAccesses = 0;
   const originalCaches = Object.getOwnPropertyDescriptor(globalThis, "caches");
   Object.defineProperty(globalThis, "caches", {
     configurable: true,
     value: {
-      default: {
-        async match(request) {
-          return entries.get(request.url)?.clone();
-        },
-        async put(request, response) {
-          entries.set(request.url, response.clone());
-        },
+      get default() {
+        cacheAccesses += 1;
+        throw new Error("This Worker is not permitted to access the default cache");
       },
     },
   });
 
   try {
-    const miss = await render("/");
-    assert.equal(miss.headers.get("x-aj-edge-cache"), "MISS");
-    await miss.text();
-
-    const hit = await render("/");
-    assert.equal(hit.headers.get("x-aj-edge-cache"), "HIT");
-    assert.match(hit.headers.get("cache-control") ?? "", /s-maxage=300/);
-    await hit.text();
-
-    const refreshed = await render("/", { "cache-control": "no-cache" });
-    assert.equal(refreshed.headers.get("x-aj-edge-cache"), "MISS");
-    await refreshed.text();
+    const publicResponse = await render("/");
+    assert.equal(publicResponse.headers.get("x-aj-edge-cache"), null);
+    assert.match(
+      publicResponse.headers.get("cache-control") ?? "",
+      /s-maxage=300/,
+    );
+    assert.match(
+      publicResponse.headers.get("cache-tag") ?? "",
+      /aj-luxury-html-2026-08-09-v4/,
+    );
+    await publicResponse.text();
 
     const privateResponse = await render("/", { cookie: "session=private" });
     assert.equal(privateResponse.headers.get("x-aj-edge-cache"), null);
@@ -63,12 +70,7 @@ test("public HTML uses the versioned edge cache while private context bypasses i
       /s-maxage/i,
     );
     await privateResponse.text();
-
-    assert.ok(
-      [...entries.keys()].every((key) =>
-        key.includes("__aj_html_cache=2026-08-09-v3"),
-      ),
-    );
+    assert.equal(cacheAccesses, 0);
   } finally {
     if (originalCaches) {
       Object.defineProperty(globalThis, "caches", originalCaches);
@@ -78,12 +80,152 @@ test("public HTML uses the versioned edge cache while private context bypasses i
   }
 });
 
+function assetHarness() {
+  const video = Uint8Array.from({ length: 10 }, (_, index) => index);
+  const calls = [];
+
+  return {
+    calls,
+    fetch: async (request) => {
+      const url = new URL(request.url);
+      calls.push({
+        method: request.method,
+        pathname: url.pathname,
+        search: url.search,
+        range: request.headers.get("range"),
+      });
+
+      if (url.pathname === "/videos/test.mp4") {
+        const headers = {
+          "Content-Length": String(video.byteLength),
+          "Content-Type": "application/octet-stream",
+          ETag: '"test-video"',
+        };
+        return request.method === "HEAD"
+          ? new Response(null, { status: 200, headers })
+          : new Response(video, { status: 200, headers });
+      }
+
+      if (url.pathname === "/i18n/en.json") {
+        return new Response('{"nav.home":"Home"}', {
+          status: 200,
+          headers: { "Content-Type": "text/plain" },
+        });
+      }
+
+      return new Response("Not found", { status: 404 });
+    },
+  };
+}
+
+test("media MP4 supports every single byte-range form and rewrites to ASSETS", async () => {
+  const cases = [
+    ["bytes=2-5", [2, 3, 4, 5], "bytes 2-5/10"],
+    ["bytes=7-", [7, 8, 9], "bytes 7-9/10"],
+    ["bytes=-3", [7, 8, 9], "bytes 7-9/10"],
+    ["bytes=8-99", [8, 9], "bytes 8-9/10"],
+    ["BYTES = 0 - 0", [0], "bytes 0-0/10"],
+  ];
+
+  for (const [range, expectedBody, expectedContentRange] of cases) {
+    const assets = assetHarness();
+    const response = await invokeWorker("/media/videos/test.mp4?v=v3", {
+      headers: { range },
+      assets,
+    });
+
+    assert.equal(response.status, 206, range);
+    assert.equal(response.headers.get("content-range"), expectedContentRange);
+    assert.equal(response.headers.get("accept-ranges"), "bytes");
+    assert.equal(
+      response.headers.get("content-length"),
+      String(expectedBody.length),
+    );
+    assert.equal(response.headers.get("content-type"), "video/mp4");
+    assert.equal(response.headers.get("x-content-type-options"), "nosniff");
+    assert.equal(
+      response.headers.get("cache-control"),
+      "public, max-age=31536000, immutable",
+    );
+    assert.deepEqual(
+      [...new Uint8Array(await response.arrayBuffer())],
+      expectedBody,
+    );
+    assert.deepEqual(assets.calls, [
+      {
+        method: "GET",
+        pathname: "/videos/test.mp4",
+        search: "?v=v3",
+        range: null,
+      },
+    ]);
+  }
+});
+
+test("media MP4 returns correct HEAD and 416 responses", async () => {
+  const headAssets = assetHarness();
+  const head = await invokeWorker("/media/videos/test.mp4?v=v3", {
+    method: "HEAD",
+    headers: { range: "bytes=2-5" },
+    assets: headAssets,
+  });
+  assert.equal(head.status, 206);
+  assert.equal(head.headers.get("content-range"), "bytes 2-5/10");
+  assert.equal(head.headers.get("content-length"), "4");
+  assert.equal((await head.arrayBuffer()).byteLength, 0);
+  assert.equal(headAssets.calls[0].method, "HEAD");
+  assert.equal(headAssets.calls[0].range, null);
+
+  for (const range of [
+    "bytes=10-10",
+    "bytes=5-2",
+    "bytes=-0",
+    "bytes=0-1,3-4",
+    "items=0-1",
+    "bytes=999999999999999999999-",
+  ]) {
+    const assets = assetHarness();
+    const response = await invokeWorker("/media/videos/test.mp4?v=v3", {
+      headers: { range },
+      assets,
+    });
+    assert.equal(response.status, 416, range);
+    assert.equal(response.headers.get("content-range"), "bytes */10");
+    assert.equal(response.headers.get("accept-ranges"), "bytes");
+    assert.equal(response.headers.get("content-length"), "0");
+    assert.equal(response.headers.get("cache-control"), "no-store");
+    assert.equal((await response.arrayBuffer()).byteLength, 0);
+  }
+});
+
+test("media i18n is rewritten with immutable JSON security headers", async () => {
+  const assets = assetHarness();
+  const response = await invokeWorker("/media/i18n/en.json?v=v3", { assets });
+
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("content-type"), "application/json; charset=utf-8");
+  assert.equal(
+    response.headers.get("cache-control"),
+    "public, max-age=31536000, immutable",
+  );
+  assert.equal(response.headers.get("x-content-type-options"), "nosniff");
+  assert.equal(await response.text(), '{"nav.home":"Home"}');
+  assert.deepEqual(assets.calls, [
+    {
+      method: "GET",
+      pathname: "/i18n/en.json",
+      search: "?v=v3",
+      range: null,
+    },
+  ]);
+});
+
 test("server-renders the real AJ Luxury launch homepage", async () => {
   const response = await render();
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
   assert.match(response.headers.get("cache-control") ?? "", /s-maxage=300/);
-  assert.equal(response.headers.get("x-aj-edge-cache"), "MISS");
+  assert.equal(response.headers.get("x-aj-edge-cache"), null);
 
   const html = await response.text();
   assert.match(html, /<html lang="fr">/i);
@@ -97,6 +239,7 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
   assert.match(html, /Rose Velours/);
   assert.match(html, /Lilas Céleste/);
   assert.match(html, /data-hero-version="video-v3"/);
+  assert.match(html, /\/media\/images\/client\/hero-v3-/);
   assert.match(html, /class="aj-film__hero-video"/);
   assert.match(html, /class="aj-film__hero-backdrop"/);
   assert.match(html, /class="aj-film__hero-stage"/);

@@ -19,6 +19,7 @@ const localBindingConfig = {
     run_worker_first: [
       "/assets/*",
       "/fonts/*",
+      "/media/*",
       "/i18n/*",
       "/images/*",
       "/videos/*",

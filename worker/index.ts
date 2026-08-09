@@ -29,6 +29,8 @@ const STATIC_ASSET_PREFIXES = [
   "/images/",
   "/videos/",
 ];
+const MEDIA_ASSET_PREFIX = "/media/";
+const MEDIA_ASSET_ROOTS = new Set(["i18n", "images", "videos"]);
 const CACHEABLE_HTML_ROUTES = new Set([
   "/",
   "/contact",
@@ -43,16 +45,28 @@ const CACHEABLE_HTML_ROUTES = new Set([
 ]);
 // Bump this namespace whenever cacheable server-rendered content changes so a
 // deployment never inherits HTML written by an older Worker version.
-const HTML_CACHE_VERSION = "2026-08-09-v3";
+const HTML_CACHE_VERSION = "2026-08-09-v4";
 
-declare global {
-  interface CacheStorage {
-    readonly default: Cache;
-  }
+type ByteRange = {
+  start: number;
+  end: number;
+};
+
+function mediaAssetPath(pathname: string): string | null {
+  if (!pathname.startsWith(MEDIA_ASSET_PREFIX)) return null;
+
+  const relativePath = pathname.slice(MEDIA_ASSET_PREFIX.length);
+  const root = relativePath.split("/", 1)[0];
+  if (!root || !MEDIA_ASSET_ROOTS.has(root)) return null;
+
+  return `/${relativePath}`;
 }
 
 function isStaticAsset(pathname: string): boolean {
-  return STATIC_ASSET_PREFIXES.some((prefix) => pathname.startsWith(prefix));
+  return (
+    mediaAssetPath(pathname) !== null ||
+    STATIC_ASSET_PREFIXES.some((prefix) => pathname.startsWith(prefix))
+  );
 }
 
 function contentTypeFor(pathname: string): string | null {
@@ -91,47 +105,147 @@ function isCacheableHtmlRequest(request: Request): boolean {
   );
 }
 
-function cacheRequestDirective(request: Request): string {
-  return `${request.headers.get("Cache-Control") ?? ""},${request.headers.get("Pragma") ?? ""}`.toLowerCase();
-}
-
-function shouldBypassCacheLookup(request: Request): boolean {
-  const directive = cacheRequestDirective(request);
-  return (
-    directive.includes("no-cache") ||
-    directive.includes("no-store") ||
-    directive.includes("max-age=0")
-  );
-}
-
-function allowsCacheWrite(request: Request): boolean {
-  return !cacheRequestDirective(request).includes("no-store");
-}
-
-function htmlCacheKey(request: Request): Request {
+function rewrittenAssetRequest(request: Request): Request {
   const url = new URL(request.url);
-  url.searchParams.set("__aj_html_cache", HTML_CACHE_VERSION);
-  return new Request(url, { headers: request.headers });
+  const physicalPath = mediaAssetPath(url.pathname);
+  if (!physicalPath) return request;
+
+  url.pathname = physicalPath;
+  return new Request(url, {
+    method: request.method,
+    headers: request.headers,
+  });
 }
 
-function edgeCache(): Cache | null {
-  return typeof caches === "undefined" || !("default" in caches)
-    ? null
-    : caches.default;
+function parseContentLength(response: Response): number | null {
+  const rawLength = response.headers.get("Content-Length");
+  if (!rawLength || !/^\d+$/.test(rawLength)) return null;
+
+  const length = Number(rawLength);
+  return Number.isSafeInteger(length) ? length : null;
 }
 
-function withEdgeCacheStatus(
+function parseSingleByteRange(
+  rangeHeader: string,
+  totalLength: number,
+): ByteRange | null {
+  if (!Number.isSafeInteger(totalLength) || totalLength <= 0) return null;
+
+  const match = /^bytes\s*=\s*(\d*)\s*-\s*(\d*)$/i.exec(
+    rangeHeader.trim(),
+  );
+  if (!match || (!match[1] && !match[2])) return null;
+
+  const [, rawStart, rawEnd] = match;
+  if (!rawStart) {
+    const suffixLength = Number(rawEnd);
+    if (!Number.isSafeInteger(suffixLength) || suffixLength <= 0) return null;
+
+    return {
+      start: Math.max(totalLength - suffixLength, 0),
+      end: totalLength - 1,
+    };
+  }
+
+  const start = Number(rawStart);
+  if (!Number.isSafeInteger(start) || start >= totalLength) return null;
+
+  if (!rawEnd) return { start, end: totalLength - 1 };
+
+  const requestedEnd = Number(rawEnd);
+  if (!Number.isSafeInteger(requestedEnd) || requestedEnd < start) return null;
+
+  return { start, end: Math.min(requestedEnd, totalLength - 1) };
+}
+
+function rangeHeaders(
   response: Response,
-  status: "HIT" | "MISS",
-): Response {
+  range: ByteRange | null,
+  totalLength: number,
+): Headers {
   const headers = new Headers(response.headers);
-  headers.set("X-AJ-Edge-Cache", status);
-  headers.append("Server-Timing", `aj-edge-cache;desc=\"${status}\"`);
+  headers.delete("Content-Encoding");
+  headers.set("Accept-Ranges", "bytes");
 
-  return new Response(response.body, {
-    status: response.status,
-    statusText: response.statusText,
-    headers,
+  if (!range) {
+    headers.set("Content-Range", `bytes */${totalLength}`);
+    headers.set("Content-Length", "0");
+    return headers;
+  }
+
+  headers.set(
+    "Content-Range",
+    `bytes ${range.start}-${range.end}/${totalLength}`,
+  );
+  headers.set("Content-Length", String(range.end - range.start + 1));
+  return headers;
+}
+
+async function serveMp4Range(
+  request: Request,
+  assetRequest: Request,
+  assets: Fetcher,
+): Promise<Response> {
+  const rangeHeader = request.headers.get("Range");
+  if (!rangeHeader) return assets.fetch(assetRequest);
+
+  const fullHeaders = new Headers(assetRequest.headers);
+  fullHeaders.delete("Range");
+  let fullResponse = await assets.fetch(
+    new Request(assetRequest.url, {
+      method: request.method,
+      headers: fullHeaders,
+    }),
+  );
+  if (!fullResponse.ok) return fullResponse;
+
+  let totalLength = parseContentLength(fullResponse);
+  let fullBytes: ArrayBuffer | null = null;
+
+  if (request.method === "GET") {
+    fullBytes = await fullResponse.arrayBuffer();
+    totalLength = fullBytes.byteLength;
+  } else if (totalLength === null) {
+    const getResponse = await assets.fetch(
+      new Request(assetRequest.url, { method: "GET", headers: fullHeaders }),
+    );
+    if (!getResponse.ok) return fullResponse;
+
+    fullBytes = await getResponse.arrayBuffer();
+    totalLength = fullBytes.byteLength;
+    fullResponse = new Response(null, {
+      status: fullResponse.status,
+      statusText: fullResponse.statusText,
+      headers: getResponse.headers,
+    });
+  }
+
+  if (totalLength === null) {
+    return new Response(null, {
+      status: 416,
+      statusText: "Range Not Satisfiable",
+      headers: rangeHeaders(fullResponse, null, 0),
+    });
+  }
+
+  const range = parseSingleByteRange(rangeHeader, totalLength);
+  if (!range) {
+    return new Response(null, {
+      status: 416,
+      statusText: "Range Not Satisfiable",
+      headers: rangeHeaders(fullResponse, null, totalLength),
+    });
+  }
+
+  const body =
+    request.method === "HEAD"
+      ? null
+      : fullBytes?.slice(range.start, range.end + 1) ?? null;
+
+  return new Response(body, {
+    status: 206,
+    statusText: "Partial Content",
+    headers: rangeHeaders(fullResponse, range, totalLength),
   });
 }
 
@@ -140,7 +254,14 @@ async function serveStaticAsset(
   assets: Fetcher,
 ): Promise<Response> {
   const url = new URL(request.url);
-  const response = await assets.fetch(request);
+  const assetRequest = rewrittenAssetRequest(request);
+  const isMp4RangeRequest =
+    url.pathname.endsWith(".mp4") &&
+    (request.method === "GET" || request.method === "HEAD") &&
+    request.headers.has("Range");
+  const response = isMp4RangeRequest
+    ? await serveMp4Range(request, assetRequest, assets)
+    : await assets.fetch(assetRequest);
   const headers = new Headers(response.headers);
   const contentType = contentTypeFor(url.pathname);
   const assetVersion = url.searchParams.get("v");
@@ -150,6 +271,9 @@ async function serveStaticAsset(
     /^v\d+$/.test(assetVersion ?? "");
 
   if (contentType) headers.set("Content-Type", contentType);
+  if (url.pathname.endsWith(".mp4") && response.ok) {
+    headers.set("Accept-Ranges", "bytes");
+  }
   headers.set("X-Content-Type-Options", "nosniff");
   headers.set(
     "Cache-Control",
@@ -173,24 +297,6 @@ async function serveApplication(
   ctx: ExecutionContext,
 ): Promise<Response> {
   const cacheableRequest = isCacheableHtmlRequest(request);
-  const cache = cacheableRequest ? edgeCache() : null;
-  const cacheKey = cache ? htmlCacheKey(request) : null;
-
-  if (cache && cacheKey && !shouldBypassCacheLookup(request)) {
-    try {
-      const cachedResponse = await cache.match(cacheKey);
-      if (cachedResponse) return withEdgeCacheStatus(cachedResponse, "HIT");
-    } catch (error) {
-      console.error(
-        JSON.stringify({
-          message: "html edge cache lookup failed",
-          path: new URL(request.url).pathname,
-          error: error instanceof Error ? error.message : String(error),
-        }),
-      );
-    }
-  }
-
   const response = await handler.fetch(request, env, ctx);
   const acceptsHtml = request.headers.get("Accept")?.includes("text/html") ?? false;
   const returnsHtml =
@@ -218,27 +324,11 @@ async function serveApplication(
   );
   headers.set("Cache-Tag", `aj-luxury-html,aj-luxury-html-${HTML_CACHE_VERSION}`);
 
-  const publicResponse = new Response(response.body, {
+  return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,
     headers,
   });
-
-  if (cache && cacheKey && allowsCacheWrite(request)) {
-    ctx.waitUntil(
-      cache.put(cacheKey, publicResponse.clone()).catch((error) => {
-        console.error(
-          JSON.stringify({
-            message: "html edge cache write failed",
-            path: new URL(request.url).pathname,
-            error: error instanceof Error ? error.message : String(error),
-          }),
-        );
-      }),
-    );
-  }
-
-  return withEdgeCacheStatus(publicResponse, "MISS");
 }
 
 // Image security config. SVG sources with .svg extension auto-skip the
@@ -259,8 +349,20 @@ const worker = {
       if (env?.ASSETS) return serveStaticAsset(request, env.ASSETS);
 
       if (env === undefined) {
-        return createStaticFileSignal(localStaticPath(url.pathname), {
-          headers: null,
+        const physicalPath = mediaAssetPath(url.pathname) ?? url.pathname;
+        const staticHeaders = new Headers();
+        const contentType = contentTypeFor(url.pathname);
+        if (contentType) staticHeaders.set("Content-Type", contentType);
+        if (url.pathname.endsWith(".mp4")) {
+          // vinext start currently maps MP4 to application/octet-stream and
+          // strips an explicit Content-Type from static-file signals. Avoid
+          // nosniff only in this local fallback so browsers may decode it.
+          staticHeaders.set("Accept-Ranges", "bytes");
+        } else {
+          staticHeaders.set("X-Content-Type-Options", "nosniff");
+        }
+        return createStaticFileSignal(localStaticPath(physicalPath), {
+          headers: staticHeaders,
           status: null,
         });
       }

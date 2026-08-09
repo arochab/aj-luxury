@@ -19,42 +19,46 @@ export type HeroVideoAsset = {
 
 export const HERO_VIDEO_ASSETS = {
   portrait: {
-    src: versioned("/videos/aj-luxury-hero-v3-portrait-720x934.mp4"),
+    src: versioned("/media/videos/aj-luxury-hero-v3-portrait-720x934.mp4"),
     poster: versioned(
-      "/images/client/hero-v3-portrait-720x934-poster.webp",
+      "/media/images/client/hero-v3-portrait-720x934-poster.webp",
     ),
     posterCompact: versioned(
-      "/images/client/hero-v3-portrait-480x623-poster.webp",
+      "/media/images/client/hero-v3-portrait-480x623-poster.webp",
     ),
     width: 720,
     height: 934,
   },
   tablet: {
-    src: versioned("/videos/aj-luxury-hero-v3-tablet-1440x810.mp4"),
+    src: versioned("/media/videos/aj-luxury-hero-v3-tablet-1440x810.mp4"),
     poster: versioned(
-      "/images/client/hero-v3-tablet-1440x810-poster.webp",
+      "/media/images/client/hero-v3-tablet-1440x810-poster.webp",
     ),
     posterAvif: versioned(
-      "/images/client/hero-v3-tablet-1440x810-poster.avif",
+      "/media/images/client/hero-v3-tablet-1440x810-poster.avif",
     ),
     width: 1440,
     height: 810,
   },
   desktop: {
-    src: versioned("/videos/aj-luxury-hero-v3-desktop-1920x1080.mp4"),
+    src: versioned("/media/videos/aj-luxury-hero-v3-desktop-1920x1080.mp4"),
     poster: versioned(
-      "/images/client/hero-v3-desktop-1920x1080-poster.webp",
+      "/media/images/client/hero-v3-desktop-1920x1080-poster.webp",
     ),
     posterAvif: versioned(
-      "/images/client/hero-v3-desktop-1920x1080-poster.avif",
+      "/media/images/client/hero-v3-desktop-1920x1080-poster.avif",
     ),
     width: 1920,
     height: 1080,
   },
   xl: {
-    src: versioned("/videos/aj-luxury-hero-v3-xl-2560x1440.mp4"),
-    poster: versioned("/images/client/hero-v3-xl-2560x1440-poster.webp"),
-    posterAvif: versioned("/images/client/hero-v3-xl-2560x1440-poster.avif"),
+    src: versioned("/media/videos/aj-luxury-hero-v3-xl-2560x1440.mp4"),
+    poster: versioned(
+      "/media/images/client/hero-v3-xl-2560x1440-poster.webp",
+    ),
+    posterAvif: versioned(
+      "/media/images/client/hero-v3-xl-2560x1440-poster.avif",
+    ),
     width: 2560,
     height: 1440,
   },
