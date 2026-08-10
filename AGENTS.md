@@ -4,7 +4,7 @@ Ces règles s’appliquent à toute évolution visuelle du projet, quel que soit
 
 ## Périmètre e-commerce durable
 
-- La zone de vente et de livraison est mondiale, sous réserve des pays exclus par AJ Luxury, de la réglementation applicable et des capacités des services tiers retenus.
+- L’architecture de livraison est internationale et extensible. Au lancement, seules l’Union européenne, le Royaume-Uni, les États-Unis et le Canada sont dans le périmètre ; toute autre destination reste bloquée jusqu’à une instruction explicite et datée d’Adam.
 - Le socle comprend le frontend et le backend standard de commerce nécessaires au catalogue, au paiement, aux comptes clients, au stock en ligne, aux commandes, à la livraison mondiale, à l’administration, aux e-mails, au déploiement et à la documentation.
 - Le stock est géré en ligne par variante, avec administration protégée, contrôle avant paiement, décrément après commande payée et règles d’affichage publique convenues.
 - Shopify est explicitement exclu par Adam depuis le 10 août 2026 ; ne jamais le réintroduire sans une nouvelle instruction explicite et datée.
