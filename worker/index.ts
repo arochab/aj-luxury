@@ -45,7 +45,7 @@ const CACHEABLE_HTML_ROUTES = new Set([
 ]);
 // Bump this namespace whenever cacheable server-rendered content changes so a
 // deployment never inherits HTML written by an older Worker version.
-const HTML_CACHE_VERSION = "2026-08-09-v4";
+const HTML_CACHE_VERSION = "2026-08-10-hero-v4";
 
 type ByteRange = {
   start: number;

@@ -59,7 +59,7 @@ test("public HTML advertises shared caching without using the forbidden Cache AP
     );
     assert.match(
       publicResponse.headers.get("cache-tag") ?? "",
-      /aj-luxury-html-2026-08-09-v4/,
+      /aj-luxury-html-2026-08-10-hero-v4/,
     );
     await publicResponse.text();
 
@@ -238,26 +238,27 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
   assert.match(html, /Pourpre Impérial/);
   assert.match(html, /Rose Velours/);
   assert.match(html, /Lilas Céleste/);
-  assert.match(html, /data-hero-version="video-v3"/);
-  assert.match(html, /\/media\/images\/client\/hero-v3-/);
+  assert.match(html, /data-hero-version="video-v4"/);
+  assert.match(html, /\/media\/images\/client\/hero-v4-/);
   assert.match(html, /class="aj-film__hero-video"/);
   assert.match(html, /class="aj-film__hero-backdrop"/);
   assert.match(html, /class="aj-film__hero-stage"/);
   assert.match(html, /class="aj-film__hero-poster"/);
-  assert.match(html, /hero-v3-portrait-720x934-poster\.webp\?v=v3/);
-  assert.match(html, /hero-v3-portrait-480x623-poster\.webp\?v=v3/);
-  assert.doesNotMatch(html, /hero-v3-portrait-720x934-poster\.avif\?v=v3/);
+  assert.match(html, /hero-v4-portrait-720x934-poster\.webp\?v=v4/);
+  assert.match(html, /hero-v4-portrait-480x623-poster\.webp\?v=v4/);
+  assert.doesNotMatch(html, /hero-v4-portrait-720x934-poster\.avif\?v=v4/);
   assert.match(html, /type="image\/avif"/);
-  assert.match(html, /hero-v3-tablet-1440x810-poster\.webp\?v=v3/);
-  assert.match(html, /hero-v3-tablet-1440x810-poster\.avif\?v=v3/);
-  assert.match(html, /hero-v3-desktop-1920x1080-poster\.webp\?v=v3/);
-  assert.match(html, /hero-v3-desktop-1920x1080-poster\.avif\?v=v3/);
-  assert.match(html, /hero-v3-xl-2560x1440-poster\.webp\?v=v3/);
-  assert.match(html, /hero-v3-xl-2560x1440-poster\.avif\?v=v3/);
+  assert.match(html, /hero-v4-tablet-1440x810-poster\.webp\?v=v4/);
+  assert.match(html, /hero-v4-tablet-1440x810-poster\.avif\?v=v4/);
+  assert.match(html, /hero-v4-desktop-1920x1080-poster\.webp\?v=v4/);
+  assert.match(html, /hero-v4-desktop-1920x1080-poster\.avif\?v=v4/);
+  assert.match(html, /hero-v4-xl-native-1920x1080-poster\.webp\?v=v4/);
+  assert.match(html, /hero-v4-xl-native-1920x1080-poster\.avif\?v=v4/);
   assert.match(
     html,
-    /<video[^>]*muted=""[^>]*loop=""[^>]*playsInline=""[^>]*preload="none"/,
+    /<video[^>]*autoPlay=""[^>]*muted=""[^>]*playsInline=""[^>]*preload="none"/,
   );
+  assert.doesNotMatch(html, /<video[^>]*\sloop=""/);
   assert.doesNotMatch(html, /<video[^>]*\ssrc=/);
   assert.doesNotMatch(html, /<video[^>]*\sposter=/);
   assert.doesNotMatch(html, /images\/client\/hero-duo-(?:static|cutout)/);

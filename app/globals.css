@@ -2960,6 +2960,29 @@ footer:not([class]) > p {
   z-index: 1;
   pointer-events: none;
   background: transparent;
+  opacity: 0;
+  transition: opacity 1100ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.aj-film__hero-video--started {
+  opacity: 1;
+}
+
+@media (min-aspect-ratio: 801 / 1000) {
+  .aj-film__hero-backdrop {
+    opacity: 1;
+  }
+
+  .aj-film__hero-backdrop img {
+    filter: blur(18px) brightness(0.44) saturate(0.72);
+    transform: scale(1.08);
+  }
+
+  .aj-film__hero-stage {
+    top: 96px;
+    bottom: 0;
+    height: auto;
+  }
 }
 
 @media (max-aspect-ratio: 4 / 5) {
@@ -2978,7 +3001,7 @@ footer:not([class]) > p {
   }
 
   .aj-film__hero-stage {
-    top: 50%;
+    top: calc(50% + 34px);
     left: 50%;
     width: min(100%, calc(70svh * 720 / 934));
     height: auto;

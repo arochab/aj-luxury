@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import { readFile, stat } from "node:fs/promises";
+import { readFile, readdir, stat } from "node:fs/promises";
+import { join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 import {
   HERO_VIDEO_ASSETS,
@@ -12,8 +14,41 @@ const projectFile = (path) => new URL(`../${path}`, import.meta.url);
 const publicAssetFile = (url) =>
   projectFile(`public${url.split("?")[0].replace(/^\/media/, "")}`);
 
+const V3_VIDEO_BYTE_CEILINGS = {
+  portrait: 1_123_698,
+  tablet: 2_281_803,
+  desktop: 2_923_443,
+  xl: 5_095_439,
+};
+
+const V3_POSTER_BYTE_CEILINGS = {
+  portrait: 103_202,
+  tablet: 224_974,
+  desktop: 346_814,
+  xl: 548_472,
+};
+
+const V3_AVIF_POSTER_BYTE_CEILINGS = {
+  tablet: 111_961,
+  desktop: 166_742,
+  xl: 242_352,
+};
+
+const V3_COMPACT_PORTRAIT_POSTER_BYTE_CEILING = 64_562;
+
+async function listFiles(directory) {
+  const entries = await readdir(directory, { withFileTypes: true });
+  const nestedFiles = await Promise.all(
+    entries.map(async (entry) => {
+      const absolutePath = join(directory, entry.name);
+      return entry.isDirectory() ? listFiles(absolutePath) : [absolutePath];
+    }),
+  );
+  return nestedFiles.flat();
+}
+
 test("hero video asset selection is deterministic at every breakpoint", () => {
-  assert.equal(HERO_VIDEO_VERSION, "v3");
+  assert.equal(HERO_VIDEO_VERSION, "v4");
   assert.equal(selectHeroVideoAsset(390, 844), HERO_VIDEO_ASSETS.portrait);
   assert.equal(selectHeroVideoAsset(768, 1024), HERO_VIDEO_ASSETS.portrait);
   assert.equal(selectHeroVideoAsset(800, 1000), HERO_VIDEO_ASSETS.portrait);
@@ -39,18 +74,14 @@ test("hero video asset selection is deterministic at every breakpoint", () => {
 });
 
 test("the responsive HD MP4 set stays bounded and starts progressively", async () => {
-  const limits = {
-    portrait: 1.1 * 1024 * 1024,
-    tablet: 2.2 * 1024 * 1024,
-    desktop: 2.9 * 1024 * 1024,
-    xl: 5 * 1024 * 1024,
-  };
-
   for (const [name, asset] of Object.entries(HERO_VIDEO_ASSETS)) {
     const path = publicAssetFile(asset.src);
     const info = await stat(path);
     assert.ok(info.size > 128 * 1024, `${name} video is unexpectedly small`);
-    assert.ok(info.size <= limits[name], `${name} video exceeds its byte budget`);
+    assert.ok(
+      info.size <= V3_VIDEO_BYTE_CEILINGS[name],
+      `${name} video exceeds its exact V3 byte ceiling`,
+    );
 
     const bytes = await readFile(path);
     const ftyp = bytes.indexOf(Buffer.from("ftyp"));
@@ -59,17 +90,11 @@ test("the responsive HD MP4 set stays bounded and starts progressively", async (
     assert.ok(ftyp >= 0 && ftyp < 32, `${name} has no valid MP4 header`);
     assert.ok(moov > ftyp, `${name} has no moov atom`);
     assert.ok(mdat > moov, `${name} is not optimized for progressive start`);
-    assert.match(asset.src, /aj-luxury-hero-v3-[\w-]+\.mp4\?v=v3$/);
+    assert.match(asset.src, /aj-luxury-hero-v4-[\w-]+\.mp4\?v=v4$/);
   }
 });
 
 test("responsive first-frame posters stay within explicit byte budgets", async () => {
-  const limits = {
-    portrait: 160 * 1024,
-    tablet: 230 * 1024,
-    desktop: 350 * 1024,
-    xl: 550 * 1024,
-  };
   const posters = new Set(
     Object.values(HERO_VIDEO_ASSETS).map((asset) => asset.poster),
   );
@@ -78,15 +103,12 @@ test("responsive first-frame posters stay within explicit byte budgets", async (
   for (const [role, asset] of Object.entries(HERO_VIDEO_ASSETS)) {
     const info = await stat(publicAssetFile(asset.poster));
     assert.ok(info.size > 32 * 1024, `${role} poster is unexpectedly small`);
-    assert.ok(info.size <= limits[role], `${role} poster exceeds its byte budget`);
-    assert.match(asset.poster, /hero-v3-[\w-]+-poster\.webp\?v=v3$/);
+    assert.ok(
+      info.size <= V3_POSTER_BYTE_CEILINGS[role],
+      `${role} poster exceeds its exact V3 byte ceiling`,
+    );
+    assert.match(asset.poster, /hero-v4-[\w-]+-poster\.webp\?v=v4$/);
   }
-
-  const avifMinimums = {
-    tablet: 96 * 1024,
-    desktop: 144 * 1024,
-    xl: 220 * 1024,
-  };
 
   for (const [role, asset] of Object.entries(HERO_VIDEO_ASSETS).filter(
     ([, candidate]) => candidate.posterAvif,
@@ -95,19 +117,39 @@ test("responsive first-frame posters stay within explicit byte budgets", async (
       stat(publicAssetFile(asset.poster)),
       stat(publicAssetFile(asset.posterAvif)),
     ]);
-    assert.ok(avifInfo.size > avifMinimums[role]);
+    assert.ok(avifInfo.size > 48 * 1024);
     assert.ok(
-      avifInfo.size <= webpInfo.size * 0.5,
+      avifInfo.size <= V3_AVIF_POSTER_BYTE_CEILINGS[role],
+      `${role} AVIF exceeds its exact V3 byte ceiling`,
+    );
+    assert.ok(
+      avifInfo.size <= webpInfo.size * 0.65,
       `${role} AVIF exceeds its WebP-relative byte budget`,
     );
-    assert.match(asset.posterAvif, /hero-v3-[\w-]+-poster\.avif\?v=v3$/);
+    assert.match(asset.posterAvif, /hero-v4-[\w-]+-poster\.avif\?v=v4$/);
   }
 
   const compactPortrait = HERO_VIDEO_ASSETS.portrait.posterCompact;
   const compactInfo = await stat(publicAssetFile(compactPortrait));
-  assert.ok(compactInfo.size > 60 * 1024);
-  assert.ok(compactInfo.size < 66 * 1024);
-  assert.match(compactPortrait, /hero-v3-portrait-480x623-poster\.webp\?v=v3$/);
+  assert.ok(compactInfo.size > 24 * 1024);
+  assert.ok(
+    compactInfo.size <= V3_COMPACT_PORTRAIT_POSTER_BYTE_CEILING,
+    "compact portrait poster exceeds its exact V3 byte ceiling",
+  );
+  assert.match(compactPortrait, /hero-v4-portrait-480x623-poster\.webp\?v=v4$/);
+});
+
+test("public assets never contain temporary .tmp files", async () => {
+  const publicDirectory = fileURLToPath(projectFile("public/"));
+  const temporaryFiles = (await listFiles(publicDirectory))
+    .map((file) => relative(publicDirectory, file).replaceAll("\\", "/"))
+    .filter((file) => /\.tmp(?:\.|$)/i.test(file));
+
+  assert.deepEqual(
+    temporaryFiles,
+    [],
+    "temporary .tmp files must never enter the public asset tree",
+  );
 });
 
 test("every runtime rendition contains video only", async () => {
@@ -144,13 +186,19 @@ test("hero playback is accessible, resource-aware and subject-safe", async () =>
   ]);
 
   assert.match(videoComponent, /muted/);
-  assert.match(videoComponent, /loop/);
+  assert.doesNotMatch(videoComponent, /\sloop(?:\s|\/>)/);
   assert.match(videoComponent, /playsInline/);
+  assert.match(videoComponent, /saveData/);
+  assert.match(videoComponent, /shouldAttachHeroVideoSource/);
+  assert.match(
+    videoComponent,
+    /onEnded=\{\(\) => onPlaybackIntentChange\(false\)\}/,
+  );
   assert.match(videoComponent, /prefers-reduced-motion: reduce/);
   assert.match(videoComponent, /IntersectionObserver/);
   assert.match(videoComponent, /visibilitychange/);
-  assert.match(videoComponent, /requestIdleCallback/);
-  assert.match(videoComponent, /document\.readyState === "complete"/);
+  assert.match(videoComponent, /requestAnimationFrame/);
+  assert.match(videoComponent, /cancelAnimationFrame/);
   assert.match(videoComponent, /preload="none"/);
   assert.match(videoComponent, /className="aj-film__hero-backdrop"/);
   assert.match(videoComponent, /className="aj-film__hero-stage"/);
@@ -168,13 +216,35 @@ test("hero playback is accessible, resource-aware and subject-safe", async () =>
   assert.match(videoComponent, /imageSizes: PORTRAIT_POSTER_SIZES/);
   assert.match(videoComponent, /media: HERO_POSTER_MEDIA\[role\]/);
   assert.match(videoComponent, /selectHeroVideoAsset\([\s\S]*window\.innerHeight/);
-  assert.match(videoComponent, /src=\{asset\?\.src\}/);
+  assert.match(
+    videoComponent,
+    /src=\{sourceAttached \? asset\?\.src : undefined\}/,
+  );
   assert.doesNotMatch(videoComponent, /SOURCE_LOAD_CEILING|ceilingHandle/);
-  assert.doesNotMatch(videoComponent, /autoPlay/);
+  assert.match(videoComponent, /autoPlay=\{playing\}/);
+  assert.match(videoComponent, /onPlaying=\{\(\) => setStartedAssetSrc/);
+  assert.match(videoComponent, /isHeroVideoReady\(video\.readyState\)/);
+  assert.match(videoComponent, /rewindHeroVideoIfEnded\(video\)/);
+  assert.match(videoComponent, /nextHeroPlaybackIntentAfterRejection/);
+  assert.match(videoComponent, /useImperativeHandle/);
+  assert.match(heroComponent, /backgroundVideoRef\.current\?\.requestPlayback\(\)/);
   assert.doesNotMatch(heroComponent, /hero-duo-(?:static|cutout)/);
   assert.match(heroComponent, /<figcaption>/);
   assert.match(stylesheet, /\.aj-film__hero-video[\s\S]*object-fit: cover/);
+  assert.match(
+    stylesheet,
+    /\.aj-film__hero-video \{[\s\S]*opacity: 0;[\s\S]*transition: opacity 1100ms/,
+  );
+  assert.match(
+    stylesheet,
+    /\.aj-film__hero-video--started \{[\s\S]*opacity: 1;/,
+  );
+  assert.match(
+    stylesheet,
+    /@media \(min-aspect-ratio: 801 \/ 1000\)[\s\S]*\.aj-film__hero-stage[\s\S]*top: 96px/,
+  );
   assert.match(stylesheet, /@media \(max-aspect-ratio: 4 \/ 5\)/);
+  assert.match(stylesheet, /top: calc\(50% \+ 34px\)/);
   assert.match(stylesheet, /aspect-ratio: 720 \/ 934/);
   assert.match(stylesheet, /width: min\(100%, calc\(70svh \* 720 \/ 934\)\)/);
   assert.match(stylesheet, /filter: blur\(18px\) brightness\(0\.44\)/);

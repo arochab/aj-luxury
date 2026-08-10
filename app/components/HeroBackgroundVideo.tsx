@@ -1,17 +1,41 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from "react";
 import { preload } from "react-dom";
 import {
   HERO_VIDEO_ASSETS,
+  rewindHeroVideoIfEnded,
   selectHeroVideoAsset,
   type HeroVideoAsset,
 } from "../../lib/hero-video";
-import { shouldPlayHeroVideo } from "../../lib/motion-policy";
+import {
+  isHeroVideoReady,
+  nextHeroPlaybackIntentAfterRejection,
+  shouldAttachHeroVideoSource,
+  shouldPlayHeroVideo,
+} from "../../lib/motion-policy";
 
 type HeroBackgroundVideoProps = {
   playing: boolean;
   onPlaybackIntentChange: (playing: boolean) => void;
+  onMotionAvailabilityChange: (available: boolean) => void;
+};
+
+export type HeroBackgroundVideoHandle = {
+  pausePlayback: () => void;
+  requestPlayback: () => void;
+};
+
+type NetworkInformation = EventTarget & { saveData?: boolean };
+type NavigatorWithConnection = Navigator & {
+  connection?: NetworkInformation;
 };
 
 const HERO_POSTER_MEDIA = {
@@ -79,10 +103,17 @@ function HeroPoster({ className, priority }: HeroPosterProps) {
   );
 }
 
-export default function HeroBackgroundVideo({
-  playing,
-  onPlaybackIntentChange,
-}: HeroBackgroundVideoProps) {
+const HeroBackgroundVideo = forwardRef<
+  HeroBackgroundVideoHandle,
+  HeroBackgroundVideoProps
+>(function HeroBackgroundVideo(
+  {
+    playing,
+    onPlaybackIntentChange,
+    onMotionAvailabilityChange,
+  },
+  controlRef,
+) {
   preload(HERO_VIDEO_ASSETS.portrait.posterCompact, {
     as: "image",
     fetchPriority: "high",
@@ -100,63 +131,136 @@ export default function HeroBackgroundVideo({
   }
 
   const videoRef = useRef<HTMLVideoElement>(null);
+  const playbackAttemptRef = useRef(0);
   const visibleRef = useRef(true);
   const pageVisibleRef = useRef(true);
   const [reducedMotion, setReducedMotion] = useState(false);
+  const [saveData, setSaveData] = useState(false);
   const [sourceEnabled, setSourceEnabled] = useState(false);
   const [asset, setAsset] = useState<HeroVideoAsset | null>(null);
+  const [startedAssetSrc, setStartedAssetSrc] = useState<string | null>(null);
+  const sourceAttached = shouldAttachHeroVideoSource({
+    sourceEnabled,
+    reducedMotion,
+    saveData,
+  });
+
+  const rejectPlaybackIntent = useCallback(
+    (error: unknown, attempt: number, readyState: number) => {
+      if (attempt !== playbackAttemptRef.current) return;
+      const errorName =
+        typeof error === "object" &&
+        error !== null &&
+        "name" in error &&
+        typeof error.name === "string"
+          ? error.name
+          : null;
+      const nextIntent = nextHeroPlaybackIntentAfterRejection({
+        currentIntent: true,
+        errorName,
+        readyState,
+      });
+      if (!nextIntent) onPlaybackIntentChange(false);
+    },
+    [onPlaybackIntentChange],
+  );
 
   const syncPlayback = useCallback(async () => {
     const video = videoRef.current;
-    if (!video || !asset) return;
+    if (!video) return;
+    const attempt = ++playbackAttemptRef.current;
+    if (!asset || !sourceAttached) {
+      video.pause();
+      return;
+    }
 
     const canPlay = shouldPlayHeroVideo({
       playbackIntent: playing,
-      assetReady: true,
+      assetReady: isHeroVideoReady(video.readyState),
       reducedMotion,
       inViewport: visibleRef.current,
       pageVisible: pageVisibleRef.current,
     });
 
     if (!canPlay) {
-      video.pause();
+      if (
+        !playing ||
+        reducedMotion ||
+        !visibleRef.current ||
+        !pageVisibleRef.current
+      ) {
+        video.pause();
+      }
       return;
+    }
+
+    if (rewindHeroVideoIfEnded(video)) {
+      setStartedAssetSrc(null);
     }
 
     try {
       await video.play();
-    } catch {
-      onPlaybackIntentChange(false);
+    } catch (error) {
+      rejectPlaybackIntent(error, attempt, video.readyState);
     }
-  }, [asset, onPlaybackIntentChange, playing, reducedMotion]);
+  }, [asset, playing, reducedMotion, rejectPlaybackIntent, sourceAttached]);
+
+  const requestPlayback = useCallback(() => {
+    onPlaybackIntentChange(true);
+
+    const video = videoRef.current;
+    if (
+      !video ||
+      !asset ||
+      !sourceAttached ||
+      reducedMotion ||
+      !visibleRef.current ||
+      !pageVisibleRef.current
+    ) {
+      return;
+    }
+
+    if (rewindHeroVideoIfEnded(video)) {
+      setStartedAssetSrc(null);
+    }
+
+    const attempt = ++playbackAttemptRef.current;
+    void video.play().catch((error: unknown) => {
+      rejectPlaybackIntent(error, attempt, video.readyState);
+    });
+  }, [
+    asset,
+    onPlaybackIntentChange,
+    reducedMotion,
+    rejectPlaybackIntent,
+    sourceAttached,
+  ]);
+
+  const pausePlayback = useCallback(() => {
+    playbackAttemptRef.current += 1;
+    videoRef.current?.pause();
+    onPlaybackIntentChange(false);
+  }, [onPlaybackIntentChange]);
+
+  useImperativeHandle(
+    controlRef,
+    () => ({ pausePlayback, requestPlayback }),
+    [pausePlayback, requestPlayback],
+  );
 
   useEffect(() => {
-    let idleHandle: number | null = null;
-    let timeoutHandle: ReturnType<typeof globalThis.setTimeout> | null = null;
-
-    const enableSource = () => setSourceEnabled(true);
-    const scheduleSource = () => {
-      if ("requestIdleCallback" in window) {
-        idleHandle = window.requestIdleCallback(enableSource, { timeout: 1800 });
-        return;
-      }
-      timeoutHandle = globalThis.setTimeout(enableSource, 250);
-    };
-
-    if (document.readyState === "complete") scheduleSource();
-    else window.addEventListener("load", scheduleSource, { once: true });
+    const firstPaintFrame = window.requestAnimationFrame(() => {
+      setAsset(selectHeroVideoAsset(window.innerWidth, window.innerHeight));
+      setSourceEnabled(true);
+    });
 
     return () => {
-      window.removeEventListener("load", scheduleSource);
-      if (idleHandle !== null && "cancelIdleCallback" in window) {
-        window.cancelIdleCallback(idleHandle);
-      }
-      if (timeoutHandle !== null) globalThis.clearTimeout(timeoutHandle);
+      window.cancelAnimationFrame(firstPaintFrame);
     };
   }, []);
 
   useEffect(() => {
-    if (!sourceEnabled || reducedMotion) return;
+    if (!sourceAttached) return;
 
     const updateAsset = () => {
       const nextAsset = selectHeroVideoAsset(
@@ -183,7 +287,7 @@ export default function HeroBackgroundVideo({
         query.removeEventListener("change", updateAsset);
       }
     };
-  }, [reducedMotion, sourceEnabled]);
+  }, [sourceAttached]);
 
   useEffect(() => {
     const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -197,6 +301,26 @@ export default function HeroBackgroundVideo({
     return () =>
       motionQuery.removeEventListener("change", updateMotionPreference);
   }, [onPlaybackIntentChange]);
+
+  useEffect(() => {
+    const connection = (navigator as NavigatorWithConnection).connection;
+    if (!connection) return;
+
+    const updateSaveDataPreference = () => {
+      const nextSaveData = connection.saveData === true;
+      setSaveData(nextSaveData);
+      if (nextSaveData) onPlaybackIntentChange(false);
+    };
+
+    updateSaveDataPreference();
+    connection.addEventListener("change", updateSaveDataPreference);
+    return () =>
+      connection.removeEventListener("change", updateSaveDataPreference);
+  }, [onPlaybackIntentChange]);
+
+  useEffect(() => {
+    onMotionAvailabilityChange(!reducedMotion && !saveData);
+  }, [onMotionAvailabilityChange, reducedMotion, saveData]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -236,12 +360,16 @@ export default function HeroBackgroundVideo({
         <HeroPoster className="aj-film__hero-poster" priority="high" />
         <video
           ref={videoRef}
-          className="aj-film__hero-video"
-          src={asset?.src}
+          className={`aj-film__hero-video${
+            startedAssetSrc === asset?.src
+              ? " aj-film__hero-video--started"
+              : ""
+          }`}
+          src={sourceAttached ? asset?.src : undefined}
           width={asset?.width ?? HERO_VIDEO_ASSETS.desktop.width}
           height={asset?.height ?? HERO_VIDEO_ASSETS.desktop.height}
+          autoPlay={playing}
           muted
-          loop
           playsInline
           preload="none"
           aria-hidden="true"
@@ -249,9 +377,16 @@ export default function HeroBackgroundVideo({
           disablePictureInPicture
           controlsList="nodownload noplaybackrate noremoteplayback"
           onCanPlay={() => void syncPlayback()}
-          onError={() => onPlaybackIntentChange(false)}
+          onPlaying={() => setStartedAssetSrc(asset?.src ?? null)}
+          onEnded={() => onPlaybackIntentChange(false)}
+          onError={() => {
+            setStartedAssetSrc(null);
+            onPlaybackIntentChange(false);
+          }}
         />
       </div>
     </div>
   );
-}
+});
+
+export default HeroBackgroundVideo;
