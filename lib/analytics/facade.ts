@@ -1,27 +1,13 @@
 import type { AnalyticsConsentController } from "./consent.ts";
-import { deferAnalyticsEvent } from "./deferred-dispatch.ts";
-import {
-  ANALYTICS_SCHEMA_VERSION,
-  type AnalyticsContextInput,
-  type AnalyticsDataPolicy,
-  type ClientAnalyticsEvent,
-  type ClientAnalyticsEventName,
-  type ClientAnalyticsInputByName,
-} from "./events.ts";
-import {
-  sanitizeAnalyticsContext,
-  sanitizeClientAnalyticsInput,
-} from "./sanitization.ts";
+import type {
+  ClientAnalyticsEventName,
+  ClientAnalyticsInputByName,
+} from "./client-events.ts";
+import type { AnalyticsContextInput } from "./shared.ts";
 
 export type ClientAnalyticsTrackResult =
-  | { accepted: true }
-  | {
-      accepted: false;
-      reason:
-        | "consent_not_granted"
-        | "invalid_event"
-        | "dispatch_unavailable";
-    };
+  | { accepted: false; reason: "consent_not_granted" }
+  | { accepted: false; reason: "analytics_inactive" };
 
 export type ClientAnalyticsFacade = {
   track<Name extends ClientAnalyticsEventName>(
@@ -33,30 +19,19 @@ export type ClientAnalyticsFacade = {
 
 type CreateClientAnalyticsFacadeOptions = {
   consent: AnalyticsConsentController;
-  collect: (event: ClientAnalyticsEvent) => unknown;
-  policy: AnalyticsDataPolicy;
-  clock?: () => Date;
 };
 
-function safeTimestamp(clock: () => Date): string | null {
-  try {
-    const now = clock();
-    return now instanceof Date && Number.isFinite(now.getTime())
-      ? now.toISOString()
-      : null;
-  } catch {
-    return null;
-  }
-}
-
+/**
+ * Inactive browser facade. It never reads event input, allocates an event,
+ * invokes a callback, schedules work or buffers data. Runtime work is O(1)
+ * relative to payload and catalogue size and is limited to the first-party
+ * consent controller lookup plus the result object.
+ */
 export function createClientAnalyticsFacade({
   consent,
-  collect,
-  policy,
-  clock = () => new Date(),
 }: CreateClientAnalyticsFacadeOptions): ClientAnalyticsFacade {
   return {
-    track(name, input, context) {
+    track() {
       try {
         if (consent.getState() !== "granted") {
           return { accepted: false, reason: "consent_not_granted" };
@@ -64,28 +39,7 @@ export function createClientAnalyticsFacade({
       } catch {
         return { accepted: false, reason: "consent_not_granted" };
       }
-
-      try {
-        const occurredAt = safeTimestamp(clock);
-        const sanitized = sanitizeClientAnalyticsInput(name, input, policy);
-        const sanitizedContext = sanitizeAnalyticsContext(context, policy);
-        if (!occurredAt || !sanitized || !sanitizedContext) {
-          return { accepted: false, reason: "invalid_event" };
-        }
-
-        const event = {
-          schemaVersion: ANALYTICS_SCHEMA_VERSION,
-          occurredAt,
-          context: sanitizedContext,
-          ...sanitized,
-        } as ClientAnalyticsEvent;
-
-        return deferAnalyticsEvent(collect, event)
-          ? { accepted: true }
-          : { accepted: false, reason: "dispatch_unavailable" };
-      } catch {
-        return { accepted: false, reason: "invalid_event" };
-      }
+      return { accepted: false, reason: "analytics_inactive" };
     },
   };
 }

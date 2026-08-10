@@ -6,21 +6,21 @@ const context = { url: "https://ajluxurystore.com/products/rose-pale" };
 
 analytics.track(
   "product_view",
-  { productId: "apollon-rose" },
+  { productId: "AJ-APO-ROS" },
   context,
 );
 analytics.track(
   "add_to_cart",
   {
-    productId: "apollon-rose",
-    variantId: "variant_boxer_rose-pale_xl",
+    productId: "AJ-APO-ROS",
+    variantId: "AJ-APO-ROS-XL",
     quantity: 1,
   },
   context,
 );
 analytics.track(
   "checkout_started",
-  { lines: [{ variantId: "variant_boxer_rose-pale_xl", quantity: 1 }] },
+  { lines: [{ variantId: "AJ-APO-ROS-XL", quantity: 1 }] },
   { url: "https://ajluxurystore.com/checkout" },
 );
 
@@ -30,8 +30,8 @@ analytics.track("order_paid", { lines: [] }, context);
 analytics.track(
   "add_to_cart",
   {
-    productId: "apollon-rose",
-    variantId: "variant_boxer_rose-pale_xl",
+    productId: "AJ-APO-ROS",
+    variantId: "AJ-APO-ROS-XL",
     quantity: 1,
     // @ts-expect-error Values are derived from the governed catalogue.
     valueMinor: 1,

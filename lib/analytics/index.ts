@@ -2,8 +2,15 @@ export * from "./consent.ts";
 export {
   CLIENT_ANALYTICS_EVENT_NAMES,
   CLIENT_ANALYTICS_INPUT_FIELD_ALLOWLIST,
+} from "./client-events.ts";
+export type {
+  ClientAnalyticsEventName,
+  ClientAnalyticsInputByName,
+} from "./client-events.ts";
+export {
+  ANALYTICS_SCHEMA_VERSION,
   ANALYTICS_UTM_KEYS,
-} from "./events.ts";
+} from "./shared.ts";
 export type {
   AnalyticsCatalogVariant,
   AnalyticsContextInput,
@@ -11,17 +18,10 @@ export type {
   AnalyticsLineInput,
   AnalyticsUtm,
   AnalyticsUtmKey,
-  ClientAnalyticsEventName,
-  ClientAnalyticsInputByName,
   SanitizedAnalyticsContext,
-} from "./events.ts";
+} from "./shared.ts";
 export {
   createClientAnalyticsFacade,
   type ClientAnalyticsFacade,
   type ClientAnalyticsTrackResult,
 } from "./facade.ts";
-export {
-  sanitizeAnalyticsContext,
-  sanitizeAnalyticsPath,
-  sanitizeReferrerOrigin,
-} from "./sanitization.ts";

@@ -32,7 +32,7 @@ futur outil d’audience. Les quatre événements ci-dessous couvrent seulement 
 tunnel commerce complémentaire, avec trois événements navigateur et un
 événement réservé au serveur.
 
-## Contrat d’événements V2
+## Contrat d’événements V3
 
 Allowlist fermée : tout nom ou champ non listé est rejeté, sans envoi ni mise en
 attente.
@@ -42,14 +42,16 @@ attente.
 | `product_view` | Navigateur après consentement | `productId`, `variantId` facultatif | Identifiants validés par le catalogue | Intérêt produit |
 | `add_to_cart` | Navigateur après consentement | `productId`, `variantId`, `quantity` | Prix, valeur et devise dérivés de la variante gouvernée | Intention d’achat |
 | `checkout_started` | Navigateur après consentement | Lignes `variantId` et `quantity` | Nombre d’articles, valeur et devise dérivés du catalogue | Friction panier vers paiement |
-| `order_paid` | Serveur après paiement vérifié et consentement conservé | Lignes de commande gouvernées | Nombre d’articles, valeur et devise dérivés du catalogue | Conversion et revenu fiables |
+| `order_paid` | Serveur après paiement vérifié et consentement conservé | Snapshot payé vérifié, montants réconciliés et clé d’idempotence | Nombre d’articles, total payé et devise, sans identifiant de commande | Conversion et revenu fiables |
 
-`order_paid` ne peut pas être appelé par l’index ni la façade client. Il vit
-dans un module serveur distinct, volontairement absent de l’API navigateur. Sa
+`order_paid` ne peut pas être appelé par l’index ni la façade client. Constantes,
+types, sanitization et entrée serveur résident dans des fichiers physiquement
+séparés du graphe client. L’entrée serveur utilise une résolution conditionnelle
+qui fait échouer un bundle ciblant le navigateur, plus une garde d’exécution. Sa
 source d’autorité future est le backend de paiement après vérification du
 statut payé.
 
-Bornes V2 : identifiants produit/variante présents dans la nomenclature catalogue
+Bornes V3 : identifiants produit/variante présents dans la nomenclature catalogue
 injectée et limités à 64 caractères ; quantité et nombre d’articles de 1 à 99 ;
 valeur en unité monétaire mineure de 1 à 100 000 000 ; devise sur trois lettres
 majuscules. Une valeur hors bornes ou inconnue fait rejeter l’événement complet.
@@ -83,7 +85,8 @@ Le contrôleur possède trois états : `unknown`, `denied`, `granted`.
 
 - `unknown` et `denied` bloquent tout événement ;
 - aucun événement n’est mis en file pour un envoi ultérieur ;
-- `granted` autorise seulement un événement conforme à l’allowlist ;
+- `granted` ne déclenche rien dans ce candidat : la façade navigateur reste
+  explicitement inactive ;
 - un retrait vers `denied` ou une remise à zéro vers `unknown` prend effet dès
   l’événement suivant ;
 - accepter et refuser devront rester au même niveau dans l’interface finale.
@@ -96,24 +99,48 @@ jour des pages confidentialité/cookies avant toute activation.
 ## Architecture retenue dans ce candidat
 
 - façade TypeScript client limitée à `product_view`, `add_to_cart` et
-  `checkout_started` ;
-- module serveur séparé et non réexporté par l’index pour `order_paid` ;
-- collecteur privé, sans type ni autorité de collecte exposés par l’index ;
-- invocation du collecteur différée dans une microtâche, hors du chemin
-  d’interaction commerce ; lenteur, exception ou promesse rejetée sont
-  contenues sans bloquer `track` ;
+  `checkout_started`, mais inactive : elle ne lit pas le payload, ne prépare
+  aucun événement, ne bufferise rien et ne planifie aucun travail ;
+- coût de `track` constant par rapport au payload et au catalogue : lecture du
+  contrôleur de consentement de première partie, puis retour
+  `analytics_inactive` ; cette garantie ne couvre pas un contrôleur de
+  consentement tiers volontairement bloquant ;
+- contrat de préparation client dormant, non exporté par l’index et jamais
+  appelé par la façade inactive ;
+- constantes et types client dans un graphe physique distinct du serveur ;
+- entrée serveur séparée et non réexportée pour `order_paid` ; la résolution
+  conditionnelle donne explicitement priorité à `react-server`, `workerd`,
+  `worker` et `node`, puis bloque `browser`, avec une garde d’exécution
+  complémentaire ;
+- conditions client, SSR et RSC lues depuis la configuration Vinext/Vite
+  réellement résolue en production, puis rejouées dans les tests de bundle ;
+- bundle navigateur réel de l’index construit par esbuild et inspecté durant la
+  recette, plus inspection de tous les fichiers JavaScript du `dist/client`
+  final produit par Vinext ; tentative de bundle navigateur de l’entrée serveur
+  obligatoirement en échec ;
+- aucun collecteur, callback, buffer ou dispatcher côté navigateur ;
+- outbox mémoire présente uniquement dans les tests serveur ;
 - politique injectée et fail-closed pour routes, référents, UTM, produits et
   variantes ;
 - origine canonique HTTPS obligatoire et catalogue gouverné reliant chaque
   variante à son produit, son prix et sa devise ;
 - validation d’exécution des noms, champs, formats, montants et quantités ;
 - sanitization centralisée des chemins, référents et UTM ;
-- horloge et collecteur injectables pour des tests déterministes ;
-- erreurs de collecte contenues : la mesure ne bloque jamais l’achat.
+- snapshot payé vérifié : douze variantes `AJ-APO`, montants marchandise,
+  livraison, taxe, remise et total réconciliés avant émission ;
+- clé d’idempotence obligatoire et écriture atomique `storeOnce` avant toute
+  évacuation future ;
+- indisponibilité de l’outbox renvoyée sans prétendre que l’événement a été
+  enregistré.
 
 Il n’existe volontairement aucun appel réseau, token, SDK, cookie analytics,
 table D1, endpoint de collecte ou branchement dans l’interface. Ce module reste
 une proposition isolée ; il ne constitue pas à lui seul le Lot 2 backend.
+
+L’idempotence durable n’est pas revendiquée dans ce candidat : le test utilise
+une mémoire locale, tandis que l’activation exigera une réclamation atomique en
+D1 et une stratégie transactionnelle de type outbox. Sans cette persistance,
+aucun `order_paid` ne doit être activé.
 
 ## Indicateurs du tableau de bord futur
 
@@ -143,19 +170,21 @@ de conservation restent à valider avant construction du tableau de bord.
 
 Le socle passe cette phase si :
 
-1. l’API client n’accepte que trois événements et ne contient aucune autorité
-   `order_paid` ;
-2. seul le module serveur distinct peut construire `order_paid` ;
-3. aucun événement ne sort avant consentement explicite ;
-4. le retrait du consentement coupe immédiatement les événements suivants ;
-5. variantes, produits, prix, devises et totaux sont gouvernés par le catalogue ;
-6. toute URL d’une origine différente de l’origine canonique est rejetée ;
-7. les champs non prévus et valeurs invalides sont rejetés ;
-8. URL, référent et UTM ne conservent aucune donnée brute sensible ;
-9. le code ne contient aucun transport réseau ni SDK fournisseur ;
-10. un collecteur lent, en erreur ou sans réponse ne peut pas bloquer l’achat ;
-11. collecteur, dispatcher et builder interne ne sont pas exposés par l’index ;
-12. lint, build et tests du projet restent verts.
+1. le bundle navigateur réel de l’index et le `dist/client` final Vinext ne
+   contiennent jamais `order_paid`, les marqueurs de snapshot payé ni l’outbox
+   serveur ;
+2. le bundle navigateur direct de l’entrée serveur échoue ;
+3. la façade client ne possède aucun collecteur et laisse passer le prochain
+   task sans exécuter un callback CPU hostile ;
+4. la façade reste inactive même avec consentement accordé ;
+5. `unknown` et `denied` restent fail-closed ;
+6. les douze variantes `AJ-APO`, leurs produits, prix et devise sont gouvernés ;
+7. ajout panier et checkout dérivent leurs valeurs du catalogue ;
+8. `order_paid` exige un snapshot vérifié, arithmétiquement réconcilié et une
+   écriture outbox atomique par clé d’idempotence ;
+9. toute URL d’une origine différente de l’origine canonique est rejetée ;
+10. le code ne contient aucun transport réseau ni SDK fournisseur ;
+11. lint, build, test de types et suite complète restent verts.
 
 L’activation reste bloquée par le choix du fournisseur, la validation juridique
 et client des textes et durées, la connexion du backend commerce, une recette

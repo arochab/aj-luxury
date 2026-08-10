@@ -1,0 +1,20 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "allowImportingTsExtensions": true,
+    "incremental": false,
+    "noEmit": true,
+    "strict": true,
+    "skipLibCheck": true
+  },
+  "include": [
+    "lib/analytics/**/*.ts",
+    "tests/analytics-contract-types.ts"
+  ],
+  "exclude": [
+    "lib/analytics/server-browser-forbidden.ts"
+  ]
+}

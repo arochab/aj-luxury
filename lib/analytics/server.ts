@@ -1,16 +1,18 @@
+import "#analytics-server-only";
+
 import type { AnalyticsConsentController } from "./consent.ts";
-import { deferAnalyticsEvent } from "./deferred-dispatch.ts";
+import { sanitizeAnalyticsContext } from "./context-sanitization.ts";
+import {
+  SERVER_ORDER_PAID_EVENT_NAME,
+  type ServerOrderPaidEvent,
+  type VerifiedPaidOrderSnapshot,
+} from "./server-events.ts";
+import { sanitizeVerifiedPaidOrderSnapshot } from "./server-sanitization.ts";
 import {
   ANALYTICS_SCHEMA_VERSION,
   type AnalyticsContextInput,
   type AnalyticsDataPolicy,
-  type ServerOrderPaidEvent,
-  type ServerOrderPaidInput,
-} from "./events.ts";
-import {
-  sanitizeAnalyticsContext,
-  sanitizeServerOrderPaidInput,
-} from "./sanitization.ts";
+} from "./shared.ts";
 
 export type ServerOrderPaidResult =
   | { accepted: true }
@@ -18,36 +20,30 @@ export type ServerOrderPaidResult =
       accepted: false;
       reason:
         | "consent_not_granted"
-        | "invalid_event"
-        | "dispatch_unavailable";
+        | "invalid_snapshot"
+        | "duplicate_snapshot"
+        | "outbox_unavailable";
     };
 
 export type ServerOrderPaidEmitter = {
-  emit(
-    input: ServerOrderPaidInput,
+  record(
+    snapshot: VerifiedPaidOrderSnapshot,
     context?: AnalyticsContextInput,
-  ): ServerOrderPaidResult;
+  ): Promise<ServerOrderPaidResult>;
 };
 
 type CreateServerOrderPaidEmitterOptions = {
   consent: AnalyticsConsentController;
-  collect: (event: ServerOrderPaidEvent) => unknown;
   policy: AnalyticsDataPolicy;
-  clock?: () => Date;
+  storeOnce: (record: {
+    idempotencyKey: string;
+    event: ServerOrderPaidEvent;
+  }) => "stored" | "duplicate" | Promise<"stored" | "duplicate">;
 };
 
-function safeTimestamp(clock: () => Date): string | null {
-  try {
-    const now = clock();
-    return now instanceof Date && Number.isFinite(now.getTime())
-      ? now.toISOString()
-      : null;
-  } catch {
-    return null;
-  }
-}
-
-function defaultServerContext(policy: AnalyticsDataPolicy): AnalyticsContextInput | null {
+function defaultServerContext(
+  policy: AnalyticsDataPolicy,
+): AnalyticsContextInput | null {
   try {
     return { url: new URL("/checkout", policy.canonicalOrigin).href };
   } catch {
@@ -56,17 +52,17 @@ function defaultServerContext(policy: AnalyticsDataPolicy): AnalyticsContextInpu
 }
 
 /**
- * Server-only authority for order_paid. This module is deliberately absent
- * from the browser-facing analytics index.
+ * Server-only paid-order recorder. The caller must implement storeOnce with one
+ * atomic durable outbox transaction before activation. This candidate
+ * deliberately provides no store, transport or provider integration.
  */
 export function createServerOrderPaidEmitter({
   consent,
-  collect,
   policy,
-  clock = () => new Date(),
+  storeOnce,
 }: CreateServerOrderPaidEmitterOptions): ServerOrderPaidEmitter {
   return {
-    emit(input, context) {
+    async record(snapshot, context) {
       try {
         if (consent.getState() !== "granted") {
           return { accepted: false, reason: "consent_not_granted" };
@@ -75,31 +71,38 @@ export function createServerOrderPaidEmitter({
         return { accepted: false, reason: "consent_not_granted" };
       }
 
+      const sanitized = sanitizeVerifiedPaidOrderSnapshot(snapshot, policy);
+      const effectiveContext = context ?? defaultServerContext(policy);
+      const sanitizedContext = effectiveContext
+        ? sanitizeAnalyticsContext(effectiveContext, policy)
+        : null;
+      if (!sanitized || !sanitizedContext) {
+        return { accepted: false, reason: "invalid_snapshot" };
+      }
+
+      const event: ServerOrderPaidEvent = {
+        schemaVersion: ANALYTICS_SCHEMA_VERSION,
+        name: SERVER_ORDER_PAID_EVENT_NAME,
+        occurredAt: sanitized.occurredAt,
+        context: sanitizedContext,
+        payload: sanitized.payload,
+      };
+
       try {
-        const occurredAt = safeTimestamp(clock);
-        const payload = sanitizeServerOrderPaidInput(input, policy);
-        const effectiveContext = context ?? defaultServerContext(policy);
-        const sanitizedContext = effectiveContext
-          ? sanitizeAnalyticsContext(effectiveContext, policy)
-          : null;
-        if (!occurredAt || !payload || !sanitizedContext) {
-          return { accepted: false, reason: "invalid_event" };
+        const result = await storeOnce({
+          idempotencyKey: sanitized.idempotencyKey,
+          event,
+        });
+        if (result === "stored") return { accepted: true };
+        if (result === "duplicate") {
+          return { accepted: false, reason: "duplicate_snapshot" };
         }
-
-        const event: ServerOrderPaidEvent = {
-          schemaVersion: ANALYTICS_SCHEMA_VERSION,
-          name: "order_paid",
-          occurredAt,
-          context: sanitizedContext,
-          payload,
-        };
-
-        return deferAnalyticsEvent(collect, event)
-          ? { accepted: true }
-          : { accepted: false, reason: "dispatch_unavailable" };
+        return { accepted: false, reason: "outbox_unavailable" };
       } catch {
-        return { accepted: false, reason: "invalid_event" };
+        return { accepted: false, reason: "outbox_unavailable" };
       }
     },
   };
 }
+
+export type { VerifiedPaidOrderSnapshot } from "./server-events.ts";
