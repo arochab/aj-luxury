@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { build } from "esbuild";
 import {
   LAUNCH_PHYSICAL_QUANTITY,
   LAUNCH_VARIANT_COUNT,
@@ -13,13 +15,22 @@ import {
   availableToSell,
 } from "../lib/commerce/backend-domain.ts";
 import { D1CommerceStore } from "../lib/commerce/d1-commerce-store.ts";
-import { verifyTestPaymentEvent } from "../lib/commerce/verified-payment-event.ts";
+import { assertVerifiedPaymentEvent } from "../lib/commerce/verified-payment-event.ts";
+import { verifyTestPaymentEvent } from "./support/test-payment-event.ts";
 
 const drizzleDirectory = fileURLToPath(new URL("../drizzle/", import.meta.url));
 const migrationPaths = readdirSync(drizzleDirectory)
   .filter((name) => /^\d+_.+\.sql$/.test(name))
   .sort()
   .map((name) => `${drizzleDirectory}${name}`);
+
+function listSourceFiles(directory) {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) return listSourceFiles(path);
+    return /\.(?:[cm]?js|tsx?)$/.test(entry.name) ? [path] : [];
+  });
+}
 
 class SQLiteD1Statement {
   constructor(database, query, values = []) {
@@ -378,6 +389,84 @@ test("timestamps are strict UTC and cart id collisions cannot alias different ca
     (error) => error instanceof CommerceError && error.code === "INVALID_INPUT",
   );
   database.close();
+});
+
+test("payment authority is non-forgeable and the local verifier stays outside production code", async () => {
+  const verified = await verifyTestPaymentEvent({
+    providerEventId: "event_authority",
+    providerPaymentId: "payment_authority",
+    orderId: "order_authority",
+    amountCents: 2_999,
+    currency: "EUR",
+    occurredAt: "2026-08-10T12:00:00.000Z",
+    verifiedAt: "2026-08-10T12:00:01.000Z",
+  });
+  assert.doesNotThrow(() => assertVerifiedPaymentEvent(verified));
+  assert.equal(Object.getOwnPropertySymbols(verified).length, 0);
+
+  const forged = Object.freeze({
+    ...verified,
+    provider: "stripe",
+    verificationMethod: "stripe_signature",
+  });
+  assert.throws(
+    () => assertVerifiedPaymentEvent(forged),
+    (error) =>
+      error instanceof CommerceError &&
+      error.code === "PAYMENT_VERIFICATION_REQUIRED",
+  );
+  assert.throws(
+    () => assertVerifiedPaymentEvent(null),
+    (error) =>
+      error instanceof CommerceError &&
+      error.code === "PAYMENT_VERIFICATION_REQUIRED",
+  );
+
+  const productionRoots = ["../app/", "../db/", "../lib/", "../worker/"];
+  const forbiddenRegistrarConsumers = productionRoots
+    .flatMap((relative) =>
+      listSourceFiles(fileURLToPath(new URL(relative, import.meta.url))),
+    )
+    .filter(
+      (path) =>
+        !path.endsWith("verified-payment-event.ts") &&
+        readFileSync(path, "utf8").includes(
+          "registerVerifiedPaymentEventFromTrustedAdapter",
+        ),
+    );
+  assert.deepEqual(forbiddenRegistrarConsumers, []);
+
+  const storeBundle = await build({
+    entryPoints: [
+      fileURLToPath(
+        new URL("../lib/commerce/d1-commerce-store.ts", import.meta.url),
+      ),
+    ],
+    bundle: true,
+    format: "esm",
+    platform: "browser",
+    treeShaking: true,
+    write: false,
+  });
+  const storeCode = storeBundle.outputFiles[0].text;
+  assert.doesNotMatch(storeCode, /verifyTestPaymentEvent|test_adapter/);
+
+  await assert.rejects(
+    () =>
+      build({
+        entryPoints: [
+          fileURLToPath(
+            new URL("./support/test-payment-event.ts", import.meta.url),
+          ),
+        ],
+        bundle: true,
+        format: "esm",
+        logLevel: "silent",
+        platform: "browser",
+        write: false,
+      }),
+    /Could not resolve "node:crypto"/,
+  );
 });
 
 test("reservations are blocked until gift and safety reserves are explicitly validated", async () => {
