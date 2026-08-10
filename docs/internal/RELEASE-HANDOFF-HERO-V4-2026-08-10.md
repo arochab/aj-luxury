@@ -37,11 +37,12 @@ partie du paquet applicatif.
 | Gate | Statut | Preuve |
 |---|---|---|
 | Validation visuelle préalable Adam | REÇUE le 10 août 2026 | Adam : « je vois ton taffe il est bien » ; cette validation précède le SHA final et ne remplace pas la validation du couple SHA/version Sites |
-| Droits d’exploitation du master Isabelle | PENDING | Confirmation directe et conservée requise avant publication externe |
+| Droits d’exploitation du master Isabelle | DÉCLARÉS OK PAR ADAM le 10 août 2026 ; preuve directe à relier | Adam a confirmé « droits OK ». La confirmation directe d’Isabelle doit encore être conservée selon la gouvernance du workspace |
 | Validation Adam du SHA + version Sites | PENDING | À lier explicitement au SHA et à la version Sites candidate |
 | Validation visuelle préalable Jérémy | REÇUE, rapportée par Adam le 10 août 2026 | Jérémy a validé le rendu ; cette validation doit encore être rattachée au lien de préproduction, au SHA et à la version Sites exacts |
 | Validation Jérémy du même SHA + version Sites | PENDING | Confirmation finale sur le candidat identifié, après publication en préproduction |
-| Autorisation de production | BLOQUÉE | Les trois lignes précédentes doivent être closes |
+| Autorisation de production par Adam | REÇUE le 10 août 2026 | Adam : « Production : Go ». La promotion reste conditionnée aux gates de preuve et à la validation du candidat exact par Jérémy |
+| Promotion effective | BLOQUÉE | Relier les droits directs, la préproduction, le SHA/version Sites et la validation exacte de Jérémy avant déploiement |
 
 ## Compatibilité et nettoyage V3
 

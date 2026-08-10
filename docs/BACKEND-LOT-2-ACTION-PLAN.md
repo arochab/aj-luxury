@@ -30,34 +30,43 @@ architecture volontairement simple :
 Aucun microservice, moteur fiscal ou douanier maison, multi-entrepôts, système de fraude
 sur mesure, data platform ou marketing automation avancée.
 
+Solution proposée pour le go-to-market : Shopify Basic en headless comme moteur de
+catalogue, stock, commandes, paiement, comptes et administration, tout en conservant le
+frontend AJ Luxury actuel. Le compte, l’abonnement, la facturation et les données restent
+au nom d’AJ Luxury. Cette proposition doit être approuvée par Jérémy avant souscription.
+
 ## Faits et décisions encore ouvertes
 
 ### Faits
 
-- Apollon comporte 3 coloris × 4 tailles, soit 12 variantes.
-- 756 unités sont annoncées au total.
-- Le périmètre convenu couvre la vente et la livraison dans le monde entier, selon les
-  pays autorisés, la réglementation et les capacités des prestataires retenus.
+- Apollon comporte 3 coloris × 4 tailles, soit 12 combinaisons de stock, pas 12 produits.
+- Le prix validé est de 29,99 €.
+- Le stock physique transmis totalise 756 unités : Pourpre 26/103/87/36,
+  Rose 26/103/87/36 et Lilas 26/102/88/36, dans l’ordre S/M/L/XL.
+- Les zones de lancement validées sont l’Union européenne, le Royaume-Uni, les
+  États-Unis et le Canada.
+- L’adresse d’expédition et de retour retenue par Adam est l’adresse contractuelle
+  d’AJ Luxury : 3 A rue Principale, 67130 Belmont.
 - Le site actuel simule le compte, le panier et le paiement : aucune commande, aucun
   paiement, aucun stock ou transporteur réels ne sont encore connectés.
 - La production reste en lecture seule. Tout le socle 2 sera construit et recetté dans
   un environnement distinct.
 
-### Drifts à lever par écrit
+### Seuls apports encore attendus d’AJ Luxury
 
-- Le code et le registre des textes utilisent 29,99 €, mais d’autres documents indiquent
-  encore « prix à confirmer ».
-- Les 756 unités ne suffisent pas : le stock réellement vendable doit être fourni pour
-  chacune des 12 variantes après dotations et réserve.
-- Le registre juridique prévoit de ne publier que `disponible / stock faible / épuisé`,
-  alors qu’un type de démonstration permet un nombre restant. La règle publique doit être
-  confirmée ; par défaut, aucune quantité interne ne sera exposée.
+- Quantités à isoler pour cadeaux/influenceurs et réserve de sécurité.
+- Poids/dimensions du colis prêt à partir, pays de fabrication, éventuels SKU/EAN,
+  étiquettes physiques, entretien, guide des tailles et scellé d’hygiène.
+- KYC/RIB des comptes commerce ouverts au nom d’AJ Luxury, sans partage de mot de passe.
+- Numéro public de contact, médiateur de la consommation et validation comptable des
+  règles TVA/EORI applicables aux zones ouvertes.
+- Par défaut, le public voit `disponible / stock faible / épuisé`, jamais le stock exact.
 
 ## Worldwide, sans usine à gaz
 
-Le backend accepte des adresses internationales et applique une matrice simple par
-zones : France, Union européenne, hors Union européenne desservi, territoires à régime
-particulier et destinations exclues.
+Le backend accepte des adresses internationales et applique une matrice simple pour les
+zones de lancement : Union européenne, Royaume-Uni, États-Unis et Canada. Toute autre
+destination reste désactivée jusqu’à décision ultérieure.
 
 Une destination n’est activée que si AJ Luxury a validé :
 
@@ -65,7 +74,7 @@ Une destination n’est activée que si AJ Luxury a validé :
 - le tarif ou la règle de calcul ;
 - le délai indicatif et le suivi ;
 - les poids et dimensions ;
-- l’adresse d’expédition et de retour ;
+- l’adresse d’expédition et de retour, déjà fixée à Belmont sauf correction expresse ;
 - le pays d’origine et le code douanier ;
 - la règle DAP/DDP ou équivalente, les droits et taxes à annoncer ;
 - les restrictions produit, paiement ou adresse.
@@ -196,11 +205,10 @@ restent séquentielles.
 
 ### Phase 0 — décisions client et choix des prestataires
 
-1. Lever les drifts prix et stock.
-2. Valider la matrice mondiale, les retours et les informations légales.
-3. Décider invité/compte, devise et moyens de paiement.
-4. Comparer de façon bornée les solutions de paiement, livraison, e-mail et stockage sur
-   couverture, coût, simplicité, réversibilité et propriété du compte.
+1. Fixer les réserves cadeaux/influenceurs et sécurité sur le stock déjà transmis.
+2. Compléter les informations colis, étiquettes, fabrication, entretien et tailles.
+3. Faire approuver le choix du moteur commerce headless et son abonnement client.
+4. Finaliser transport, droits/taxes, retours, médiateur et validation comptable.
 5. Créer les comptes retenus au nom d’AJ Luxury, avec MFA et récupération.
 
 **Gate :** aucune intégration réelle tant que les décisions et propriétaires de comptes
@@ -247,19 +255,13 @@ données commerce actives sans sauvegarde et restauration vérifiée.
 
 ## Décisions à obtenir de Jérémy
 
-1. Prix TTC, promotions et devise(s) réellement encaissée(s).
-2. Stock vendable des 12 variantes, `GIFTING`, `SAFETY` et règle d’affichage public.
-3. SKU, poids, dimensions, origine et code douanier.
-4. Mode invité/compte et administrateurs nommés.
-5. Prestataire et moyens de paiement, propriétaire du compte marchand.
-6. Pays/zones autorisés ou exclus, transporteurs, tarifs, délais et suivi.
-7. DAP/DDP, taxes/droits, adresse d’expédition et adresse de retour.
-8. Retours, frais, dispositif d’hygiène, inspection et remise en stock.
-9. Identité vendeur, téléphone, directeur de publication, médiateur et informations
-   produit obligatoires : fabricant et contact, éventuelle personne responsable UE,
-   identifiant produit, avertissements nécessaires, composition textile, langues et
-   identifiants REP applicables.
-10. Domaine d’envoi, langues, textes e-mails, politique RGPD/cookies/analytics.
+1. Réserve cadeaux/influenceurs et sécurité à soustraire des 756 unités physiques.
+2. Poids/dimensions colis, fabrication, éventuels SKU/EAN, étiquettes, entretien,
+   guide des tailles et scellé d’hygiène.
+3. Accord sur le moteur commerce headless et création/KYC des comptes AJ Luxury.
+4. Numéro public, médiateur et validation comptable TVA/EORI pour les zones ouvertes.
+5. Approbation finale des tarifs/délais de livraison, droits/taxes et retours proposés
+   par Adam à partir de la matrice UE/Royaume-Uni/États-Unis/Canada.
 
 Pour chaque zone réellement activée, les professionnels compétents confirment par écrit
 les règles fiscales et douanières, TVA/OSS/EORI, REP, protection impérative du
