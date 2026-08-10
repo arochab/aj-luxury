@@ -1,6 +1,11 @@
-import { sizes, type ProductSize } from "../products.ts";
+import type { ProductSize } from "../products.ts";
 
 const MODEL_CODE = "APO";
+
+// Deliberately independent from the exported catalogue array: reference
+// validation must not change if another module mutates catalogue input.
+const referenceSizes = Object.freeze(["S", "M", "L", "XL"] as const);
+const referenceSizeSet = new Set<string>(referenceSizes);
 
 const colorCodes = {
   pourpre: "POU",
@@ -15,7 +20,7 @@ export function isLaunchColorSlug(value: string): value is LaunchColorSlug {
 }
 
 export function isProductSize(value: string): value is ProductSize {
-  return (sizes as readonly string[]).includes(value);
+  return referenceSizeSet.has(value);
 }
 
 /**

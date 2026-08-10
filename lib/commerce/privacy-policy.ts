@@ -1,4 +1,4 @@
-export const prohibitedOperationalLogFields = [
+export const prohibitedOperationalLogFields = Object.freeze([
   "email",
   "firstName",
   "lastName",
@@ -10,87 +10,119 @@ export const prohibitedOperationalLogFields = [
   "paymentToken",
   "cardNumber",
   "rawWebhookPayload",
-] as const;
+] as const);
 
-export const allowedCommerceLogFields = [
+/**
+ * Only fields with a closed value policy belong here. Provider identifiers,
+ * provider event names and free-form error codes remain excluded until the
+ * corresponding providers and server-owned code catalogues are selected.
+ */
+export const allowedCommerceLogFields = Object.freeze([
   "event",
   "status",
   "zone",
-  "provider",
-  "providerEventType",
   "attempt",
   "durationMs",
-  "errorCode",
-] as const;
+] as const);
 
-const prohibitedOperationalLogFieldSet = new Set<string>(
-  prohibitedOperationalLogFields,
-);
 const allowedCommerceLogFieldSet = new Set<string>(allowedCommerceLogFields);
+const allowedEvents = new Set<string>(["payment-reconciled"]);
+const allowedStatuses = new Set<string>([
+  "open",
+  "converted",
+  "expired",
+  "pending-payment",
+  "paid",
+  "preparing",
+  "fulfilled",
+  "cancelled",
+  "refunded",
+  "created",
+  "requires-action",
+  "succeeded",
+  "failed",
+]);
+const allowedZones = new Set<string>(["EU", "UK", "US", "CA"]);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
 
 export function sanitizeCommerceLogMetadata(
   metadata: Readonly<Record<string, unknown>>,
-): Record<string, string | number | boolean | null> {
-  const sanitized: Record<string, string | number | boolean | null> = {};
-  const unsafeString =
-    /@|https?:|(?:sk|pk)_(?:live|test)_|(?:secret|password|token|bearer)/i;
-  const safeToken = /^[a-z0-9][a-z0-9_.:-]{0,63}$/i;
-  const longDigitRun = /\d{7,}/;
-  const longOpaqueToken = /^[a-z0-9_-]{33,}$/i;
+): Record<string, string | number>;
+export function sanitizeCommerceLogMetadata(
+  metadata: unknown,
+): Record<string, string | number> {
+  const sanitized: Record<string, string | number> = {};
+  if (!isRecord(metadata)) return sanitized;
 
   for (const [key, value] of Object.entries(metadata)) {
+    if (!allowedCommerceLogFieldSet.has(key)) continue;
+
+    if (key === "event") {
+      if (typeof value === "string" && allowedEvents.has(value)) {
+        sanitized.event = value;
+      }
+      continue;
+    }
+
+    if (key === "status") {
+      if (typeof value === "string" && allowedStatuses.has(value)) {
+        sanitized.status = value;
+      }
+      continue;
+    }
+
+    if (key === "zone") {
+      if (typeof value === "string" && allowedZones.has(value)) {
+        sanitized.zone = value;
+      }
+      continue;
+    }
+
+    if (key === "attempt") {
+      if (
+        typeof value === "number" &&
+        Number.isSafeInteger(value) &&
+        value >= 1 &&
+        value <= 20
+      ) {
+        sanitized.attempt = value;
+      }
+      continue;
+    }
+
     if (
-      !allowedCommerceLogFieldSet.has(key) ||
-      prohibitedOperationalLogFieldSet.has(key)
+      key === "durationMs" &&
+      typeof value === "number" &&
+      Number.isSafeInteger(value) &&
+      value >= 0 &&
+      value <= 120_000
     ) {
-      continue;
-    }
-    if (value === null) {
-      sanitized[key] = null;
-      continue;
-    }
-    if (typeof value === "string") {
-      if (
-        unsafeString.test(value) ||
-        longDigitRun.test(value) ||
-        longOpaqueToken.test(value) ||
-        !safeToken.test(value)
-      ) {
-        continue;
-      }
-      if (key === "zone" && !["EU", "UK", "US", "CA"].includes(value)) {
-        continue;
-      }
-      sanitized[key] = value;
-      continue;
-    }
-    if (typeof value === "number") {
-      if (!Number.isFinite(value) || value < 0) continue;
-      if (key === "attempt" && (!Number.isSafeInteger(value) || value > 100)) {
-        continue;
-      }
-      if (
-        key === "durationMs" &&
-        (!Number.isSafeInteger(value) || value > 120_000)
-      ) {
-        continue;
-      }
-      sanitized[key] = value;
+      sanitized.durationMs = value;
     }
   }
 
   return sanitized;
 }
 
-export const commerceDataRules = {
+const customerRights = Object.freeze([
+  "access",
+  "rectification",
+  "export",
+  "erasure-request",
+] as const);
+
+export const commerceDataRules = Object.freeze({
   marketingProfiles: "not-collected-at-launch",
   sessionReplay: "prohibited-at-launch",
   advertisingPixels: "prohibited-at-launch",
   paymentCardData: "never-received-by-aj-luxury",
   accountPasswords: "not-stored-passwordless-access-only",
   legalRetentionDuration: "must-be-validated-before-live-data",
-  customerRights: ["access", "rectification", "export", "erasure-request"],
-} as const;
+  customerRights,
+} as const);
 
 export type DataRightsRequestKind =
   (typeof commerceDataRules.customerRights)[number];

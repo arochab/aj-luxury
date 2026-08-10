@@ -1,11 +1,11 @@
-export const transactionalEmailKinds = [
+export const transactionalEmailKinds = Object.freeze([
   "order-confirmation",
   "payment-confirmation",
   "shipment-confirmation",
   "withdrawal-acknowledgement",
   "refund-confirmation",
   "account-access",
-] as const;
+] as const);
 
 export type TransactionalEmailKind = (typeof transactionalEmailKinds)[number];
 
@@ -17,7 +17,6 @@ export type TransactionalEmailInput = {
   orderNumber?: string;
   trackingUrl?: string;
   accessUrl?: string;
-  allowedUrlHosts?: readonly string[];
 };
 
 export type TransactionalEmail = {
@@ -27,16 +26,27 @@ export type TransactionalEmail = {
   text: string;
 };
 
-function requireValue(value: string | undefined, field: string): string {
-  if (!value?.trim()) throw new Error(`Missing transactional email field: ${field}`);
+const transactionalEmailKindSet = new Set<string>(transactionalEmailKinds);
+const supportedLocaleSet = new Set<string>(["fr", "en"]);
+const safeEventId = /^[a-z0-9][a-z0-9_.-]{0,127}$/i;
+const safeOrderNumber = /^AJ-[A-Z0-9][A-Z0-9-]{0,31}$/;
+const safeAccessToken = /^[A-Za-z0-9_-]{43}$/;
+const ajAccountAccessOrigin = "https://ajluxurystore.com";
+const ajAccountAccessPath = "/account/access";
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function requireValue(value: unknown, field: string): string {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error(`Missing transactional email field: ${field}`);
+  }
   return value.trim();
 }
 
-const safeEventId = /^[a-z0-9][a-z0-9_.-]{0,127}$/i;
-const safeOrderNumber = /^AJ-[A-Z0-9][A-Z0-9-]{0,31}$/;
-
 function requireIdentifier(
-  value: string | undefined,
+  value: unknown,
   field: string,
   pattern: RegExp,
 ): string {
@@ -47,95 +57,105 @@ function requireIdentifier(
   return normalized;
 }
 
-function requireSecureUrl(
-  value: string | undefined,
-  field: string,
-  allowedHosts: readonly string[] | undefined,
-): string {
-  const raw = requireValue(value, field);
+function requireAjAccountAccessUrl(value: unknown): string {
+  const raw = requireValue(value, "accessUrl");
   let url: URL;
   try {
     url = new URL(raw);
   } catch {
-    throw new Error(`Invalid transactional email field: ${field}`);
+    throw new Error("Invalid transactional email field: accessUrl");
   }
-  const hosts = new Set(
-    (allowedHosts ?? []).map((host) => host.trim().toLowerCase()).filter(Boolean),
-  );
+
+  const queryKeys = [...url.searchParams.keys()];
+  const token = url.searchParams.get("token") ?? "";
   if (
-    url.protocol !== "https:" ||
+    url.origin !== ajAccountAccessOrigin ||
+    url.pathname !== ajAccountAccessPath ||
     Boolean(url.username) ||
     Boolean(url.password) ||
-    !hosts.has(url.hostname.toLowerCase())
+    Boolean(url.hash) ||
+    queryKeys.length !== 1 ||
+    queryKeys[0] !== "token" ||
+    !safeAccessToken.test(token)
   ) {
-    throw new Error(`Invalid transactional email field: ${field}`);
+    throw new Error("Invalid transactional email field: accessUrl");
   }
   return url.toString();
 }
 
-function orderCopy(
-  input: TransactionalEmailInput,
-  french: string,
-  english: string,
-): { orderNumber: string; line: string } {
-  const orderNumber = requireIdentifier(
-    input.orderNumber,
-    "orderNumber",
-    safeOrderNumber,
+function bytesToHex(bytes: Uint8Array): string {
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join(
+    "",
   );
-  return { orderNumber, line: input.locale === "fr" ? french : english };
+}
+
+async function fingerprintRecipient(recipient: string): Promise<string> {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(recipient),
+  );
+  return bytesToHex(new Uint8Array(digest));
 }
 
 export function buildTransactionalEmail(
   input: TransactionalEmailInput,
-): TransactionalEmail {
+): Promise<TransactionalEmail>;
+export async function buildTransactionalEmail(
+  input: unknown,
+): Promise<TransactionalEmail> {
+  if (!isRecord(input)) {
+    throw new Error("Invalid transactional email input.");
+  }
+  if (
+    typeof input.kind !== "string" ||
+    !transactionalEmailKindSet.has(input.kind)
+  ) {
+    throw new Error("Invalid transactional email field: kind");
+  }
+  if (
+    typeof input.locale !== "string" ||
+    !supportedLocaleSet.has(input.locale)
+  ) {
+    throw new Error("Invalid transactional email field: locale");
+  }
+
+  const kind = input.kind as TransactionalEmailKind;
+  const locale = input.locale as "fr" | "en";
   const eventId = requireIdentifier(input.eventId, "eventId", safeEventId);
-  const recipient = input.recipientEmail.trim().toLowerCase();
+  const recipient = requireValue(input.recipientEmail, "recipientEmail")
+    .toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient)) {
     throw new Error("Invalid transactional email recipient.");
   }
+  const recipientFingerprint = await fingerprintRecipient(recipient);
 
-  if (input.kind === "account-access") {
-    const accessUrl = requireSecureUrl(
-      input.accessUrl,
-      "accessUrl",
-      input.allowedUrlHosts,
-    );
+  if (kind === "account-access") {
+    const accessUrl = requireAjAccountAccessUrl(input.accessUrl);
     return {
-      deduplicationKey: `${input.kind}:${eventId}`,
+      deduplicationKey: `${kind}:${eventId}:${recipientFingerprint}`,
       recipientEmail: recipient,
       subject:
-        input.locale === "fr"
+        locale === "fr"
           ? "Votre accès sécurisé AJ Luxury"
           : "Your secure AJ Luxury access",
       text:
-        input.locale === "fr"
+        locale === "fr"
           ? `Utilisez ce lien à usage unique pour accéder à votre compte AJ Luxury : ${accessUrl}`
           : `Use this one-time link to access your AJ Luxury account: ${accessUrl}`,
     };
   }
 
-  if (input.kind === "shipment-confirmation") {
-    const { orderNumber } = orderCopy(input, "", "");
-    const trackingUrl = requireSecureUrl(
-      input.trackingUrl,
-      "trackingUrl",
-      input.allowedUrlHosts,
+  if (kind === "shipment-confirmation") {
+    throw new Error(
+      "Shipment tracking email is unavailable until a server-owned carrier policy is configured.",
     );
-    return {
-      deduplicationKey: `${input.kind}:${eventId}`,
-      recipientEmail: recipient,
-      subject:
-        input.locale === "fr"
-          ? `Votre commande ${orderNumber} a été expédiée`
-          : `Your order ${orderNumber} has shipped`,
-      text:
-        input.locale === "fr"
-          ? `Votre commande ${orderNumber} a été expédiée. Suivez-la ici : ${trackingUrl}`
-          : `Your order ${orderNumber} has shipped. Track it here: ${trackingUrl}`,
-    };
   }
 
+  const orderNumber = requireIdentifier(
+    input.orderNumber,
+    "orderNumber",
+    safeOrderNumber,
+  );
   const copyByKind = {
     "order-confirmation": {
       frSubject: "Commande reçue",
@@ -163,13 +183,12 @@ export function buildTransactionalEmail(
     },
   } as const;
 
-  const copy = copyByKind[input.kind];
-  const { orderNumber } = orderCopy(input, copy.frLine, copy.enLine);
-  const subjectPrefix = input.locale === "fr" ? copy.frSubject : copy.enSubject;
-  const line = input.locale === "fr" ? copy.frLine : copy.enLine;
+  const copy = copyByKind[kind];
+  const subjectPrefix = locale === "fr" ? copy.frSubject : copy.enSubject;
+  const line = locale === "fr" ? copy.frLine : copy.enLine;
 
   return {
-    deduplicationKey: `${input.kind}:${eventId}`,
+    deduplicationKey: `${kind}:${eventId}:${orderNumber}:${recipientFingerprint}`,
     recipientEmail: recipient,
     subject: `${subjectPrefix} ${orderNumber}`,
     text: `${line} ${orderNumber}.`,

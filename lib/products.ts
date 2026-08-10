@@ -1,4 +1,4 @@
-export const sizes = ["S", "M", "L", "XL"] as const;
+export const sizes = Object.freeze(["S", "M", "L", "XL"] as const);
 
 export type ProductSize = (typeof sizes)[number];
 

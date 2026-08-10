@@ -3,7 +3,7 @@ import {
   verifyOneTimeAccessToken,
 } from "./account-security.ts";
 
-export const adminRoles = ["owner", "operations"] as const;
+export const adminRoles = Object.freeze(["owner", "operations"] as const);
 export type AdminRole = (typeof adminRoles)[number];
 
 export type AdminCapability =
@@ -50,12 +50,19 @@ function isSafeInternalId(value: string): boolean {
   return safeInternalId.test(value);
 }
 
-const verifiedGuestGrantBrand = Symbol("verified-guest-order-grant");
-
-export type VerifiedGuestOrderGrant = {
+export type VerifiedGuestOrderGrant = Readonly<{
   orderId: string;
-  [verifiedGuestGrantBrand]: true;
-};
+}>;
+
+const verifiedGuestGrants = new WeakSet<VerifiedGuestOrderGrant>();
+
+export type ConsumeOneTimeAccessTokenAtomically = (
+  command: Readonly<{
+    orderId: string;
+    expectedTokenHash: string;
+    now: string;
+  }>,
+) => Promise<boolean>;
 
 export async function verifyGuestOrderGrant(input: {
   orderId: string;
@@ -65,19 +72,42 @@ export async function verifyGuestOrderGrant(input: {
   revokedAt: string | null;
   expiresAt: string;
   now: Date;
+  /**
+   * Must compare the persisted hash, consumed/revoked state and expiry, then
+   * mark the token consumed in one storage transaction. No grant is issued
+   * without this compare-and-consume boundary.
+   */
+  consumeTokenAtomically: ConsumeOneTimeAccessTokenAtomically;
 }): Promise<VerifiedGuestOrderGrant | null> {
   if (
+    !isRecord(input) ||
     !isSafeInternalId(input.orderId) ||
+    typeof input.providedToken !== "string" ||
+    typeof input.storedTokenHash !== "string" ||
+    typeof input.expiresAt !== "string" ||
+    !(input.now instanceof Date) ||
+    !Number.isFinite(input.now.getTime()) ||
+    typeof input.consumeTokenAtomically !== "function" ||
     !isOneTimeAccessTokenUsable(input) ||
     !(await verifyOneTimeAccessToken(input.providedToken, input.storedTokenHash))
   ) {
     return null;
   }
 
-  return Object.freeze({
+  const consumed = await input.consumeTokenAtomically({
     orderId: input.orderId,
-    [verifiedGuestGrantBrand]: true as const,
+    expectedTokenHash: input.storedTokenHash,
+    now: input.now.toISOString(),
   });
+  if (consumed !== true) {
+    return null;
+  }
+
+  const grant = Object.freeze({
+    orderId: input.orderId,
+  });
+  verifiedGuestGrants.add(grant);
+  return grant;
 }
 
 export type OrderAccessActor =
@@ -130,7 +160,7 @@ export function canReadOrder(
   }
 
   return (
-    actor.grant[verifiedGuestGrantBrand] === true &&
+    verifiedGuestGrants.has(actor.grant as VerifiedGuestOrderGrant) &&
     typeof actor.grant.orderId === "string" &&
     isSafeInternalId(actor.grant.orderId) &&
     actor.grant.orderId === order.orderId
