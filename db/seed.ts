@@ -32,7 +32,6 @@ type LaunchColor = Omit<
   | "safetyReserveQuantity"
   | "reservesValidated"
 > & {
-  referenceCode: "POU" | "ROS" | "LIL";
   stockBySize: Readonly<Record<LaunchSize, number>>;
 };
 
@@ -43,7 +42,6 @@ const colors: readonly LaunchColor[] = [
     colorKey: "pourpre",
     colorName: "Pourpre Impérial",
     sourceSlug: "pourpre",
-    referenceCode: "POU",
     swatch: "#7d0f52",
     imageUrl: "/images/client/raw/product-card-pourpre.webp",
     stockBySize: { S: 26, M: 103, L: 87, XL: 36 },
@@ -52,7 +50,6 @@ const colors: readonly LaunchColor[] = [
     colorKey: "rose",
     colorName: "Rose Velours",
     sourceSlug: "rose-pale",
-    referenceCode: "ROS",
     swatch: "#dda9bd",
     imageUrl: "/images/client/raw/product-rose-profile.webp",
     stockBySize: { S: 26, M: 103, L: 87, XL: 36 },
@@ -61,7 +58,6 @@ const colors: readonly LaunchColor[] = [
     colorKey: "lilas",
     colorName: "Lilas Céleste",
     sourceSlug: "lilas-bleu-clair",
-    referenceCode: "LIL",
     swatch: "#a9abd9",
     imageUrl: "/images/client/raw/product-lilas-model.webp",
     stockBySize: { S: 26, M: 102, L: 88, XL: 36 },
@@ -72,7 +68,7 @@ export const launchVariantSeed: readonly LaunchVariantSeed[] = colors.flatMap(
   (color, colorIndex) =>
     sizes.map((size, sizeIndex) => ({
       id: `variant_boxer_${color.sourceSlug}_${size.toLowerCase()}`,
-      internalReference: `AJ-APO-${color.referenceCode}-${size}`,
+      internalReference: createApollonInternalReference(color.sourceSlug, size),
       colorKey: color.colorKey,
       colorName: color.colorName,
       sourceSlug: color.sourceSlug,
@@ -122,3 +118,4 @@ export function assertLaunchSeedIntegrity(): void {
 }
 
 assertLaunchSeedIntegrity();
+import { createApollonInternalReference } from "../lib/commerce/internal-reference.ts";

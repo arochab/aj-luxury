@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "4de3a091-95fb-4239-87de-e33aed597d74",
+  "id": "86668144-0f68-416c-be2c-08a83c31af4d",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "audit_log": {
@@ -50,6 +50,13 @@
           "notNull": true,
           "autoincrement": false
         },
+        "idempotency_key": {
+          "name": "idempotency_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
         "metadata_json": {
           "name": "metadata_json",
           "type": "text",
@@ -85,6 +92,13 @@
             "created_at"
           ],
           "isUnique": false
+        },
+        "ux_audit_log_idempotency_key": {
+          "name": "ux_audit_log_idempotency_key",
+          "columns": [
+            "idempotency_key"
+          ],
+          "isUnique": true
         }
       },
       "foreignKeys": {},
@@ -1337,6 +1351,14 @@
           ],
           "isUnique": true
         },
+        "ux_payments_order_succeeded": {
+          "name": "ux_payments_order_succeeded",
+          "columns": [
+            "order_id"
+          ],
+          "isUnique": true,
+          "where": "\"payments\".\"status\" = 'succeeded'"
+        },
         "idx_payments_order_id": {
           "name": "idx_payments_order_id",
           "columns": [
@@ -1564,12 +1586,12 @@
           ],
           "isUnique": true
         },
-        "ux_stock_reservations_transition_key": {
-          "name": "ux_stock_reservations_transition_key",
+        "idx_stock_reservations_transition_key": {
+          "name": "idx_stock_reservations_transition_key",
           "columns": [
             "last_transition_key"
           ],
-          "isUnique": true
+          "isUnique": false
         },
         "idx_stock_reservations_cart_status": {
           "name": "idx_stock_reservations_cart_status",
@@ -1818,8 +1840,50 @@
           "notNull": true,
           "autoincrement": false
         },
-        "payload_hash": {
-          "name": "payload_hash",
+        "payload_fingerprint": {
+          "name": "payload_fingerprint",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "verification_method": {
+          "name": "verification_method",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "verified_at": {
+          "name": "verified_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "order_id": {
+          "name": "order_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "provider_payment_id": {
+          "name": "provider_payment_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "amount_cents": {
+          "name": "amount_cents",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "currency": {
+          "name": "currency",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -1831,7 +1895,7 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "'received'"
+          "default": "'verified'"
         },
         "attempts": {
           "name": "attempts",
@@ -1882,7 +1946,21 @@
           "isUnique": false
         }
       },
-      "foreignKeys": {},
+      "foreignKeys": {
+        "webhook_events_order_id_orders_id_fk": {
+          "name": "webhook_events_order_id_orders_id_fk",
+          "tableFrom": "webhook_events",
+          "tableTo": "orders",
+          "columnsFrom": [
+            "order_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {
@@ -1890,13 +1968,25 @@
           "name": "ck_webhook_events_provider",
           "value": "\"webhook_events\".\"provider\" IN ('test', 'stripe')"
         },
+        "ck_webhook_events_verification_method": {
+          "name": "ck_webhook_events_verification_method",
+          "value": "\"webhook_events\".\"verification_method\" IN ('test_adapter', 'stripe_signature')"
+        },
         "ck_webhook_events_status": {
           "name": "ck_webhook_events_status",
-          "value": "\"webhook_events\".\"status\" IN ('received', 'processed', 'failed')"
+          "value": "\"webhook_events\".\"status\" IN ('verified', 'processed', 'failed')"
         },
         "ck_webhook_events_attempts_non_negative": {
           "name": "ck_webhook_events_attempts_non_negative",
           "value": "\"webhook_events\".\"attempts\" >= 0"
+        },
+        "ck_webhook_events_amount_positive": {
+          "name": "ck_webhook_events_amount_positive",
+          "value": "\"webhook_events\".\"amount_cents\" > 0"
+        },
+        "ck_webhook_events_currency_eur": {
+          "name": "ck_webhook_events_currency_eur",
+          "value": "\"webhook_events\".\"currency\" = 'EUR'"
         }
       }
     }

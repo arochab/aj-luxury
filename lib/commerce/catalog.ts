@@ -1,6 +1,7 @@
 import type { ProductVariant } from "./types";
 import { products, sizes } from "../products";
 import { getInternalStockPosition } from "./internal-stock";
+import { createApollonInternalReference } from "./internal-reference";
 
 /**
  * Catalogue de simulation : les quantités restent dans le registre interne.
@@ -16,7 +17,7 @@ export const launchVariants: ProductVariant[] = products.flatMap((product) =>
       productSlug: product.slug,
       productName: product.model,
       title: `${product.name} / ${size}`,
-      sku: `AJ-BOX-${product.slug.slice(0, 3).toUpperCase()}-${size}`,
+      sku: createApollonInternalReference(product.slug, size),
       options: [
         { name: "color" as const, value: product.name },
         { name: "size" as const, value: size },

@@ -5,6 +5,7 @@ CREATE TABLE `audit_log` (
 	`action` text NOT NULL,
 	`entity_type` text NOT NULL,
 	`entity_id` text NOT NULL,
+	`idempotency_key` text NOT NULL,
 	`metadata_json` text DEFAULT '{}' NOT NULL,
 	`created_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL,
 	CONSTRAINT "ck_audit_log_actor_type" CHECK("audit_log"."actor_type" IN ('system', 'customer', 'admin'))
@@ -12,6 +13,7 @@ CREATE TABLE `audit_log` (
 --> statement-breakpoint
 CREATE INDEX `idx_audit_log_entity_created_at` ON `audit_log` (`entity_type`,`entity_id`,`created_at`);--> statement-breakpoint
 CREATE INDEX `idx_audit_log_actor_created_at` ON `audit_log` (`actor_type`,`actor_id`,`created_at`);--> statement-breakpoint
+CREATE UNIQUE INDEX `ux_audit_log_idempotency_key` ON `audit_log` (`idempotency_key`);--> statement-breakpoint
 CREATE TABLE `cart_lines` (
 	`id` text PRIMARY KEY NOT NULL,
 	`cart_id` text NOT NULL,
@@ -222,6 +224,7 @@ CREATE TABLE `payments` (
 --> statement-breakpoint
 CREATE UNIQUE INDEX `ux_payments_provider_session` ON `payments` (`provider`,`provider_session_id`);--> statement-breakpoint
 CREATE UNIQUE INDEX `ux_payments_idempotency_key` ON `payments` (`idempotency_key`);--> statement-breakpoint
+CREATE UNIQUE INDEX `ux_payments_order_succeeded` ON `payments` (`order_id`) WHERE "payments"."status" = 'succeeded';--> statement-breakpoint
 CREATE INDEX `idx_payments_order_id` ON `payments` (`order_id`);--> statement-breakpoint
 CREATE TABLE `products` (
 	`id` text PRIMARY KEY NOT NULL,
@@ -258,7 +261,7 @@ CREATE TABLE `stock_reservations` (
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `ux_stock_reservations_idempotency_key` ON `stock_reservations` (`idempotency_key`);--> statement-breakpoint
-CREATE UNIQUE INDEX `ux_stock_reservations_transition_key` ON `stock_reservations` (`last_transition_key`);--> statement-breakpoint
+CREATE INDEX `idx_stock_reservations_transition_key` ON `stock_reservations` (`last_transition_key`);--> statement-breakpoint
 CREATE INDEX `idx_stock_reservations_cart_status` ON `stock_reservations` (`cart_id`,`status`);--> statement-breakpoint
 CREATE INDEX `idx_stock_reservations_status_expires_at` ON `stock_reservations` (`status`,`expires_at`);--> statement-breakpoint
 CREATE TABLE `variants` (
@@ -287,26 +290,65 @@ CREATE TABLE `webhook_events` (
 	`provider` text NOT NULL,
 	`provider_event_id` text NOT NULL,
 	`event_type` text NOT NULL,
-	`payload_hash` text NOT NULL,
-	`status` text DEFAULT 'received' NOT NULL,
+	`payload_fingerprint` text NOT NULL,
+	`verification_method` text NOT NULL,
+	`verified_at` text NOT NULL,
+	`order_id` text NOT NULL,
+	`provider_payment_id` text NOT NULL,
+	`amount_cents` integer NOT NULL,
+	`currency` text NOT NULL,
+	`status` text DEFAULT 'verified' NOT NULL,
 	`attempts` integer DEFAULT 0 NOT NULL,
 	`last_error_code` text,
 	`received_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL,
 	`processed_at` text,
+	FOREIGN KEY (`order_id`) REFERENCES `orders`(`id`) ON UPDATE no action ON DELETE restrict,
 	CONSTRAINT "ck_webhook_events_provider" CHECK("webhook_events"."provider" IN ('test', 'stripe')),
-	CONSTRAINT "ck_webhook_events_status" CHECK("webhook_events"."status" IN ('received', 'processed', 'failed')),
-	CONSTRAINT "ck_webhook_events_attempts_non_negative" CHECK("webhook_events"."attempts" >= 0)
+	CONSTRAINT "ck_webhook_events_verification_method" CHECK("webhook_events"."verification_method" IN ('test_adapter', 'stripe_signature')),
+	CONSTRAINT "ck_webhook_events_status" CHECK("webhook_events"."status" IN ('verified', 'processed', 'failed')),
+	CONSTRAINT "ck_webhook_events_attempts_non_negative" CHECK("webhook_events"."attempts" >= 0),
+	CONSTRAINT "ck_webhook_events_amount_positive" CHECK("webhook_events"."amount_cents" > 0),
+	CONSTRAINT "ck_webhook_events_currency_eur" CHECK("webhook_events"."currency" = 'EUR')
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `ux_webhook_events_provider_event` ON `webhook_events` (`provider`,`provider_event_id`);--> statement-breakpoint
 CREATE INDEX `idx_webhook_events_status_received_at` ON `webhook_events` (`status`,`received_at`);--> statement-breakpoint
+CREATE TRIGGER `trg_inventory_seed_ledger`
+AFTER INSERT ON `inventory`
+BEGIN
+  INSERT INTO `inventory_movements` (
+    `id`, `variant_id`, `kind`, `quantity`, `reference_type`, `reference_id`,
+    `actor_type`, `actor_id`, `idempotency_key`, `created_at`
+  ) VALUES (
+    'movement_seed_' || NEW.`variant_id`, NEW.`variant_id`, 'seed',
+    NEW.`physical_quantity`, 'catalog_seed', 'aj_launch_2026', 'system', NULL,
+    'seed:' || NEW.`variant_id`, NEW.`updated_at`
+  );
+END;--> statement-breakpoint
+CREATE TRIGGER `trg_stock_reservations_validate_insert_reserves`
+BEFORE INSERT ON `stock_reservations`
+WHEN NEW.`status` = 'active'
+  AND NOT EXISTS (
+    SELECT 1 FROM `stock_reservations`
+    WHERE `idempotency_key` = NEW.`idempotency_key`
+  )
+  AND EXISTS (
+    SELECT 1 FROM `inventory`
+    WHERE `variant_id` = NEW.`variant_id` AND `reserves_validated` = 0
+  )
+BEGIN
+  SELECT RAISE(ABORT, 'commerce_reserves_not_validated');
+END;--> statement-breakpoint
 CREATE TRIGGER `trg_stock_reservations_validate_insert`
 BEFORE INSERT ON `stock_reservations`
 WHEN NEW.`status` = 'active'
   AND NOT EXISTS (
-    SELECT 1
-    FROM `stock_reservations` AS existing
-    WHERE existing.`idempotency_key` = NEW.`idempotency_key`
+    SELECT 1 FROM `stock_reservations`
+    WHERE `idempotency_key` = NEW.`idempotency_key`
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM `inventory`
+    WHERE `variant_id` = NEW.`variant_id` AND `reserves_validated` = 0
   )
 BEGIN
   SELECT CASE WHEN NOT EXISTS (
@@ -321,9 +363,11 @@ BEGIN
     WHERE cart.`id` = NEW.`cart_id`
       AND cart.`status` = 'open'
       AND cart.`expires_at` > NEW.`created_at`
+      AND NEW.`expires_at` > NEW.`created_at`
       AND NEW.`expires_at` <= cart.`expires_at`
       AND variant.`active` = 1
       AND product.`status` = 'active'
+      AND stock.`reserves_validated` = 1
       AND stock.`physical_quantity`
         - stock.`gift_reserve_quantity`
         - stock.`safety_reserve_quantity`
@@ -361,13 +405,36 @@ WHEN OLD.`status` <> NEW.`status`
 BEGIN
   SELECT RAISE(ABORT, 'commerce_invalid_reservation_transition');
 END;--> statement-breakpoint
-CREATE TRIGGER `trg_stock_reservations_validate_sale`
+CREATE TRIGGER `trg_stock_reservations_validate_expiration`
+BEFORE UPDATE OF `status` ON `stock_reservations`
+WHEN OLD.`status` = 'active' AND NEW.`status` = 'expired'
+  AND NEW.`updated_at` < OLD.`expires_at`
+BEGIN
+  SELECT RAISE(ABORT, 'commerce_reservation_not_expired');
+END;--> statement-breakpoint
+CREATE TRIGGER `trg_stock_reservations_validate_sale_expiry`
+BEFORE UPDATE OF `status` ON `stock_reservations`
+WHEN OLD.`status` = 'active' AND NEW.`status` = 'converted'
+  AND OLD.`expires_at` <= NEW.`updated_at`
+BEGIN
+  SELECT RAISE(ABORT, 'commerce_sale_reservation_expired');
+END;--> statement-breakpoint
+CREATE TRIGGER `trg_stock_reservations_validate_sale_order`
 BEFORE UPDATE OF `status` ON `stock_reservations`
 WHEN OLD.`status` = 'active' AND NEW.`status` = 'converted'
 BEGIN
   SELECT CASE WHEN NEW.`converted_order_id` IS NULL OR NOT EXISTS (
-    SELECT 1 FROM `orders` WHERE `id` = NEW.`converted_order_id`
-  ) THEN RAISE(ABORT, 'commerce_sale_requires_order') END;
+    SELECT 1
+    FROM `orders` AS customer_order
+    INNER JOIN `payments` AS payment
+      ON payment.`order_id` = customer_order.`id`
+    WHERE customer_order.`id` = NEW.`converted_order_id`
+      AND customer_order.`cart_id` = OLD.`cart_id`
+      AND customer_order.`status` = 'pending_payment'
+      AND payment.`status` = 'succeeded'
+      AND payment.`amount_cents` = customer_order.`total_cents`
+      AND payment.`currency` = customer_order.`currency`
+  ) THEN RAISE(ABORT, 'commerce_sale_order_payment_mismatch') END;
 END;--> statement-breakpoint
 CREATE TRIGGER `trg_stock_reservations_apply_release`
 AFTER UPDATE OF `status` ON `stock_reservations`
@@ -389,5 +456,122 @@ BEGIN
       `version` = `version` + 1,
       `updated_at` = NEW.`updated_at`
   WHERE `variant_id` = NEW.`variant_id`;
+END;--> statement-breakpoint
+CREATE TRIGGER `trg_webhook_events_validate_provenance`
+BEFORE INSERT ON `webhook_events`
+WHEN (NEW.`provider` = 'test' AND NEW.`verification_method` <> 'test_adapter')
+  OR (NEW.`provider` = 'stripe' AND NEW.`verification_method` <> 'stripe_signature')
+BEGIN
+  SELECT RAISE(ABORT, 'commerce_webhook_verification_method_mismatch');
+END;--> statement-breakpoint
+CREATE TRIGGER `trg_webhook_events_validate_replay`
+BEFORE INSERT ON `webhook_events`
+WHEN EXISTS (
+  SELECT 1 FROM `webhook_events`
+  WHERE `provider` = NEW.`provider`
+    AND `provider_event_id` = NEW.`provider_event_id`
+)
+AND NOT EXISTS (
+  SELECT 1 FROM `webhook_events`
+  WHERE `provider` = NEW.`provider`
+    AND `provider_event_id` = NEW.`provider_event_id`
+    AND `event_type` = NEW.`event_type`
+    AND `payload_fingerprint` = NEW.`payload_fingerprint`
+    AND `verification_method` = NEW.`verification_method`
+    AND `order_id` = NEW.`order_id`
+    AND `provider_payment_id` = NEW.`provider_payment_id`
+    AND `amount_cents` = NEW.`amount_cents`
+    AND `currency` = NEW.`currency`
+)
+BEGIN
+  SELECT RAISE(ABORT, 'commerce_webhook_replay_conflict');
+END;--> statement-breakpoint
+CREATE TRIGGER `trg_payments_require_verified_event_insert`
+BEFORE INSERT ON `payments`
+WHEN NEW.`status` = 'succeeded'
+BEGIN
+  SELECT CASE WHEN NOT EXISTS (
+    SELECT 1 FROM `webhook_events`
+    WHERE `provider` = NEW.`provider`
+      AND `provider_payment_id` = NEW.`provider_session_id`
+      AND `order_id` = NEW.`order_id`
+      AND `amount_cents` = NEW.`amount_cents`
+      AND `currency` = NEW.`currency`
+      AND `status` IN ('verified', 'processed')
+  ) THEN RAISE(ABORT, 'commerce_payment_requires_verified_event') END;
+END;--> statement-breakpoint
+CREATE TRIGGER `trg_orders_validate_paid_transition`
+BEFORE UPDATE OF `status` ON `orders`
+WHEN OLD.`status` = 'pending_payment' AND NEW.`status` = 'paid'
+BEGIN
+  SELECT CASE WHEN NEW.`paid_at` IS NULL OR NOT EXISTS (
+    SELECT 1 FROM `carts`
+    WHERE `id` = NEW.`cart_id` AND `status` = 'open'
+  ) OR NOT EXISTS (
+    SELECT 1 FROM `payments`
+    WHERE `order_id` = NEW.`id`
+      AND `status` = 'succeeded'
+      AND `amount_cents` = NEW.`total_cents`
+      AND `currency` = NEW.`currency`
+  ) OR NOT EXISTS (
+    SELECT 1 FROM `stock_reservations`
+    WHERE `converted_order_id` = NEW.`id` AND `status` = 'converted'
+  ) OR EXISTS (
+    SELECT 1 FROM `stock_reservations`
+    WHERE `cart_id` = NEW.`cart_id` AND `status` = 'active'
+  ) OR COALESCE((
+    SELECT SUM(`line_total_cents`) FROM `order_lines`
+    WHERE `order_id` = NEW.`id`
+  ), -1) <> NEW.`subtotal_cents`
+  THEN RAISE(ABORT, 'commerce_order_payment_mismatch') END;
+
+  SELECT CASE WHEN EXISTS (
+    SELECT `variant_id`, SUM(`quantity`) AS quantity
+    FROM `stock_reservations`
+    WHERE `converted_order_id` = NEW.`id` AND `status` = 'converted'
+    GROUP BY `variant_id`
+    EXCEPT
+    SELECT `variant_id`, SUM(`quantity`) AS quantity
+    FROM `order_lines`
+    WHERE `order_id` = NEW.`id`
+    GROUP BY `variant_id`
+  ) OR EXISTS (
+    SELECT `variant_id`, SUM(`quantity`) AS quantity
+    FROM `order_lines`
+    WHERE `order_id` = NEW.`id`
+    GROUP BY `variant_id`
+    EXCEPT
+    SELECT `variant_id`, SUM(`quantity`) AS quantity
+    FROM `stock_reservations`
+    WHERE `converted_order_id` = NEW.`id` AND `status` = 'converted'
+    GROUP BY `variant_id`
+  ) THEN RAISE(ABORT, 'commerce_order_payment_mismatch') END;
+END;--> statement-breakpoint
+CREATE TRIGGER `trg_webhook_events_validate_processed`
+BEFORE UPDATE OF `status` ON `webhook_events`
+WHEN NEW.`status` = 'processed'
+BEGIN
+  SELECT CASE WHEN NOT EXISTS (
+    SELECT 1
+    FROM `orders` AS customer_order
+    INNER JOIN `carts` AS cart ON cart.`id` = customer_order.`cart_id`
+    INNER JOIN `payments` AS payment ON payment.`order_id` = customer_order.`id`
+    WHERE customer_order.`id` = NEW.`order_id`
+      AND customer_order.`status` = 'paid'
+      AND cart.`status` = 'converted'
+      AND payment.`provider` = NEW.`provider`
+      AND payment.`provider_session_id` = NEW.`provider_payment_id`
+      AND payment.`status` = 'succeeded'
+      AND payment.`amount_cents` = NEW.`amount_cents`
+      AND payment.`currency` = NEW.`currency`
+  ) OR NOT EXISTS (
+    SELECT 1 FROM `email_outbox`
+    WHERE `order_id` = NEW.`order_id` AND `kind` = 'order_confirmation'
+  ) OR NOT EXISTS (
+    SELECT 1 FROM `audit_log`
+    WHERE `entity_type` = 'order'
+      AND `entity_id` = NEW.`order_id`
+      AND `action` = 'payment_succeeded'
+  ) THEN RAISE(ABORT, 'commerce_webhook_processing_incomplete') END;
 END;--> statement-breakpoint
 PRAGMA optimize;

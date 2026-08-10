@@ -1,9 +1,14 @@
 export type CommerceErrorCode =
   | "INVALID_INPUT"
   | "IDEMPOTENCY_CONFLICT"
+  | "CART_ID_CONFLICT"
+  | "RESERVES_NOT_VALIDATED"
   | "INSUFFICIENT_STOCK_OR_CART_CLOSED"
   | "RESERVATION_NOT_FOUND"
-  | "INVALID_RESERVATION_TRANSITION";
+  | "INVALID_RESERVATION_TRANSITION"
+  | "RESERVATION_NOT_EXPIRED"
+  | "ORDER_PAYMENT_MISMATCH"
+  | "PAYMENT_VERIFICATION_REQUIRED";
 
 export class CommerceError extends Error {
   readonly code: CommerceErrorCode;
@@ -69,7 +74,14 @@ export type ConvertStockToSaleInput = {
   now: string;
 };
 
+export type ExpireStockInput = {
+  reservationId: string;
+  idempotencyKey: string;
+  now: string;
+};
+
 const safeIdentifierPattern = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,159}$/;
+const strictUtcIsoPattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 
 export function assertSafeIdentifier(value: string, field: string): void {
   if (!safeIdentifierPattern.test(value)) {
@@ -90,10 +102,18 @@ export function assertPositiveInteger(value: number, field: string): void {
 }
 
 export function assertIsoTimestamp(value: string, field: string): void {
-  if (value.length > 40 || Number.isNaN(Date.parse(value))) {
+  if (!strictUtcIsoPattern.test(value)) {
     throw new CommerceError(
       "INVALID_INPUT",
-      `${field} must be a valid ISO timestamp.`,
+      `${field} must use the strict UTC format YYYY-MM-DDTHH:mm:ss.sssZ.`,
+    );
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime()) || parsed.toISOString() !== value) {
+    throw new CommerceError(
+      "INVALID_INPUT",
+      `${field} must be a real UTC timestamp without calendar rollover.`,
     );
   }
 }
@@ -126,6 +146,12 @@ export function validateConvertStockToSaleInput(
 ): void {
   assertSafeIdentifier(input.reservationId, "reservationId");
   assertSafeIdentifier(input.orderId, "orderId");
+  assertSafeIdentifier(input.idempotencyKey, "idempotencyKey");
+  assertIsoTimestamp(input.now, "now");
+}
+
+export function validateExpireStockInput(input: ExpireStockInput): void {
+  assertSafeIdentifier(input.reservationId, "reservationId");
   assertSafeIdentifier(input.idempotencyKey, "idempotencyKey");
   assertIsoTimestamp(input.now, "now");
 }

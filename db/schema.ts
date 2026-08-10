@@ -294,7 +294,7 @@ export const stockReservations = sqliteTable(
     uniqueIndex("ux_stock_reservations_idempotency_key").on(
       table.idempotencyKey,
     ),
-    uniqueIndex("ux_stock_reservations_transition_key").on(
+    index("idx_stock_reservations_transition_key").on(
       table.lastTransitionKey,
     ),
     index("idx_stock_reservations_cart_status").on(table.cartId, table.status),
@@ -344,6 +344,9 @@ export const payments = sqliteTable(
       table.providerSessionId,
     ),
     uniqueIndex("ux_payments_idempotency_key").on(table.idempotencyKey),
+    uniqueIndex("ux_payments_order_succeeded")
+      .on(table.orderId)
+      .where(sql`${table.status} = 'succeeded'`),
     index("idx_payments_order_id").on(table.orderId),
     check("ck_payments_provider", sql`${table.provider} IN ('test', 'stripe')`),
     check(
@@ -364,10 +367,20 @@ export const webhookEvents = sqliteTable(
     provider: text("provider", { enum: ["test", "stripe"] }).notNull(),
     providerEventId: text("provider_event_id").notNull(),
     eventType: text("event_type").notNull(),
-    payloadHash: text("payload_hash").notNull(),
-    status: text("status", { enum: ["received", "processed", "failed"] })
+    payloadFingerprint: text("payload_fingerprint").notNull(),
+    verificationMethod: text("verification_method", {
+      enum: ["test_adapter", "stripe_signature"],
+    }).notNull(),
+    verifiedAt: text("verified_at").notNull(),
+    orderId: text("order_id")
       .notNull()
-      .default("received"),
+      .references(() => orders.id, { onDelete: "restrict" }),
+    providerPaymentId: text("provider_payment_id").notNull(),
+    amountCents: integer("amount_cents").notNull(),
+    currency: text("currency", { enum: ["EUR"] }).notNull(),
+    status: text("status", { enum: ["verified", "processed", "failed"] })
+      .notNull()
+      .default("verified"),
     attempts: integer("attempts").notNull().default(0),
     lastErrorCode: text("last_error_code"),
     receivedAt: text("received_at").notNull().default(utcNow),
@@ -384,10 +397,16 @@ export const webhookEvents = sqliteTable(
     ),
     check("ck_webhook_events_provider", sql`${table.provider} IN ('test', 'stripe')`),
     check(
+      "ck_webhook_events_verification_method",
+      sql`${table.verificationMethod} IN ('test_adapter', 'stripe_signature')`,
+    ),
+    check(
       "ck_webhook_events_status",
-      sql`${table.status} IN ('received', 'processed', 'failed')`,
+      sql`${table.status} IN ('verified', 'processed', 'failed')`,
     ),
     check("ck_webhook_events_attempts_non_negative", sql`${table.attempts} >= 0`),
+    check("ck_webhook_events_amount_positive", sql`${table.amountCents} > 0`),
+    check("ck_webhook_events_currency_eur", sql`${table.currency} = 'EUR'`),
   ],
 );
 
@@ -526,6 +545,7 @@ export const auditLog = sqliteTable(
     action: text("action").notNull(),
     entityType: text("entity_type").notNull(),
     entityId: text("entity_id").notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
     metadataJson: text("metadata_json").notNull().default("{}"),
     createdAt: text("created_at").notNull().default(utcNow),
   },
@@ -540,6 +560,7 @@ export const auditLog = sqliteTable(
       table.actorId,
       table.createdAt,
     ),
+    uniqueIndex("ux_audit_log_idempotency_key").on(table.idempotencyKey),
     check(
       "ck_audit_log_actor_type",
       sql`${table.actorType} IN ('system', 'customer', 'admin')`,

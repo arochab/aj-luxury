@@ -12,6 +12,7 @@ import type {
 import {
   CommerceError,
   type ConvertStockToSaleInput,
+  type ExpireStockInput,
   type InventoryPosition,
   type ReleaseStockInput,
   type ReserveStockInput,
@@ -19,9 +20,14 @@ import {
   assertIsoTimestamp,
   assertSafeIdentifier,
   validateConvertStockToSaleInput,
+  validateExpireStockInput,
   validateReleaseStockInput,
   validateReserveStockInput,
 } from "./backend-domain.ts";
+import {
+  assertVerifiedPaymentEvent,
+  type VerifiedPaymentEvent,
+} from "./verified-payment-event.ts";
 
 type InventoryRow = {
   variant_id: string;
@@ -48,16 +54,26 @@ type ReservationRow = {
   updated_at: string;
 };
 
-type WebhookEventRow = {
+type CartRow = {
   id: string;
-  provider: "test" | "stripe";
-  provider_event_id: string;
-  event_type: string;
-  payload_hash: string;
-  status: "received" | "processed" | "failed";
-  attempts: number;
-  received_at: string;
-  processed_at: string | null;
+  customer_id: string | null;
+  email: string | null;
+  status: "open" | "converted" | "expired";
+  currency: "EUR";
+  expires_at: string;
+};
+
+type SeedIntegrityRow = {
+  inventory_count: number;
+  physical_quantity: number;
+  ledger_count: number;
+};
+
+type PaymentResultRow = {
+  order_status: string;
+  cart_status: string;
+  webhook_status: string;
+  converted_reservations: number;
 };
 
 export type CreateCartInput = {
@@ -66,33 +82,6 @@ export type CreateCartInput = {
   email?: string | null;
   expiresAt: string;
   now: string;
-};
-
-export type RecordWebhookEventInput = {
-  id: string;
-  provider: "test" | "stripe";
-  providerEventId: string;
-  eventType: string;
-  payloadHash: string;
-  receivedAt: string;
-};
-
-export type StoredWebhookEvent = {
-  id: string;
-  provider: "test" | "stripe";
-  providerEventId: string;
-  eventType: string;
-  payloadHash: string;
-  status: "received" | "processed" | "failed";
-  attempts: number;
-  receivedAt: string;
-  processedAt: string | null;
-};
-
-export type ProcessPaymentSucceededInput = RecordWebhookEventInput & {
-  reservationId: string;
-  orderId: string;
-  processedAt: string;
 };
 
 function toInventoryPosition(row: InventoryRow): InventoryPosition {
@@ -124,26 +113,20 @@ function toStockReservation(row: ReservationRow): StockReservation {
   };
 }
 
-function toStoredWebhookEvent(row: WebhookEventRow): StoredWebhookEvent {
-  return {
-    id: row.id,
-    provider: row.provider,
-    providerEventId: row.provider_event_id,
-    eventType: row.event_type,
-    payloadHash: row.payload_hash,
-    status: row.status,
-    attempts: row.attempts,
-    receivedAt: row.received_at,
-    processedAt: row.processed_at,
-  };
-}
-
-function movementKey(action: "reserve" | "release" | "sale", key: string) {
+function movementKey(action: "reserve" | "release" | "expire" | "sale", key: string) {
   return `${action}:${key}`;
 }
 
-function mapReservationError(error: unknown): never {
+function mapCommerceDatabaseError(error: unknown): never {
   const message = error instanceof Error ? error.message : String(error);
+
+  if (message.includes("commerce_reserves_not_validated")) {
+    throw new CommerceError(
+      "RESERVES_NOT_VALIDATED",
+      "Stock cannot be reserved until AJ Luxury validates gift and safety reserves.",
+      { cause: error },
+    );
+  }
 
   if (message.includes("commerce_insufficient_stock_or_cart_closed")) {
     throw new CommerceError(
@@ -153,7 +136,18 @@ function mapReservationError(error: unknown): never {
     );
   }
 
-  if (message.includes("commerce_invalid_reservation_transition")) {
+  if (message.includes("commerce_reservation_not_expired")) {
+    throw new CommerceError(
+      "RESERVATION_NOT_EXPIRED",
+      "The reservation has not reached its expiry time.",
+      { cause: error },
+    );
+  }
+
+  if (
+    message.includes("commerce_invalid_reservation_transition") ||
+    message.includes("commerce_sale_reservation_expired")
+  ) {
     throw new CommerceError(
       "INVALID_RESERVATION_TRANSITION",
       "The reservation transition is not allowed.",
@@ -161,7 +155,44 @@ function mapReservationError(error: unknown): never {
     );
   }
 
+  if (
+    message.includes("commerce_sale_order_payment_mismatch") ||
+    message.includes("commerce_order_payment_mismatch") ||
+    message.includes("commerce_webhook_processing_incomplete") ||
+    message.includes("payments.order_id")
+  ) {
+    throw new CommerceError(
+      "ORDER_PAYMENT_MISMATCH",
+      "Order, payment, cart, lines and reservations are inconsistent.",
+      { cause: error },
+    );
+  }
+
+  if (message.includes("commerce_webhook_replay_conflict")) {
+    throw new CommerceError(
+      "IDEMPOTENCY_CONFLICT",
+      "The verified provider event was replayed with different content.",
+      { cause: error },
+    );
+  }
+
+  if (
+    message.includes("commerce_webhook_verification_method_mismatch") ||
+    message.includes("commerce_payment_requires_verified_event")
+  ) {
+    throw new CommerceError(
+      "PAYMENT_VERIFICATION_REQUIRED",
+      "The payment event does not have verified provider provenance.",
+      { cause: error },
+    );
+  }
+
   throw error;
+}
+
+function normalizeOptionalEmail(email: string | null | undefined): string | null {
+  const normalized = email?.trim().toLowerCase() ?? null;
+  return normalized || null;
 }
 
 export class D1CommerceStore {
@@ -174,6 +205,20 @@ export class D1CommerceStore {
   async seedLaunchCatalog(now: string): Promise<void> {
     assertIsoTimestamp(now, "now");
     assertLaunchSeedIntegrity();
+
+    const preexistingIntegrity = await this.#getLaunchSeedIntegrity();
+    if (
+      preexistingIntegrity &&
+      preexistingIntegrity.inventory_count > 0 &&
+      (preexistingIntegrity.inventory_count !== 12 ||
+        preexistingIntegrity.physical_quantity !== 756 ||
+        preexistingIntegrity.ledger_count !== 12)
+    ) {
+      throw new CommerceError(
+        "IDEMPOTENCY_CONFLICT",
+        "Existing launch inventory and its seed ledger are not synchronized.",
+      );
+    }
 
     const statements: CommerceD1PreparedStatement[] = [
       this.#database
@@ -248,26 +293,45 @@ export class D1CommerceStore {
             variant.reservesValidated ? 1 : 0,
             now,
           ),
-        this.#database
-          .prepare(
-            `INSERT INTO inventory_movements (
-              id, variant_id, kind, quantity, reference_type, reference_id,
-              actor_type, actor_id, idempotency_key, created_at
-            ) VALUES (?, ?, 'seed', ?, 'catalog_seed', ?, 'system', NULL, ?, ?)
-            ON CONFLICT(idempotency_key) DO NOTHING`,
-          )
-          .bind(
-            `movement_seed_${variant.id}`,
-            variant.id,
-            variant.physicalQuantity,
-            "aj_launch_2026",
-            `seed:${variant.id}`,
-            now,
-          ),
       );
     }
 
     await this.#database.batch(statements);
+
+    const integrity = await this.#getLaunchSeedIntegrity();
+
+    if (
+      !integrity ||
+      integrity.inventory_count !== 12 ||
+      integrity.physical_quantity !== 756 ||
+      integrity.ledger_count !== 12
+    ) {
+      throw new CommerceError(
+        "IDEMPOTENCY_CONFLICT",
+        "Launch inventory and its seed ledger are not synchronized.",
+      );
+    }
+  }
+
+  async #getLaunchSeedIntegrity(): Promise<SeedIntegrityRow | null> {
+    return this.#database
+      .prepare(
+        `SELECT
+          COUNT(*) AS inventory_count,
+          COALESCE(SUM(stock.physical_quantity), 0) AS physical_quantity,
+          COALESCE(SUM(
+            CASE WHEN movement.kind = 'seed'
+              AND movement.quantity = stock.physical_quantity
+              THEN 1 ELSE 0 END
+          ), 0) AS ledger_count
+        FROM inventory AS stock
+        INNER JOIN variants AS variant ON variant.id = stock.variant_id
+        LEFT JOIN inventory_movements AS movement
+          ON movement.idempotency_key = 'seed:' || stock.variant_id
+        WHERE variant.product_id = ?`,
+      )
+      .bind(LAUNCH_PRODUCT_ID)
+      .first<SeedIntegrityRow>();
   }
 
   async createCart(input: CreateCartInput): Promise<void> {
@@ -286,6 +350,7 @@ export class D1CommerceStore {
       );
     }
 
+    const normalizedEmail = normalizeOptionalEmail(input.email);
     await this.#database
       .prepare(
         `INSERT INTO carts (
@@ -296,12 +361,33 @@ export class D1CommerceStore {
       .bind(
         input.id,
         input.customerId ?? null,
-        input.email?.trim().toLowerCase() ?? null,
+        normalizedEmail,
         input.expiresAt,
         input.now,
         input.now,
       )
       .run();
+
+    const cart = await this.#database
+      .prepare(
+        `SELECT id, customer_id, email, status, currency, expires_at
+        FROM carts WHERE id = ?`,
+      )
+      .bind(input.id)
+      .first<CartRow>();
+
+    if (
+      !cart ||
+      cart.customer_id !== (input.customerId ?? null) ||
+      cart.email !== normalizedEmail ||
+      cart.expires_at !== input.expiresAt ||
+      cart.currency !== "EUR"
+    ) {
+      throw new CommerceError(
+        "CART_ID_CONFLICT",
+        "The cart id already belongs to different cart input.",
+      );
+    }
   }
 
   async getInventoryPosition(
@@ -368,7 +454,7 @@ export class D1CommerceStore {
           ),
       ]);
     } catch (error) {
-      mapReservationError(error);
+      mapCommerceDatabaseError(error);
     }
 
     const reservation = await this.getReservationByIdempotencyKey(
@@ -399,17 +485,62 @@ export class D1CommerceStore {
 
   async releaseStock(input: ReleaseStockInput): Promise<StockReservation> {
     validateReleaseStockInput(input);
-    const releaseMovementKey = movementKey("release", input.idempotencyKey);
+    return this.#closeReservation({
+      reservationId: input.reservationId,
+      idempotencyKey: input.idempotencyKey,
+      now: input.now,
+      targetStatus: "released",
+      requireExpired: false,
+    });
+  }
+
+  async expireReservation(input: ExpireStockInput): Promise<StockReservation> {
+    validateExpireStockInput(input);
+    return this.#closeReservation({
+      reservationId: input.reservationId,
+      idempotencyKey: input.idempotencyKey,
+      now: input.now,
+      targetStatus: "expired",
+      requireExpired: true,
+    });
+  }
+
+  async #closeReservation(input: {
+    reservationId: string;
+    idempotencyKey: string;
+    now: string;
+    targetStatus: "released" | "expired";
+    requireExpired: boolean;
+  }): Promise<StockReservation> {
+    const closeMovementKey = movementKey(
+      input.targetStatus === "expired" ? "expire" : "release",
+      input.idempotencyKey,
+    );
+    const expiryPredicate = input.requireExpired ? "AND expires_at <= ?" : "";
+    const updateValues = input.requireExpired
+      ? [
+          input.targetStatus,
+          input.idempotencyKey,
+          input.now,
+          input.reservationId,
+          input.now,
+        ]
+      : [
+          input.targetStatus,
+          input.idempotencyKey,
+          input.now,
+          input.reservationId,
+        ];
 
     try {
       await this.#database.batch([
         this.#database
           .prepare(
             `UPDATE stock_reservations
-            SET status = 'released', last_transition_key = ?, updated_at = ?
-            WHERE id = ? AND status = 'active'`,
+            SET status = ?, last_transition_key = ?, updated_at = ?
+            WHERE id = ? AND status = 'active' ${expiryPredicate}`,
           )
-          .bind(input.idempotencyKey, input.now, input.reservationId),
+          .bind(...updateValues),
         this.#database
           .prepare(
             `INSERT INTO inventory_movements (
@@ -417,27 +548,28 @@ export class D1CommerceStore {
               actor_type, actor_id, idempotency_key, created_at
             )
             SELECT ?, reservation.variant_id, 'release', reservation.quantity,
-              'reservation', reservation.id, 'system', NULL, ?, ?
+              ?, reservation.id, 'system', NULL, ?, ?
             FROM stock_reservations AS reservation
             WHERE reservation.id = ?
-              AND reservation.status = 'released'
+              AND reservation.status = ?
               AND reservation.last_transition_key = ?
             ON CONFLICT(idempotency_key) DO NOTHING`,
           )
           .bind(
-            `movement_release_${input.reservationId}`,
-            releaseMovementKey,
+            `movement_${input.targetStatus}_${input.reservationId}`,
+            input.targetStatus === "expired" ? "expiration" : "reservation",
+            closeMovementKey,
             input.now,
             input.reservationId,
+            input.targetStatus,
             input.idempotencyKey,
           ),
       ]);
     } catch (error) {
-      mapReservationError(error);
+      mapCommerceDatabaseError(error);
     }
 
     const reservation = await this.getReservation(input.reservationId);
-
     if (!reservation) {
       throw new CommerceError(
         "RESERVATION_NOT_FOUND",
@@ -446,16 +578,23 @@ export class D1CommerceStore {
     }
 
     if (
-      reservation.status !== "released" ||
-      reservation.lastTransitionKey !== input.idempotencyKey
+      reservation.status === input.targetStatus &&
+      reservation.lastTransitionKey === input.idempotencyKey
     ) {
+      return reservation;
+    }
+
+    if (input.requireExpired && reservation.status === "active") {
       throw new CommerceError(
-        "INVALID_RESERVATION_TRANSITION",
-        "Only an active reservation can be released.",
+        "RESERVATION_NOT_EXPIRED",
+        "The reservation has not reached its expiry time.",
       );
     }
 
-    return reservation;
+    throw new CommerceError(
+      "INVALID_RESERVATION_TRANSITION",
+      `Only an active reservation can be ${input.targetStatus}.`,
+    );
   }
 
   async convertStockToSale(
@@ -502,11 +641,10 @@ export class D1CommerceStore {
           ),
       ]);
     } catch (error) {
-      mapReservationError(error);
+      mapCommerceDatabaseError(error);
     }
 
     const reservation = await this.getReservation(input.reservationId);
-
     if (!reservation) {
       throw new CommerceError(
         "RESERVATION_NOT_FOUND",
@@ -521,11 +659,214 @@ export class D1CommerceStore {
     ) {
       throw new CommerceError(
         "INVALID_RESERVATION_TRANSITION",
-        "Only an active reservation can be converted to a sale.",
+        "Only an active, unexpired reservation with a coherent paid order can be sold.",
       );
     }
 
     return reservation;
+  }
+
+  async processPaymentSucceeded(
+    event: VerifiedPaymentEvent,
+  ): Promise<{ orderId: string; convertedReservations: number }> {
+    assertVerifiedPaymentEvent(event);
+    const eventKey = `webhook:${event.provider}:${event.providerEventId}`;
+    const paymentId = `payment_${event.provider}_${event.providerPaymentId}`;
+    const webhookId = `webhook_${event.provider}_${event.providerEventId}`;
+    const outboxId = `outbox_order_confirmation_${event.orderId}`;
+    const auditId = `audit_payment_succeeded_${event.orderId}`;
+
+    try {
+      await this.#database.batch([
+        this.#database
+          .prepare(
+            `INSERT INTO webhook_events (
+              id, provider, provider_event_id, event_type, payload_fingerprint,
+              verification_method, verified_at, order_id, provider_payment_id,
+              amount_cents, currency, status, attempts, received_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'verified', 0, ?)
+            ON CONFLICT(provider, provider_event_id) DO NOTHING`,
+          )
+          .bind(
+            webhookId,
+            event.provider,
+            event.providerEventId,
+            event.eventType,
+            event.payloadFingerprint,
+            event.verificationMethod,
+            event.verifiedAt,
+            event.orderId,
+            event.providerPaymentId,
+            event.amountCents,
+            event.currency,
+            event.occurredAt,
+          ),
+        this.#database
+          .prepare(
+            `INSERT INTO payments (
+              id, order_id, provider, provider_session_id, status, amount_cents,
+              currency, idempotency_key, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, 'succeeded', ?, ?, ?, ?, ?)
+            ON CONFLICT(provider, provider_session_id) DO NOTHING`,
+          )
+          .bind(
+            paymentId,
+            event.orderId,
+            event.provider,
+            event.providerPaymentId,
+            event.amountCents,
+            event.currency,
+            `payment:${event.provider}:${event.providerPaymentId}`,
+            event.occurredAt,
+            event.verifiedAt,
+          ),
+        this.#database
+          .prepare(
+            `UPDATE stock_reservations
+            SET status = 'converted', converted_order_id = ?,
+              last_transition_key = ?, updated_at = ?
+            WHERE status = 'active'
+              AND cart_id = (SELECT cart_id FROM orders WHERE id = ?)`,
+          )
+          .bind(event.orderId, eventKey, event.occurredAt, event.orderId),
+        this.#database
+          .prepare(
+            `INSERT INTO inventory_movements (
+              id, variant_id, kind, quantity, reference_type, reference_id,
+              actor_type, actor_id, idempotency_key, created_at
+            )
+            SELECT 'movement_sale_' || reservation.id,
+              reservation.variant_id, 'sale', reservation.quantity,
+              'order', reservation.converted_order_id, 'system', NULL,
+              'sale:' || ? || ':' || reservation.id, ?
+            FROM stock_reservations AS reservation
+            WHERE reservation.converted_order_id = ?
+              AND reservation.status = 'converted'
+              AND reservation.last_transition_key = ?
+            ON CONFLICT(idempotency_key) DO NOTHING`,
+          )
+          .bind(eventKey, event.occurredAt, event.orderId, eventKey),
+        this.#database
+          .prepare(
+            `UPDATE orders
+            SET status = 'paid', paid_at = ?, updated_at = ?
+            WHERE id = ? AND status = 'pending_payment'`,
+          )
+          .bind(event.occurredAt, event.verifiedAt, event.orderId),
+        this.#database
+          .prepare(
+            `UPDATE carts
+            SET status = 'converted', updated_at = ?
+            WHERE id = (SELECT cart_id FROM orders WHERE id = ? AND status = 'paid')
+              AND status = 'open'`,
+          )
+          .bind(event.verifiedAt, event.orderId),
+        this.#database
+          .prepare(
+            `INSERT INTO email_outbox (
+              id, kind, recipient_email, order_id, locale, template_version,
+              payload_json, status, attempts, next_attempt_at, idempotency_key,
+              created_at
+            )
+            SELECT ?, 'order_confirmation', email, id, 'fr', ?, ?, 'pending',
+              0, ?, ?, ?
+            FROM orders WHERE id = ? AND status = 'paid'
+            ON CONFLICT(idempotency_key) DO NOTHING`,
+          )
+          .bind(
+            outboxId,
+            "order-confirmation-v1",
+            JSON.stringify({ orderId: event.orderId }),
+            event.verifiedAt,
+            `email:order_confirmation:${event.orderId}`,
+            event.verifiedAt,
+            event.orderId,
+          ),
+        this.#database
+          .prepare(
+            `INSERT INTO audit_log (
+              id, actor_type, actor_id, action, entity_type, entity_id,
+              idempotency_key, metadata_json, created_at
+            )
+            SELECT ?, 'system', NULL, 'payment_succeeded', 'order', id, ?, ?, ?
+            FROM orders WHERE id = ? AND status = 'paid'
+            ON CONFLICT(idempotency_key) DO NOTHING`,
+          )
+          .bind(
+            auditId,
+            `audit:payment:${event.provider}:${event.providerEventId}`,
+            JSON.stringify({
+              eventId: event.providerEventId,
+              paymentId: event.providerPaymentId,
+              provider: event.provider,
+            }),
+            event.verifiedAt,
+            event.orderId,
+          ),
+        this.#database
+          .prepare(
+            `UPDATE webhook_events
+            SET status = 'processed', attempts = attempts + 1,
+              processed_at = COALESCE(processed_at, ?), last_error_code = NULL
+            WHERE provider = ? AND provider_event_id = ?
+              AND order_id = ? AND provider_payment_id = ?
+              AND amount_cents = ? AND currency = ?
+              AND payload_fingerprint = ? AND verification_method = ?`,
+          )
+          .bind(
+            event.verifiedAt,
+            event.provider,
+            event.providerEventId,
+            event.orderId,
+            event.providerPaymentId,
+            event.amountCents,
+            event.currency,
+            event.payloadFingerprint,
+            event.verificationMethod,
+          ),
+      ]);
+    } catch (error) {
+      mapCommerceDatabaseError(error);
+    }
+
+    const result = await this.#database
+      .prepare(
+        `SELECT
+          orders.status AS order_status,
+          carts.status AS cart_status,
+          webhook_events.status AS webhook_status,
+          COUNT(stock_reservations.id) AS converted_reservations
+        FROM orders
+        INNER JOIN carts ON carts.id = orders.cart_id
+        INNER JOIN webhook_events ON webhook_events.order_id = orders.id
+          AND webhook_events.provider = ?
+          AND webhook_events.provider_event_id = ?
+        LEFT JOIN stock_reservations
+          ON stock_reservations.converted_order_id = orders.id
+          AND stock_reservations.status = 'converted'
+        WHERE orders.id = ?
+        GROUP BY orders.id, orders.status, carts.status, webhook_events.status`,
+      )
+      .bind(event.provider, event.providerEventId, event.orderId)
+      .first<PaymentResultRow>();
+
+    if (
+      !result ||
+      result.order_status !== "paid" ||
+      result.cart_status !== "converted" ||
+      result.webhook_status !== "processed" ||
+      result.converted_reservations < 1
+    ) {
+      throw new CommerceError(
+        "ORDER_PAYMENT_MISMATCH",
+        "The verified payment did not complete the order transaction.",
+      );
+    }
+
+    return {
+      orderId: event.orderId,
+      convertedReservations: result.converted_reservations,
+    };
   }
 
   async getReservation(id: string): Promise<StockReservation | null> {
@@ -536,8 +877,7 @@ export class D1CommerceStore {
           id, cart_id, variant_id, quantity, status, idempotency_key,
           last_transition_key, expires_at, converted_order_id, created_at,
           updated_at
-        FROM stock_reservations
-        WHERE id = ?`,
+        FROM stock_reservations WHERE id = ?`,
       )
       .bind(id)
       .first<ReservationRow>();
@@ -555,107 +895,11 @@ export class D1CommerceStore {
           id, cart_id, variant_id, quantity, status, idempotency_key,
           last_transition_key, expires_at, converted_order_id, created_at,
           updated_at
-        FROM stock_reservations
-        WHERE idempotency_key = ?`,
+        FROM stock_reservations WHERE idempotency_key = ?`,
       )
       .bind(idempotencyKey)
       .first<ReservationRow>();
 
     return row ? toStockReservation(row) : null;
-  }
-
-  async recordWebhookEvent(
-    input: RecordWebhookEventInput,
-  ): Promise<StoredWebhookEvent> {
-    assertSafeIdentifier(input.id, "id");
-    assertSafeIdentifier(input.providerEventId, "providerEventId");
-    assertIsoTimestamp(input.receivedAt, "receivedAt");
-
-    if (!input.eventType.trim() || !input.payloadHash.trim()) {
-      throw new CommerceError(
-        "INVALID_INPUT",
-        "eventType and payloadHash are required.",
-      );
-    }
-
-    await this.#database
-      .prepare(
-        `INSERT INTO webhook_events (
-          id, provider, provider_event_id, event_type, payload_hash, status,
-          attempts, received_at
-        ) VALUES (?, ?, ?, ?, ?, 'received', 0, ?)
-        ON CONFLICT(provider, provider_event_id) DO NOTHING`,
-      )
-      .bind(
-        input.id,
-        input.provider,
-        input.providerEventId,
-        input.eventType,
-        input.payloadHash,
-        input.receivedAt,
-      )
-      .run();
-
-    const row = await this.#database
-      .prepare(
-        `SELECT
-          id, provider, provider_event_id, event_type, payload_hash, status,
-          attempts, received_at, processed_at
-        FROM webhook_events
-        WHERE provider = ? AND provider_event_id = ?`,
-      )
-      .bind(input.provider, input.providerEventId)
-      .first<WebhookEventRow>();
-
-    if (!row) {
-      throw new Error("The webhook event could not be persisted.");
-    }
-
-    if (
-      row.event_type !== input.eventType ||
-      row.payload_hash !== input.payloadHash
-    ) {
-      throw new CommerceError(
-        "IDEMPOTENCY_CONFLICT",
-        "The provider event id was already used with a different payload.",
-      );
-    }
-
-    return toStoredWebhookEvent(row);
-  }
-
-  async processPaymentSucceeded(
-    input: ProcessPaymentSucceededInput,
-  ): Promise<StockReservation> {
-    if (input.eventType !== "payment.succeeded") {
-      throw new CommerceError(
-        "INVALID_INPUT",
-        "processPaymentSucceeded accepts only payment.succeeded events.",
-      );
-    }
-
-    assertIsoTimestamp(input.processedAt, "processedAt");
-    await this.recordWebhookEvent(input);
-
-    const reservation = await this.convertStockToSale({
-      reservationId: input.reservationId,
-      orderId: input.orderId,
-      idempotencyKey: `webhook:${input.provider}:${input.providerEventId}`,
-      now: input.processedAt,
-    });
-
-    await this.#database
-      .prepare(
-        `UPDATE webhook_events
-        SET status = 'processed',
-          attempts = attempts + 1,
-          processed_at = COALESCE(processed_at, ?),
-          last_error_code = NULL
-        WHERE provider = ? AND provider_event_id = ?`,
-      )
-      .bind(input.processedAt, input.provider, input.providerEventId)
-      .run();
-
-    return reservation;
   }
 }
