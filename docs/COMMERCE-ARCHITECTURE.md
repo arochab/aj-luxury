@@ -1,3 +1,5 @@
+SUPERSEDED — retained as history — replaced by `docs/BACKEND-LOT-2-ACTION-PLAN.md` on 2026-08-10
+
 # AJ Luxury - fondation commerce de démonstration
 
 ## Catalogue réel intégré
