@@ -1,6 +1,10 @@
-import type { ProductVariant } from "./types";
-import { products, sizes } from "../products";
-import { getInternalStockPosition } from "./internal-stock";
+import type { ProductVariant } from "./types.ts";
+import { products, sizes } from "../products.ts";
+import { getInternalStockPosition } from "./internal-stock.ts";
+import {
+  buildInternalVariantReference,
+  isLaunchColorSlug,
+} from "./internal-reference.ts";
 
 /**
  * Catalogue de simulation : les quantités restent dans le registre interne.
@@ -9,6 +13,9 @@ import { getInternalStockPosition } from "./internal-stock";
 export const launchVariants: ProductVariant[] = products.flatMap((product) =>
   sizes.map((size) => {
     const stock = getInternalStockPosition(product.slug, size);
+    if (!isLaunchColorSlug(product.slug)) {
+      throw new Error(`Unsupported launch color slug: ${product.slug}`);
+    }
 
     return {
       id: `variant_boxer_${product.slug}_${size.toLowerCase()}`,
@@ -16,7 +23,7 @@ export const launchVariants: ProductVariant[] = products.flatMap((product) =>
       productSlug: product.slug,
       productName: product.model,
       title: `${product.name} / ${size}`,
-      sku: `AJ-BOX-${product.slug.slice(0, 3).toUpperCase()}-${size}`,
+      sku: buildInternalVariantReference(product.slug, size),
       options: [
         { name: "color" as const, value: product.name },
         { name: "size" as const, value: size },

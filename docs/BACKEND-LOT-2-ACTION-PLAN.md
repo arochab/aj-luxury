@@ -47,6 +47,8 @@ ou compte marchand doit être validé par Jérémy avant activation.
 - Le prix validé est de 29,99 €.
 - Le stock physique transmis totalise 756 unités : Pourpre 26/103/87/36,
   Rose 26/103/87/36 et Lilas 26/102/88/36, dans l’ordre S/M/L/XL.
+- Les 12 références internes sont générées par l’application à partir du modèle, du
+  coloris et de la taille. Aucun SKU ni EAN n’est demandé à Jérémy.
 - Les zones de lancement validées sont l’Union européenne, le Royaume-Uni, les
   États-Unis et le Canada.
 - L’adresse d’expédition et de retour retenue par Adam est l’adresse contractuelle
@@ -59,7 +61,7 @@ ou compte marchand doit être validé par Jérémy avant activation.
 ### Seuls apports encore attendus d’AJ Luxury
 
 - Quantités à isoler pour cadeaux/influenceurs et réserve de sécurité.
-- Poids/dimensions du colis prêt à partir, pays de fabrication, éventuels SKU/EAN,
+- Poids/dimensions du colis prêt à partir, pays de fabrication,
   étiquettes physiques, entretien, guide des tailles et scellé d’hygiène.
 - KYC/RIB des comptes commerce ouverts au nom d’AJ Luxury, sans partage de mot de passe.
 - Numéro public de contact, médiateur de la consommation et validation comptable des
@@ -260,7 +262,7 @@ données commerce actives sans sauvegarde et restauration vérifiée.
 ## Décisions à obtenir de Jérémy
 
 1. Réserve cadeaux/influenceurs et sécurité à soustraire des 756 unités physiques.
-2. Poids/dimensions colis, fabrication, éventuels SKU/EAN, étiquettes, entretien,
+2. Poids/dimensions colis, fabrication, étiquettes, entretien,
    guide des tailles et scellé d’hygiène.
 3. Accord sur les prestataires retenus et création/KYC des comptes AJ Luxury.
 4. Numéro public, médiateur et validation comptable TVA/EORI pour les zones ouvertes.
