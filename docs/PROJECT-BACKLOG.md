@@ -50,7 +50,7 @@ Créer une expérience e-commerce propriétaire pour AJ Luxury, sobre et premium
 | AJ-108 | Choisir et connecter le paiement | À connecter | AJ Luxury + Adam | Paiement test autorisé, refusé et remboursé | Recette prestataire | Compte marchand, AJ-102 |
 | AJ-109 | Valider livraison et retours | À valider | AJ Luxury | Zones, tarifs, délais et politique confirmés | Matrice logistique | Transporteur |
 | AJ-110 | Finaliser et valider les contenus légaux | À valider | AJ Luxury + Adam | Socle CGV, mentions, confidentialité, cookies et retours intégré ; identité et opérations confirmées | `docs/LEGAL-LAUNCH-REGISTER.md` | Données société, logistique, paiement, médiateur, conseil juridique |
-| AJ-111 | Configurer mesure et consentement | À connecter | Adam CHABBI | Consentement et événements commerce testés | Plan de taggage et recette | AJ-110 |
+| AJ-111 | Configurer mesure et consentement | À connecter | Adam CHABBI | Socle fail-closed et quatre événements commerce testés ; fournisseur et activation encore à valider | `docs/ANALYTICS-LOT-2.md` et tests automatisés | AJ-110 |
 | AJ-112 | Recetter le commerce réel | À connecter | Adam + AJ Luxury | Paiement, stock, e-mails et erreurs testés | Procès-verbal de recette | AJ-102 à AJ-111 |
 | AJ-113 | Mettre en ligne et documenter | À connecter | Adam CHABBI | Domaine actif, surveillance en place, accès transmis | URL production et runbook | AJ-112 |
 | AJ-114 | Connecter la rétractation en ligne | À connecter | Adam CHABBI | Déclaration sans compte, confirmation explicite et accusé durable horodaté testés | Route `/withdrawal` et preuve de recette | Commandes, e-mail transactionnel, AJ-110 |
