@@ -39,7 +39,7 @@ function withTotals(cart: Cart, lines: CartLine[]): Cart {
 
 /**
  * Provider sans I/O et sans persistance. Il documente le contrat attendu
- * d'un futur connecteur Shopify/Stripe sans prétendre encaisser ni stocker.
+ * d'un futur connecteur de paiement sans prétendre encaisser ni stocker.
  */
 export const mockCommerceProvider: CommerceProvider = {
   name: "AJ Luxury local commerce simulator",
