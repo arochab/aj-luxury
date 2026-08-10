@@ -44,6 +44,10 @@ test("generates twelve stable internal references without EAN input", () => {
     size: "M",
   });
   assert.equal(parseInternalVariantReference("1234567890123"), null);
+  assert.throws(
+    () => buildInternalVariantReference("unknown", "S"),
+    /Unsupported AJ Luxury launch variant/,
+  );
   assert.deepEqual(
     launchVariants.map((variant) => variant.sku),
     references,
@@ -156,6 +160,23 @@ test("keeps every shipping zone disabled until real configuration exists", () =>
       "height",
     ],
   );
+  assert.ok(
+    getZoneActivationBlockers({
+      zone: "EU",
+      carrierServiceCode: "carrier\r\nsecret",
+      priceCents: 500,
+      estimatedDaysMin: 2,
+      estimatedDaysMax: 4,
+      dutiesTerms: "EU_INCLUDED",
+      parcel: {
+        weightGrams: 250,
+        lengthCm: 30,
+        widthCm: 20,
+        heightCm: 5,
+        originCountryCode: "FR",
+      },
+    }).includes("carrier-service"),
+  );
 });
 
 test("enforces customer ownership and lean admin roles", async () => {
@@ -187,6 +208,10 @@ test("enforces customer ownership and lean admin roles", async () => {
   });
   assert.notEqual(grant, null);
   assert.equal(canReadOrder({ kind: "guest-order", grant }, order), true);
+  assert.equal(
+    canReadOrder({ kind: "guest-order", grant: { orderId: "ord_1" } }, order),
+    false,
+  );
   assert.equal(
     canReadOrder(
       { kind: "customer", customerId: "" },
@@ -258,6 +283,7 @@ test("allowlists operational logs and preserves legal-retention gates", () => {
       rawWebhookPayload: "secret",
       attempt: 2,
       provider: "sk_live_secret",
+      errorCode: "0612345678",
       durationMs: Number.NaN,
       arbitrary: "drop-me",
     }),

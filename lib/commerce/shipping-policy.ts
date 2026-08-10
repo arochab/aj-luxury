@@ -181,22 +181,33 @@ export function getZoneActivationBlockers(
 
   const isNonNegativeSafeInteger = (value: number | null): value is number =>
     value !== null && Number.isSafeInteger(value) && value >= 0;
-  const isPositiveSafeInteger = (value: number | null): value is number =>
-    value !== null && Number.isSafeInteger(value) && value > 0;
-  const isPositiveFinite = (value: number | null): value is number =>
-    value !== null && Number.isFinite(value) && value > 0;
+  const isPositiveSafeInteger = (
+    value: number | null,
+    maximum = Number.MAX_SAFE_INTEGER,
+  ): value is number =>
+    value !== null &&
+    Number.isSafeInteger(value) &&
+    value > 0 &&
+    value <= maximum;
+  const isPositiveFinite = (
+    value: number | null,
+    maximum: number,
+  ): value is number =>
+    value !== null && Number.isFinite(value) && value > 0 && value <= maximum;
 
   if (!(launchShippingZones as readonly string[]).includes(input.zone)) {
     blockers.push("zone");
   }
-  if (!input.carrierServiceCode?.trim()) blockers.push("carrier-service");
+  if (!/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,79}$/.test(input.carrierServiceCode ?? "")) {
+    blockers.push("carrier-service");
+  }
   if (!isNonNegativeSafeInteger(input.priceCents)) blockers.push("price");
-  if (!isPositiveSafeInteger(input.estimatedDaysMin)) {
+  if (!isPositiveSafeInteger(input.estimatedDaysMin, 365)) {
     blockers.push("minimum-delivery-time");
   }
   if (
-    !isPositiveSafeInteger(input.estimatedDaysMax) ||
-    !isPositiveSafeInteger(input.estimatedDaysMin) ||
+    !isPositiveSafeInteger(input.estimatedDaysMax, 365) ||
+    !isPositiveSafeInteger(input.estimatedDaysMin, 365) ||
     input.estimatedDaysMax < input.estimatedDaysMin
   ) {
     blockers.push("maximum-delivery-time");
@@ -213,10 +224,10 @@ export function getZoneActivationBlockers(
   ) {
     blockers.push("international-duties-terms");
   }
-  if (!isPositiveSafeInteger(parcel.weightGrams)) blockers.push("weight");
-  if (!isPositiveFinite(parcel.lengthCm)) blockers.push("length");
-  if (!isPositiveFinite(parcel.widthCm)) blockers.push("width");
-  if (!isPositiveFinite(parcel.heightCm)) blockers.push("height");
+  if (!isPositiveSafeInteger(parcel.weightGrams, 1_000_000)) blockers.push("weight");
+  if (!isPositiveFinite(parcel.lengthCm, 1_000)) blockers.push("length");
+  if (!isPositiveFinite(parcel.widthCm, 1_000)) blockers.push("width");
+  if (!isPositiveFinite(parcel.heightCm, 1_000)) blockers.push("height");
   if (!normalizeCountryCode(parcel.originCountryCode ?? "")) {
     blockers.push("origin-country");
   }

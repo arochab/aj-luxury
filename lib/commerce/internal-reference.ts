@@ -26,6 +26,9 @@ export function buildInternalVariantReference(
   colorSlug: LaunchColorSlug,
   size: ProductSize,
 ): string {
+  if (!isLaunchColorSlug(colorSlug) || !isProductSize(size)) {
+    throw new Error("Unsupported AJ Luxury launch variant.");
+  }
   return `AJ-${MODEL_CODE}-${colorCodes[colorSlug]}-${size}`;
 }
 

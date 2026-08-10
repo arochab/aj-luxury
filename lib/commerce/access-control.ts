@@ -50,7 +50,7 @@ function isSafeInternalId(value: string): boolean {
   return safeInternalId.test(value);
 }
 
-declare const verifiedGuestGrantBrand: unique symbol;
+const verifiedGuestGrantBrand = Symbol("verified-guest-order-grant");
 
 export type VerifiedGuestOrderGrant = {
   orderId: string;
@@ -74,9 +74,10 @@ export async function verifyGuestOrderGrant(input: {
     return null;
   }
 
-  return {
+  return Object.freeze({
     orderId: input.orderId,
-  } as VerifiedGuestOrderGrant;
+    [verifiedGuestGrantBrand]: true as const,
+  });
 }
 
 export type OrderAccessActor =
@@ -93,6 +94,8 @@ export function canReadOrder(
   actor: OrderAccessActor,
   order: OrderOwnership,
 ): boolean {
+  if (!isSafeInternalId(order.orderId)) return false;
+
   if (actor.kind === "admin") {
     return adminHasCapability(actor.role, "orders:read");
   }
@@ -107,8 +110,8 @@ export function canReadOrder(
   }
 
   return (
+    actor.grant[verifiedGuestGrantBrand] === true &&
     isSafeInternalId(actor.grant.orderId) &&
-    isSafeInternalId(order.orderId) &&
     actor.grant.orderId === order.orderId
   );
 }

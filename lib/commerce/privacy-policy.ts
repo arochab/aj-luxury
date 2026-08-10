@@ -30,6 +30,8 @@ export function sanitizeCommerceLogMetadata(
   const unsafeString =
     /@|https?:|(?:sk|pk)_(?:live|test)_|(?:secret|password|token|bearer)/i;
   const safeToken = /^[a-z0-9][a-z0-9_.:-]{0,63}$/i;
+  const longDigitRun = /\d{7,}/;
+  const longOpaqueToken = /^[a-z0-9_-]{33,}$/i;
 
   for (const [key, value] of Object.entries(metadata)) {
     if (!allowedCommerceLogFields.has(key) || prohibitedOperationalLogFields.has(key)) {
@@ -40,7 +42,14 @@ export function sanitizeCommerceLogMetadata(
       continue;
     }
     if (typeof value === "string") {
-      if (unsafeString.test(value) || !safeToken.test(value)) continue;
+      if (
+        unsafeString.test(value) ||
+        longDigitRun.test(value) ||
+        longOpaqueToken.test(value) ||
+        !safeToken.test(value)
+      ) {
+        continue;
+      }
       if (key === "zone" && !["EU", "UK", "US", "CA"].includes(value)) {
         continue;
       }
