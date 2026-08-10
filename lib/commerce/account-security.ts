@@ -1,4 +1,6 @@
 const TOKEN_BYTES = 32;
+const canonicalUtcTimestamp =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 
 function bytesToBase64Url(bytes: Uint8Array): string {
   let binary = "";
@@ -27,6 +29,16 @@ export async function createOneTimeAccessToken(
     throw new Error("One-time access token TTL must be between 1 and 60 minutes.");
   }
 
+  let nowMs: number;
+  try {
+    nowMs = Date.prototype.getTime.call(now);
+  } catch {
+    throw new Error("One-time access token creation requires a valid Date.");
+  }
+  if (!Number.isFinite(nowMs)) {
+    throw new Error("One-time access token creation requires a valid Date.");
+  }
+
   const tokenBytes = new Uint8Array(TOKEN_BYTES);
   crypto.getRandomValues(tokenBytes);
   const token = bytesToBase64Url(tokenBytes);
@@ -34,7 +46,7 @@ export async function createOneTimeAccessToken(
   return {
     token,
     tokenHash: await hashOneTimeAccessToken(token),
-    expiresAt: new Date(now.getTime() + ttlMinutes * 60_000).toISOString(),
+    expiresAt: new Date(nowMs + ttlMinutes * 60_000).toISOString(),
   };
 }
 
@@ -64,17 +76,42 @@ export async function verifyOneTimeAccessToken(
   return difference === 0;
 }
 
-export function isOneTimeAccessTokenUsable(input: {
-  consumedAt: string | null;
-  revokedAt: string | null;
-  expiresAt: string;
-  now: Date;
-}): boolean {
-  const expiresAt = Date.parse(input.expiresAt);
+export function isCanonicalUtcTimestamp(value: unknown): value is string {
+  if (typeof value !== "string" || !canonicalUtcTimestamp.test(value)) {
+    return false;
+  }
+
+  const milliseconds = Date.parse(value);
   return (
-    input.consumedAt === null &&
-    input.revokedAt === null &&
-    Number.isFinite(expiresAt) &&
-    expiresAt > input.now.getTime()
+    Number.isFinite(milliseconds) &&
+    new Date(milliseconds).toISOString() === value
   );
+}
+
+function isRecord(value: unknown): value is Record<PropertyKey, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+export function isOneTimeAccessTokenUsable(input: unknown): boolean {
+  if (!isRecord(input)) return false;
+
+  try {
+    const consumedAt = input.consumedAt;
+    const revokedAt = input.revokedAt;
+    const expiresAt = input.expiresAt;
+    const now = input.now;
+    const nowMs = Date.prototype.getTime.call(now);
+    if (
+      consumedAt !== null ||
+      revokedAt !== null ||
+      !isCanonicalUtcTimestamp(expiresAt) ||
+      !Number.isFinite(nowMs)
+    ) {
+      return false;
+    }
+
+    return Date.parse(expiresAt) > nowMs;
+  } catch {
+    return false;
+  }
 }

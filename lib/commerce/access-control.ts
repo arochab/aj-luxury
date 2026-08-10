@@ -1,8 +1,3 @@
-import {
-  isOneTimeAccessTokenUsable,
-  verifyOneTimeAccessToken,
-} from "./account-security.ts";
-
 export const adminRoles = Object.freeze(["owner", "operations"] as const);
 export type AdminRole = (typeof adminRoles)[number];
 
@@ -54,60 +49,19 @@ export type VerifiedGuestOrderGrant = Readonly<{
   orderId: string;
 }>;
 
-const verifiedGuestGrants = new WeakSet<VerifiedGuestOrderGrant>();
+/**
+ * Guest-order access stays closed until a server-owned D1 store can compare
+ * and consume a token in one persistent transaction. A caller callback cannot
+ * stand in for that boundary because the caller could return `true` twice.
+ */
+export const guestOrderGrantAvailability = Object.freeze({
+  available: false,
+  reason: "persistent-d1-token-store-required",
+} as const);
 
-export type ConsumeOneTimeAccessTokenAtomically = (
-  command: Readonly<{
-    orderId: string;
-    expectedTokenHash: string;
-    now: string;
-  }>,
-) => Promise<boolean>;
-
-export async function verifyGuestOrderGrant(input: {
-  orderId: string;
-  providedToken: string;
-  storedTokenHash: string;
-  consumedAt: string | null;
-  revokedAt: string | null;
-  expiresAt: string;
-  now: Date;
-  /**
-   * Must compare the persisted hash, consumed/revoked state and expiry, then
-   * mark the token consumed in one storage transaction. No grant is issued
-   * without this compare-and-consume boundary.
-   */
-  consumeTokenAtomically: ConsumeOneTimeAccessTokenAtomically;
-}): Promise<VerifiedGuestOrderGrant | null> {
-  if (
-    !isRecord(input) ||
-    !isSafeInternalId(input.orderId) ||
-    typeof input.providedToken !== "string" ||
-    typeof input.storedTokenHash !== "string" ||
-    typeof input.expiresAt !== "string" ||
-    !(input.now instanceof Date) ||
-    !Number.isFinite(input.now.getTime()) ||
-    typeof input.consumeTokenAtomically !== "function" ||
-    !isOneTimeAccessTokenUsable(input) ||
-    !(await verifyOneTimeAccessToken(input.providedToken, input.storedTokenHash))
-  ) {
-    return null;
-  }
-
-  const consumed = await input.consumeTokenAtomically({
-    orderId: input.orderId,
-    expectedTokenHash: input.storedTokenHash,
-    now: input.now.toISOString(),
-  });
-  if (consumed !== true) {
-    return null;
-  }
-
-  const grant = Object.freeze({
-    orderId: input.orderId,
-  });
-  verifiedGuestGrants.add(grant);
-  return grant;
+export async function verifyGuestOrderGrant(input: unknown): Promise<null> {
+  void input;
+  return null;
 }
 
 export type OrderAccessActor =
@@ -128,43 +82,60 @@ export function canReadOrder(
   actor: OrderAccessActor | unknown,
   order: OrderOwnership | unknown,
 ): boolean {
+  if (!isRecord(actor) || !isRecord(order)) {
+    return false;
+  }
+
+  let actorKind: unknown;
+  let orderId: unknown;
+  let orderCustomerId: unknown;
+  try {
+    actorKind = actor.kind;
+    orderId = order.orderId;
+    orderCustomerId = order.customerId;
+  } catch {
+    return false;
+  }
+
   if (
-    !isRecord(actor) ||
-    !isRecord(order) ||
-    typeof order.orderId !== "string" ||
-    !isSafeInternalId(order.orderId) ||
-    (order.customerId !== null && typeof order.customerId !== "string")
+    typeof orderId !== "string" ||
+    !isSafeInternalId(orderId) ||
+    (orderCustomerId !== null && typeof orderCustomerId !== "string")
   ) {
     return false;
   }
 
-  if (actor.kind === "admin") {
+  if (actorKind === "admin") {
+    let role: unknown;
+    try {
+      role = actor.role;
+    } catch {
+      return false;
+    }
     return (
-      typeof actor.role === "string" &&
-      adminHasCapability(actor.role, "orders:read")
+      typeof role === "string" && adminHasCapability(role, "orders:read")
     );
   }
 
-  if (actor.kind === "customer") {
+  if (actorKind === "customer") {
+    let actorCustomerId: unknown;
+    try {
+      actorCustomerId = actor.customerId;
+    } catch {
+      return false;
+    }
     return (
-      order.customerId !== null &&
-      typeof actor.customerId === "string" &&
-      isSafeInternalId(actor.customerId) &&
-      isSafeInternalId(order.customerId) &&
-      actor.customerId === order.customerId
+      orderCustomerId !== null &&
+      typeof actorCustomerId === "string" &&
+      isSafeInternalId(actorCustomerId) &&
+      isSafeInternalId(orderCustomerId) &&
+      actorCustomerId === orderCustomerId
     );
   }
 
-  if (actor.kind !== "guest-order" || !isRecord(actor.grant)) {
-    return false;
-  }
-
-  return (
-    verifiedGuestGrants.has(actor.grant as VerifiedGuestOrderGrant) &&
-    typeof actor.grant.orderId === "string" &&
-    isSafeInternalId(actor.grant.orderId) &&
-    actor.grant.orderId === order.orderId
-  );
+  // Deliberately do not read actor.grant while issuance is unavailable. This
+  // also removes accessor/Proxy time-of-check/time-of-use switching.
+  return false;
 }
 
 export function canCreateRefund(role: AdminRole): boolean {

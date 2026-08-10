@@ -25,7 +25,6 @@ export const allowedCommerceLogFields = Object.freeze([
   "durationMs",
 ] as const);
 
-const allowedCommerceLogFieldSet = new Set<string>(allowedCommerceLogFields);
 const allowedEvents = new Set<string>(["payment-reconciled"]);
 const allowedStatuses = new Set<string>([
   "open",
@@ -57,51 +56,61 @@ export function sanitizeCommerceLogMetadata(
   const sanitized: Record<string, string | number> = {};
   if (!isRecord(metadata)) return sanitized;
 
-  for (const [key, value] of Object.entries(metadata)) {
-    if (!allowedCommerceLogFieldSet.has(key)) continue;
+  try {
+    for (const key of allowedCommerceLogFields) {
+      const descriptor = Object.getOwnPropertyDescriptor(metadata, key);
+      // Accessors are deliberately ignored so sanitization never executes
+      // caller code merely to produce an operational log.
+      if (!descriptor || !("value" in descriptor)) continue;
+      const value = descriptor.value;
 
-    if (key === "event") {
-      if (typeof value === "string" && allowedEvents.has(value)) {
-        sanitized.event = value;
+      if (key === "event") {
+        if (typeof value === "string" && allowedEvents.has(value)) {
+          sanitized.event = value;
+        }
+        continue;
       }
-      continue;
-    }
 
-    if (key === "status") {
-      if (typeof value === "string" && allowedStatuses.has(value)) {
-        sanitized.status = value;
+      if (key === "status") {
+        if (typeof value === "string" && allowedStatuses.has(value)) {
+          sanitized.status = value;
+        }
+        continue;
       }
-      continue;
-    }
 
-    if (key === "zone") {
-      if (typeof value === "string" && allowedZones.has(value)) {
-        sanitized.zone = value;
+      if (key === "zone") {
+        if (typeof value === "string" && allowedZones.has(value)) {
+          sanitized.zone = value;
+        }
+        continue;
       }
-      continue;
-    }
 
-    if (key === "attempt") {
+      if (key === "attempt") {
+        if (
+          typeof value === "number" &&
+          Number.isSafeInteger(value) &&
+          value >= 1 &&
+          value <= 20
+        ) {
+          sanitized.attempt = value;
+        }
+        continue;
+      }
+
       if (
+        key === "durationMs" &&
         typeof value === "number" &&
         Number.isSafeInteger(value) &&
-        value >= 1 &&
-        value <= 20
+        value >= 0 &&
+        value <= 120_000
       ) {
-        sanitized.attempt = value;
+        sanitized.durationMs = value;
       }
-      continue;
     }
-
-    if (
-      key === "durationMs" &&
-      typeof value === "number" &&
-      Number.isSafeInteger(value) &&
-      value >= 0 &&
-      value <= 120_000
-    ) {
-      sanitized.durationMs = value;
-    }
+  } catch {
+    // Logging must never break the commerce path. A hostile or revoked Proxy
+    // is dropped entirely instead of leaking a partial, inconsistent record.
+    return {};
   }
 
   return sanitized;
@@ -127,9 +136,28 @@ export const commerceDataRules = Object.freeze({
 export type DataRightsRequestKind =
   (typeof commerceDataRules.customerRights)[number];
 
-export function canEraseCommerceRecord(input: {
-  legalRetentionRequired: boolean;
-  activeDispute: boolean;
-}): boolean {
-  return !input.legalRetentionRequired && !input.activeDispute;
+export function canEraseCommerceRecord(input: unknown): boolean {
+  if (!isRecord(input) || Array.isArray(input)) return false;
+
+  try {
+    // structuredClone rejects Proxy objects and removes any time-of-check /
+    // time-of-use gap. Only a plain data record with two explicit booleans can
+    // authorize erasure; every malformed or active object fails closed.
+    if (Object.getPrototypeOf(input) !== Object.prototype) return false;
+    const snapshot: unknown = structuredClone(input);
+    if (
+      !isRecord(snapshot) ||
+      Array.isArray(snapshot) ||
+      Object.getPrototypeOf(snapshot) !== Object.prototype
+    ) {
+      return false;
+    }
+
+    return (
+      snapshot.legalRetentionRequired === false &&
+      snapshot.activeDispute === false
+    );
+  } catch {
+    return false;
+  }
 }

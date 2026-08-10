@@ -16,10 +16,14 @@ import {
   adminHasCapability,
   canCreateRefund,
   canReadOrder,
+  guestOrderGrantAvailability,
   verifyGuestOrderGrant,
 } from "../lib/commerce/access-control.ts";
 import { createOneTimeAccessToken } from "../lib/commerce/account-security.ts";
-import { launchVariants } from "../lib/commerce/catalog.ts";
+import {
+  getLaunchVariant,
+  launchVariants,
+} from "../lib/commerce/catalog.ts";
 import { iso3166Alpha2CountryCodes } from "../lib/commerce/iso-country-codes.ts";
 import {
   buildTransactionalEmail,
@@ -31,7 +35,26 @@ import {
   prohibitedOperationalLogFields,
   sanitizeCommerceLogMetadata,
 } from "../lib/commerce/privacy-policy.ts";
-import { sizes as catalogueSizes } from "../lib/products.ts";
+import { products, sizes as catalogueSizes } from "../lib/products.ts";
+
+function assertDeeplyFrozen(value, seen = new Set()) {
+  if (
+    (typeof value !== "object" && typeof value !== "function") ||
+    value === null ||
+    seen.has(value)
+  ) {
+    return;
+  }
+
+  seen.add(value);
+  assert.equal(Object.isFrozen(value), true);
+  for (const key of Reflect.ownKeys(value)) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (descriptor && "value" in descriptor) {
+      assertDeeplyFrozen(descriptor.value, seen);
+    }
+  }
+}
 
 test("generates twelve stable internal references without EAN input", () => {
   const colors = ["pourpre", "rose-pale", "lilas-bleu-clair"];
@@ -85,6 +108,30 @@ test("keeps exported security lists immutable at runtime", () => {
   assert.equal(iso3166Alpha2CountryCodes.includes("XK"), false);
 });
 
+test("deep-freezes products and launch variants at every runtime layer", () => {
+  assertDeeplyFrozen(products);
+  assertDeeplyFrozen(launchVariants);
+
+  const variantId = launchVariants[0].id;
+  const originalAmount = launchVariants[0].price.amountCents;
+  const originalImage = products[0].gallery[0].src;
+  assert.throws(() => {
+    launchVariants[0].price.amountCents = 1;
+  }, TypeError);
+  assert.throws(() => {
+    launchVariants[0].options[0].value = "MUTATED";
+  }, TypeError);
+  assert.throws(() => {
+    products[0].gallery[0].src = "/mutated.webp";
+  }, TypeError);
+  assert.throws(() => {
+    products[0].benefits[0].title = "MUTATED";
+  }, TypeError);
+
+  assert.equal(getLaunchVariant(variantId)?.price.amountCents, originalAmount);
+  assert.equal(products[0].gallery[0].src, originalImage);
+});
+
 test("recognizes only launch zones and blocks special territories", () => {
   assert.deepEqual(resolveLaunchShippingScope({ countryCode: "FR", postalCode: "75001" }), {
     inScope: true,
@@ -95,6 +142,14 @@ test("recognizes only launch zones and blocks special territories", () => {
   assert.equal(resolveLaunchShippingScope({ countryCode: "DE" }).zone, "EU");
   assert.equal(resolveLaunchShippingScope({ countryCode: "GB" }).zone, "UK");
   assert.equal(resolveLaunchShippingScope({ countryCode: "US", regionCode: "CA" }).zone, "US");
+  assert.equal(
+    resolveLaunchShippingScope({ countryCode: "US" }).reason,
+    "invalid-address-input",
+  );
+  assert.equal(
+    resolveLaunchShippingScope({ countryCode: "US", regionCode: "XX" }).reason,
+    "invalid-address-input",
+  );
   assert.equal(resolveLaunchShippingScope({ countryCode: "CA" }).zone, "CA");
   assert.equal(
     resolveLaunchShippingScope({ countryCode: "FR", postalCode: "97100" }).reason,
@@ -140,6 +195,97 @@ test("recognizes only launch zones and blocks special territories", () => {
       "special-territory-needs-explicit-validation",
     );
   }
+});
+
+test("snapshots hostile shipping inputs exactly once and fails closed on traps", () => {
+  const addressReads = new Map();
+  const alternatingAddress = new Proxy(
+    { countryCode: "US", postalCode: undefined, regionCode: "PR" },
+    {
+      get(target, key, receiver) {
+        addressReads.set(key, (addressReads.get(key) ?? 0) + 1);
+        if (key === "regionCode") {
+          return addressReads.get(key) === 1 ? "PR" : "CA";
+        }
+        return Reflect.get(target, key, receiver);
+      },
+    },
+  );
+
+  assert.equal(
+    resolveLaunchShippingScope(alternatingAddress).reason,
+    "special-territory-needs-explicit-validation",
+  );
+  assert.deepEqual(Object.fromEntries(addressReads), {
+    countryCode: 1,
+    postalCode: 1,
+    regionCode: 1,
+  });
+
+  const activationReads = new Map();
+  const countReads = (target, prefix) =>
+    new Proxy(target, {
+      get(object, key, receiver) {
+        const label = `${prefix}${String(key)}`;
+        activationReads.set(label, (activationReads.get(label) ?? 0) + 1);
+        return Reflect.get(object, key, receiver);
+      },
+    });
+  const parcel = countReads(
+    {
+      weightGrams: 250,
+      lengthCm: 30,
+      widthCm: 20,
+      heightCm: 5,
+      originCountryCode: "FR",
+    },
+    "parcel.",
+  );
+  const activation = countReads(
+    {
+      zone: "EU",
+      carrierServiceCode: "test-carrier",
+      priceCents: 500,
+      estimatedDaysMin: 2,
+      estimatedDaysMax: 4,
+      dutiesTerms: "EU_INCLUDED",
+      parcel,
+    },
+    "input.",
+  );
+  assert.deepEqual(getZoneActivationBlockers(activation), []);
+  for (const count of activationReads.values()) {
+    assert.equal(count, 1);
+  }
+
+  const throwingAddress = new Proxy(
+    {},
+    {
+      get() {
+        throw new Error("trap");
+      },
+    },
+  );
+  assert.equal(
+    resolveLaunchShippingScope(throwingAddress).reason,
+    "invalid-address-input",
+  );
+  assert.deepEqual(
+    getZoneActivationBlockers(throwingAddress),
+    [
+      "zone",
+      "carrier-service",
+      "price",
+      "minimum-delivery-time",
+      "maximum-delivery-time",
+      "duties-terms",
+      "weight",
+      "length",
+      "width",
+      "height",
+      "origin-country",
+    ],
+  );
 });
 
 test("keeps every shipping zone disabled until real configuration exists", () => {
@@ -267,55 +413,10 @@ test("keeps every shipping zone disabled until real configuration exists", () =>
   ]);
 });
 
-test("enforces customer ownership and lean admin roles", async () => {
+test("enforces customer ownership and lean admin roles", () => {
   const order = { orderId: "ord_1", customerId: "cus_a" };
   assert.equal(canReadOrder({ kind: "customer", customerId: "cus_a" }, order), true);
   assert.equal(canReadOrder({ kind: "customer", customerId: "cus_b" }, order), false);
-  const now = new Date("2026-08-10T20:00:00.000Z");
-  const token = await createOneTimeAccessToken(now);
-  let invalidTokenConsumerCalled = false;
-  assert.equal(
-    await verifyGuestOrderGrant({
-      orderId: "ord_1",
-      providedToken: "invalid",
-      storedTokenHash: token.tokenHash,
-      consumedAt: null,
-      revokedAt: null,
-      expiresAt: token.expiresAt,
-      now,
-      consumeTokenAtomically: async () => {
-        invalidTokenConsumerCalled = true;
-        return true;
-      },
-    }),
-    null,
-  );
-  assert.equal(invalidTokenConsumerCalled, false);
-  let consumed = false;
-  const grant = await verifyGuestOrderGrant({
-    orderId: "ord_1",
-    providedToken: token.token,
-    storedTokenHash: token.tokenHash,
-    consumedAt: null,
-    revokedAt: null,
-    expiresAt: token.expiresAt,
-    now,
-    consumeTokenAtomically: async ({ expectedTokenHash }) => {
-      if (consumed || expectedTokenHash !== token.tokenHash) return false;
-      consumed = true;
-      return true;
-    },
-  });
-  assert.notEqual(grant, null);
-  assert.equal(canReadOrder({ kind: "guest-order", grant }, order), true);
-  assert.equal(
-    canReadOrder({ kind: "guest-order", grant: { orderId: "ord_1" } }, order),
-    false,
-  );
-  assert.equal(
-    canReadOrder({ kind: "guest-order", grant: { ...grant } }, order),
-    false,
-  );
   assert.equal(
     canReadOrder(
       { kind: "customer", customerId: "" },
@@ -345,9 +446,14 @@ test("enforces customer ownership and lean admin roles", async () => {
   assert.equal(canCreateRefund("owner"), true);
 });
 
-test("requires one atomic token consumer and issues one grant under concurrency", async () => {
+test("keeps guest grants closed until a persistent D1 consumer exists", async () => {
   const now = new Date("2026-08-10T20:00:00.000Z");
   const token = await createOneTimeAccessToken(now);
+  let callerCallbackCount = 0;
+  const callerControlledCallback = async () => {
+    callerCallbackCount += 1;
+    return true;
+  };
   const base = {
     orderId: "ord_concurrent",
     providedToken: token.token,
@@ -356,31 +462,44 @@ test("requires one atomic token consumer and issues one grant under concurrency"
     revokedAt: null,
     expiresAt: token.expiresAt,
     now,
+    consumeTokenAtomically: callerControlledCallback,
   };
 
-  assert.equal(await verifyGuestOrderGrant(base), null);
-
-  let consumed = false;
-  const consumeTokenAtomically = async () => {
-    if (consumed) return false;
-    consumed = true;
-    return true;
-  };
   const results = await Promise.all([
-    verifyGuestOrderGrant({ ...base, consumeTokenAtomically }),
-    verifyGuestOrderGrant({ ...base, consumeTokenAtomically }),
+    verifyGuestOrderGrant(base),
+    verifyGuestOrderGrant(base),
   ]);
 
-  assert.equal(results.filter(Boolean).length, 1);
-  assert.equal(
-    results.filter((grant) =>
-      canReadOrder(
-        { kind: "guest-order", grant },
-        { orderId: "ord_concurrent", customerId: null },
-      ),
-    ).length,
-    1,
+  assert.deepEqual(results, [null, null]);
+  assert.equal(callerCallbackCount, 0);
+  assert.deepEqual(guestOrderGrantAvailability, {
+    available: false,
+    reason: "persistent-d1-token-store-required",
+  });
+
+  let grantReads = 0;
+  const alternatingActor = new Proxy(
+    { kind: "guest-order" },
+    {
+      get(target, key, receiver) {
+        if (key === "grant") {
+          grantReads += 1;
+          return grantReads % 2 === 1
+            ? { orderId: "ord_source" }
+            : { orderId: "ord_target" };
+        }
+        return Reflect.get(target, key, receiver);
+      },
+    },
   );
+  assert.equal(
+    canReadOrder(
+      alternatingActor,
+      { orderId: "ord_target", customerId: null },
+    ),
+    false,
+  );
+  assert.equal(grantReads, 0);
 });
 
 test("builds deterministic transactional messages and rejects incomplete input", async () => {
@@ -392,6 +511,7 @@ test("builds deterministic transactional messages and rejects incomplete input",
     orderNumber: "AJ-2026-0001",
   });
   assert.equal(email.recipientEmail, "client@example.com");
+  assert.equal(email.deduplicationPersisted, false);
   assert.match(
     email.deduplicationKey,
     /^payment-confirmation:evt_payment_1:AJ-2026-0001:[0-9a-f]{64}$/,
@@ -434,6 +554,25 @@ test("builds deterministic transactional messages and rejects incomplete input",
     /^account-access:evt_access_1:[0-9a-f]{64}$/,
   );
   assert.doesNotMatch(access.deduplicationKey, /token|client@/i);
+  assert.equal(access.deduplicationPersisted, false);
+
+  for (const recipientEmail of [
+    "client@example.com,attacker",
+    "client,tag@example.com",
+    "client@example.com;attacker",
+  ]) {
+    await assert.rejects(
+      () =>
+        buildTransactionalEmail({
+          kind: "payment-confirmation",
+          eventId: "evt_invalid_recipient",
+          locale: "fr",
+          recipientEmail,
+          orderNumber: "AJ-2026-0001",
+        }),
+      /recipient/,
+    );
+  }
 
   await assert.rejects(
     () =>
@@ -541,6 +680,37 @@ test("allowlists operational logs and preserves legal-retention gates", () => {
     }),
     {},
   );
+
+  const metadataWithThrowingAccessors = {
+    event: "payment-reconciled",
+    get rawWebhookPayload() {
+      throw new Error("must never be read");
+    },
+    get status() {
+      throw new Error("must never be invoked");
+    },
+  };
+  assert.deepEqual(
+    sanitizeCommerceLogMetadata(metadataWithThrowingAccessors),
+    { event: "payment-reconciled" },
+  );
+  assert.deepEqual(
+    sanitizeCommerceLogMetadata(
+      new Proxy(
+        {},
+        {
+          ownKeys() {
+            throw new Error("hostile ownKeys trap");
+          },
+        },
+      ),
+    ),
+    {},
+  );
+  const revokedMetadata = Proxy.revocable({}, {});
+  revokedMetadata.revoke();
+  assert.deepEqual(sanitizeCommerceLogMetadata(revokedMetadata.proxy), {});
+
   assert.equal(
     canEraseCommerceRecord({ legalRetentionRequired: true, activeDispute: false }),
     false,
@@ -548,5 +718,39 @@ test("allowlists operational logs and preserves legal-retention gates", () => {
   assert.equal(
     canEraseCommerceRecord({ legalRetentionRequired: false, activeDispute: false }),
     true,
+  );
+  for (const invalidInput of [
+    {},
+    null,
+    undefined,
+    [],
+    "false",
+    0,
+    { legalRetentionRequired: "false", activeDispute: false },
+    { legalRetentionRequired: false, activeDispute: 0 },
+  ]) {
+    assert.equal(canEraseCommerceRecord(invalidInput), false);
+  }
+  assert.equal(
+    canEraseCommerceRecord(
+      new Proxy(
+        { legalRetentionRequired: false, activeDispute: false },
+        {},
+      ),
+    ),
+    false,
+  );
+  assert.equal(
+    canEraseCommerceRecord(
+      new Proxy(
+        {},
+        {
+          getPrototypeOf() {
+            throw new Error("hostile prototype trap");
+          },
+        },
+      ),
+    ),
+    false,
   );
 });

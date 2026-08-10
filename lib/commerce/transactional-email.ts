@@ -20,7 +20,9 @@ export type TransactionalEmailInput = {
 };
 
 export type TransactionalEmail = {
+  /** Deterministic candidate only; this builder does not reserve or persist it. */
   deduplicationKey: string;
+  deduplicationPersisted: false;
   recipientEmail: string;
   subject: string;
   text: string;
@@ -97,6 +99,42 @@ async function fingerprintRecipient(recipient: string): Promise<string> {
   return bytesToHex(new Uint8Array(digest));
 }
 
+function isStrictMailboxAddress(value: string): boolean {
+  if (value.length > 254) return false;
+
+  const atIndex = value.indexOf("@");
+  if (atIndex < 1 || atIndex !== value.lastIndexOf("@")) return false;
+
+  const localPart = value.slice(0, atIndex);
+  const domain = value.slice(atIndex + 1);
+  if (
+    localPart.length > 64 ||
+    localPart.startsWith(".") ||
+    localPart.endsWith(".") ||
+    localPart.includes("..") ||
+    !/^[A-Za-z0-9!#$%&'*+/=?^_`{|}~.-]+$/.test(localPart)
+  ) {
+    return false;
+  }
+
+  const labels = domain.split(".");
+  if (
+    domain.length > 253 ||
+    labels.length < 2 ||
+    !labels.every(
+      (label) =>
+        label.length >= 1 &&
+        label.length <= 63 &&
+        /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/.test(label),
+    ) ||
+    !/^(?:[A-Za-z]{2,63}|xn--[A-Za-z0-9-]{2,59})$/.test(labels.at(-1)!)
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
 export function buildTransactionalEmail(
   input: TransactionalEmailInput,
 ): Promise<TransactionalEmail>;
@@ -124,7 +162,7 @@ export async function buildTransactionalEmail(
   const eventId = requireIdentifier(input.eventId, "eventId", safeEventId);
   const recipient = requireValue(input.recipientEmail, "recipientEmail")
     .toLowerCase();
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient)) {
+  if (!isStrictMailboxAddress(recipient)) {
     throw new Error("Invalid transactional email recipient.");
   }
   const recipientFingerprint = await fingerprintRecipient(recipient);
@@ -133,6 +171,7 @@ export async function buildTransactionalEmail(
     const accessUrl = requireAjAccountAccessUrl(input.accessUrl);
     return {
       deduplicationKey: `${kind}:${eventId}:${recipientFingerprint}`,
+      deduplicationPersisted: false,
       recipientEmail: recipient,
       subject:
         locale === "fr"
@@ -189,6 +228,7 @@ export async function buildTransactionalEmail(
 
   return {
     deduplicationKey: `${kind}:${eventId}:${orderNumber}:${recipientFingerprint}`,
+    deduplicationPersisted: false,
     recipientEmail: recipient,
     subject: `${subjectPrefix} ${orderNumber}`,
     text: `${line} ${orderNumber}.`,

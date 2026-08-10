@@ -52,6 +52,60 @@ const usSpecialRegions = new Set([
   "VI",
 ]);
 
+const usLaunchRegions = new Set([
+  "AL",
+  "AK",
+  "AZ",
+  "AR",
+  "CA",
+  "CO",
+  "CT",
+  "DE",
+  "DC",
+  "FL",
+  "GA",
+  "HI",
+  "ID",
+  "IL",
+  "IN",
+  "IA",
+  "KS",
+  "KY",
+  "LA",
+  "ME",
+  "MD",
+  "MA",
+  "MI",
+  "MN",
+  "MS",
+  "MO",
+  "MT",
+  "NE",
+  "NV",
+  "NH",
+  "NJ",
+  "NM",
+  "NY",
+  "NC",
+  "ND",
+  "OH",
+  "OK",
+  "OR",
+  "PA",
+  "RI",
+  "SC",
+  "SD",
+  "TN",
+  "TX",
+  "UT",
+  "VT",
+  "VA",
+  "WA",
+  "WV",
+  "WI",
+  "WY",
+]);
+
 export type ShippingAddressScopeInput = {
   countryCode: string;
   postalCode?: string;
@@ -90,23 +144,42 @@ function normalizePostalCode(value: string | undefined): string {
   return (value ?? "").replace(/\s+/g, "").toUpperCase();
 }
 
-function isShippingAddressScopeInput(
+function snapshotShippingAddressScopeInput(
   value: unknown,
-): value is ShippingAddressScopeInput {
-  return (
-    isRecord(value) &&
-    typeof value.countryCode === "string" &&
-    (value.postalCode === undefined || typeof value.postalCode === "string") &&
-    (value.regionCode === undefined || typeof value.regionCode === "string")
-  );
+): ShippingAddressScopeInput | null {
+  if (!isRecord(value)) return null;
+
+  try {
+    // Read each untrusted property exactly once, then make every decision from
+    // this plain snapshot. This closes accessor/Proxy TOCTOU switching.
+    const countryCode = value.countryCode;
+    const postalCode = value.postalCode;
+    const regionCode = value.regionCode;
+    if (
+      typeof countryCode !== "string" ||
+      (postalCode !== undefined && typeof postalCode !== "string") ||
+      (regionCode !== undefined && typeof regionCode !== "string")
+    ) {
+      return null;
+    }
+    return { countryCode, postalCode, regionCode };
+  } catch {
+    return null;
+  }
+}
+
+function normalizeRegionCode(value: string | undefined): string | null {
+  if (value === undefined) return null;
+  const normalized = value.trim().toUpperCase();
+  return /^[A-Z]{2}$/.test(normalized) ? normalized : null;
 }
 
 function isSpecialTerritory(
   input: ShippingAddressScopeInput,
   country: string,
+  region: string | null,
 ): boolean {
   const postal = normalizePostalCode(input.postalCode);
-  const region = (input.regionCode ?? "").trim().toUpperCase();
 
   if (country === "FR") {
     return /^(97[1-8]|98[4-8])/.test(postal);
@@ -117,7 +190,7 @@ function isSpecialTerritory(
   }
 
   if (country === "US") {
-    return usSpecialRegions.has(region);
+    return region !== null && usSpecialRegions.has(region);
   }
 
   if (country === "GR") {
@@ -153,7 +226,8 @@ export function resolveLaunchShippingScope(
 export function resolveLaunchShippingScope(
   input: unknown,
 ): ShippingScopeDecision {
-  if (!isShippingAddressScopeInput(input)) {
+  const snapshot = snapshotShippingAddressScopeInput(input);
+  if (!snapshot) {
     return {
       inScope: false,
       zone: null,
@@ -162,7 +236,7 @@ export function resolveLaunchShippingScope(
     };
   }
 
-  const country = normalizeCountryCode(input.countryCode);
+  const country = normalizeCountryCode(snapshot.countryCode);
   if (!country) {
     return {
       inScope: false,
@@ -172,12 +246,31 @@ export function resolveLaunchShippingScope(
     };
   }
 
-  if (isSpecialTerritory(input, country)) {
+  const region = normalizeRegionCode(snapshot.regionCode);
+  if (country === "US" && region === null) {
+    return {
+      inScope: false,
+      zone: null,
+      checkoutEnabled: false,
+      reason: "invalid-address-input",
+    };
+  }
+
+  if (isSpecialTerritory(snapshot, country, region)) {
     return {
       inScope: false,
       zone: null,
       checkoutEnabled: false,
       reason: "special-territory-needs-explicit-validation",
+    };
+  }
+
+  if (country === "US" && !usLaunchRegions.has(region!)) {
+    return {
+      inScope: false,
+      zone: null,
+      checkoutEnabled: false,
+      reason: "invalid-address-input",
     };
   }
 
@@ -251,34 +344,98 @@ function isPositiveFinite(value: unknown, maximum: number): value is number {
   );
 }
 
+type ZoneActivationSnapshot = {
+  zone: unknown;
+  carrierServiceCode: unknown;
+  priceCents: unknown;
+  estimatedDaysMin: unknown;
+  estimatedDaysMax: unknown;
+  dutiesTerms: unknown;
+  parcel: {
+    weightGrams: unknown;
+    lengthCm: unknown;
+    widthCm: unknown;
+    heightCm: unknown;
+    originCountryCode: unknown;
+  };
+};
+
+function snapshotZoneActivationInput(
+  input: unknown,
+): ZoneActivationSnapshot | null {
+  if (!isRecord(input)) return null;
+
+  try {
+    const zone = input.zone;
+    const carrierServiceCode = input.carrierServiceCode;
+    const priceCents = input.priceCents;
+    const estimatedDaysMin = input.estimatedDaysMin;
+    const estimatedDaysMax = input.estimatedDaysMax;
+    const dutiesTerms = input.dutiesTerms;
+    const parcelInput = input.parcel;
+
+    let weightGrams: unknown;
+    let lengthCm: unknown;
+    let widthCm: unknown;
+    let heightCm: unknown;
+    let originCountryCode: unknown;
+    if (isRecord(parcelInput)) {
+      weightGrams = parcelInput.weightGrams;
+      lengthCm = parcelInput.lengthCm;
+      widthCm = parcelInput.widthCm;
+      heightCm = parcelInput.heightCm;
+      originCountryCode = parcelInput.originCountryCode;
+    }
+
+    return {
+      zone,
+      carrierServiceCode,
+      priceCents,
+      estimatedDaysMin,
+      estimatedDaysMax,
+      dutiesTerms,
+      parcel: {
+        weightGrams,
+        lengthCm,
+        widthCm,
+        heightCm,
+        originCountryCode,
+      },
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function getZoneActivationBlockers(input: ZoneActivationInput): string[];
 export function getZoneActivationBlockers(input: unknown): string[] {
   const blockers: string[] = [];
-  const record = isRecord(input) ? input : {};
-  const parcel = isRecord(record.parcel) ? record.parcel : {};
-  const zone = typeof record.zone === "string" ? record.zone : null;
+  const snapshot = snapshotZoneActivationInput(input);
+  const zone = typeof snapshot?.zone === "string" ? snapshot.zone : null;
   const zoneIsValid = zone !== null && launchShippingZoneSet.has(zone);
 
   if (!zoneIsValid) blockers.push("zone");
   if (
-    typeof record.carrierServiceCode !== "string" ||
-    !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,79}$/.test(record.carrierServiceCode)
+    typeof snapshot?.carrierServiceCode !== "string" ||
+    !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,79}$/.test(
+      snapshot.carrierServiceCode,
+    )
   ) {
     blockers.push("carrier-service");
   }
-  if (!isNonNegativeSafeInteger(record.priceCents)) blockers.push("price");
-  if (!isPositiveSafeInteger(record.estimatedDaysMin, 365)) {
+  if (!isNonNegativeSafeInteger(snapshot?.priceCents)) blockers.push("price");
+  if (!isPositiveSafeInteger(snapshot?.estimatedDaysMin, 365)) {
     blockers.push("minimum-delivery-time");
   }
   if (
-    !isPositiveSafeInteger(record.estimatedDaysMax, 365) ||
-    !isPositiveSafeInteger(record.estimatedDaysMin, 365) ||
-    record.estimatedDaysMax < record.estimatedDaysMin
+    !isPositiveSafeInteger(snapshot?.estimatedDaysMax, 365) ||
+    !isPositiveSafeInteger(snapshot?.estimatedDaysMin, 365) ||
+    snapshot.estimatedDaysMax < snapshot.estimatedDaysMin
   ) {
     blockers.push("maximum-delivery-time");
   }
 
-  const dutiesTerms = record.dutiesTerms;
+  const dutiesTerms = snapshot?.dutiesTerms;
   const dutiesAreRecognized =
     dutiesTerms === "EU_INCLUDED" || dutiesTerms === "DAP" || dutiesTerms === "DDP";
   if (!dutiesAreRecognized) blockers.push("duties-terms");
@@ -295,13 +452,19 @@ export function getZoneActivationBlockers(input: unknown): string[] {
     blockers.push("international-duties-terms");
   }
 
-  if (!isPositiveSafeInteger(parcel.weightGrams, 1_000_000)) {
+  if (!isPositiveSafeInteger(snapshot?.parcel.weightGrams, 1_000_000)) {
     blockers.push("weight");
   }
-  if (!isPositiveFinite(parcel.lengthCm, 1_000)) blockers.push("length");
-  if (!isPositiveFinite(parcel.widthCm, 1_000)) blockers.push("width");
-  if (!isPositiveFinite(parcel.heightCm, 1_000)) blockers.push("height");
-  if (!normalizeCountryCode(parcel.originCountryCode)) {
+  if (!isPositiveFinite(snapshot?.parcel.lengthCm, 1_000)) {
+    blockers.push("length");
+  }
+  if (!isPositiveFinite(snapshot?.parcel.widthCm, 1_000)) {
+    blockers.push("width");
+  }
+  if (!isPositiveFinite(snapshot?.parcel.heightCm, 1_000)) {
+    blockers.push("height");
+  }
+  if (!normalizeCountryCode(snapshot?.parcel.originCountryCode)) {
     blockers.push("origin-country");
   }
 
