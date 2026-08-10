@@ -30,10 +30,14 @@ architecture volontairement simple :
 Aucun microservice, moteur fiscal ou douanier maison, multi-entrepôts, système de fraude
 sur mesure, data platform ou marketing automation avancée.
 
-Solution proposée pour le go-to-market : Shopify Basic en headless comme moteur de
-catalogue, stock, commandes, paiement, comptes et administration, tout en conservant le
-frontend AJ Luxury actuel. Le compte, l’abonnement, la facturation et les données restent
-au nom d’AJ Luxury. Cette proposition doit être approuvée par Jérémy avant souscription.
+Décision d’Adam du 10 août 2026 : **Shopify est exclu**.
+
+Le socle retenu reste indépendant et proportionné : API commerce et base relationnelle
+sur Cloudflare, paiement sur une page hébergée par le prestataire, espace client
+passwordless, administration minimale protégée, e-mails transactionnels et connecteur
+de livraison standard. Le frontend AJ Luxury actuel reste intact. Tous les comptes,
+données et moyens d’encaissement restent au nom d’AJ Luxury ; chaque prestataire payant
+ou compte marchand doit être validé par Jérémy avant activation.
 
 ## Faits et décisions encore ouvertes
 
@@ -207,7 +211,7 @@ restent séquentielles.
 
 1. Fixer les réserves cadeaux/influenceurs et sécurité sur le stock déjà transmis.
 2. Compléter les informations colis, étiquettes, fabrication, entretien et tailles.
-3. Faire approuver le choix du moteur commerce headless et son abonnement client.
+3. Valider les prestataires de paiement, livraison et e-mail, ainsi que leurs coûts.
 4. Finaliser transport, droits/taxes, retours, médiateur et validation comptable.
 5. Créer les comptes retenus au nom d’AJ Luxury, avec MFA et récupération.
 
@@ -258,7 +262,7 @@ données commerce actives sans sauvegarde et restauration vérifiée.
 1. Réserve cadeaux/influenceurs et sécurité à soustraire des 756 unités physiques.
 2. Poids/dimensions colis, fabrication, éventuels SKU/EAN, étiquettes, entretien,
    guide des tailles et scellé d’hygiène.
-3. Accord sur le moteur commerce headless et création/KYC des comptes AJ Luxury.
+3. Accord sur les prestataires retenus et création/KYC des comptes AJ Luxury.
 4. Numéro public, médiateur et validation comptable TVA/EORI pour les zones ouvertes.
 5. Approbation finale des tarifs/délais de livraison, droits/taxes et retours proposés
    par Adam à partir de la matrice UE/Royaume-Uni/États-Unis/Canada.

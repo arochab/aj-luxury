@@ -33,10 +33,9 @@ Sources officielles :
 
 Ce scénario est le moins cher en coût récurrent, pas nécessairement en temps de
 conception. Il demande de construire proprement le catalogue, le stock, les
-commandes et les webhooks. Il faut donc le comparer à Shopify Basic si AJ Luxury
-préfère payer davantage chaque mois pour disposer immédiatement d’un back-office
-commerce complet. Shopify affiche actuellement 29 USD/mois en paiement annuel ou
-39 USD/mois en paiement mensuel.
+commandes et les webhooks. Adam a explicitement écarté Shopify le 10 août 2026 :
+le projet conserve donc un socle commerce indépendant, une administration minimale
+et des prestataires spécialisés remplaçables, sans plateforme e-commerce imposée.
 
 ## Règle de propriété
 
