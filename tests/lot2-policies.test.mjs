@@ -219,6 +219,21 @@ test("enforces customer ownership and lean admin roles", async () => {
     ),
     false,
   );
+  assert.equal(
+    canReadOrder(
+      { kind: "unknown" },
+      { orderId: "ord_1", customerId: null },
+    ),
+    false,
+  );
+  assert.equal(
+    canReadOrder(
+      { kind: "guest-order", grant: null },
+      { orderId: "ord_1", customerId: null },
+    ),
+    false,
+  );
+  assert.equal(canReadOrder(null, null), false);
   assert.equal(adminHasCapability("operations", "orders:write"), true);
   assert.equal(adminHasCapability("operations", "admins:manage"), false);
   assert.equal(adminHasCapability("invalid", "orders:read"), false);

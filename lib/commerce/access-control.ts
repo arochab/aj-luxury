@@ -90,27 +90,48 @@ export type OrderOwnership = {
   customerId: string | null;
 };
 
+function isRecord(value: unknown): value is Record<PropertyKey, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
 export function canReadOrder(
-  actor: OrderAccessActor,
-  order: OrderOwnership,
+  actor: OrderAccessActor | unknown,
+  order: OrderOwnership | unknown,
 ): boolean {
-  if (!isSafeInternalId(order.orderId)) return false;
+  if (
+    !isRecord(actor) ||
+    !isRecord(order) ||
+    typeof order.orderId !== "string" ||
+    !isSafeInternalId(order.orderId) ||
+    (order.customerId !== null && typeof order.customerId !== "string")
+  ) {
+    return false;
+  }
 
   if (actor.kind === "admin") {
-    return adminHasCapability(actor.role, "orders:read");
+    return (
+      typeof actor.role === "string" &&
+      adminHasCapability(actor.role, "orders:read")
+    );
   }
 
   if (actor.kind === "customer") {
     return (
       order.customerId !== null &&
+      typeof actor.customerId === "string" &&
       isSafeInternalId(actor.customerId) &&
       isSafeInternalId(order.customerId) &&
       actor.customerId === order.customerId
     );
   }
 
+  if (actor.kind !== "guest-order" || !isRecord(actor.grant)) {
+    return false;
+  }
+
   return (
     actor.grant[verifiedGuestGrantBrand] === true &&
+    typeof actor.grant.orderId === "string" &&
     isSafeInternalId(actor.grant.orderId) &&
     actor.grant.orderId === order.orderId
   );
