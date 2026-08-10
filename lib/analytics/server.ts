@@ -4,16 +4,15 @@ import {
   ANALYTICS_SCHEMA_VERSION,
   type AnalyticsContextInput,
   type AnalyticsDataPolicy,
-  type ClientAnalyticsEvent,
-  type ClientAnalyticsEventName,
-  type ClientAnalyticsInputByName,
+  type ServerOrderPaidEvent,
+  type ServerOrderPaidInput,
 } from "./events.ts";
 import {
   sanitizeAnalyticsContext,
-  sanitizeClientAnalyticsInput,
+  sanitizeServerOrderPaidInput,
 } from "./sanitization.ts";
 
-export type ClientAnalyticsTrackResult =
+export type ServerOrderPaidResult =
   | { accepted: true }
   | {
       accepted: false;
@@ -23,17 +22,16 @@ export type ClientAnalyticsTrackResult =
         | "dispatch_unavailable";
     };
 
-export type ClientAnalyticsFacade = {
-  track<Name extends ClientAnalyticsEventName>(
-    name: Name,
-    input: ClientAnalyticsInputByName[Name],
-    context: AnalyticsContextInput,
-  ): ClientAnalyticsTrackResult;
+export type ServerOrderPaidEmitter = {
+  emit(
+    input: ServerOrderPaidInput,
+    context?: AnalyticsContextInput,
+  ): ServerOrderPaidResult;
 };
 
-type CreateClientAnalyticsFacadeOptions = {
+type CreateServerOrderPaidEmitterOptions = {
   consent: AnalyticsConsentController;
-  collect: (event: ClientAnalyticsEvent) => unknown;
+  collect: (event: ServerOrderPaidEvent) => unknown;
   policy: AnalyticsDataPolicy;
   clock?: () => Date;
 };
@@ -49,14 +47,26 @@ function safeTimestamp(clock: () => Date): string | null {
   }
 }
 
-export function createClientAnalyticsFacade({
+function defaultServerContext(policy: AnalyticsDataPolicy): AnalyticsContextInput | null {
+  try {
+    return { url: new URL("/checkout", policy.canonicalOrigin).href };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Server-only authority for order_paid. This module is deliberately absent
+ * from the browser-facing analytics index.
+ */
+export function createServerOrderPaidEmitter({
   consent,
   collect,
   policy,
   clock = () => new Date(),
-}: CreateClientAnalyticsFacadeOptions): ClientAnalyticsFacade {
+}: CreateServerOrderPaidEmitterOptions): ServerOrderPaidEmitter {
   return {
-    track(name, input, context) {
+    emit(input, context) {
       try {
         if (consent.getState() !== "granted") {
           return { accepted: false, reason: "consent_not_granted" };
@@ -67,18 +77,22 @@ export function createClientAnalyticsFacade({
 
       try {
         const occurredAt = safeTimestamp(clock);
-        const sanitized = sanitizeClientAnalyticsInput(name, input, policy);
-        const sanitizedContext = sanitizeAnalyticsContext(context, policy);
-        if (!occurredAt || !sanitized || !sanitizedContext) {
+        const payload = sanitizeServerOrderPaidInput(input, policy);
+        const effectiveContext = context ?? defaultServerContext(policy);
+        const sanitizedContext = effectiveContext
+          ? sanitizeAnalyticsContext(effectiveContext, policy)
+          : null;
+        if (!occurredAt || !payload || !sanitizedContext) {
           return { accepted: false, reason: "invalid_event" };
         }
 
-        const event = {
+        const event: ServerOrderPaidEvent = {
           schemaVersion: ANALYTICS_SCHEMA_VERSION,
+          name: "order_paid",
           occurredAt,
           context: sanitizedContext,
-          ...sanitized,
-        } as ClientAnalyticsEvent;
+          payload,
+        };
 
         return deferAnalyticsEvent(collect, event)
           ? { accepted: true }

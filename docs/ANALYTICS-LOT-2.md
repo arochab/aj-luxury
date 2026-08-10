@@ -29,35 +29,41 @@ production.
 
 Les visiteurs, pages vues et indicateurs de performance web relèveront du
 futur outil d’audience. Les quatre événements ci-dessous couvrent seulement le
-tunnel commerce complémentaire.
+tunnel commerce complémentaire, avec trois événements navigateur et un
+événement réservé au serveur.
 
-## Contrat d’événements V1
+## Contrat d’événements V2
 
 Allowlist fermée : tout nom ou champ non listé est rejeté, sans envoi ni mise en
 attente.
 
-| Événement | Déclencheur futur | Champs autorisés | Usage métier |
-|---|---|---|---|
-| `product_view` | Affichage confirmé d’une fiche produit | `productId`, `variantId` facultatif | Intérêt produit |
-| `add_to_cart` | Ajout au panier accepté | `productId`, `variantId`, `quantity`, `valueMinor`, `currency` | Intention d’achat |
-| `checkout_started` | Checkout réellement engagé | `itemCount`, `valueMinor`, `currency` | Friction panier → paiement |
-| `order_paid` | Confirmation serveur d’un paiement vérifié | `itemCount`, `valueMinor`, `currency` | Conversion et revenu fiables |
+| Événement | Autorité | Entrée autorisée | Données émises | Usage métier |
+|---|---|---|---|---|
+| `product_view` | Navigateur après consentement | `productId`, `variantId` facultatif | Identifiants validés par le catalogue | Intérêt produit |
+| `add_to_cart` | Navigateur après consentement | `productId`, `variantId`, `quantity` | Prix, valeur et devise dérivés de la variante gouvernée | Intention d’achat |
+| `checkout_started` | Navigateur après consentement | Lignes `variantId` et `quantity` | Nombre d’articles, valeur et devise dérivés du catalogue | Friction panier vers paiement |
+| `order_paid` | Serveur après paiement vérifié et consentement conservé | Lignes de commande gouvernées | Nombre d’articles, valeur et devise dérivés du catalogue | Conversion et revenu fiables |
 
-`order_paid` ne devra jamais être déclenché par le navigateur ni par une page de
-confirmation seule. Sa source d’autorité future est le backend de paiement
-après vérification du statut payé.
+`order_paid` ne peut pas être appelé par l’index ni la façade client. Il vit
+dans un module serveur distinct, volontairement absent de l’API navigateur. Sa
+source d’autorité future est le backend de paiement après vérification du
+statut payé.
 
-Bornes V1 : identifiants produit/variante présents dans la nomenclature catalogue
+Bornes V2 : identifiants produit/variante présents dans la nomenclature catalogue
 injectée et limités à 64 caractères ; quantité et nombre d’articles de 1 à 99 ;
-valeur en unité monétaire mineure de 0 à 100 000 000 ; devise sur trois lettres
+valeur en unité monétaire mineure de 1 à 100 000 000 ; devise sur trois lettres
 majuscules. Une valeur hors bornes ou inconnue fait rejeter l’événement complet.
+Chaque variante est liée à un seul produit, un prix unitaire et une devise. Un
+couple produit/variante incohérent, une variante dupliquée, plusieurs devises
+dans un checkout ou un total fourni librement par le navigateur sont rejetés.
 
 ## Contexte autorisé et protection des données
 
 Le contexte est volontairement minimal :
 
-- chemin de page uniquement s’il appartient à la nomenclature injectée, sans
-  domaine, paramètres de requête ni fragment ;
+- chemin de page uniquement si l’URL absolue correspond exactement à l’origine
+  canonique HTTPS injectée et si le chemin appartient à la nomenclature, sans
+  domaine, paramètres de requête ni fragment dans l’événement ;
 - origine du référent uniquement si elle est explicitement autorisée, sans
   chemin ni paramètres ;
 - trois clés UTM maximum : `utm_source`, `utm_medium`, `utm_campaign`, chacune
@@ -89,14 +95,17 @@ jour des pages confidentialité/cookies avant toute activation.
 
 ## Architecture retenue dans ce candidat
 
-- façade TypeScript indépendante du fournisseur, seule porte publique
-  d’émission d’un événement ;
-- interface de collecte à acquittement strictement synchrone ; seul un
-  collecteur mémoire de test est fourni dans la recette ;
-- collecteur asynchrone, en échec ou sans réponse rejeté immédiatement sans
-  bloquer le parcours commerce ;
+- façade TypeScript client limitée à `product_view`, `add_to_cart` et
+  `checkout_started` ;
+- module serveur séparé et non réexporté par l’index pour `order_paid` ;
+- collecteur privé, sans type ni autorité de collecte exposés par l’index ;
+- invocation du collecteur différée dans une microtâche, hors du chemin
+  d’interaction commerce ; lenteur, exception ou promesse rejetée sont
+  contenues sans bloquer `track` ;
 - politique injectée et fail-closed pour routes, référents, UTM, produits et
   variantes ;
+- origine canonique HTTPS obligatoire et catalogue gouverné reliant chaque
+  variante à son produit, son prix et sa devise ;
 - validation d’exécution des noms, champs, formats, montants et quantités ;
 - sanitization centralisée des chemins, référents et UTM ;
 - horloge et collecteur injectables pour des tests déterministes ;
@@ -134,15 +143,19 @@ de conservation restent à valider avant construction du tableau de bord.
 
 Le socle passe cette phase si :
 
-1. les quatre événements exacts sont les seuls acceptés ;
-2. aucun événement ne sort avant consentement explicite ;
-3. le retrait du consentement coupe immédiatement les événements suivants ;
-4. les champs non prévus et valeurs invalides sont rejetés ;
-5. URL, référent et UTM ne conservent aucune donnée brute sensible ;
-6. le code ne contient aucun transport réseau ni SDK fournisseur ;
-7. un collecteur asynchrone ou bloqué ne peut pas bloquer l’achat ;
-8. le builder interne n’est pas exposé par l’API publique ;
-9. lint, build et tests du projet restent verts.
+1. l’API client n’accepte que trois événements et ne contient aucune autorité
+   `order_paid` ;
+2. seul le module serveur distinct peut construire `order_paid` ;
+3. aucun événement ne sort avant consentement explicite ;
+4. le retrait du consentement coupe immédiatement les événements suivants ;
+5. variantes, produits, prix, devises et totaux sont gouvernés par le catalogue ;
+6. toute URL d’une origine différente de l’origine canonique est rejetée ;
+7. les champs non prévus et valeurs invalides sont rejetés ;
+8. URL, référent et UTM ne conservent aucune donnée brute sensible ;
+9. le code ne contient aucun transport réseau ni SDK fournisseur ;
+10. un collecteur lent, en erreur ou sans réponse ne peut pas bloquer l’achat ;
+11. collecteur, dispatcher et builder interne ne sont pas exposés par l’index ;
+12. lint, build et tests du projet restent verts.
 
 L’activation reste bloquée par le choix du fournisseur, la validation juridique
 et client des textes et durées, la connexion du backend commerce, une recette
