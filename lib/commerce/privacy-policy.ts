@@ -1,4 +1,4 @@
-export const prohibitedOperationalLogFields = new Set([
+export const prohibitedOperationalLogFields = [
   "email",
   "firstName",
   "lastName",
@@ -10,9 +10,9 @@ export const prohibitedOperationalLogFields = new Set([
   "paymentToken",
   "cardNumber",
   "rawWebhookPayload",
-]);
+] as const;
 
-export const allowedCommerceLogFields = new Set([
+export const allowedCommerceLogFields = [
   "event",
   "status",
   "zone",
@@ -21,7 +21,12 @@ export const allowedCommerceLogFields = new Set([
   "attempt",
   "durationMs",
   "errorCode",
-]);
+] as const;
+
+const prohibitedOperationalLogFieldSet = new Set<string>(
+  prohibitedOperationalLogFields,
+);
+const allowedCommerceLogFieldSet = new Set<string>(allowedCommerceLogFields);
 
 export function sanitizeCommerceLogMetadata(
   metadata: Readonly<Record<string, unknown>>,
@@ -34,7 +39,10 @@ export function sanitizeCommerceLogMetadata(
   const longOpaqueToken = /^[a-z0-9_-]{33,}$/i;
 
   for (const [key, value] of Object.entries(metadata)) {
-    if (!allowedCommerceLogFields.has(key) || prohibitedOperationalLogFields.has(key)) {
+    if (
+      !allowedCommerceLogFieldSet.has(key) ||
+      prohibitedOperationalLogFieldSet.has(key)
+    ) {
       continue;
     }
     if (value === null) {
