@@ -26,8 +26,9 @@ contre-audit indépendant et validation du candidat intégré exact.
   présentes avant D01 restent conservées mais sont révoquées par la migration.
 - Achat invité maintenu : une session invitée ne donne accès qu'à sa commande.
 - Administration lean avec rôles D1 `owner` et `operations`. Une preuve MFA
-  externe `AAL >= 2` et récente est requise ; la limitation de débit intervient
-  avant toute recherche d'administrateur ou création de session.
+  externe `AAL >= 2` et récente est requise ; une limite locale globale et
+  pseudonymisée intervient avant tout appel MFA, toute recherche
+  d'administrateur et toute création de session.
 - Séparation cryptographique versionnée des domaines challenge, session, CSRF et
   limitation de débit, pour client, invité et administrateur. Les anciens hashes
   SHA-256 non contextualisés sont incompatibles et échouent fermés.
