@@ -257,6 +257,30 @@ function validateReserves(database, variantIds = null) {
   database.exec("UPDATE inventory SET reserves_validated = 1");
 }
 
+function adjustPhysicalStock(database, input) {
+  const current = database
+    .prepare("SELECT physical_quantity FROM inventory WHERE variant_id = ?")
+    .get(input.variantId).physical_quantity;
+  assert.notEqual(current, input.targetQuantity);
+  const increase = input.targetQuantity > current;
+  database
+    .prepare(
+      `INSERT INTO inventory_movements (
+        id, variant_id, kind, quantity, reference_type, reference_id,
+        actor_type, actor_id, idempotency_key, created_at
+      ) VALUES (?, ?, 'adjustment', ?, ?, ?, 'admin', NULL, ?, ?)`,
+    )
+    .run(
+      input.id,
+      input.variantId,
+      Math.abs(input.targetQuantity - current),
+      increase ? "physical_increase" : "physical_decrease",
+      input.id,
+      `stock:${input.id}`,
+      input.now,
+    );
+}
+
 function insertPendingOrder(database, input) {
   const subtotalCents = input.lines.reduce(
     (total, line) =>
@@ -505,8 +529,13 @@ test("foreign keys, unique constraints and checks reject impossible states", asy
     () =>
       database
         .prepare(
-          `UPDATE inventory SET gift_reserve_quantity = physical_quantity + 1
-          WHERE variant_id = ?`,
+          `INSERT INTO inventory_movements (
+            id, variant_id, kind, quantity, reference_type, reference_id,
+            actor_type, actor_id, idempotency_key, created_at
+          ) SELECT 'movement_invalid_gift', variant_id, 'gift_allocation',
+              physical_quantity + 1, 'gift_reserve_increase', 'invalid-gift',
+              'admin', NULL, 'stock:invalid-gift', '2026-08-10T12:00:01.000Z'
+            FROM inventory WHERE variant_id = ?`,
         )
         .run("variant_boxer_pourpre_s"),
     /ck_inventory_allocation_within_physical/,
@@ -539,6 +568,84 @@ test("foreign keys, unique constraints and checks reject impossible states", asy
         .run("2026-08-10T12:00:00.000Z", "2026-08-10T12:00:00.000Z"),
     /UNIQUE constraint failed: variants.internal_reference/,
   );
+  database.close();
+});
+
+test("stock availability changes are driven by exact immutable movements", async () => {
+  const { database, store } = createFixture();
+  const variantId = "variant_boxer_pourpre_s";
+  await store.seedLaunchCatalog("2099-08-10T12:00:00.000Z");
+  const initial = await store.getInventoryPosition(variantId);
+
+  for (const assignment of [
+    "physical_quantity = physical_quantity + 1",
+    "gift_reserve_quantity = gift_reserve_quantity + 1",
+    "safety_reserve_quantity = safety_reserve_quantity + 1",
+  ]) {
+    assert.throws(
+      () =>
+        database.exec(
+          `UPDATE inventory SET ${assignment}, version = version + 1,
+            updated_at = '2099-08-10T12:01:00.000Z'
+          WHERE variant_id = '${variantId}'`,
+        ),
+      /commerce_inventory_stock_movement_required/,
+    );
+  }
+  assert.deepEqual(await store.getInventoryPosition(variantId), initial);
+
+  adjustPhysicalStock(database, {
+    id: "movement_physical_increase_proof",
+    variantId,
+    targetQuantity: initial.physicalQuantity + 2,
+    now: "2099-08-10T12:01:00.000Z",
+  });
+  const adjusted = await store.getInventoryPosition(variantId);
+  assert.equal(adjusted.physicalQuantity, initial.physicalQuantity + 2);
+  assert.equal(adjusted.version, initial.version + 1);
+
+  database.exec(`INSERT INTO inventory_movements (
+      id, variant_id, kind, quantity, reference_type, reference_id,
+      actor_type, actor_id, idempotency_key, created_at
+    ) VALUES (
+      'movement_physical_retry', '${variantId}', 'adjustment', 2,
+      'physical_increase', 'movement_physical_increase_proof', 'admin', NULL,
+      'stock:movement_physical_increase_proof',
+      '2099-08-10T12:01:00.000Z'
+    ) ON CONFLICT(idempotency_key) DO NOTHING`);
+  assert.deepEqual(await store.getInventoryPosition(variantId), adjusted);
+  assert.equal(
+    database
+      .prepare(
+        `SELECT COUNT(*) AS count FROM inventory_movements
+        WHERE idempotency_key = 'stock:movement_physical_increase_proof'`,
+      )
+      .get().count,
+    1,
+  );
+
+  assert.throws(
+    () =>
+      database.exec(`INSERT INTO inventory_movements (
+          id, variant_id, kind, quantity, reference_type, reference_id,
+          actor_type, actor_id, idempotency_key, created_at
+        ) VALUES (
+          'movement_impossible_decrease', '${variantId}', 'adjustment', 9999,
+          'physical_decrease', 'impossible', 'admin', NULL,
+          'stock:impossible-decrease', '2099-08-10T12:02:00.000Z'
+        )`),
+    /ck_inventory_(quantities_non_negative|allocation_within_physical)/,
+  );
+  assert.equal(
+    database
+      .prepare(
+        `SELECT COUNT(*) AS count FROM inventory_movements
+        WHERE idempotency_key = 'stock:impossible-decrease'`,
+      )
+      .get().count,
+    0,
+  );
+  assert.deepEqual(await store.getInventoryPosition(variantId), adjusted);
   database.close();
 });
 
@@ -909,13 +1016,18 @@ test("payment authority is non-forgeable and the local verifier stays outside pr
 
 test("reservations are blocked until gift and safety reserves are explicitly validated", async () => {
   const { database, store } = createFixture();
-  const now = "2026-08-10T12:00:00.000Z";
+  const now = "2099-08-10T12:00:00.000Z";
   const variantId = "variant_boxer_pourpre_s";
   await store.seedLaunchCatalog(now);
   await store.createCart({
     id: "cart_reserve_gate",
-    expiresAt: "2026-08-10T14:00:00.000Z",
+    expiresAt: "2099-08-10T14:00:00.000Z",
     now,
+  });
+  insertCartLines(database, {
+    cartId: "cart_reserve_gate",
+    now,
+    lines: [{ variantId, quantity: 1 }],
   });
   const input = {
     reservationId: "reservation_reserve_gate",
@@ -923,7 +1035,7 @@ test("reservations are blocked until gift and safety reserves are explicitly val
     variantId,
     quantity: 1,
     idempotencyKey: "reserve_gate",
-    expiresAt: "2026-08-10T13:00:00.000Z",
+    expiresAt: "2099-08-10T13:00:00.000Z",
     now,
   };
 
@@ -944,28 +1056,127 @@ test("reservations are blocked until gift and safety reserves are explicitly val
   database.close();
 });
 
-test("concurrent buyers never oversell, including the last unit", async () => {
+test("reservations cannot exceed or exist outside their cart lines", async () => {
   const { database, store } = createFixture();
-  const now = "2026-08-10T12:00:00.000Z";
-  const expiresAt = "2026-08-10T13:00:00.000Z";
-  const variantId = "variant_boxer_lilas-bleu-clair_s";
+  const now = "2099-08-10T12:00:00.000Z";
+  const variantId = "variant_boxer_pourpre_s";
+  const cartId = "cart_reservation_line_guard";
   await store.seedLaunchCatalog(now);
   validateReserves(database, [variantId]);
-  database
-    .prepare("UPDATE inventory SET physical_quantity = 1 WHERE variant_id = ?")
-    .run(variantId);
+  await store.createCart({
+    id: cartId,
+    expiresAt: "2099-08-10T14:00:00.000Z",
+    now,
+  });
+  const baseInput = {
+    reservationId: "reservation_line_guard",
+    cartId,
+    variantId,
+    quantity: 1,
+    idempotencyKey: "reserve_line_guard",
+    expiresAt: "2099-08-10T13:00:00.000Z",
+    now,
+  };
+
+  await assert.rejects(
+    () => store.reserveStock(baseInput),
+    (error) =>
+      error instanceof CommerceError &&
+      error.code === "INSUFFICIENT_STOCK_OR_CART_CLOSED",
+  );
+  insertCartLines(database, {
+    cartId,
+    now,
+    lines: [{ variantId, quantity: 1 }],
+  });
+  await assert.rejects(
+    () =>
+      store.reserveStock({
+        ...baseInput,
+        reservationId: "reservation_line_guard_over",
+        quantity: 2,
+        idempotencyKey: "reserve_line_guard_over",
+      }),
+    (error) =>
+      error instanceof CommerceError &&
+      error.code === "INSUFFICIENT_STOCK_OR_CART_CLOSED",
+  );
+  assert.equal(
+    database.prepare("SELECT COUNT(*) AS count FROM stock_reservations").get()
+      .count,
+    0,
+  );
+
+  const first = await store.reserveStock(baseInput);
+  const retry = await store.reserveStock(baseInput);
+  assert.deepEqual(retry, first);
+  assert.equal(
+    database.prepare("SELECT COUNT(*) AS count FROM stock_reservations").get()
+      .count,
+    1,
+  );
+  assert.equal(
+    database
+      .prepare("SELECT COUNT(*) AS count FROM inventory_movements WHERE kind = 'reserve'")
+      .get().count,
+    1,
+  );
+  await store.releaseStock({
+    reservationId: baseInput.reservationId,
+    idempotencyKey: "release_line_guard",
+    now: "2099-08-10T12:10:00.000Z",
+  });
+  assert.throws(
+    () =>
+      database.exec(`UPDATE cart_lines SET quantity = 2,
+        updated_at = '2099-08-10T12:11:00.000Z'
+        WHERE cart_id = '${cartId}' AND variant_id = '${variantId}'`),
+    /commerce_cart_line_quantity_update_not_allowed/,
+  );
+  assert.equal(
+    database
+      .prepare("SELECT quantity FROM cart_lines WHERE cart_id = ? AND variant_id = ?")
+      .get(cartId, variantId).quantity,
+    1,
+  );
+  database.close();
+});
+
+test("concurrent buyers never oversell, including the last unit", async () => {
+  const { database, store } = createFixture();
+  const now = "2099-08-10T12:01:00.000Z";
+  const expiresAt = "2099-08-10T13:00:00.000Z";
+  const variantId = "variant_boxer_lilas-bleu-clair_s";
+  await store.seedLaunchCatalog("2099-08-10T12:00:00.000Z");
+  validateReserves(database, [variantId]);
+  adjustPhysicalStock(database, {
+    id: "last-unit-proof",
+    variantId,
+    targetQuantity: 1,
+    now: "2099-08-10T12:00:30.000Z",
+  });
   await Promise.all([
     store.createCart({
       id: "cart_buyer_a",
-      expiresAt: "2026-08-10T14:00:00.000Z",
+      expiresAt: "2099-08-10T14:00:00.000Z",
       now,
     }),
     store.createCart({
       id: "cart_buyer_b",
-      expiresAt: "2026-08-10T14:00:00.000Z",
+      expiresAt: "2099-08-10T14:00:00.000Z",
       now,
     }),
   ]);
+  insertCartLines(database, {
+    cartId: "cart_buyer_a",
+    now,
+    lines: [{ variantId, quantity: 1 }],
+  });
+  insertCartLines(database, {
+    cartId: "cart_buyer_b",
+    now,
+    lines: [{ variantId, quantity: 1 }],
+  });
   const results = await Promise.allSettled([
     store.reserveStock({
       reservationId: "reservation_buyer_a",
@@ -1017,6 +1228,16 @@ test("shared transition keys stay reservation-scoped across release, expiration 
       now,
     });
   }
+  insertCartLines(database, {
+    cartId: "cart_shared_release",
+    now,
+    lines: [{ variantId: releaseVariant, quantity: 3 }],
+  });
+  insertCartLines(database, {
+    cartId: "cart_shared_expire",
+    now,
+    lines: [{ variantId: expireVariant, quantity: 3 }],
+  });
   insertCartLines(database, {
     cartId: "cart_shared_convert",
     now,
@@ -1275,7 +1496,7 @@ test("verified payment atomically converts every line once and writes outbox plu
         .prepare("SELECT status, attempts FROM webhook_events")
         .get(),
     },
-    { status: "processed", attempts: 2 },
+    { status: "processed", attempts: 1 },
   );
   assert.equal(
     database.prepare("SELECT COUNT(*) AS count FROM email_outbox").get().count,

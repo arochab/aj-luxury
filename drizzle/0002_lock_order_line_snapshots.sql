@@ -29,6 +29,29 @@ BEGIN
       )
   ) THEN RAISE(ABORT, 'commerce_cart_line_catalog_mismatch') END;
 END;--> statement-breakpoint
+DROP TRIGGER IF EXISTS `trg_cart_lines_validate_quantity_update`;--> statement-breakpoint
+CREATE TRIGGER `trg_cart_lines_validate_quantity_update`
+BEFORE UPDATE OF `quantity` ON `cart_lines`
+WHEN OLD.`quantity` IS NOT NEW.`quantity`
+BEGIN
+  SELECT CASE WHEN NOT EXISTS (
+    SELECT 1
+    FROM `carts` AS cart
+    WHERE cart.`id` = OLD.`cart_id`
+      AND cart.`status` = 'open'
+      AND datetime(cart.`expires_at`) > CURRENT_TIMESTAMP
+      AND strftime('%Y-%m-%dT%H:%M:%fZ', NEW.`updated_at`) = NEW.`updated_at`
+      AND NEW.`updated_at` > OLD.`updated_at`
+      AND NOT EXISTS (
+        SELECT 1 FROM `stock_reservations`
+        WHERE `cart_id` = OLD.`cart_id`
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM `orders`
+        WHERE `cart_id` = OLD.`cart_id`
+      )
+  ) THEN RAISE(ABORT, 'commerce_cart_line_quantity_update_not_allowed') END;
+END;--> statement-breakpoint
 CREATE TRIGGER `trg_order_lines_validate_pending_insert`
 BEFORE INSERT ON `order_lines`
 BEGIN
@@ -247,6 +270,9 @@ WHEN NEW.`active_reserved_quantity` <> COALESCE((
   OR (
     OLD.`active_reserved_quantity` IS NEW.`active_reserved_quantity`
     AND OLD.`sold_quantity` IS NEW.`sold_quantity`
+    AND OLD.`physical_quantity` IS NEW.`physical_quantity`
+    AND OLD.`gift_reserve_quantity` IS NEW.`gift_reserve_quantity`
+    AND OLD.`safety_reserve_quantity` IS NEW.`safety_reserve_quantity`
     AND OLD.`version` IS NOT NEW.`version`
   )
 BEGIN
@@ -256,6 +282,65 @@ CREATE TRIGGER `trg_inventory_retain_delete`
 BEFORE DELETE ON `inventory`
 BEGIN
   SELECT RAISE(ABORT, 'commerce_inventory_is_immutable');
+END;--> statement-breakpoint
+CREATE TRIGGER `trg_inventory_validate_stock_movement_update`
+BEFORE UPDATE ON `inventory`
+WHEN OLD.`physical_quantity` IS NOT NEW.`physical_quantity`
+  OR OLD.`gift_reserve_quantity` IS NOT NEW.`gift_reserve_quantity`
+  OR OLD.`safety_reserve_quantity` IS NOT NEW.`safety_reserve_quantity`
+BEGIN
+  SELECT CASE WHEN (
+    (OLD.`physical_quantity` IS NOT NEW.`physical_quantity`)
+    + (OLD.`gift_reserve_quantity` IS NOT NEW.`gift_reserve_quantity`)
+    + (OLD.`safety_reserve_quantity` IS NOT NEW.`safety_reserve_quantity`)
+  ) <> 1
+  OR NEW.`version` <> OLD.`version` + 1
+  OR strftime('%Y-%m-%dT%H:%M:%fZ', NEW.`updated_at`) IS NOT NEW.`updated_at`
+  OR NEW.`updated_at` <= OLD.`updated_at`
+  OR NOT EXISTS (
+    SELECT 1
+    FROM `inventory_movements` AS movement
+    WHERE movement.`variant_id` = NEW.`variant_id`
+      AND movement.`created_at` = NEW.`updated_at`
+      AND (
+        (
+          OLD.`physical_quantity` IS NOT NEW.`physical_quantity`
+          AND movement.`kind` = 'adjustment'
+          AND movement.`reference_type` = CASE
+            WHEN NEW.`physical_quantity` > OLD.`physical_quantity`
+              THEN 'physical_increase'
+            ELSE 'physical_decrease'
+          END
+          AND movement.`quantity` = ABS(
+            NEW.`physical_quantity` - OLD.`physical_quantity`
+          )
+        )
+        OR (
+          OLD.`gift_reserve_quantity` IS NOT NEW.`gift_reserve_quantity`
+          AND movement.`kind` = 'gift_allocation'
+          AND movement.`reference_type` = CASE
+            WHEN NEW.`gift_reserve_quantity` > OLD.`gift_reserve_quantity`
+              THEN 'gift_reserve_increase'
+            ELSE 'gift_reserve_decrease'
+          END
+          AND movement.`quantity` = ABS(
+            NEW.`gift_reserve_quantity` - OLD.`gift_reserve_quantity`
+          )
+        )
+        OR (
+          OLD.`safety_reserve_quantity` IS NOT NEW.`safety_reserve_quantity`
+          AND movement.`kind` = 'safety_allocation'
+          AND movement.`reference_type` = CASE
+            WHEN NEW.`safety_reserve_quantity` > OLD.`safety_reserve_quantity`
+              THEN 'safety_reserve_increase'
+            ELSE 'safety_reserve_decrease'
+          END
+          AND movement.`quantity` = ABS(
+            NEW.`safety_reserve_quantity` - OLD.`safety_reserve_quantity`
+          )
+        )
+      )
+  ) THEN RAISE(ABORT, 'commerce_inventory_stock_movement_required') END;
 END;--> statement-breakpoint
 
 CREATE TRIGGER `trg_stock_reservations_validate_insert_timestamp`
@@ -275,6 +360,35 @@ WHEN NEW.`status` <> 'active'
   OR NEW.`last_transition_key` IS NOT NULL
 BEGIN
   SELECT RAISE(ABORT, 'commerce_reservation_insert_must_be_active');
+END;--> statement-breakpoint
+CREATE TRIGGER `trg_stock_reservations_validate_cart_line_insert`
+BEFORE INSERT ON `stock_reservations`
+WHEN NOT EXISTS (
+    SELECT 1
+    FROM `stock_reservations` AS existing
+    WHERE existing.`id` = NEW.`id`
+      AND existing.`cart_id` = NEW.`cart_id`
+      AND existing.`variant_id` = NEW.`variant_id`
+      AND existing.`quantity` = NEW.`quantity`
+      AND existing.`idempotency_key` = NEW.`idempotency_key`
+      AND existing.`expires_at` = NEW.`expires_at`
+      AND existing.`created_at` = NEW.`created_at`
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM `cart_lines` AS line
+    WHERE line.`cart_id` = NEW.`cart_id`
+      AND line.`variant_id` = NEW.`variant_id`
+      AND line.`quantity` >= NEW.`quantity` + COALESCE((
+        SELECT SUM(existing_active.`quantity`)
+        FROM `stock_reservations` AS existing_active
+        WHERE existing_active.`cart_id` = NEW.`cart_id`
+          AND existing_active.`variant_id` = NEW.`variant_id`
+          AND existing_active.`status` = 'active'
+      ), 0)
+  )
+BEGIN
+  SELECT RAISE(ABORT, 'commerce_reservation_cart_line_mismatch');
 END;--> statement-breakpoint
 CREATE TRIGGER `trg_stock_reservations_lock_identity_update`
 BEFORE UPDATE ON `stock_reservations`
@@ -358,52 +472,6 @@ WHEN OLD.`status` <> NEW.`status`
       AND NOT EXISTS (
         SELECT 1 FROM `stock_reservations`
         WHERE `cart_id` = OLD.`cart_id` AND `status` IN ('active', 'converted')
-      )
-    )
-    OR (
-      OLD.`status` = 'paid' AND NEW.`status` = 'preparing'
-      AND OLD.`paid_at` IS NOT NULL
-      AND EXISTS (
-        SELECT 1 FROM `payments`
-        WHERE `order_id` = OLD.`id`
-          AND `status` = 'succeeded'
-          AND `amount_cents` = OLD.`total_cents`
-          AND `currency` = OLD.`currency`
-      )
-      AND EXISTS (
-        SELECT 1 FROM `stock_reservations`
-        WHERE `converted_order_id` = OLD.`id` AND `status` = 'converted'
-      )
-    )
-    OR (
-      OLD.`status` = 'preparing' AND NEW.`status` = 'shipped'
-      AND OLD.`paid_at` IS NOT NULL
-      AND EXISTS (
-        SELECT 1 FROM `payments`
-        WHERE `order_id` = OLD.`id`
-          AND `status` = 'succeeded'
-          AND `amount_cents` = OLD.`total_cents`
-          AND `currency` = OLD.`currency`
-      )
-      AND EXISTS (
-        SELECT 1 FROM `stock_reservations`
-        WHERE `converted_order_id` = OLD.`id` AND `status` = 'converted'
-      )
-    )
-    OR (
-      OLD.`status` IN ('paid', 'preparing', 'shipped')
-      AND NEW.`status` = 'refunded'
-      AND OLD.`paid_at` IS NOT NULL
-      AND EXISTS (
-        SELECT 1 FROM `payments`
-        WHERE `order_id` = OLD.`id`
-          AND `status` = 'refunded'
-          AND `amount_cents` = OLD.`total_cents`
-          AND `currency` = OLD.`currency`
-      )
-      AND EXISTS (
-        SELECT 1 FROM `stock_reservations`
-        WHERE `converted_order_id` = OLD.`id` AND `status` = 'converted'
       )
     )
   )
@@ -675,14 +743,19 @@ CREATE TRIGGER `trg_webhook_events_lock_fields_without_transition`
 BEFORE UPDATE OF `attempts`, `last_error_code`, `processed_at`
 ON `webhook_events`
 WHEN OLD.`status` = NEW.`status`
-  AND NOT (
-    OLD.`status` = 'processed'
-    AND NEW.`attempts` = OLD.`attempts` + 1
-    AND NEW.`last_error_code` IS NULL
-    AND NEW.`processed_at` IS OLD.`processed_at`
+  AND (
+    OLD.`attempts` IS NOT NEW.`attempts`
+    OR OLD.`last_error_code` IS NOT NEW.`last_error_code`
+    OR OLD.`processed_at` IS NOT NEW.`processed_at`
   )
 BEGIN
   SELECT RAISE(ABORT, 'commerce_webhook_update_requires_transition');
+END;--> statement-breakpoint
+CREATE TRIGGER `trg_webhook_events_lock_terminal_update`
+BEFORE UPDATE ON `webhook_events`
+WHEN OLD.`status` = 'processed'
+BEGIN
+  SELECT RAISE(ABORT, 'commerce_terminal_webhook_is_immutable');
 END;--> statement-breakpoint
 CREATE TRIGGER `trg_webhook_events_retain_delete`
 BEFORE DELETE ON `webhook_events`
@@ -706,11 +779,71 @@ BEFORE DELETE ON `audit_log`
 BEGIN
   SELECT RAISE(ABORT, 'commerce_audit_log_is_immutable');
 END;--> statement-breakpoint
+CREATE TRIGGER `trg_inventory_movements_validate_stock_transition`
+BEFORE INSERT ON `inventory_movements`
+WHEN NEW.`kind` IN ('adjustment', 'gift_allocation', 'safety_allocation')
+  AND (
+    NOT EXISTS (
+      SELECT 1 FROM `inventory`
+      WHERE `variant_id` = NEW.`variant_id`
+    )
+    OR NOT (
+      (
+        NEW.`kind` = 'adjustment'
+        AND NEW.`reference_type` IN ('physical_increase', 'physical_decrease')
+      )
+      OR (
+        NEW.`kind` = 'gift_allocation'
+        AND NEW.`reference_type` IN (
+          'gift_reserve_increase', 'gift_reserve_decrease'
+        )
+      )
+      OR (
+        NEW.`kind` = 'safety_allocation'
+        AND NEW.`reference_type` IN (
+          'safety_reserve_increase', 'safety_reserve_decrease'
+        )
+      )
+    )
+  )
+BEGIN
+  SELECT RAISE(ABORT, 'commerce_inventory_stock_movement_invalid');
+END;--> statement-breakpoint
 CREATE TRIGGER `trg_inventory_movements_validate_insert_timestamp`
 BEFORE INSERT ON `inventory_movements`
 WHEN strftime('%Y-%m-%dT%H:%M:%fZ', NEW.`created_at`) IS NOT NEW.`created_at`
 BEGIN
   SELECT RAISE(ABORT, 'commerce_inventory_movement_timestamp_invalid');
+END;--> statement-breakpoint
+CREATE TRIGGER `trg_inventory_movements_apply_stock_transition`
+AFTER INSERT ON `inventory_movements`
+WHEN NEW.`kind` IN ('adjustment', 'gift_allocation', 'safety_allocation')
+BEGIN
+  UPDATE `inventory`
+  SET `physical_quantity` = `physical_quantity` + CASE
+        WHEN NEW.`kind` = 'adjustment'
+          AND NEW.`reference_type` = 'physical_increase' THEN NEW.`quantity`
+        WHEN NEW.`kind` = 'adjustment'
+          AND NEW.`reference_type` = 'physical_decrease' THEN -NEW.`quantity`
+        ELSE 0
+      END,
+      `gift_reserve_quantity` = `gift_reserve_quantity` + CASE
+        WHEN NEW.`kind` = 'gift_allocation'
+          AND NEW.`reference_type` = 'gift_reserve_increase' THEN NEW.`quantity`
+        WHEN NEW.`kind` = 'gift_allocation'
+          AND NEW.`reference_type` = 'gift_reserve_decrease' THEN -NEW.`quantity`
+        ELSE 0
+      END,
+      `safety_reserve_quantity` = `safety_reserve_quantity` + CASE
+        WHEN NEW.`kind` = 'safety_allocation'
+          AND NEW.`reference_type` = 'safety_reserve_increase' THEN NEW.`quantity`
+        WHEN NEW.`kind` = 'safety_allocation'
+          AND NEW.`reference_type` = 'safety_reserve_decrease' THEN -NEW.`quantity`
+        ELSE 0
+      END,
+      `version` = `version` + 1,
+      `updated_at` = NEW.`created_at`
+  WHERE `variant_id` = NEW.`variant_id`;
 END;--> statement-breakpoint
 CREATE TRIGGER `trg_inventory_movements_immutable_update`
 BEFORE UPDATE ON `inventory_movements`

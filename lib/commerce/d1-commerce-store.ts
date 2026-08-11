@@ -157,6 +157,14 @@ function mapCommerceDatabaseError(error: unknown): never {
     );
   }
 
+  if (message.includes("commerce_reservation_cart_line_mismatch")) {
+    throw new CommerceError(
+      "INSUFFICIENT_STOCK_OR_CART_CLOSED",
+      "Stock reservations must match the current cart lines and quantities.",
+      { cause: error },
+    );
+  }
+
   if (message.includes("commerce_reservation_not_expired")) {
     throw new CommerceError(
       "RESERVATION_NOT_EXPIRED",
@@ -838,7 +846,8 @@ export class D1CommerceStore {
             WHERE provider = ? AND provider_event_id = ?
               AND order_id = ? AND provider_payment_id = ?
               AND amount_cents = ? AND currency = ?
-              AND payload_fingerprint = ? AND verification_method = ?`,
+              AND payload_fingerprint = ? AND verification_method = ?
+              AND status IN ('verified', 'failed')`,
           )
           .bind(
             event.verifiedAt,

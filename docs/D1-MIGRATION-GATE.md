@@ -12,7 +12,7 @@ La chaîne canonique est strictement :
 2. `0001_lock_cart_line_price_provenance.sql` — SHA-256 normalisé LF
    `bef3cc80b9201217050dd5e80362927f3c560bb1c239ac8fd08de2f88aaf08de` ;
 3. `0002_lock_order_line_snapshots.sql` — SHA-256 normalisé LF
-   `dea8ea0d6f6c7acc804130b50a118eb6bbe3480e1a38f445c31a9d32da640103`.
+   `fe72f739c3459f931830054715b8efc268ab86c42d2479d99b4cedc7fe2196fa`.
 
 Les seuls points de départ couverts par la preuve Wrangler locale sont une base
 vide, la baseline finale `0000`, et `0000+0001`. Chaque chemin conserve ses
@@ -103,21 +103,25 @@ libellé historique.
 
 Les champs snapshot de l’en-tête de commande sont immuables dès la création.
 Une commande naît exclusivement en `pending_payment`. Les transitions autorisées
-sont `pending_payment -> paid|cancelled`, `paid -> preparing`, puis
-`preparing -> shipped`; `cancelled` et `refunded` sont terminaux. Chaque entrée
-opérationnelle exige ses prérequis financiers et de réservation, `paid_at` et
-`updated_at` sont des timestamps UTC stricts et croissants, et aucun retour vers
-un état antérieur n’est admis.
+sont uniquement `pending_payment -> paid|cancelled`. Les états historiques
+`preparing`, `shipped` et `refunded` sont conservés mais terminaux dans `0002` :
+aucune nouvelle commande ne peut y entrer tant que D03 n’a pas ajouté ses preuves
+d’expédition, de livraison et de remboursement. `paid_at` et `updated_at` sont
+des timestamps UTC stricts et croissants, et aucun retour vers un état antérieur
+n’est admis.
 
-Une `cart_line` ne peut être ajoutée ou supprimée que si son panier existe, est
-ouvert, n’est pas expiré et ne possède ni réservation historique ni commande. Les
-guards de mise à jour de `0001` restent inchangés. Le panier parent ne peut être
+Une `cart_line` ne peut être ajoutée, supprimée ou changer de quantité que si son
+panier existe, est ouvert, n’est pas expiré et ne possède ni réservation
+historique ni commande. Le panier parent ne peut être
 supprimé qu’après retrait légitime de toutes ses lignes et seulement s’il ne
 possède aucune réservation, quel que soit son statut, et aucune commande. Cette
 règle empêche une cascade d’effacer une réservation active sans corriger les
 compteurs de stock.
 
-Toute réservation naît en `active`, avec identité et timestamps figés. Elle ne
+Toute réservation naît en `active`, avec identité et timestamps figés. Elle doit
+viser une ligne du même panier et de la même variante; la somme des réservations
+actives ne peut jamais dépasser la quantité de cette ligne. Une insertion sans
+ligne ou au-delà de la quantité panier est annulée avec ses effets de stock. Elle ne
 peut évoluer qu’une fois vers `released`, `expired` ou `converted`, avec une clé
 de transition; une conversion exige une commande du même panier et un paiement
 `succeeded` cohérent. Les réservations sont conservées dans tous les états et ne
@@ -128,22 +132,34 @@ ne peut pas être supprimée. Une variante à stock
 physique nul reste valide et ne crée simplement aucun mouvement initial de
 quantité nulle.
 
+`physical_quantity`, `gift_reserve_quantity` et `safety_reserve_quantity` ne
+peuvent pas être modifiés directement. L’unique commande autorisée est l’insertion
+d’un mouvement immuable et idempotent : `adjustment` avec
+`physical_increase|physical_decrease`, `gift_allocation` avec
+`gift_reserve_increase|gift_reserve_decrease`, ou `safety_allocation` avec
+`safety_reserve_increase|safety_reserve_decrease`. Cette insertion applique dans
+la même instruction un seul delta exact, incrémente la version d’une unité et
+avance strictement le timestamp. Si le delta rend l’inventaire impossible, le
+mouvement et la variation sont annulés ensemble. Un replay de la même clé ne
+réapplique pas le delta.
+
 Un paiement naît en `created`, ou exceptionnellement directement en `succeeded`
 si un webhook `payment.succeeded` vérifié et exactement correspondant existe
 déjà. Les transitions fermées sont `created -> requires_action` puis
 `created|requires_action -> succeeded|failed|expired`. `failure_code` est nul
 pour `created`, `requires_action`, `succeeded` et `expired`, et obligatoire pour
-`failed`. Les états terminaux sont immuables et aucune preuve webhook ne peut
-être modifiée ou supprimée. Les timestamps des commandes, réservations,
+`failed`. Les états terminaux sont immuables. Un webhook `processed` est lui aussi
+terminal et intégralement immuable; le replay du même événement devient un no-op
+et n’incrémente pas son compteur. Aucune preuve webhook ne peut être supprimée.
+Les timestamps des commandes, réservations,
 paiements, webhooks, mouvements de stock et entrées d’audit sont UTC stricts;
 le ledger et l’audit sont append-only.
 
 `refunded` reste volontairement inaccessible à tout nouveau paiement dans
 `0002`. D03 devra définir sa preuve fournisseur, sa transition comptable et ses
-effets avant d’étendre les triggers. Les états internes `preparing` et `shipped`
-sont supportés, mais la correspondance entre `shipped` en D1 et `fulfilled` dans
-le contrat public reste elle aussi un gate D03 : aucune équivalence silencieuse
-n’est autorisée.
+effets avant de remplacer explicitement le guard de commande. Il devra de même
+fournir les preuves requises avant d’ouvrir `preparing` puis `shipped`, ainsi que
+la correspondance entre `shipped` en D1 et `fulfilled` dans le contrat public.
 
 Pour D02, la pseudonymisation client doit être douce et ciblée. Il ne faut pas
 supprimer une ligne `customers` pour compter sur `ON DELETE SET NULL` :
