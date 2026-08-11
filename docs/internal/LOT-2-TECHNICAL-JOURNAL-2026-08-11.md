@@ -168,8 +168,11 @@ Toutes restent locales, non intégrées au checkout canonique et non publiées.
 | `L2-I06` | Exécutant gel final | `f5ba52d` | Gelé, worktree propre, suite intégrée et D1 réelles locales vertes ; QA finale indépendante en cours |
 | `L2-I06` | Jury métier/exploitation indépendant | `f5ba52d` | PASS fondation locale ; 117/117 contrôles ciblés, D1 `0000→0004` et replay verts ; FAIL si présenté comme live e-commerce |
 | `L2-I06` | Jury technique indépendant | `f5ba52d` | PASS intégrité/build/canaries/81+24+12/lint/sécurité ; verdict global retenu à cause d’un `fetch failed` Wrangler local avant la fin de la suite |
+| `L2-I06` | Diagnostic indépendant | `f5ba52d` | Rejeu D1 isolé 1/1 PASS en 298,454 s ; incident local Miniflare/workerd transitoire, aucune correction source |
+| `L2-I06` | Gate complet indépendant | `f5ba52d` | PASS final : une exécution fraîche `npm test`, exit 0, 188/188 tests, D1 canonique et ciblée vertes, Git propre, aucun retry/remote/provider/déploiement |
 | `L2-D03` | Oracle fulfillment indépendant | Base gelée `f5ba52d` | Spécification `0005`, huit tables, invariants et tests veto prêts ; aucune écriture ni activation |
 | `L2-D03` | Jury périmètre fulfillment indépendant | Contrat oracle | FAIL initial sur quantités inspectées et preuves ; PASS exécuteur après corrections inscrites dans `docs/internal/LOT-2-D03-FULFILLMENT-SCOPE-2026-08-11.md` ; toujours aucun code |
+| `L2-D03` | Exécutant fulfillment | Base acceptée `f5ba52d` | Exécution locale isolée lancée après PASS I06 ; aucune activation ni production |
 | `L2-X01` | Audit exécutif mindmap et captures | Bloc dirigeant | FAIL : 1 P1 statuts/MECE + 2 P2 jargon/légende livraison |
 | `L2-X01` | Réaudit exécutif indépendant | Bloc dirigeant corrigé | PASS : 0 P1/P2, lecture dirigeant en deux minutes |
 

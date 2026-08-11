@@ -10,9 +10,9 @@ Validation métier avant activation : Jérémy SCHEPPLER
 
 ## Verdict
 
-La vitrine et Hero V4 sont en ligne sur `ajluxurystore.com`. Le cœur e-commerce est
-assemblé et testé localement, mais son dernier contrôle complet reproductible est en
-cours. Aucun paiement, transporteur, e-mail réel, compte client connecté, base distante
+La vitrine et Hero V4 sont en ligne sur `ajluxurystore.com`. Le cœur e-commerce a passé
+son contrôle complet reproductible en local. La construction de la logistique est lancée
+dans un environnement séparé. Aucun paiement, transporteur, e-mail réel, compte client connecté, base distante
 ou analytics n’est activé : **le site ne peut pas encore accepter une commande réelle**.
 
 ```mermaid
@@ -35,7 +35,6 @@ mindmap
       Interfaces connectées
       Préproduction privée
     BLOQUÉ
-      Contrôle complet du socle
       Accès DNS du .fr
       Données produit finales
       Comptes prestataires AJ Luxury
@@ -45,10 +44,10 @@ mindmap
 ## Ce qui est fait
 
 - **Hero V4 live** : version 31 publiée et contrôlée sur mobile et desktop, sans rollback.
-- **Candidat commerce unique** : une seule version locale réunit stock, panier, commandes, comptes, administration, e-mails/RGPD et mesure d’audience inactive.
+- **Socle commerce accepté** : une seule version locale réunit stock, panier, commandes, comptes, administration, e-mails/RGPD et mesure d’audience inactive.
 - **Sécurité locale** : base SQL, anti-survente, isolation des comptes, absence de double effet et droits sur les données testés.
+- **Contrôle complet** : 188/188 tests verts en un seul lancement, sans modification ni service distant.
 - **International préparé** : règles d’adresse UE, Royaume-Uni, États-Unis et Canada testées ; toute autre destination reste fermée.
-- **Aucune fausse activation** : services réels, argent, secrets et base cloud restent absents.
 
 ## Lecture visuelle honnête
 
@@ -73,18 +72,18 @@ construire puis connecter.
 | Statut | Bloc | Preuve actuelle | Prochaine porte |
 |---|---|---|---|
 | `LIVE` | Front `.com` et Hero V4 | Version Sites 31, smoke indépendant PASS | Surveillance ; rollback 30 conservé |
-| `TEST LOCAL` | Commerce, stock, comptes, admin, e-mails/RGPD | Version intégrée locale, 21 tables et contrôles ciblés verts | Une suite complète verte en un seul lancement |
-| `À CONSTRUIRE` | Expédition, suivi, retours, remboursements | Spécification uniquement ; aucun code ni nouvelle table ajoutée | Implémentation locale après validation du socle |
+| `TEST LOCAL` | Commerce, stock, comptes, admin, e-mails/RGPD | Version intégrée locale, 21 tables, 188/188 tests verts en un seul lancement | Socle accepté ; aucune activation réelle |
+| `À CONSTRUIRE` | Expédition, suivi, retours, remboursements | Périmètre audité et exécution locale lancée ; aucun candidat encore accepté | Candidat figé puis contrôle indépendant |
 | `À CONSTRUIRE` | Cookies, consentement, analytics | Mesure d’audience présente mais inactive ; aucune collecte | Après le bloc logistique |
 | `BLOQUÉ` | Redirection `.fr` vers `.com` | Domaine parqué ; aucune duplication du site | Jérémy partage la gestion domaine/DNS dans Hostinger |
 
 ## Suite
 
-- **Adam / technique** : obtenir un contrôle complet reproductible du socle local, sans ignorer l’aléa de l’outil de base de données.
 - **Adam / technique** : construire la logistique localement, puis la faire auditer par des agents distincts.
 - **Adam / technique** : construire le consentement cookies et connecter les interfaces, toujours hors production.
 - **Adam + Jérémy** : tester paiement, transport et e-mails uniquement avec des comptes de test AJ Luxury.
 - **Adam puis Jérémy** : valider la même préproduction privée avant toute activation.
+- **Adam / technique** : prouver sauvegarde, restauration, alertes et reprise avant le go-live.
 
 ## Manques et blocages
 
