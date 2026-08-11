@@ -1,4 +1,6 @@
-export const sizes = ["S", "M", "L", "XL"] as const;
+import { deepFreeze } from "./deep-freeze.ts";
+
+export const sizes = Object.freeze(["S", "M", "L", "XL"] as const);
 
 export type ProductSize = (typeof sizes)[number];
 
@@ -54,7 +56,7 @@ const features = [
   "Maintien optimal au quotidien",
 ];
 
-export const products: Product[] = [
+export const products: Product[] = deepFreeze([
   {
     slug: "pourpre",
     modelId: "boxer-aj-luxury",
@@ -159,7 +161,7 @@ export const products: Product[] = [
     primaryModel: true,
     benefits,
   },
-];
+]);
 
 export function getProducts() {
   return products;

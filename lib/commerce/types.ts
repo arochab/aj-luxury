@@ -99,7 +99,7 @@ export type Order = {
   createdAt: string;
 };
 
-export type PaymentProvider = "mock" | "stripe" | "shopify-payments";
+export type PaymentProvider = "mock" | "stripe";
 
 export type PaymentSession = {
   id: string;
