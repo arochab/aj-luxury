@@ -2,6 +2,7 @@ export const transactionalEmailKinds = Object.freeze([
   "order-confirmation",
   "payment-confirmation",
   "shipment-confirmation",
+  "return-acknowledgement",
   "withdrawal-acknowledgement",
   "refund-confirmation",
   "account-access",
@@ -35,6 +36,7 @@ export const transactionalEmailKindAvailability = Object.freeze({
     available: false,
     reason: "server-owned-carrier-policy-required",
   } as const),
+  "return-acknowledgement": Object.freeze({ available: true } as const),
   "withdrawal-acknowledgement": Object.freeze({ available: true } as const),
   "refund-confirmation": Object.freeze({ available: true } as const),
   "account-access": Object.freeze({
@@ -268,6 +270,12 @@ export async function buildTransactionalEmail(
       enSubject: "Refund confirmed",
       frLine: "Votre remboursement est confirmé pour la commande",
       enLine: "Your refund is confirmed for order",
+    },
+    "return-acknowledgement": {
+      frSubject: "Demande de retour re\u00e7ue",
+      enSubject: "Return request received",
+      frLine: "Nous avons re\u00e7u votre demande de retour pour la commande",
+      enLine: "We have received your return request for order",
     },
     "withdrawal-acknowledgement": {
       frSubject: "Demande de rétractation reçue",

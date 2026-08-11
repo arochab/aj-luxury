@@ -310,14 +310,18 @@ export class D1DataRightsStore {
   }
 
   private async exportOrder(order: Record<string, string | number>): Promise<Record<string, unknown>> {
-    const lines = await this.database
-      .prepare(
-        `SELECT product_name, color_name, size, quantity,
-          unit_price_cents, line_total_cents
-        FROM order_lines WHERE order_id = ? ORDER BY created_at, id`,
-      )
-      .bind(String(order.id))
-      .all<Record<string, string | number>>();
+    const orderId = String(order.id);
+    const [lines, fulfillment] = await Promise.all([
+      this.database
+        .prepare(
+          `SELECT product_name, color_name, size, quantity,
+            unit_price_cents, line_total_cents
+          FROM order_lines WHERE order_id = ? ORDER BY created_at, id`,
+        )
+        .bind(orderId)
+        .all<Record<string, string | number>>(),
+      this.exportFulfillment(orderId),
+    ]);
     return {
       id: order.id,
       number: order.order_number,
@@ -331,6 +335,7 @@ export class D1DataRightsStore {
       shippingAddress: sanitizeAddress(String(order.shipping_address_json)),
       billingAddress: sanitizeAddress(String(order.billing_address_json)),
       createdAt: order.created_at,
+      fulfillment,
       lines: lines.results.map((line) => Object.freeze({
         productName: line.product_name,
         colorName: line.color_name,
@@ -340,6 +345,106 @@ export class D1DataRightsStore {
         lineTotalCents: line.line_total_cents,
       })),
     };
+  }
+
+  private async exportFulfillment(orderId: string): Promise<Record<string, unknown> | null> {
+    try {
+      const [shipment, returns, refunds] = await Promise.all([
+        this.database
+          .prepare(
+            `SELECT status, tracking_reference, label_created_at,
+              handed_over_at, delivered_at
+            FROM shipments WHERE order_id = ? LIMIT 1`,
+          )
+          .bind(orderId)
+          .first<Record<string, string | null>>(),
+        this.database
+          .prepare(
+            `SELECT request.id, request.kind, request.status, request.resolution,
+              request.requested_at, request.resolved_at,
+              line.requested_quantity, line.received_quantity,
+              line.sellable_quantity, line.non_sellable_quantity,
+              line.restocked_quantity, line.inspection_result,
+              order_line.product_name, order_line.color_name, order_line.size
+            FROM return_requests AS request
+            INNER JOIN return_lines AS line ON line.return_request_id = request.id
+            INNER JOIN order_lines AS order_line ON order_line.id = line.order_line_id
+            WHERE request.order_id = ?
+            ORDER BY request.requested_at, request.id, line.id`,
+          )
+          .bind(orderId)
+          .all<Record<string, string | number | null>>(),
+        this.database
+          .prepare(
+            `SELECT refund.id, refund.reason, refund.amount_cents,
+              refund.currency, refund.status, refund.succeeded_at
+            FROM refunds AS refund
+            INNER JOIN return_requests AS request
+              ON request.id = refund.return_request_id
+            WHERE request.order_id = ? ORDER BY refund.created_at, refund.id`,
+          )
+          .bind(orderId)
+          .all<Record<string, string | number | null>>(),
+      ]);
+      let trackingEvents: readonly Record<string, string>[] = [];
+      if (shipment) {
+        const tracking = await this.database
+          .prepare(
+            `SELECT event_type, occurred_at, received_at
+            FROM shipment_tracking_events
+            WHERE shipment_id = (SELECT id FROM shipments WHERE order_id = ?)
+            ORDER BY received_at, id`,
+          )
+          .bind(orderId)
+          .all<Record<string, string>>();
+        trackingEvents = tracking.results.map((event) => Object.freeze({
+          eventType: event.event_type,
+          occurredAt: event.occurred_at,
+          receivedAt: event.received_at,
+        }));
+      }
+      return Object.freeze({
+        shipment: shipment ? Object.freeze({
+          status: shipment.status,
+          trackingReference: shipment.tracking_reference,
+          labelCreatedAt: shipment.label_created_at,
+          handedOverAt: shipment.handed_over_at,
+          deliveredAt: shipment.delivered_at,
+          trackingEvents,
+        }) : null,
+        returns: returns.results.map((row) => Object.freeze({
+          id: row.id,
+          kind: row.kind,
+          status: row.status,
+          resolution: row.resolution,
+          requestedAt: row.requested_at,
+          resolvedAt: row.resolved_at,
+          productName: row.product_name,
+          colorName: row.color_name,
+          size: row.size,
+          requestedQuantity: row.requested_quantity,
+          receivedQuantity: row.received_quantity,
+          sellableQuantity: row.sellable_quantity,
+          nonSellableQuantity: row.non_sellable_quantity,
+          restockedQuantity: row.restocked_quantity,
+          inspectionResult: row.inspection_result,
+        })),
+        refunds: refunds.results.map((row) => Object.freeze({
+          id: row.id,
+          reason: row.reason,
+          amountCents: row.amount_cents,
+          currency: row.currency,
+          status: row.status,
+          succeededAt: row.succeeded_at,
+        })),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (/no such table:\s*(?:shipments|return_requests|refunds)/i.test(message)) {
+        return null;
+      }
+      throw error;
+    }
   }
 
   async applyProfileRectification(input: Readonly<{

@@ -150,6 +150,7 @@ export const carts = sqliteTable(
     currency: text("currency", { enum: ["EUR"] }).notNull().default("EUR"),
     email: text("email"),
     expiresAt: text("expires_at").notNull(),
+    fulfillmentRevision: integer("fulfillment_revision").notNull().default(0),
     createdAt: text("created_at").notNull().default(utcNow),
     updatedAt: text("updated_at").notNull().default(utcNow),
   },
@@ -213,6 +214,11 @@ export const orders = sqliteTable(
     totalCents: integer("total_cents").notNull(),
     shippingCountryCode: text("shipping_country_code").notNull(),
     shippingAddressJson: text("shipping_address_json").notNull(),
+    shippingQuoteId: text("shipping_quote_id").references(
+      (): AnySQLiteColumn => shippingQuotes.id,
+      { onDelete: "restrict" },
+    ),
+    shippingAddressFingerprint: text("shipping_address_fingerprint"),
     billingAddressJson: text("billing_address_json").notNull(),
     termsVersion: text("terms_version").notNull(),
     privacyVersion: text("privacy_version").notNull(),
@@ -223,6 +229,9 @@ export const orders = sqliteTable(
   (table) => [
     uniqueIndex("ux_orders_order_number").on(table.orderNumber),
     uniqueIndex("ux_orders_cart_id").on(table.cartId),
+    uniqueIndex("ux_orders_shipping_quote_id")
+      .on(table.shippingQuoteId)
+      .where(sql`${table.shippingQuoteId} IS NOT NULL`),
     index("idx_orders_customer_created_at").on(table.customerId, table.createdAt),
     index("idx_orders_status_created_at").on(table.status, table.createdAt),
     check(
@@ -724,6 +733,7 @@ export const emailOutbox = sqliteTable(
         "payment_failed",
         "shipment_confirmation",
         "refund_confirmation",
+        "return_acknowledgement",
         "withdrawal_acknowledgement",
         "account_access",
       ],
@@ -734,6 +744,7 @@ export const emailOutbox = sqliteTable(
         "payment_failed",
         "shipment_created",
         "refund_succeeded",
+        "return_received",
         "withdrawal_received",
         "account_access_challenge",
       ],
@@ -809,7 +820,8 @@ export const emailOutbox = sqliteTable(
       "ck_email_outbox_kind",
       sql`${table.kind} IN (
         'payment_confirmation', 'payment_failed', 'shipment_confirmation',
-        'refund_confirmation', 'withdrawal_acknowledgement', 'account_access',
+        'refund_confirmation', 'return_acknowledgement',
+        'withdrawal_acknowledgement', 'account_access',
         'order_confirmation'
       )`,
     ),
@@ -819,6 +831,7 @@ export const emailOutbox = sqliteTable(
         OR (${table.kind} = 'payment_failed' AND ${table.transactionIntent} = 'payment_failed')
         OR (${table.kind} = 'shipment_confirmation' AND ${table.transactionIntent} = 'shipment_created')
         OR (${table.kind} = 'refund_confirmation' AND ${table.transactionIntent} = 'refund_succeeded')
+        OR (${table.kind} = 'return_acknowledgement' AND ${table.transactionIntent} = 'return_received')
         OR (${table.kind} = 'withdrawal_acknowledgement' AND ${table.transactionIntent} = 'withdrawal_received')
         OR (${table.kind} = 'account_access' AND ${table.transactionIntent} = 'account_access_challenge')
         OR (${table.kind} = 'order_confirmation' AND ${table.transactionIntent} = 'payment_succeeded')`,
@@ -1109,6 +1122,582 @@ export const auditLog = sqliteTable(
     check(
       "ck_audit_log_actor_type",
       sql`${table.actorType} IN ('system', 'customer', 'admin')`,
+    ),
+  ],
+);
+
+export const shippingZoneConfigurations = sqliteTable(
+  "shipping_zone_configurations",
+  {
+    id: text("id").primaryKey(),
+    zone: text("zone", { enum: ["EU", "UK", "US", "CA"] }).notNull(),
+    version: integer("version").notNull(),
+    status: text("status", { enum: ["draft", "active", "retired"] })
+      .notNull()
+      .default("draft"),
+    serviceCode: text("service_code"),
+    priceCents: integer("price_cents"),
+    currency: text("currency", { enum: ["EUR"] }).notNull().default("EUR"),
+    estimatedDaysMin: integer("estimated_days_min"),
+    estimatedDaysMax: integer("estimated_days_max"),
+    dutiesTerms: text("duties_terms", {
+      enum: ["EU_INCLUDED", "DAP", "DDP"],
+    }),
+    parcelCode: text("parcel_code"),
+    parcelWeightGrams: integer("parcel_weight_grams"),
+    parcelLengthMm: integer("parcel_length_mm"),
+    parcelWidthMm: integer("parcel_width_mm"),
+    parcelHeightMm: integer("parcel_height_mm"),
+    originCountryCode: text("origin_country_code"),
+    customsHsCode: text("customs_hs_code"),
+    activatedAt: text("activated_at"),
+    retiredAt: text("retired_at"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("ux_shipping_zone_configurations_version").on(
+      table.zone,
+      table.version,
+    ),
+    uniqueIndex("ux_shipping_zone_configurations_active")
+      .on(table.zone)
+      .where(sql`${table.status} = 'active'`),
+    check(
+      "ck_shipping_zone_configurations_zone",
+      sql`${table.zone} IN ('EU', 'UK', 'US', 'CA')`,
+    ),
+    check(
+      "ck_shipping_zone_configurations_status",
+      sql`${table.status} IN ('draft', 'active', 'retired')`,
+    ),
+    check("ck_shipping_zone_configurations_version", sql`${table.version} > 0`),
+    check("ck_shipping_zone_configurations_currency", sql`${table.currency} = 'EUR'`),
+    check(
+      "ck_shipping_zone_configurations_price",
+      sql`${table.priceCents} IS NULL OR ${table.priceCents} >= 0`,
+    ),
+    check(
+      "ck_shipping_zone_configurations_delays",
+      sql`(${table.estimatedDaysMin} IS NULL AND ${table.estimatedDaysMax} IS NULL)
+        OR (${table.estimatedDaysMin} > 0
+          AND ${table.estimatedDaysMax} >= ${table.estimatedDaysMin})`,
+    ),
+    check(
+      "ck_shipping_zone_configurations_duties",
+      sql`${table.dutiesTerms} IS NULL
+        OR ${table.dutiesTerms} IN ('EU_INCLUDED', 'DAP', 'DDP')`,
+    ),
+    check(
+      "ck_shipping_zone_configurations_parcel",
+      sql`(${table.parcelWeightGrams} IS NULL
+          AND ${table.parcelLengthMm} IS NULL
+          AND ${table.parcelWidthMm} IS NULL
+          AND ${table.parcelHeightMm} IS NULL)
+        OR (${table.parcelWeightGrams} > 0
+          AND ${table.parcelLengthMm} > 0
+          AND ${table.parcelWidthMm} > 0
+          AND ${table.parcelHeightMm} > 0)`,
+    ),
+  ],
+);
+
+export const shippingQuotes = sqliteTable(
+  "shipping_quotes",
+  {
+    id: text("id").primaryKey(),
+    cartId: text("cart_id")
+      .notNull()
+      .references(() => carts.id, { onDelete: "restrict" }),
+    cartFingerprint: text("cart_fingerprint").notNull(),
+    cartRevision: integer("cart_revision").notNull(),
+    configurationId: text("configuration_id")
+      .notNull()
+      .references(() => shippingZoneConfigurations.id, { onDelete: "restrict" }),
+    shippingAddressJson: text("shipping_address_json").notNull(),
+    shippingAddressFingerprint: text("shipping_address_fingerprint").notNull(),
+    providerQuoteReference: text("provider_quote_reference"),
+    providerReceiptFingerprint: text("provider_receipt_fingerprint"),
+    amountCents: integer("amount_cents").notNull(),
+    currency: text("currency", { enum: ["EUR"] }).notNull().default("EUR"),
+    estimatedDaysMin: integer("estimated_days_min").notNull(),
+    estimatedDaysMax: integer("estimated_days_max").notNull(),
+    dutiesTerms: text("duties_terms", {
+      enum: ["EU_INCLUDED", "DAP", "DDP"],
+    }).notNull(),
+    expiresAt: text("expires_at").notNull(),
+    selectedAt: text("selected_at"),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("ux_shipping_quotes_selected_cart")
+      .on(table.cartId)
+      .where(sql`${table.selectedAt} IS NOT NULL`),
+    index("idx_shipping_quotes_cart_expires_at").on(table.cartId, table.expiresAt),
+    index("idx_shipping_quotes_configuration").on(table.configurationId),
+    check("ck_shipping_quotes_amount", sql`${table.amountCents} >= 0`),
+    check("ck_shipping_quotes_cart_revision", sql`${table.cartRevision} >= 0`),
+    check("ck_shipping_quotes_currency", sql`${table.currency} = 'EUR'`),
+    check(
+      "ck_shipping_quotes_delays",
+      sql`${table.estimatedDaysMin} > 0
+        AND ${table.estimatedDaysMax} >= ${table.estimatedDaysMin}`,
+    ),
+    check(
+      "ck_shipping_quotes_duties",
+      sql`${table.dutiesTerms} IN ('EU_INCLUDED', 'DAP', 'DDP')`,
+    ),
+    check(
+      "ck_shipping_quotes_fingerprints",
+      sql`length(${table.cartFingerprint}) = 64
+        AND ${table.cartFingerprint} = lower(${table.cartFingerprint})
+        AND ${table.cartFingerprint} NOT GLOB '*[^0-9a-f]*'
+        AND length(${table.shippingAddressFingerprint}) = 64
+        AND ${table.shippingAddressFingerprint} = lower(${table.shippingAddressFingerprint})
+        AND ${table.shippingAddressFingerprint} NOT GLOB '*[^0-9a-f]*'
+        AND (${table.providerReceiptFingerprint} IS NULL
+          OR (length(${table.providerReceiptFingerprint}) = 64
+            AND ${table.providerReceiptFingerprint} = lower(${table.providerReceiptFingerprint})
+            AND ${table.providerReceiptFingerprint} NOT GLOB '*[^0-9a-f]*'))`,
+    ),
+  ],
+);
+
+export const shipments = sqliteTable(
+  "shipments",
+  {
+    id: text("id").primaryKey(),
+    orderId: text("order_id")
+      .notNull()
+      .references(() => orders.id, { onDelete: "restrict" }),
+    shippingQuoteId: text("shipping_quote_id")
+      .notNull()
+      .references(() => shippingQuotes.id, { onDelete: "restrict" }),
+    status: text("status", {
+      enum: [
+        "label_pending",
+        "label_claimed",
+        "label_ready",
+        "handed_over",
+        "in_transit",
+        "delivered",
+        "failed",
+      ],
+    })
+      .notNull()
+      .default("label_pending"),
+    providerShipmentReference: text("provider_shipment_reference"),
+    trackingProviderCode: text("tracking_provider_code"),
+    trackingReference: text("tracking_reference"),
+    providerReceiptFingerprint: text("provider_receipt_fingerprint"),
+    idempotencyKey: text("idempotency_key").notNull(),
+    leaseTokenHash: text("lease_token_hash"),
+    leasedAt: text("leased_at"),
+    leaseExpiresAt: text("lease_expires_at"),
+    attempts: integer("attempts").notNull().default(0),
+    maxAttempts: integer("max_attempts").notNull().default(5),
+    lastErrorCode: text("last_error_code"),
+    labelCreatedAt: text("label_created_at"),
+    handedOverAt: text("handed_over_at"),
+    deliveredAt: text("delivered_at"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("ux_shipments_order").on(table.orderId),
+    uniqueIndex("ux_shipments_idempotency").on(table.idempotencyKey),
+    uniqueIndex("ux_shipments_provider_reference")
+      .on(table.providerShipmentReference)
+      .where(sql`${table.providerShipmentReference} IS NOT NULL`),
+    uniqueIndex("ux_shipments_tracking_reference")
+      .on(table.trackingReference)
+      .where(sql`${table.trackingReference} IS NOT NULL`),
+    uniqueIndex("ux_shipments_active_lease")
+      .on(table.leaseTokenHash)
+      .where(sql`${table.leaseTokenHash} IS NOT NULL`),
+    index("idx_shipments_status_lease").on(table.status, table.leaseExpiresAt),
+    check(
+      "ck_shipments_status",
+      sql`${table.status} IN (
+        'label_pending', 'label_claimed', 'label_ready', 'handed_over',
+        'in_transit', 'delivered', 'failed'
+      )`,
+    ),
+    check(
+      "ck_shipments_attempts",
+      sql`${table.attempts} >= 0 AND ${table.maxAttempts} >= 1
+        AND ${table.attempts} <= ${table.maxAttempts}`,
+    ),
+    check(
+      "ck_shipments_receipt_fingerprint",
+      sql`${table.providerReceiptFingerprint} IS NULL
+        OR (length(${table.providerReceiptFingerprint}) = 64
+          AND ${table.providerReceiptFingerprint} = lower(${table.providerReceiptFingerprint})
+          AND ${table.providerReceiptFingerprint} NOT GLOB '*[^0-9a-f]*')`,
+    ),
+  ],
+);
+
+export const carrierEventReceipts = sqliteTable(
+  "carrier_event_receipts",
+  {
+    id: text("id").primaryKey(),
+    shipmentId: text("shipment_id")
+      .notNull()
+      .references(() => shipments.id, { onDelete: "restrict" }),
+    providerCode: text("provider_code").notNull(),
+    providerEventId: text("provider_event_id").notNull(),
+    trackingReference: text("tracking_reference").notNull(),
+    eventType: text("event_type", {
+      enum: [
+        "in_transit",
+        "out_for_delivery",
+        "delivered",
+        "exception",
+        "returned",
+      ],
+    }).notNull(),
+    eventFingerprint: text("event_fingerprint").notNull(),
+    receiptFingerprint: text("receipt_fingerprint").notNull(),
+    verificationMethod: text("verification_method", {
+      enum: ["test_adapter", "carrier_signature"],
+    }).notNull(),
+    occurredAt: text("occurred_at").notNull(),
+    receivedAt: text("received_at").notNull(),
+    verifiedAt: text("verified_at").notNull(),
+    status: text("status", { enum: ["verified", "consumed"] })
+      .notNull()
+      .default("verified"),
+    consumedAt: text("consumed_at"),
+  },
+  (table) => [
+    uniqueIndex("ux_carrier_receipts_provider_event").on(
+      table.providerCode,
+      table.providerEventId,
+    ),
+    uniqueIndex("ux_carrier_receipts_fingerprint").on(table.receiptFingerprint),
+    index("idx_carrier_receipts_shipment_status").on(table.shipmentId, table.status),
+    check(
+      "ck_carrier_receipts_type",
+      sql`${table.eventType} IN (
+        'in_transit', 'out_for_delivery', 'delivered', 'exception', 'returned'
+      )`,
+    ),
+    check(
+      "ck_carrier_receipts_verification_method",
+      sql`${table.verificationMethod} IN ('test_adapter', 'carrier_signature')`,
+    ),
+    check(
+      "ck_carrier_receipts_fingerprints",
+      sql`length(${table.eventFingerprint}) = 64
+        AND ${table.eventFingerprint} = lower(${table.eventFingerprint})
+        AND ${table.eventFingerprint} NOT GLOB '*[^0-9a-f]*'
+        AND length(${table.receiptFingerprint}) = 64
+        AND ${table.receiptFingerprint} = lower(${table.receiptFingerprint})
+        AND ${table.receiptFingerprint} NOT GLOB '*[^0-9a-f]*'`,
+    ),
+    check(
+      "ck_carrier_receipts_state",
+      sql`(${table.status} = 'verified' AND ${table.consumedAt} IS NULL)
+        OR (${table.status} = 'consumed' AND ${table.consumedAt} IS NOT NULL)`,
+    ),
+  ],
+);
+
+export const shipmentTrackingEvents = sqliteTable(
+  "shipment_tracking_events",
+  {
+    id: text("id").primaryKey(),
+    shipmentId: text("shipment_id")
+      .notNull()
+      .references(() => shipments.id, { onDelete: "restrict" }),
+    providerCode: text("provider_code").notNull(),
+    providerEventId: text("provider_event_id").notNull(),
+    carrierReceiptId: text("carrier_receipt_id").references(
+      () => carrierEventReceipts.id,
+      { onDelete: "restrict" },
+    ),
+    trackingReference: text("tracking_reference").notNull(),
+    eventType: text("event_type", {
+      enum: [
+        "handed_over",
+        "in_transit",
+        "out_for_delivery",
+        "delivered",
+        "exception",
+        "returned",
+      ],
+    }).notNull(),
+    eventFingerprint: text("event_fingerprint").notNull(),
+    occurredAt: text("occurred_at").notNull(),
+    receivedAt: text("received_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("ux_tracking_events_provider_event").on(
+      table.providerCode,
+      table.providerEventId,
+    ),
+    uniqueIndex("ux_tracking_events_carrier_receipt")
+      .on(table.carrierReceiptId)
+      .where(sql`${table.carrierReceiptId} IS NOT NULL`),
+    uniqueIndex("ux_tracking_events_handover_shipment")
+      .on(table.shipmentId)
+      .where(sql`${table.eventType} = 'handed_over'`),
+    index("idx_tracking_events_shipment_received").on(
+      table.shipmentId,
+      table.receivedAt,
+    ),
+    check(
+      "ck_tracking_events_type",
+      sql`${table.eventType} IN (
+        'handed_over', 'in_transit', 'out_for_delivery', 'delivered',
+        'exception', 'returned'
+      )`,
+    ),
+    check(
+      "ck_tracking_events_fingerprint",
+      sql`length(${table.eventFingerprint}) = 64
+        AND ${table.eventFingerprint} = lower(${table.eventFingerprint})
+        AND ${table.eventFingerprint} NOT GLOB '*[^0-9a-f]*'`,
+    ),
+    check(
+      "ck_tracking_events_receipt_shape",
+      sql`(${table.eventType} = 'handed_over' AND ${table.carrierReceiptId} IS NULL)
+        OR (${table.eventType} <> 'handed_over' AND ${table.carrierReceiptId} IS NOT NULL)`,
+    ),
+  ],
+);
+
+export const returnRequests = sqliteTable(
+  "return_requests",
+  {
+    id: text("id").primaryKey(),
+    orderId: text("order_id")
+      .notNull()
+      .references(() => orders.id, { onDelete: "restrict" }),
+    kind: text("kind", { enum: ["return", "withdrawal"] }).notNull(),
+    source: text("source", { enum: ["customer", "guest", "admin"] }).notNull(),
+    actorCustomerId: text("actor_customer_id").references(() => customers.id, {
+      onDelete: "restrict",
+    }),
+    guestOrderSessionId: text("guest_order_session_id").references(
+      () => guestOrderSessions.id,
+      { onDelete: "restrict" },
+    ),
+    actorAdminId: text("actor_admin_id").references(
+      () => administrators.id,
+      { onDelete: "restrict" },
+    ),
+    declarationFingerprint: text("declaration_fingerprint").notNull(),
+    declaredLineCount: integer("declared_line_count").notNull(),
+    status: text("status", {
+      enum: [
+        "received",
+        "approved",
+        "goods_received",
+        "inspected",
+        "resolved",
+        "rejected",
+        "cancelled",
+      ],
+    })
+      .notNull()
+      .default("received"),
+    resolution: text("resolution", {
+      enum: ["pending", "refund", "rejected", "no_refund"],
+    })
+      .notNull()
+      .default("pending"),
+    requestedAt: text("requested_at").notNull(),
+    resolvedAt: text("resolved_at"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("ux_return_requests_declaration").on(
+      table.orderId,
+      table.declarationFingerprint,
+    ),
+    index("idx_return_requests_order_status").on(table.orderId, table.status),
+    check("ck_return_requests_kind", sql`${table.kind} IN ('return', 'withdrawal')`),
+    check(
+      "ck_return_requests_source",
+      sql`(${table.source} = 'customer' AND ${table.actorCustomerId} IS NOT NULL
+          AND ${table.guestOrderSessionId} IS NULL AND ${table.actorAdminId} IS NULL)
+        OR (${table.source} = 'guest' AND ${table.actorCustomerId} IS NULL
+          AND ${table.guestOrderSessionId} IS NOT NULL AND ${table.actorAdminId} IS NULL)
+        OR (${table.source} = 'admin' AND ${table.actorCustomerId} IS NULL
+          AND ${table.guestOrderSessionId} IS NULL AND ${table.actorAdminId} IS NOT NULL)`,
+    ),
+    check(
+      "ck_return_requests_status",
+      sql`${table.status} IN (
+        'received', 'approved', 'goods_received', 'inspected', 'resolved',
+        'rejected', 'cancelled'
+      )`,
+    ),
+    check(
+      "ck_return_requests_resolution",
+      sql`${table.resolution} IN ('pending', 'refund', 'rejected', 'no_refund')`,
+    ),
+    check(
+      "ck_return_requests_fingerprint",
+      sql`length(${table.declarationFingerprint}) = 64
+        AND ${table.declarationFingerprint} = lower(${table.declarationFingerprint})
+        AND ${table.declarationFingerprint} NOT GLOB '*[^0-9a-f]*'`,
+    ),
+    check("ck_return_requests_declared_lines", sql`${table.declaredLineCount} > 0`),
+  ],
+);
+
+export const returnLines = sqliteTable(
+  "return_lines",
+  {
+    id: text("id").primaryKey(),
+    returnRequestId: text("return_request_id")
+      .notNull()
+      .references(() => returnRequests.id, { onDelete: "restrict" }),
+    orderLineId: text("order_line_id")
+      .notNull()
+      .references(() => orderLines.id, { onDelete: "restrict" }),
+    requestedQuantity: integer("requested_quantity").notNull(),
+    receivedQuantity: integer("received_quantity").notNull().default(0),
+    sellableQuantity: integer("sellable_quantity").notNull().default(0),
+    nonSellableQuantity: integer("non_sellable_quantity").notNull().default(0),
+    restockedQuantity: integer("restocked_quantity").notNull().default(0),
+    inspectionResult: text("inspection_result", {
+      enum: ["pending", "complete"],
+    })
+      .notNull()
+      .default("pending"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("ux_return_lines_request_order_line").on(
+      table.returnRequestId,
+      table.orderLineId,
+    ),
+    index("idx_return_lines_order_line").on(table.orderLineId),
+    check(
+      "ck_return_lines_quantities",
+      sql`${table.requestedQuantity} > 0
+        AND ${table.receivedQuantity} >= 0
+        AND ${table.receivedQuantity} <= ${table.requestedQuantity}
+        AND ${table.sellableQuantity} >= 0
+        AND ${table.nonSellableQuantity} >= 0
+        AND ${table.sellableQuantity} + ${table.nonSellableQuantity} = ${table.receivedQuantity}
+        AND ${table.restockedQuantity} >= 0
+        AND ${table.restockedQuantity} <= ${table.sellableQuantity}`,
+    ),
+    check(
+      "ck_return_lines_inspection",
+      sql`(${table.inspectionResult} = 'pending'
+          AND ${table.receivedQuantity} = 0
+          AND ${table.sellableQuantity} = 0
+          AND ${table.nonSellableQuantity} = 0
+          AND ${table.restockedQuantity} = 0)
+        OR ${table.inspectionResult} = 'complete'`,
+    ),
+  ],
+);
+
+export const refunds = sqliteTable(
+  "refunds",
+  {
+    id: text("id").primaryKey(),
+    paymentId: text("payment_id")
+      .notNull()
+      .references(() => payments.id, { onDelete: "restrict" }),
+    returnRequestId: text("return_request_id")
+      .notNull()
+      .references(() => returnRequests.id, { onDelete: "restrict" }),
+    reason: text("reason", { enum: ["return", "withdrawal"] }).notNull(),
+    amountCents: integer("amount_cents").notNull(),
+    currency: text("currency", { enum: ["EUR"] }).notNull().default("EUR"),
+    status: text("status", {
+      enum: ["pending", "claimed", "succeeded", "failed"],
+    })
+      .notNull()
+      .default("pending"),
+    idempotencyKey: text("idempotency_key").notNull(),
+    leaseTokenHash: text("lease_token_hash"),
+    leasedAt: text("leased_at"),
+    leaseExpiresAt: text("lease_expires_at"),
+    providerRefundReference: text("provider_refund_reference"),
+    providerReceiptFingerprint: text("provider_receipt_fingerprint"),
+    attempts: integer("attempts").notNull().default(0),
+    maxAttempts: integer("max_attempts").notNull().default(5),
+    lastErrorCode: text("last_error_code"),
+    succeededAt: text("succeeded_at"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("ux_refunds_idempotency").on(table.idempotencyKey),
+    uniqueIndex("ux_refunds_provider_reference")
+      .on(table.providerRefundReference)
+      .where(sql`${table.providerRefundReference} IS NOT NULL`),
+    uniqueIndex("ux_refunds_active_lease")
+      .on(table.leaseTokenHash)
+      .where(sql`${table.leaseTokenHash} IS NOT NULL`),
+    index("idx_refunds_payment_status").on(table.paymentId, table.status),
+    check("ck_refunds_reason", sql`${table.reason} IN ('return', 'withdrawal')`),
+    check("ck_refunds_amount", sql`${table.amountCents} > 0`),
+    check("ck_refunds_currency", sql`${table.currency} = 'EUR'`),
+    check(
+      "ck_refunds_status",
+      sql`${table.status} IN ('pending', 'claimed', 'succeeded', 'failed')`,
+    ),
+    check(
+      "ck_refunds_attempts",
+      sql`${table.attempts} >= 0 AND ${table.maxAttempts} >= 1
+        AND ${table.attempts} <= ${table.maxAttempts}`,
+    ),
+    check(
+      "ck_refunds_receipt_fingerprint",
+      sql`${table.providerReceiptFingerprint} IS NULL
+        OR (length(${table.providerReceiptFingerprint}) = 64
+          AND ${table.providerReceiptFingerprint} = lower(${table.providerReceiptFingerprint})
+          AND ${table.providerReceiptFingerprint} NOT GLOB '*[^0-9a-f]*')`,
+    ),
+  ],
+);
+
+export const customsRecords = sqliteTable(
+  "customs_records",
+  {
+    id: text("id").primaryKey(),
+    shipmentId: text("shipment_id")
+      .notNull()
+      .references(() => shipments.id, { onDelete: "restrict" }),
+    status: text("status", { enum: ["pending", "ready", "blocked"] })
+      .notNull()
+      .default("pending"),
+    manualReference: text("manual_reference"),
+    recordFingerprint: text("record_fingerprint"),
+    readyAt: text("ready_at"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("ux_customs_records_shipment").on(table.shipmentId),
+    check(
+      "ck_customs_records_status",
+      sql`${table.status} IN ('pending', 'ready', 'blocked')`,
+    ),
+    check(
+      "ck_customs_records_fingerprint",
+      sql`${table.recordFingerprint} IS NULL
+        OR (length(${table.recordFingerprint}) = 64
+          AND ${table.recordFingerprint} = lower(${table.recordFingerprint})
+          AND ${table.recordFingerprint} NOT GLOB '*[^0-9a-f]*')`,
+    ),
+    check(
+      "ck_customs_records_ready_shape",
+      sql`(${table.status} = 'ready' AND ${table.manualReference} IS NOT NULL
+          AND ${table.recordFingerprint} IS NOT NULL AND ${table.readyAt} IS NOT NULL)
+        OR (${table.status} <> 'ready' AND ${table.readyAt} IS NULL)`,
     ),
   ],
 );
