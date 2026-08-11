@@ -10,12 +10,12 @@ const projectRoot = join(testDirectory, "..");
 
 const inheritedDiagnosticBaseline = [
   /^db\/index\.ts\(1,21\): error TS2307:/,
-  /^worker\/index\.ts\(7,12\): error TS2304:/,
-  /^worker\/index\.ts\(8,7\): error TS2552:/,
-  /^worker\/index\.ts\(187,11\): error TS2304:/,
-  /^worker\/index\.ts\(207,19\): error TS18047:/,
-  /^worker\/index\.ts\(215,19\): error TS18047:/,
-  /^worker\/index\.ts\(254,11\): error TS2304:/,
+  /^worker\/index\.ts\(\d+,12\): error TS2304: Cannot find name 'Fetcher'\.$/,
+  /^worker\/index\.ts\(\d+,7\): error TS2552: Cannot find name 'D1Database'\./,
+  /^worker\/index\.ts\(\d+,11\): error TS2304: Cannot find name 'Fetcher'\.$/,
+  /^worker\/index\.ts\(\d+,19\): error TS18047: 'fullBytes' is possibly 'null'\.$/,
+  /^worker\/index\.ts\(\d+,19\): error TS18047: 'fullBytes' is possibly 'null'\.$/,
+  /^worker\/index\.ts\(\d+,11\): error TS2304: Cannot find name 'Fetcher'\.$/,
 ];
 
 test("Lot 2 adds zero diagnostics to the root TypeScript project", async () => {

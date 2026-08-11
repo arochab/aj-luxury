@@ -1,122 +1,67 @@
-import Image from "next/image";
 import Link from "next/link";
-import { createDemoCart } from "../../lib/commerce";
-import { getProduct } from "../../lib/products";
-import LocalizedPrice from "../components/LocalizedPrice";
-import StoreFooter from "../components/StoreFooter";
-import StoreHeader from "../components/StoreHeader";
-import { T } from "../../lib/i18n/TranslatedText";
-import styles from "./CommerceShell.module.css";
+import DemoPageFrame from "../components/demo/DemoPageFrame";
+import {
+  formatDemoEuros,
+} from "@/lib/demo/customer-journey";
+import { syntheticCustomerJourneySource } from "@/lib/demo/customer-journey-source";
+import styles from "../components/demo/DemoJourney.module.css";
 
 export const metadata = {
-  title: "Panier de démonstration | AJ Luxury",
-  robots: { index: false, follow: false },
+  title: "Panier simulé | AJ Luxury",
+  robots: { index: false, follow: false, noarchive: true, nocache: true },
 };
 
-type CartPageProps = {
-  searchParams: Promise<{ variant?: string }>;
-};
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
-export default async function CartPage({ searchParams }: CartPageProps) {
-  const { variant } = await searchParams;
-  const cart = await createDemoCart(variant);
-  const selectedVariant = cart.lines[0]?.variant.id;
-  const subtotalCents = cart.lines.reduce(
-    (total, line) =>
-      total + (getProduct(line.variant.productSlug)?.priceCents ?? 0),
-    0,
-  );
+export default async function CartPage() {
+  const journey = await syntheticCustomerJourneySource.read();
 
   return (
-    <main className={styles.shell}>
-      <StoreHeader />
-      <aside className={styles.notice}>
-        <T id="cart.demoNotice" />
-      </aside>
-
-      <div className={styles.main}>
-        <section>
-          <p className={styles.eyebrow}>
-            <T id="cart.eyebrow" />
+    <DemoPageFrame step="01 · Panier">
+      <div className={styles.demoPage}>
+        <header className={styles.pageHeading}>
+          <p className={styles.eyebrow}>Votre sélection · Simulation</p>
+          <h1>Panier</h1>
+          <p>
+            Un article fictif est prêt pour tester la livraison, le paiement, le suivi et le retour de bout en bout.
           </p>
-          <h1 className={styles.title}>
-            <T id="cart.selectionTitle" />
-          </h1>
-          {cart.lines.map((line) => (
-            <article className={styles.line} key={line.id}>
-              <div className={styles.lineImage}>
-                <Image
-                  src={line.variant.imageUrl}
-                  alt={`${line.variant.productName} ${line.variant.color.name}`}
-                  fill
-                  unoptimized
-                  sizes="140px"
-                />
-              </div>
+        </header>
+
+        <div className={styles.orderGrid}>
+          <section className={styles.orderPanel} aria-labelledby="cart-product-title">
+            <div className={styles.cardTopline}>
+              <span>Article 01</span>
+              <span className={styles.statePill}>En stock · simulation</span>
+            </div>
+            <div className={styles.returnLine}>
+              {/* eslint-disable-next-line @next/next/no-img-element -- retained local optimized product asset */}
+              <img src={journey.line.imageUrl} alt="Boxer Apollon Pourpre Impérial" />
               <div>
-                <h2>{line.variant.productName}</h2>
-                <p>
-                  {line.variant.color.name} · <T id="product.size" /> {line.variant.size}
-                  <br />
-                  <T id="cart.reference" /> {line.variant.sku}
-                </p>
+                <h2 id="cart-product-title">{journey.line.productName}</h2>
+                <span>{journey.line.colorName} · Taille {journey.line.size} · Qté {journey.line.quantity}</span>
               </div>
-              <strong>
-                <LocalizedPrice
-                  amountCents={
-                    getProduct(line.variant.productSlug)?.priceCents ?? null
-                  }
-                />
-              </strong>
-            </article>
-          ))}
-        </section>
+              <strong>{formatDemoEuros(journey.line.unitPriceCents)}</strong>
+            </div>
+            <div className={styles.cardActions}>
+              <Link className={styles.textButton} href={journey.line.productUrl}>Modifier la sélection</Link>
+            </div>
+          </section>
 
-        <aside className={styles.summary}>
-          <p className={styles.eyebrow}>
-            <T id="cart.summary" />
-          </p>
-          <h2>
-            <T id="cart.estimatedTotal" />
-          </h2>
-          <div className={styles.row}>
-            <span><T id="cart.subtotal" /></span>
-            <span><LocalizedPrice amountCents={subtotalCents} /></span>
-          </div>
-          <div className={styles.row}>
-            <span><T id="cart.shipping" /></span>
-            <span><T id="cart.toDefine" /></span>
-          </div>
-          <div className={`${styles.row} ${styles.total}`}>
-            <span><T id="cart.provisionalTotal" /></span>
-            <span><LocalizedPrice amountCents={subtotalCents} /></span>
-          </div>
-          <Link
-            className={styles.button}
-            href={
-              selectedVariant
-                ? `/checkout?variant=${encodeURIComponent(selectedVariant)}`
-                : "/checkout"
-            }
-          >
-            <T id="cart.simulateCheckout" />
-          </Link>
-          <Link
-            className={styles.secondary}
-            href={
-              cart.lines[0]
-                ? `/products/${cart.lines[0].variant.productSlug}`
-                : "/shop"
-            }
-          >
-            <T id="cart.modifySelection" />
-          </Link>
-          <p className={styles.muted}>
-            <T id="cart.conditionsPending" />
-          </p>
-        </aside>
+          <aside className={styles.orderPanel} aria-label="Total du panier simulé">
+            <p className={styles.eyebrow}>Récapitulatif</p>
+            <h2>Total provisoire</h2>
+            <dl className={styles.orderFacts}>
+              <div><dt>Sous-total</dt><dd>{formatDemoEuros(journey.line.unitPriceCents)}</dd></div>
+              <div><dt>Livraison</dt><dd>Calculée à l’étape suivante</dd></div>
+            </dl>
+            <Link className={styles.primaryButton} href="/checkout">Continuer vers la livraison</Link>
+            <p className={styles.summarySafety}>
+              Aucun stock n’est réservé et aucune commande ne sera enregistrée.
+            </p>
+          </aside>
+        </div>
       </div>
-      <StoreFooter />
-    </main>
+    </DemoPageFrame>
   );
 }

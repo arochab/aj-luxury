@@ -488,32 +488,26 @@ test("withdrawal route is visible but cannot fake a live order workflow", async 
   assert.match(html, /contact@ajluxurystore\.com/);
 });
 
-test("cart keeps the selected color and size", async () => {
-  const response = await render(
-    "/cart?variant=variant_boxer_rose-pale_xl",
-  );
+test("private commerce journey uses the governed synthetic Apollon fixture", async () => {
+  const response = await render("/cart");
   assert.equal(response.status, 200);
   const html = await response.text();
-  assert.match(html, /Rose Velours/);
-  assert.match(html, /Taille[\s\S]*XL/);
+  assert.match(html, /Pourpre Impérial/);
+  assert.match(html, /Taille[\s\S]*M/);
   assert.match(html, /29,99(?:\s|&nbsp;|&#xA0;)*€/);
 
-  const checkout = await render(
-    "/checkout?variant=variant_boxer_rose-pale_xl",
-  );
+  const checkout = await render("/checkout");
   const checkoutHtml = await checkout.text();
-  assert.match(checkoutHtml, /Rose Velours/);
+  assert.match(checkoutHtml, /Pourpre Impérial/);
   assert.match(checkoutHtml, /29,99(?:\s|&nbsp;|&#xA0;)*€/);
-  assert.match(
-    checkoutHtml,
-    /\/cart\?variant=variant_boxer_rose-pale_xl/,
-  );
+  assert.match(checkoutHtml, /DHL Express/);
+  assert.match(checkoutHtml, /SIMULATION/);
 });
 
 const commerceCases = [
   ["/cart", /aucune commande ne sera enregistrée/i],
-  ["/checkout", /aucune commande n’est enregistrée/i],
-  ["/account", /authentification non activée/i],
+  ["/checkout", /aucun débit, aucune commande/i],
+  ["/account", /compte client fictif/i],
 ];
 
 for (const [pathname, marker] of commerceCases) {

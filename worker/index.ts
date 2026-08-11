@@ -2,10 +2,16 @@
 import { handleImageOptimization, DEFAULT_DEVICE_SIZES, DEFAULT_IMAGE_SIZES } from "vinext/server/image-optimization";
 import handler from "vinext/server/app-router-entry";
 import { createStaticFileSignal } from "vinext/server/request-pipeline";
+import {
+  assertDemoRuntime,
+  isDemoRoute,
+} from "../lib/demo/runtime-guard";
 
 interface Env {
   ASSETS?: Fetcher;
   DB: D1Database;
+  AJ_RUNTIME?: string;
+  AJ_ENVIRONMENT?: string;
   IMAGES: {
     input(stream: ReadableStream): {
       transform(options: Record<string, unknown>): {
@@ -16,6 +22,39 @@ interface Env {
 }
 
 type RuntimeEnv = Env | undefined;
+
+function runtimeValue(
+  env: RuntimeEnv,
+  key: "AJ_RUNTIME" | "AJ_ENVIRONMENT",
+): string | undefined {
+  return env?.[key] ??
+    (typeof process !== "undefined" ? process.env[key] : undefined);
+}
+
+function privateDemoResponse(response: Response): Response {
+  const headers = new Headers(response.headers);
+  headers.delete("Cache-Tag");
+  headers.delete("ETag");
+  headers.set("Cache-Control", "private, no-store, max-age=0");
+  headers.set("Pragma", "no-cache");
+  headers.set("X-Robots-Tag", "noindex, nofollow, noarchive");
+  headers.append("Vary", "Host");
+
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
+function denyDemoRequest(): Response {
+  return privateDemoResponse(
+    new Response("Not found", {
+      status: 404,
+      headers: { "Content-Type": "text/plain; charset=utf-8" },
+    }),
+  );
+}
 
 interface ExecutionContext {
   waitUntil(promise: Promise<unknown>): void;
@@ -344,6 +383,20 @@ const worker = {
     ctx: ExecutionContext,
   ): Promise<Response> {
     const url = new URL(request.url);
+    const demoRequest = isDemoRoute(url.pathname);
+
+    if (demoRequest) {
+      try {
+        assertDemoRuntime({
+          runtime: runtimeValue(env, "AJ_RUNTIME"),
+          environment: runtimeValue(env, "AJ_ENVIRONMENT"),
+          host: url.host,
+        });
+      } catch {
+        return denyDemoRequest();
+      }
+
+    }
 
     if (isStaticAsset(url.pathname)) {
       if (env?.ASSETS) return serveStaticAsset(request, env.ASSETS);
@@ -380,7 +433,8 @@ const worker = {
       }, allowedWidths);
     }
 
-    return serveApplication(request, env, ctx);
+    const response = await serveApplication(request, env, ctx);
+    return demoRequest ? privateDemoResponse(response) : response;
   },
 };
 

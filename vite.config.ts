@@ -15,6 +15,10 @@ const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === "seatbelt";
 const localBindingConfig = {
   main: "./worker/index.ts",
   compatibility_flags: ["nodejs_compat"],
+  vars: {
+    AJ_RUNTIME: process.env.AJ_RUNTIME ?? "",
+    AJ_ENVIRONMENT: process.env.AJ_ENVIRONMENT ?? "",
+  },
   assets: {
     binding: "ASSETS",
     run_worker_first: [
