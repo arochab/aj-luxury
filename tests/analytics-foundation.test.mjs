@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readdir, readFile } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, extname, join, relative } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
@@ -14,7 +14,7 @@ import { prepareClientAnalyticsEvent } from "../lib/analytics/client-preparation
 import {
   ANALYTICS_CLIENT_BOUNDARY_ERROR,
   analyticsServerBoundaryPlugin,
-  findAnalyticsClientBoundaryViolations,
+  isAnalyticsServerModule,
 } from "../lib/build/analytics-server-boundary.ts";
 import {
   sanitizeAnalyticsContext,
@@ -102,6 +102,7 @@ function viteFixtureBuild(input, options = {}) {
     build: {
       write: false,
       minify: false,
+      assetsInlineLimit: options.assetsInlineLimit,
       ...(options.ssr ? { ssr: input } : {}),
       ...(!options.ssr ? { rollupOptions: { input } } : {}),
     },
@@ -114,6 +115,30 @@ function viteOutputCode(result) {
     .flatMap((output) => output.output ?? [])
     .map((entry) => ("code" in entry ? entry.code : ""))
     .join("\n");
+}
+
+const FORBIDDEN_CLIENT_ARTIFACT_MARKERS = [
+  "order_paid",
+  "canonical_commerce_d1_not_integrated",
+  "storeOnce",
+];
+
+function findArtifactLeaks(artifacts) {
+  return artifacts.flatMap(({ name, contents }) =>
+    FORBIDDEN_CLIENT_ARTIFACT_MARKERS.filter((marker) =>
+      contents.includes(Buffer.from(marker)),
+    ).map((marker) => ({ name, marker })),
+  );
+}
+
+function viteOutputArtifacts(result) {
+  const outputs = Array.isArray(result) ? result : [result];
+  return outputs.flatMap((output) =>
+    (output.output ?? []).map((entry) => ({
+      name: entry.fileName,
+      contents: Buffer.from("code" in entry ? entry.code : entry.source),
+    })),
+  );
 }
 
 const COLORS = [
@@ -336,27 +361,23 @@ test("an actual browser bundle of the client index contains no paid-order author
   assert.doesNotMatch(code, /canonical_commerce_d1_not_integrated/);
 });
 
-test("the final Vinext client artifacts contain no paid-order or server-outbox code", async () => {
-  const clientJavaScriptFiles = (await listFilesRecursively(finalClientRoot)).filter(
-    (path) => /\.(?:c|m)?js$/i.test(path),
-  );
+test("every final Vinext client artifact contains no paid-order or server-outbox code", async () => {
+  const clientArtifactFiles = await listFilesRecursively(finalClientRoot);
   assert.ok(
-    clientJavaScriptFiles.length > 0,
+    clientArtifactFiles.some((path) => /\.(?:c|m)?js$/i.test(path)),
     "npm run build must produce final browser JavaScript before this test",
   );
-
-  const bundle = (
-    await Promise.all(
-      clientJavaScriptFiles.map((path) => readFile(path, "utf8")),
-    )
-  ).join("\n");
-  for (const forbidden of [
-    /order_paid/,
-    /canonical_commerce_d1_not_integrated/,
-    /storeOnce/,
-  ]) {
-    assert.doesNotMatch(bundle, forbidden);
-  }
+  assert.ok(
+    clientArtifactFiles.some((path) => !/\.(?:c|m)?js$/i.test(path)),
+    "the proof must include emitted non-JavaScript assets",
+  );
+  const artifacts = await Promise.all(
+    clientArtifactFiles.map(async (path) => ({
+      name: relative(finalClientRoot, path),
+      contents: await readFile(path),
+    })),
+  );
+  assert.deepEqual(findArtifactLeaks(artifacts), []);
 });
 
 test("every deep server file fails an actual browser bundle", async () => {
@@ -394,7 +415,7 @@ test("every deep server file fails an actual browser bundle", async () => {
   }
 });
 
-test("Vite 8.1.5 rejects every adversarial client path to analytics server modules", async () => {
+test("Vite 8.1.5 rejects the seven historical client paths and uppercase raw/url variants", async () => {
   assert.equal(viteVersion, "8.1.5");
   for (const fixture of [
     "raw.mjs",
@@ -404,16 +425,10 @@ test("Vite 8.1.5 rejects every adversarial client path to analytics server modul
     "dynamic-template.mjs",
     "glob.mjs",
     "new-url.mjs",
+    "uppercase-raw.mjs",
+    "uppercase-url.mjs",
   ]) {
     const fixturePath = join(boundaryFixtureRoot, fixture);
-    assert.ok(
-      findAnalyticsClientBoundaryViolations(
-        await readFile(fixturePath, "utf8"),
-        fixturePath,
-        projectRoot,
-      ).length > 0,
-      `${fixture} escaped the structural pre-build scanner`,
-    );
     await assert.rejects(
       () => viteFixtureBuild(fixturePath),
       (error) => String(error).includes(ANALYTICS_CLIENT_BOUNDARY_ERROR),
@@ -422,9 +437,65 @@ test("Vite 8.1.5 rejects every adversarial client path to analytics server modul
   }
 });
 
-test("the structural boundary is a mandatory pre-build and pre-lint gate", async () => {
+test("the boundary matcher is case-insensitive before filesystem resolution", () => {
+  assert.equal(
+    isAnalyticsServerModule(
+      "../../../lib/analytics/Server-events.ts?raw",
+      projectRoot,
+    ),
+    true,
+  );
+  assert.equal(
+    isAnalyticsServerModule("../../../LIB/ANALYTICS/SERVER.TS?url", projectRoot),
+    true,
+  );
+});
+
+test("Vite erases type-only server imports without a boundary false positive", async () => {
+  const result = await viteFixtureBuild(
+    join(boundaryFixtureRoot, "type-only.ts"),
+  );
+  assert.deepEqual(findArtifactLeaks(viteOutputArtifacts(result)), []);
+});
+
+test("Vite applies negative import.meta.glob patterns before the boundary guard", async () => {
+  const result = await viteFixtureBuild(
+    join(boundaryFixtureRoot, "glob-excluded.mjs"),
+  );
+  assert.doesNotMatch(
+    viteOutputCode(result),
+    /order_paid|canonical_commerce_d1_not_integrated/,
+  );
+});
+
+test("the artifact proof detects forbidden content in emitted non-JavaScript assets", async () => {
+  const result = await viteFixtureBuild(
+    join(boundaryFixtureRoot, "asset-non-js.mjs"),
+    { assetsInlineLimit: 0 },
+  );
+  const artifacts = viteOutputArtifacts(result);
+  const nonJavaScriptAsset = artifacts.find(
+    ({ name }) => extname(name).toLowerCase() === ".txt",
+  );
+  assert.ok(
+    nonJavaScriptAsset,
+    "Vite must emit the canary as a non-JavaScript asset",
+  );
+  assert.deepEqual(findArtifactLeaks([nonJavaScriptAsset]), [
+    {
+      name: nonJavaScriptAsset.name,
+      marker: "canonical_commerce_d1_not_integrated",
+    },
+  ]);
+});
+
+test("the real Vite boundary is a mandatory pre-build and pre-lint gate", async () => {
   const packageManifest = JSON.parse(
     await readFile(join(projectRoot, "package.json"), "utf8"),
+  );
+  const boundaryCheckSource = await readFile(
+    join(projectRoot, "scripts", "check-analytics-client-boundary.mjs"),
+    "utf8",
   );
   const viteConfigSource = await readFile(
     join(projectRoot, "vite.config.ts"),
@@ -432,6 +503,7 @@ test("the structural boundary is a mandatory pre-build and pre-lint gate", async
   );
   assert.match(packageManifest.scripts.prebuild, /check:analytics-boundary/);
   assert.match(packageManifest.scripts.prelint, /check:analytics-boundary/);
+  assert.match(boundaryCheckSource, /build as viteBuild/);
   assert.match(viteConfigSource, /analyticsServerBoundaryPlugin\(\)/);
 });
 

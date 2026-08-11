@@ -1,10 +1,25 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { assertAnalyticsClientBoundary } from "../lib/build/analytics-server-boundary.ts";
+import { build as viteBuild } from "vite";
+
+import { analyticsServerBoundaryPlugin } from "../lib/build/analytics-server-boundary.ts";
 
 const projectRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
-const checked = assertAnalyticsClientBoundary(projectRoot);
 
-console.log(
-  `Analytics client boundary: ${checked.roots} roots and ${checked.modules} modules checked.`,
-);
+await viteBuild({
+  configFile: false,
+  root: projectRoot,
+  publicDir: false,
+  cacheDir: join(projectRoot, "node_modules", ".vite-analytics-check"),
+  logLevel: "silent",
+  plugins: [analyticsServerBoundaryPlugin(projectRoot)],
+  build: {
+    write: false,
+    minify: false,
+    rollupOptions: {
+      input: join(projectRoot, "lib", "analytics", "index.ts"),
+    },
+  },
+});
+
+console.log("Analytics public client boundary: real Vite build passed.");

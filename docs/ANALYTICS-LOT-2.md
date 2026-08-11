@@ -120,14 +120,15 @@ jour des pages confidentialité/cookies avant toute activation.
   complémentaire ;
 - conditions client, SSR et RSC lues depuis la configuration Vinext/Vite
   réellement résolue en production, puis rejouées dans les tests de bundle ;
-- garde structurelle obligatoire avant lint et build, complétée par un plugin
-  limité aux environnements Vite de type client ; les imports directs,
-  sous-chemins, `?raw`, `?url`, `import.meta.glob`, `new URL(..., import.meta.url)`
-  et imports dynamiques calculés visant `lib/analytics/server*.ts` font échouer
-  le build, tandis que SSR et RSC restent autorisés ;
+- build Vite réel de l’entrée publique obligatoire avant lint et build, complété
+  par un plugin limité aux environnements client ; ses hooks bloquent les modules
+  serveur réellement résolus ou chargés, sans réimplémenter la résolution ni les
+  globs de Vite, et un petit contrôle AST couvre les imports calculés non résolus
+  ainsi que `new URL(..., import.meta.url)` ; les imports de types effacés et les
+  exclusions négatives de `import.meta.glob` restent autorisés, comme SSR et RSC ;
 - bundles adversariaux exécutés avec Vite 8.1.5, bundle navigateur de l’index
-  construit par esbuild et inspection de tous les fichiers JavaScript du
-  `dist/client` final produit par Vinext ;
+  construit par esbuild et inspection binaire de tous les fichiers émis dans le
+  `dist/client` final produit par Vinext, y compris les assets non JavaScript ;
 - aucun collecteur, callback, buffer ou dispatcher côté navigateur ;
 - aucune outbox, même simulée, et aucun callback de persistance injectable ;
 - politique injectée et fail-closed uniquement pour routes, référents et UTM ;
@@ -185,7 +186,9 @@ Le socle passe cette phase si :
    contiennent jamais `order_paid`, le blocker D1 ni une outbox serveur ;
 2. la garde pré-build/pré-lint et les builds Vite 8.1.5 adversariaux bloquent
    les imports directs, sous-chemins, `?raw`, `?url`, glob et imports dynamiques
-   calculés des fichiers serveur, sans bloquer SSR ou RSC ;
+   calculés des fichiers serveur, y compris avec une casse différente sur un
+   système insensible à la casse, sans bloquer les types, les exclusions de glob,
+   SSR ou RSC ;
 3. la façade client ne possède aucun collecteur et laisse passer le prochain
    task sans exécuter un callback CPU hostile ;
 4. la façade reste inactive même avec consentement accordé ;
