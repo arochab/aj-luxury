@@ -60,7 +60,9 @@ Toute nouvelle commande doit les renseigner et les figer.
   de livraison n’est pas encore connue.
 - Pour chaque ligne : reçu ≤ acheté ; vendable + non vendable = reçu ; remise en stock
   ≤ vendable. Aucun réassort avant inspection complète.
-- Le réassort est un unique mouvement déterministe `physical_increase`.
+- Le réassort réutilise exactement le ledger I06 : un unique mouvement déterministe
+  `kind='adjustment'` avec `reference_type='physical_increase'`, relié à la ligne de
+  retour. Aucun nouveau type de mouvement n’est créé.
 - Remboursements `pending + claimed + succeeded` ≤ paiement `succeeded`.
 - Une issue réseau ambiguë est reprise avec la même clé ; elle ne devient jamais un
   faux succès ou un faux échec.
