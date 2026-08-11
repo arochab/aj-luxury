@@ -62,8 +62,12 @@ CREATE TABLE `access_challenges` (
 	FOREIGN KEY (`order_id`) REFERENCES `orders`(`id`) ON UPDATE no action ON DELETE cascade,
 	CONSTRAINT `ck_access_challenges_purpose` CHECK(`purpose` IN ('customer_sign_in', 'guest_order_access')),
 	CONSTRAINT `ck_access_challenges_target` CHECK(
-		(`purpose` = 'customer_sign_in' AND `order_id` IS NULL)
-		OR (`purpose` = 'guest_order_access' AND `customer_id` IS NULL AND `order_id` IS NOT NULL)
+		(`purpose` = 'customer_sign_in' AND `order_id` IS NULL AND (
+			`customer_id` IS NOT NULL OR `revoked_at` IS NOT NULL
+		))
+		OR (`purpose` = 'guest_order_access' AND `customer_id` IS NULL AND (
+			`order_id` IS NOT NULL OR `revoked_at` IS NOT NULL
+		))
 	),
 	CONSTRAINT `ck_access_challenges_token_hash` CHECK(
 		length(`token_hash`) = 64
@@ -85,6 +89,22 @@ CREATE INDEX `idx_access_challenges_customer_active` ON `access_challenges` (`cu
 CREATE INDEX `idx_access_challenges_order_active` ON `access_challenges` (`order_id`,`purpose`,`expires_at`);--> statement-breakpoint
 CREATE INDEX `idx_customers_email_normalized` ON `customers` (lower(`email`)) WHERE `deleted_at` IS NULL;--> statement-breakpoint
 
+CREATE TRIGGER `trg_access_challenges_validate_insert_state`
+BEFORE INSERT ON `access_challenges`
+WHEN NEW.`dispatched_at` IS NOT NULL
+  OR NEW.`consumed_at` IS NOT NULL
+  OR (
+    NEW.`customer_id` IS NULL AND NEW.`order_id` IS NULL
+    AND (NEW.`revoked_at` IS NULL OR NEW.`revoked_at` IS NOT NEW.`created_at`)
+  )
+  OR (
+    (NEW.`customer_id` IS NOT NULL OR NEW.`order_id` IS NOT NULL)
+    AND NEW.`revoked_at` IS NOT NULL
+  )
+BEGIN
+  SELECT RAISE(ABORT, 'identity_challenge_insert_state_not_allowed');
+END;--> statement-breakpoint
+
 CREATE TRIGGER `trg_access_challenges_customer_account_insert`
 BEFORE INSERT ON `access_challenges`
 WHEN NEW.`purpose` = 'customer_sign_in'
@@ -102,6 +122,7 @@ END;--> statement-breakpoint
 CREATE TRIGGER `trg_access_challenges_guest_order_insert`
 BEFORE INSERT ON `access_challenges`
 WHEN NEW.`purpose` = 'guest_order_access'
+  AND NEW.`order_id` IS NOT NULL
   AND NOT EXISTS (
     SELECT 1 FROM `orders`
     WHERE `id` = NEW.`order_id` AND `customer_id` IS NULL
@@ -216,8 +237,8 @@ WHEN length(NEW.`token_hash`) <> 64
       WHERE `id` = NEW.`issued_by_challenge_id`
         AND `purpose` = 'customer_sign_in'
         AND `customer_id` = NEW.`customer_id`
-        AND `consumed_at` IS NOT NULL
-        AND `consumed_at` = NEW.`created_at`
+        AND `dispatched_at` IS NOT NULL
+        AND `consumed_at` IS NULL
         AND `expires_at` > NEW.`created_at`
         AND `revoked_at` IS NULL
     )
@@ -236,6 +257,22 @@ WHEN length(NEW.`token_hash`) <> 64
   OR NEW.`authentication_source` = 'legacy_revoked'
 BEGIN
   SELECT RAISE(ABORT, 'identity_customer_session_insert_not_allowed');
+END;--> statement-breakpoint
+CREATE TRIGGER `trg_customer_sessions_consume_challenge`
+AFTER INSERT ON `customer_sessions`
+WHEN NEW.`authentication_source` = 'challenge'
+BEGIN
+  UPDATE `access_challenges`
+  SET `consumed_at` = NEW.`created_at`
+  WHERE `id` = NEW.`issued_by_challenge_id`
+    AND `purpose` = 'customer_sign_in'
+    AND `customer_id` = NEW.`customer_id`
+    AND `dispatched_at` IS NOT NULL
+    AND `consumed_at` IS NULL
+    AND `revoked_at` IS NULL
+    AND `expires_at` > NEW.`created_at`;
+  SELECT CASE WHEN changes() = 1 THEN 1
+    ELSE RAISE(ABORT, 'identity_customer_challenge_consume_failed') END;
 END;--> statement-breakpoint
 CREATE TRIGGER `trg_customer_sessions_immutable_identity`
 BEFORE UPDATE ON `customer_sessions`
@@ -319,14 +356,29 @@ WHEN NEW.`last_seen_at` IS NOT NULL
     WHERE challenge.`id` = NEW.`issued_by_challenge_id`
       AND challenge.`purpose` = 'guest_order_access'
       AND challenge.`order_id` = NEW.`order_id`
-      AND challenge.`consumed_at` IS NOT NULL
-      AND challenge.`consumed_at` = NEW.`created_at`
+      AND challenge.`dispatched_at` IS NOT NULL
+      AND challenge.`consumed_at` IS NULL
       AND challenge.`expires_at` > NEW.`created_at`
       AND challenge.`revoked_at` IS NULL
       AND customer_order.`customer_id` IS NULL
   )
 BEGIN
   SELECT RAISE(ABORT, 'identity_guest_session_insert_not_allowed');
+END;--> statement-breakpoint
+CREATE TRIGGER `trg_guest_order_sessions_consume_challenge`
+AFTER INSERT ON `guest_order_sessions`
+BEGIN
+  UPDATE `access_challenges`
+  SET `consumed_at` = NEW.`created_at`
+  WHERE `id` = NEW.`issued_by_challenge_id`
+    AND `purpose` = 'guest_order_access'
+    AND `order_id` = NEW.`order_id`
+    AND `dispatched_at` IS NOT NULL
+    AND `consumed_at` IS NULL
+    AND `revoked_at` IS NULL
+    AND `expires_at` > NEW.`created_at`;
+  SELECT CASE WHEN changes() = 1 THEN 1
+    ELSE RAISE(ABORT, 'identity_guest_challenge_consume_failed') END;
 END;--> statement-breakpoint
 CREATE TRIGGER `trg_guest_order_sessions_immutable_identity`
 BEFORE UPDATE ON `guest_order_sessions`
@@ -356,6 +408,27 @@ WHEN (OLD.`revoked_at` IS NOT NULL AND OLD.`revoked_at` IS NOT NEW.`revoked_at`)
   ))
 BEGIN
   SELECT RAISE(ABORT, 'identity_guest_session_transition_not_allowed');
+END;--> statement-breakpoint
+
+CREATE TRIGGER `trg_access_challenges_consumption_provenance`
+AFTER UPDATE OF `consumed_at` ON `access_challenges`
+WHEN OLD.`consumed_at` IS NULL
+  AND NEW.`consumed_at` IS NOT NULL
+  AND NOT (
+    (NEW.`purpose` = 'customer_sign_in' AND EXISTS (
+      SELECT 1 FROM `customer_sessions`
+      WHERE `issued_by_challenge_id` = NEW.`id`
+        AND `authentication_source` = 'challenge'
+        AND `created_at` = NEW.`consumed_at`
+    ))
+    OR (NEW.`purpose` = 'guest_order_access' AND EXISTS (
+      SELECT 1 FROM `guest_order_sessions`
+      WHERE `issued_by_challenge_id` = NEW.`id`
+        AND `created_at` = NEW.`consumed_at`
+    ))
+  )
+BEGIN
+  SELECT RAISE(ABORT, 'identity_challenge_consumption_without_session');
 END;--> statement-breakpoint
 
 CREATE TABLE `administrators` (

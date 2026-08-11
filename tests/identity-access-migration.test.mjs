@@ -212,12 +212,64 @@ test("0003 constraints fail closed for guest, administrator and session provenan
 
   database
     .prepare(
+      `UPDATE customers SET account_enabled_at = ?, updated_at = ?
+      WHERE id = 'customer_a'`,
+    )
+    .run(now, now);
+
+  for (const [id, purpose, tokenHash] of [
+    ["challenge_targetless_customer", "customer_sign_in", "2".repeat(64)],
+    ["challenge_targetless_guest", "guest_order_access", "3".repeat(64)],
+  ]) {
+    assert.throws(
+      () =>
+        database
+          .prepare(
+            `INSERT INTO access_challenges (
+              id, purpose, customer_id, order_id, token_hash, expires_at,
+              created_at
+            ) VALUES (?, ?, NULL, NULL, ?, '2026-08-11T12:15:00.000Z', ?)`,
+          )
+          .run(id, purpose, tokenHash, now),
+      /identity_challenge_insert_state_not_allowed/,
+    );
+  }
+
+  assert.throws(
+    () =>
+      database
+        .prepare(
+          `INSERT INTO access_challenges (
+            id, purpose, customer_id, token_hash, expires_at, dispatched_at,
+            created_at
+          ) VALUES ('challenge_predispatched', 'customer_sign_in',
+            'customer_a', ?, '2026-08-11T12:15:00.000Z', ?, ?)` ,
+        )
+        .run("4".repeat(64), now, now),
+    /identity_challenge_insert_state_not_allowed/,
+  );
+  assert.throws(
+    () =>
+      database
+        .prepare(
+          `INSERT INTO access_challenges (
+            id, purpose, customer_id, token_hash, expires_at, consumed_at,
+            created_at
+          ) VALUES ('challenge_preconsumed', 'customer_sign_in',
+            'customer_a', ?, '2026-08-11T12:15:00.000Z', ?, ?)` ,
+        )
+        .run("5".repeat(64), now, now),
+    /identity_challenge_insert_state_not_allowed/,
+  );
+
+  database
+    .prepare(
       `INSERT INTO access_challenges (
         id, purpose, customer_id, token_hash, expires_at, created_at
-      ) VALUES ('challenge_state', 'customer_sign_in', NULL, ?,
+      ) VALUES ('challenge_state', 'customer_sign_in', 'customer_a', ?,
         '2026-08-11T12:15:00.000Z', ?)` ,
     )
-    .run("2".repeat(64), now);
+    .run("6".repeat(64), now);
   assert.throws(
     () =>
       database
@@ -247,12 +299,39 @@ test("0003 constraints fail closed for guest, administrator and session provenan
       WHERE id = 'challenge_state'`,
     )
     .run("2026-08-11T12:01:00.000Z");
+  assert.throws(
+    () =>
+      database
+        .prepare(
+          `UPDATE access_challenges SET consumed_at = ?
+          WHERE id = 'challenge_state'`,
+        )
+        .run("2026-08-11T12:02:00.000Z"),
+    /identity_challenge_consumption_without_session/,
+  );
   database
     .prepare(
-      `UPDATE access_challenges SET consumed_at = ?
-      WHERE id = 'challenge_state'`,
+      `INSERT INTO customer_sessions (
+        id, customer_id, token_hash, csrf_token_hash, session_family_id,
+        authentication_source, issued_by_challenge_id, rotated_from_session_id,
+        expires_at, idle_expires_at, last_seen_at, revoked_at, created_at
+      ) VALUES (
+        'session_challenge_state', 'customer_a', ?, ?, 'family_challenge_state',
+        'challenge', 'challenge_state', NULL,
+        '2026-08-11T12:12:00.000Z', '2026-08-11T12:10:00.000Z',
+        NULL, NULL, '2026-08-11T12:02:00.000Z'
+      )`,
     )
-    .run("2026-08-11T12:02:00.000Z");
+    .run("7".repeat(64), "8".repeat(64));
+  assert.equal(
+    database
+      .prepare(
+        `SELECT consumed_at FROM access_challenges
+        WHERE id = 'challenge_state'`,
+      )
+      .get().consumed_at,
+    "2026-08-11T12:02:00.000Z",
+  );
   assert.throws(
     () =>
       database
@@ -270,7 +349,7 @@ test("0003 constraints fail closed for guest, administrator and session provenan
       ) VALUES ('challenge_revoked', 'customer_sign_in', NULL, ?,
         '2026-08-11T12:15:00.000Z', ?, ?)` ,
     )
-    .run("3".repeat(64), now, now);
+    .run("9".repeat(64), now, now);
   assert.throws(
     () =>
       database

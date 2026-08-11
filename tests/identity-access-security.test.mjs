@@ -20,7 +20,12 @@ import {
   isTrustedMutationOrigin,
   isValidCsrfPair,
 } from "../lib/commerce/identity-access-policy.ts";
-import { createOpaqueAccessToken } from "../lib/commerce/account-security.ts";
+import {
+  accessTokenHashContexts,
+  createOpaqueAccessToken,
+  hashOneTimeAccessToken,
+  verifyOneTimeAccessToken,
+} from "../lib/commerce/account-security.ts";
 
 const drizzleDirectory = fileURLToPath(new URL("../drizzle/", import.meta.url));
 const migrationPaths = readdirSync(drizzleDirectory)
@@ -114,15 +119,25 @@ function createFixture(options = {}) {
   for (const migrationPath of migrationPaths) applyMigration(database, migrationPath);
 
   const deliveries = [];
+  const backgroundTasks = [];
+  const rateLimitInputs = [];
+  let virtualMilliseconds = 0;
   const ports = {
     delivery: {
       async deliver(delivery) {
+        if (options.deliveryGate) await options.deliveryGate;
+        if (options.deliveryDelayMs) {
+          await new Promise((resolvePromise) => {
+            setTimeout(resolvePromise, options.deliveryDelayMs);
+          });
+        }
         if (options.deliveryError) throw new Error("test delivery failure");
         deliveries.push(Object.freeze({ ...delivery }));
       },
     },
     rateLimit: {
-      async take() {
+      async take(input) {
+        rateLimitInputs.push(Object.freeze({ ...input }));
         return options.allowRateLimit ?? true;
       },
     },
@@ -131,12 +146,35 @@ function createFixture(options = {}) {
         return options.mfaEvidence ?? null;
       },
     },
+    background: {
+      defer(task) {
+        if (options.backgroundError) throw new Error("test background failure");
+        const pending = Promise.resolve().then(task);
+        backgroundTasks.push(pending);
+      },
+    },
+    timing:
+      options.timing ??
+      {
+        monotonicMilliseconds() {
+          return virtualMilliseconds;
+        },
+        async wait(milliseconds) {
+          virtualMilliseconds += milliseconds;
+        },
+      },
   };
 
   return {
+    backgroundTasks,
     database,
     deliveries,
+    async flushBackground() {
+      const pending = backgroundTasks.splice(0);
+      await Promise.all(pending);
+    },
     ports,
+    rateLimitInputs,
     store: new D1IdentityAccessStore(new SQLiteD1Database(database), ports),
   };
 }
@@ -179,7 +217,7 @@ function insertOrder(database, input) {
 }
 
 test("known and unknown emails receive the exact same response without persisting a raw token", async () => {
-  const { database, deliveries, store } = createFixture();
+  const { database, deliveries, flushBackground, store } = createFixture();
   const now = "2026-08-11T12:00:00.000Z";
   insertCustomer(database, "customer_known", "known@example.com", now);
   insertCustomer(database, "customer_inactive", "inactive@example.com", now, false);
@@ -199,6 +237,7 @@ test("known and unknown emails receive the exact same response without persistin
     challengeId: "challenge_inactive",
     now,
   });
+  await flushBackground();
 
   assert.strictEqual(known, accessRequestAcknowledgement);
   assert.strictEqual(unknown, accessRequestAcknowledgement);
@@ -238,8 +277,140 @@ test("known and unknown emails receive the exact same response without persistin
   database.close();
 });
 
+test("customer and guest access timing is padded identically without awaiting delivery", async () => {
+  let releaseDelivery;
+  const deliveryGate = new Promise((resolvePromise) => {
+    releaseDelivery = resolvePromise;
+  });
+  const waits = [];
+  const clockReads = [0, 37, 120, 123, 240, 279, 360, 362];
+  const timing = {
+    monotonicMilliseconds() {
+      return clockReads.shift();
+    },
+    async wait(milliseconds) {
+      waits.push(milliseconds);
+    },
+  };
+  const { database, deliveries, flushBackground, store } = createFixture({
+    deliveryGate,
+    timing,
+  });
+  const now = "2026-08-11T12:00:00.000Z";
+  insertCustomer(database, "customer_timing", "timing@example.com", now);
+  insertOrder(database, {
+    id: "order_timing",
+    orderNumber: "AJ-TIMING",
+    email: "guest-timing@example.com",
+    now,
+  });
+
+  async function settleBeforeBlockedDelivery(promise) {
+    let timer;
+    try {
+      return await Promise.race([
+        promise,
+        new Promise((_, rejectPromise) => {
+          timer = setTimeout(
+            () => rejectPromise(new Error("access response awaited delivery")),
+            1_000,
+          );
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  await settleBeforeBlockedDelivery(
+    store.requestCustomerSignIn({
+      email: "timing@example.com",
+      challengeId: "challenge_timing_known",
+      now,
+    }),
+  );
+  await store.requestCustomerSignIn({
+    email: "unknown-timing@example.com",
+    challengeId: "challenge_timing_unknown",
+    now,
+  });
+  await settleBeforeBlockedDelivery(
+    store.requestGuestOrderAccess({
+      email: "guest-timing@example.com",
+      orderNumber: "AJ-TIMING",
+      challengeId: "challenge_guest_timing_known",
+      now,
+    }),
+  );
+  await store.requestGuestOrderAccess({
+    email: "unknown-guest-timing@example.com",
+    orderNumber: "AJ-UNKNOWN",
+    challengeId: "challenge_guest_timing_unknown",
+    now,
+  });
+
+  assert.deepEqual(waits, [83, 117, 81, 118]);
+  assert.deepEqual(
+    [37, 3, 39, 2].map((elapsed, index) => elapsed + waits[index]),
+    [120, 120, 120, 120],
+  );
+  assert.equal(clockReads.length, 0);
+  assert.equal(deliveries.length, 0);
+  releaseDelivery();
+  await flushBackground();
+  assert.equal(deliveries.length, 2);
+  assert.equal(
+    database
+      .prepare(
+        `SELECT COUNT(*) AS count FROM access_challenges
+        WHERE customer_id IS NULL AND order_id IS NULL
+          AND revoked_at = created_at AND dispatched_at IS NULL`,
+      )
+      .get().count,
+    2,
+  );
+  database.close();
+});
+
+test("identity hashes are domain-separated and legacy unscoped hashes fail closed", async () => {
+  const rawToken = (await createOpaqueAccessToken()).token;
+  const contexts = Object.values(accessTokenHashContexts);
+  const contextualHashes = await Promise.all(
+    contexts.map((context) => hashOneTimeAccessToken(rawToken, context)),
+  );
+
+  assert.equal(new Set(contextualHashes).size, contexts.length);
+  for (let index = 0; index < contexts.length; index += 1) {
+    assert.equal(
+      await verifyOneTimeAccessToken(
+        rawToken,
+        contextualHashes[index],
+        contexts[index],
+      ),
+      true,
+    );
+  }
+  assert.equal(
+    await verifyOneTimeAccessToken(
+      rawToken,
+      contextualHashes[0],
+      contexts[1],
+    ),
+    false,
+  );
+
+  const legacyDigest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(rawToken),
+  );
+  const legacyUnscopedHash = Array.from(new Uint8Array(legacyDigest), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
+  assert.equal(await verifyOneTimeAccessToken(rawToken, legacyUnscopedHash), false);
+});
+
 test("delivery failure remains enumeration-safe and revokes the unusable challenge", async () => {
-  const { database, store } = createFixture({ deliveryError: true });
+  const { database, flushBackground, store } = createFixture({ deliveryError: true });
   const now = "2026-08-11T12:00:00.000Z";
   insertCustomer(database, "customer_known", "known@example.com", now);
   const known = await store.requestCustomerSignIn({
@@ -252,6 +423,7 @@ test("delivery failure remains enumeration-safe and revokes the unusable challen
     challengeId: "challenge_unknown_delivery_failure",
     now,
   });
+  await flushBackground();
   assert.strictEqual(known, accessRequestAcknowledgement);
   assert.strictEqual(unknown, accessRequestAcknowledgement);
   assert.equal(
@@ -267,7 +439,7 @@ test("delivery failure remains enumeration-safe and revokes the unusable challen
 });
 
 test("customer challenge consumption and rotation each have exactly one concurrent winner", async () => {
-  const { database, deliveries, store } = createFixture();
+  const { database, deliveries, flushBackground, store } = createFixture();
   const createdAt = "2026-08-11T12:00:00.000Z";
   insertCustomer(database, "customer_a", "a@example.com", createdAt);
   insertOrder(database, {
@@ -282,6 +454,7 @@ test("customer challenge consumption and rotation each have exactly one concurre
     challengeId: "challenge_customer_a",
     now: createdAt,
   });
+  await flushBackground();
 
   const consumeAt = "2026-08-11T12:01:00.000Z";
   const attempts = await Promise.all([
@@ -349,8 +522,109 @@ test("customer challenge consumption and rotation each have exactly one concurre
   database.close();
 });
 
+test("a persistence failure rolls back both session creation and challenge consumption", async () => {
+  const { database, deliveries, flushBackground, store } = createFixture();
+  const createdAt = "2026-08-11T12:00:00.000Z";
+  insertCustomer(
+    database,
+    "customer_atomic_rollback",
+    "atomic-rollback@example.com",
+    createdAt,
+  );
+  await store.requestCustomerSignIn({
+    email: "atomic-rollback@example.com",
+    challengeId: "challenge_atomic_rollback",
+    now: createdAt,
+  });
+  await flushBackground();
+  database
+    .prepare(
+      `INSERT INTO audit_log (
+        id, actor_type, action, entity_type, entity_id, idempotency_key,
+        metadata_json, created_at
+      ) VALUES (?, 'system', 'atomicity_sentinel', 'access_challenge', ?, ?, '{}', ?)`,
+    )
+    .run(
+      "audit_identity_challenge_consumed_challenge_atomic_rollback",
+      "challenge_atomic_rollback",
+      "identity:test:atomic-rollback",
+      createdAt,
+    );
+
+  assert.equal(
+    await store.consumeCustomerChallenge({
+      rawChallengeToken: deliveries[0].rawToken,
+      sessionId: "session_atomic_rollback",
+      now: "2026-08-11T12:01:00.000Z",
+    }),
+    null,
+  );
+  assert.deepEqual(
+    {
+      ...database
+        .prepare(
+          `SELECT consumed_at,
+            (SELECT COUNT(*) FROM customer_sessions
+              WHERE id = 'session_atomic_rollback') AS sessions
+          FROM access_challenges WHERE id = 'challenge_atomic_rollback'`,
+        )
+        .get(),
+    },
+    { consumed_at: null, sessions: 0 },
+  );
+  database.close();
+});
+
+test("guest challenge consumption is atomic under concurrent replay", async () => {
+  const { database, deliveries, flushBackground, store } = createFixture();
+  const createdAt = "2026-08-11T12:00:00.000Z";
+  insertOrder(database, {
+    id: "order_guest_concurrency",
+    orderNumber: "AJ-GUEST-CONCURRENCY",
+    email: "guest-concurrency@example.com",
+    now: createdAt,
+  });
+  await store.requestGuestOrderAccess({
+    email: "guest-concurrency@example.com",
+    orderNumber: "AJ-GUEST-CONCURRENCY",
+    challengeId: "challenge_guest_concurrency",
+    now: createdAt,
+  });
+  await flushBackground();
+
+  const attempts = await Promise.all([
+    store.consumeGuestOrderChallenge({
+      rawChallengeToken: deliveries[0].rawToken,
+      sessionId: "session_guest_concurrency_1",
+      now: "2026-08-11T12:01:00.000Z",
+    }),
+    store.consumeGuestOrderChallenge({
+      rawChallengeToken: deliveries[0].rawToken,
+      sessionId: "session_guest_concurrency_2",
+      now: "2026-08-11T12:01:00.000Z",
+    }),
+  ]);
+
+  assert.equal(attempts.filter((attempt) => attempt !== null).length, 1);
+  assert.deepEqual(
+    {
+      ...database
+        .prepare(
+          `SELECT
+            (SELECT COUNT(*) FROM guest_order_sessions) AS sessions,
+            (SELECT COUNT(*) FROM access_challenges
+              WHERE id = 'challenge_guest_concurrency'
+                AND consumed_at = '2026-08-11T12:01:00.000Z') AS consumed`,
+        )
+        .get(),
+    },
+    { sessions: 1, consumed: 1 },
+  );
+  database.close();
+});
+
 test("customer A, customer B and guest sessions are isolated by SQL ownership", async () => {
-  const { database, deliveries, store } = createFixture();
+  const { database, deliveries, flushBackground, store } = createFixture();
   const now = "2026-08-11T12:00:00.000Z";
   insertCustomer(database, "customer_a", "a@example.com", now);
   insertCustomer(database, "customer_b", "b@example.com", now);
@@ -386,6 +660,7 @@ test("customer A, customer B and guest sessions are isolated by SQL ownership", 
     challengeId: "challenge_a",
     now,
   });
+  await flushBackground();
   const customerSession = await store.consumeCustomerChallenge({
     rawChallengeToken: deliveries.at(-1).rawToken,
     sessionId: "session_a",
@@ -422,6 +697,7 @@ test("customer A, customer B and guest sessions are isolated by SQL ownership", 
     challengeId: "challenge_guest_a",
     now,
   });
+  await flushBackground();
   const guestSession = await store.consumeGuestOrderChallenge({
     rawChallengeToken: deliveries.at(-1).rawToken,
     sessionId: "session_guest_a",
@@ -448,8 +724,93 @@ test("customer A, customer B and guest sessions are isolated by SQL ownership", 
   database.close();
 });
 
+test("customer logout-all is atomic, audited and cannot cross accounts", async () => {
+  const { database, deliveries, flushBackground, store } = createFixture();
+  const createdAt = "2026-08-11T12:00:00.000Z";
+  insertCustomer(database, "customer_logout_a", "logout-a@example.com", createdAt);
+  insertCustomer(database, "customer_logout_b", "logout-b@example.com", createdAt);
+
+  async function issueSession(email, challengeId, sessionId, consumeAt) {
+    await store.requestCustomerSignIn({ email, challengeId, now: createdAt });
+    await flushBackground();
+    const result = await store.consumeCustomerChallenge({
+      rawChallengeToken: deliveries.at(-1).rawToken,
+      sessionId,
+      now: consumeAt,
+    });
+    assert.ok(result);
+    return result;
+  }
+
+  const firstA = await issueSession(
+    "logout-a@example.com",
+    "challenge_logout_a_1",
+    "session_logout_a_1",
+    "2026-08-11T12:01:00.000Z",
+  );
+  const secondA = await issueSession(
+    "logout-a@example.com",
+    "challenge_logout_a_2",
+    "session_logout_a_2",
+    "2026-08-11T12:01:01.000Z",
+  );
+  const sessionB = await issueSession(
+    "logout-b@example.com",
+    "challenge_logout_b_1",
+    "session_logout_b_1",
+    "2026-08-11T12:01:02.000Z",
+  );
+
+  const results = await Promise.all([
+    store.logoutAllCustomerSessions(
+      firstA.token,
+      "2026-08-11T12:02:00.000Z",
+    ),
+    store.logoutAllCustomerSessions(
+      secondA.token,
+      "2026-08-11T12:02:00.000Z",
+    ),
+  ]);
+  assert.deepEqual(results.sort((left, right) => left - right), [0, 2]);
+
+  assert.deepEqual(
+    database
+      .prepare(
+        `SELECT id, CASE WHEN revoked_at IS NULL THEN 0 ELSE 1 END AS revoked
+        FROM customer_sessions ORDER BY id`,
+      )
+      .all()
+      .map((row) => ({ ...row })),
+    [
+      { id: "session_logout_a_1", revoked: 1 },
+      { id: "session_logout_a_2", revoked: 1 },
+      { id: "session_logout_b_1", revoked: 0 },
+    ],
+  );
+  assert.equal(
+    database
+      .prepare(
+        `SELECT COUNT(*) AS count FROM audit_log
+        WHERE action = 'identity_session_revoked'
+          AND entity_id IN ('session_logout_a_1', 'session_logout_a_2')`,
+      )
+      .get().count,
+    2,
+  );
+  assert.equal(
+    await store.authorizeSessionMutation(
+      "customer",
+      sessionB.token,
+      sessionB.csrfToken,
+      "2026-08-11T12:03:00.000Z",
+    ),
+    true,
+  );
+  database.close();
+});
+
 test("activity refresh, logout, absolute expiry and idle expiry all fail closed", async () => {
-  const { database, deliveries, store } = createFixture();
+  const { database, deliveries, flushBackground, store } = createFixture();
   const now = "2026-08-11T12:00:00.000Z";
   insertCustomer(database, "customer_a", "a@example.com", now);
   insertOrder(database, {
@@ -464,6 +825,7 @@ test("activity refresh, logout, absolute expiry and idle expiry all fail closed"
     challengeId: "challenge_expiry",
     now,
   });
+  await flushBackground();
   const session = await store.consumeCustomerChallenge({
     rawChallengeToken: deliveries[0].rawToken,
     sessionId: "session_expiry",
@@ -553,7 +915,7 @@ test("activity refresh, logout, absolute expiry and idle expiry all fail closed"
 test("admin authority comes only from a current enabled MFA-backed database role", async () => {
   const subjectHash = "e".repeat(64);
   const now = "2026-08-11T12:00:00.000Z";
-  const { database, store } = createFixture({
+  const { database, rateLimitInputs, store } = createFixture({
     mfaEvidence: {
       externalSubjectHash: subjectHash,
       evidenceHash: "9".repeat(64),
@@ -591,6 +953,17 @@ test("admin authority comes only from a current enabled MFA-backed database role
     }),
   ]);
   assert.equal(replayAttempts.filter((attempt) => attempt !== null).length, 1);
+  assert.equal(rateLimitInputs.length, 2);
+  assert.ok(rateLimitInputs.every((input) => input.scope === "admin_sign_in"));
+  assert.ok(
+    rateLimitInputs.every(
+      (input) =>
+        input.discriminatorHash ===
+        rateLimitInputs[0].discriminatorHash &&
+        input.discriminatorHash !== subjectHash &&
+        /^[0-9a-f]{64}$/.test(input.discriminatorHash),
+    ),
+  );
   const session = replayAttempts.find((attempt) => attempt !== null);
   assert.ok(session);
   assert.equal(session.role, "operations");
@@ -653,6 +1026,52 @@ test("admin authority comes only from a current enabled MFA-backed database role
   assert.ok(adminAudits.length >= 4);
   assert.ok(adminAudits.every((audit) => audit.metadata_json === "{}"));
   assert.doesNotMatch(JSON.stringify(adminAudits), new RegExp(subjectHash));
+  database.close();
+});
+
+test("admin rate limiting runs before any session is created", async () => {
+  const now = "2026-08-11T12:00:00.000Z";
+  const externalSubjectHash = "a".repeat(64);
+  const { database, rateLimitInputs, store } = createFixture({
+    allowRateLimit: false,
+    mfaEvidence: {
+      externalSubjectHash,
+      evidenceHash: "b".repeat(64),
+      aal: 2,
+      authenticatedAt: now,
+    },
+  });
+  database
+    .prepare(
+      `INSERT INTO administrators (
+        id, external_subject_hash, role, enabled, authz_version,
+        created_at, updated_at
+      ) VALUES ('admin_rate_limited', ?, 'owner', 1, 1, ?, ?)`,
+    )
+    .run(externalSubjectHash, now, now);
+
+  assert.equal(
+    await store.createAdminSession({
+      assertion: { opaque: true },
+      sessionId: "admin_session_rate_limited",
+      now,
+    }),
+    null,
+  );
+  assert.deepEqual(rateLimitInputs, [
+    {
+      scope: "admin_sign_in",
+      discriminatorHash: await hashOneTimeAccessToken(
+        externalSubjectHash,
+        accessTokenHashContexts.adminRateLimit,
+      ),
+      now,
+    },
+  ]);
+  assert.equal(
+    database.prepare("SELECT COUNT(*) AS count FROM admin_sessions").get().count,
+    0,
+  );
   database.close();
 });
 
