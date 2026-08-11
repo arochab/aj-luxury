@@ -1,4 +1,10 @@
-export const LAUNCH_PRODUCT_ID = "product_apollon";
+import {
+  createApollonInternalReference,
+  createLaunchVariantId,
+  LAUNCH_PRODUCT_ID,
+} from "../lib/commerce/product-identifiers.ts";
+
+export { LAUNCH_PRODUCT_ID };
 export const LAUNCH_PRICE_CENTS = 2_999;
 export const LAUNCH_CURRENCY = "EUR" as const;
 export const LAUNCH_RESERVES_VALIDATED = false;
@@ -7,6 +13,7 @@ export type LaunchSize = "S" | "M" | "L" | "XL";
 
 export type LaunchVariantSeed = {
   id: string;
+  productId: typeof LAUNCH_PRODUCT_ID;
   internalReference: string;
   colorKey: "pourpre" | "rose" | "lilas";
   colorName: string;
@@ -24,6 +31,7 @@ export type LaunchVariantSeed = {
 type LaunchColor = Omit<
   LaunchVariantSeed,
   | "id"
+  | "productId"
   | "internalReference"
   | "size"
   | "sortOrder"
@@ -67,7 +75,8 @@ const colors: readonly LaunchColor[] = [
 export const launchVariantSeed: readonly LaunchVariantSeed[] = colors.flatMap(
   (color, colorIndex) =>
     sizes.map((size, sizeIndex) => ({
-      id: `variant_boxer_${color.sourceSlug}_${size.toLowerCase()}`,
+      id: createLaunchVariantId(color.sourceSlug, size),
+      productId: LAUNCH_PRODUCT_ID,
       internalReference: createApollonInternalReference(color.sourceSlug, size),
       colorKey: color.colorKey,
       colorName: color.colorName,
@@ -99,6 +108,10 @@ export function assertLaunchSeedIntegrity(): void {
     throw new Error("The AJ Luxury launch seed must contain 12 unique variants.");
   }
 
+  if (launchVariantSeed.some((variant) => variant.productId !== LAUNCH_PRODUCT_ID)) {
+    throw new Error("Every AJ Luxury launch variant must belong to Apollon.");
+  }
+
   if (LAUNCH_PHYSICAL_QUANTITY !== 756) {
     throw new Error("The AJ Luxury launch seed must total 756 physical units.");
   }
@@ -118,4 +131,3 @@ export function assertLaunchSeedIntegrity(): void {
 }
 
 assertLaunchSeedIntegrity();
-import { createApollonInternalReference } from "../lib/commerce/internal-reference.ts";

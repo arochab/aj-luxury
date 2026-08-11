@@ -274,6 +274,7 @@ export class D1CommerceStore {
               swatch, image_url, active, sort_order, created_at, updated_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
+              product_id = excluded.product_id,
               internal_reference = excluded.internal_reference,
               color_key = excluded.color_key,
               color_name = excluded.color_name,
@@ -286,7 +287,7 @@ export class D1CommerceStore {
           )
           .bind(
             variant.id,
-            LAUNCH_PRODUCT_ID,
+            variant.productId,
             variant.internalReference,
             variant.colorKey,
             variant.colorName,

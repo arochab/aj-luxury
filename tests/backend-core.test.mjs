@@ -13,6 +13,7 @@ import {
   LAUNCH_VARIANT_COUNT,
   launchVariantSeed,
 } from "../db/seed.ts";
+import { launchVariants } from "../lib/commerce/catalog.ts";
 import {
   CommerceError,
   availableToSell,
@@ -34,6 +35,21 @@ const migrationPaths = readdirSync(drizzleDirectory)
   .filter((name) => /^\d+_.+\.sql$/.test(name))
   .sort()
   .map((name) => `${drizzleDirectory}${name}`);
+
+const expectedLaunchVariantIdentity = [
+  { id: "variant_boxer_pourpre_s", productId: "product_apollon", sku: "AJ-APO-POU-S" },
+  { id: "variant_boxer_pourpre_m", productId: "product_apollon", sku: "AJ-APO-POU-M" },
+  { id: "variant_boxer_pourpre_l", productId: "product_apollon", sku: "AJ-APO-POU-L" },
+  { id: "variant_boxer_pourpre_xl", productId: "product_apollon", sku: "AJ-APO-POU-XL" },
+  { id: "variant_boxer_rose-pale_s", productId: "product_apollon", sku: "AJ-APO-ROS-S" },
+  { id: "variant_boxer_rose-pale_m", productId: "product_apollon", sku: "AJ-APO-ROS-M" },
+  { id: "variant_boxer_rose-pale_l", productId: "product_apollon", sku: "AJ-APO-ROS-L" },
+  { id: "variant_boxer_rose-pale_xl", productId: "product_apollon", sku: "AJ-APO-ROS-XL" },
+  { id: "variant_boxer_lilas-bleu-clair_s", productId: "product_apollon", sku: "AJ-APO-LIL-S" },
+  { id: "variant_boxer_lilas-bleu-clair_m", productId: "product_apollon", sku: "AJ-APO-LIL-M" },
+  { id: "variant_boxer_lilas-bleu-clair_l", productId: "product_apollon", sku: "AJ-APO-LIL-L" },
+  { id: "variant_boxer_lilas-bleu-clair_xl", productId: "product_apollon", sku: "AJ-APO-LIL-XL" },
+];
 
 function listSourceFiles(directory) {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -377,6 +393,29 @@ test("migration applies locally and launch seed replay keeps inventory and ledge
     .prepare("SELECT internal_reference FROM variants ORDER BY sort_order")
     .all()
     .map((row) => row.internal_reference);
+  const catalogIdentity = launchVariants.map(({ id, productId, sku }) => ({
+    id,
+    productId,
+    sku,
+  }));
+  const seedIdentity = launchVariantSeed.map(
+    ({ id, productId, internalReference }) => ({
+      id,
+      productId,
+      sku: internalReference,
+    }),
+  );
+  const databaseIdentity = database
+    .prepare(
+      `SELECT id, product_id, internal_reference
+      FROM variants ORDER BY sort_order`,
+    )
+    .all()
+    .map((variant) => ({
+      id: variant.id,
+      productId: variant.product_id,
+      sku: variant.internal_reference,
+    }));
 
   assert.equal(tableCount, 15);
   assert.equal(LAUNCH_VARIANT_COUNT, 12);
@@ -389,6 +428,9 @@ test("migration applies locally and launch seed replay keeps inventory and ledge
     validated: 0,
   });
   assert.deepEqual({ ...seedLedger }, { count: 12, quantity: 756 });
+  assert.deepEqual(catalogIdentity, expectedLaunchVariantIdentity);
+  assert.deepEqual(seedIdentity, expectedLaunchVariantIdentity);
+  assert.deepEqual(databaseIdentity, expectedLaunchVariantIdentity);
   assert.deepEqual(
     references,
     launchVariantSeed.map((variant) => variant.internalReference),
@@ -492,13 +534,19 @@ test("foreign keys, unique constraints and checks reject impossible states", asy
 
 test("cart price snapshots must originate from the active server catalog", async () => {
   const { database, store } = createFixture();
-  const now = "2026-08-10T12:00:00.000Z";
+  const now = "2099-08-10T12:00:00.000Z";
   const cartId = "cart_catalog_price";
+  const otherCartId = "cart_catalog_price_other";
   const variantId = "variant_boxer_pourpre_s";
   await store.seedLaunchCatalog(now);
   await store.createCart({
     id: cartId,
-    expiresAt: "2026-08-10T14:00:00.000Z",
+    expiresAt: "2099-08-10T14:00:00.000Z",
+    now,
+  });
+  await store.createCart({
+    id: otherCartId,
+    expiresAt: "2099-08-10T14:00:00.000Z",
     now,
   });
 
@@ -522,16 +570,86 @@ test("cart price snapshots must originate from the active server catalog", async
       ) VALUES ('cart_line_catalog_snapshot', ?, ?, 1, 2999, ?, ?)`,
     )
     .run(cartId, variantId, now, now);
+
+  const protectedMutations = [
+    "UPDATE cart_lines SET unit_price_cents = 1 WHERE id = 'cart_line_catalog_snapshot'",
+    `UPDATE cart_lines SET cart_id = '${otherCartId}' WHERE id = 'cart_line_catalog_snapshot'`,
+    "UPDATE cart_lines SET variant_id = 'variant_boxer_rose-pale_s' WHERE id = 'cart_line_catalog_snapshot'",
+    "UPDATE cart_lines SET id = 'cart_line_rekeyed' WHERE id = 'cart_line_catalog_snapshot'",
+    "UPDATE cart_lines SET created_at = '2099-08-10T12:01:00.000Z' WHERE id = 'cart_line_catalog_snapshot'",
+  ];
+  for (const mutation of protectedMutations) {
+    assert.throws(
+      () => database.prepare(mutation).run(),
+      /commerce_cart_line_snapshot_is_immutable/,
+    );
+  }
+  assert.throws(
+    () =>
+      database
+        .prepare("UPDATE carts SET currency = 'USD' WHERE id = ?")
+        .run(cartId),
+    /commerce_cart_currency_is_immutable/,
+  );
+  assert.deepEqual(
+    {
+      ...database
+        .prepare(
+          `SELECT id, cart_id, variant_id, quantity, unit_price_cents,
+            created_at, updated_at
+          FROM cart_lines WHERE id = 'cart_line_catalog_snapshot'`,
+        )
+        .get(),
+    },
+    {
+      id: "cart_line_catalog_snapshot",
+      cart_id: cartId,
+      variant_id: variantId,
+      quantity: 1,
+      unit_price_cents: 2_999,
+      created_at: now,
+      updated_at: now,
+    },
+  );
+  assert.equal(
+    database.prepare("SELECT currency FROM carts WHERE id = ?").get(cartId)
+      .currency,
+    "EUR",
+  );
+
+  const quantityUpdate = database
+    .prepare(
+      `UPDATE cart_lines SET quantity = 2, updated_at = ?
+      WHERE id = 'cart_line_catalog_snapshot'`,
+    )
+    .run("2099-08-10T12:01:00.000Z");
+  assert.equal(quantityUpdate.changes, 1);
+  database
+    .prepare("UPDATE carts SET status = 'converted' WHERE id = ?")
+    .run(cartId);
+  assert.throws(
+    () =>
+      database
+        .prepare(
+          `UPDATE cart_lines SET quantity = 3, updated_at = ?
+          WHERE id = 'cart_line_catalog_snapshot'`,
+        )
+        .run("2099-08-10T12:02:00.000Z"),
+    /commerce_cart_line_quantity_update_not_allowed/,
+  );
   database
     .prepare("UPDATE products SET price_cents = 3499 WHERE id = 'product_apollon'")
     .run();
-  assert.equal(
-    database
-      .prepare(
-        "SELECT unit_price_cents FROM cart_lines WHERE id = 'cart_line_catalog_snapshot'",
-      )
-      .get().unit_price_cents,
-    2_999,
+  assert.deepEqual(
+    {
+      ...database
+        .prepare(
+          `SELECT quantity, unit_price_cents
+          FROM cart_lines WHERE id = 'cart_line_catalog_snapshot'`,
+        )
+        .get(),
+    },
+    { quantity: 2, unit_price_cents: 2_999 },
   );
   database.close();
 });
@@ -868,7 +986,7 @@ test("concurrent buyers never oversell, including the last unit", async () => {
 
 test("shared transition keys stay reservation-scoped across release, expiration and sale retries", async () => {
   const { database, store } = createFixture();
-  const now = "2026-08-10T12:00:00.000Z";
+  const now = "2099-08-10T12:00:00.000Z";
   const releaseVariant = "variant_boxer_pourpre_s";
   const expireVariant = "variant_boxer_rose-pale_m";
   const saleVariants = [
@@ -885,7 +1003,7 @@ test("shared transition keys stay reservation-scoped across release, expiration 
   ]) {
     await store.createCart({
       id: cartId,
-      expiresAt: "2026-08-10T14:00:00.000Z",
+      expiresAt: "2099-08-10T14:00:00.000Z",
       now,
     });
   }
@@ -906,7 +1024,7 @@ test("shared transition keys stay reservation-scoped across release, expiration 
       variantId,
       quantity,
       idempotencyKey: `reserve_${reservationId}`,
-      expiresAt: "2026-08-10T13:00:00.000Z",
+      expiresAt: "2099-08-10T13:00:00.000Z",
       now,
     });
   }
@@ -918,12 +1036,12 @@ test("shared transition keys stay reservation-scoped across release, expiration 
     await store.releaseStock({
       reservationId,
       idempotencyKey: "shared_release_request",
-      now: "2026-08-10T12:10:00.000Z",
+      now: "2099-08-10T12:10:00.000Z",
     });
     await store.releaseStock({
       reservationId,
       idempotencyKey: "shared_release_request",
-      now: "2026-08-10T12:11:00.000Z",
+      now: "2099-08-10T12:11:00.000Z",
     });
   }
 
@@ -932,7 +1050,7 @@ test("shared transition keys stay reservation-scoped across release, expiration 
       store.expireReservation({
         reservationId: "reservation_shared_expire_a",
         idempotencyKey: "shared_expire_request",
-        now: "2026-08-10T12:59:59.999Z",
+        now: "2099-08-10T12:59:59.999Z",
       }),
     (error) =>
       error instanceof CommerceError && error.code === "RESERVATION_NOT_EXPIRED",
@@ -944,12 +1062,12 @@ test("shared transition keys stay reservation-scoped across release, expiration 
     await store.expireReservation({
       reservationId,
       idempotencyKey: "shared_expire_request",
-      now: "2026-08-10T13:00:00.000Z",
+      now: "2099-08-10T13:00:00.000Z",
     });
     await store.expireReservation({
       reservationId,
       idempotencyKey: "shared_expire_request",
-      now: "2026-08-10T13:01:00.000Z",
+      now: "2099-08-10T13:01:00.000Z",
     });
   }
 
@@ -968,7 +1086,7 @@ test("shared transition keys stay reservation-scoped across release, expiration 
     providerPaymentId: "payment_shared_convert",
     orderId: "order_shared_convert",
     amountCents: orderTotal,
-    now: "2026-08-10T12:20:00.000Z",
+    now: "2099-08-10T12:20:00.000Z",
   });
   for (const reservationId of [
     "reservation_shared_convert_a",
@@ -978,13 +1096,13 @@ test("shared transition keys stay reservation-scoped across release, expiration 
       reservationId,
       orderId: "order_shared_convert",
       idempotencyKey: "shared_convert_request",
-      now: "2026-08-10T12:20:00.000Z",
+      now: "2099-08-10T12:20:00.000Z",
     });
     await store.convertStockToSale({
       reservationId,
       orderId: "order_shared_convert",
       idempotencyKey: "shared_convert_request",
-      now: "2026-08-10T12:21:00.000Z",
+      now: "2099-08-10T12:21:00.000Z",
     });
   }
 
@@ -1049,8 +1167,8 @@ test("shared transition keys stay reservation-scoped across release, expiration 
 
 test("verified payment atomically converts every line once and writes outbox plus audit", async () => {
   const { database, store } = createFixture();
-  const now = "2026-08-10T12:00:00.000Z";
-  const paidAt = "2026-08-10T12:10:00.000Z";
+  const now = "2099-08-10T12:00:00.000Z";
+  const paidAt = "2099-08-10T12:10:00.000Z";
   const firstVariant = "variant_boxer_pourpre_m";
   const secondVariant = "variant_boxer_rose-pale_l";
   await store.seedLaunchCatalog(now);
@@ -1058,7 +1176,7 @@ test("verified payment atomically converts every line once and writes outbox plu
   await store.createCart({
     id: "cart_paid",
     email: "client@example.com",
-    expiresAt: "2026-08-10T14:00:00.000Z",
+    expiresAt: "2099-08-10T14:00:00.000Z",
     now,
   });
   await Promise.all([
@@ -1068,7 +1186,7 @@ test("verified payment atomically converts every line once and writes outbox plu
       variantId: firstVariant,
       quantity: 2,
       idempotencyKey: "reserve_paid_1",
-      expiresAt: "2026-08-10T13:00:00.000Z",
+      expiresAt: "2099-08-10T13:00:00.000Z",
       now,
     }),
     store.reserveStock({
@@ -1077,7 +1195,7 @@ test("verified payment atomically converts every line once and writes outbox plu
       variantId: secondVariant,
       quantity: 1,
       idempotencyKey: "reserve_paid_2",
-      expiresAt: "2026-08-10T13:00:00.000Z",
+      expiresAt: "2099-08-10T13:00:00.000Z",
       now,
     }),
   ]);
@@ -1374,7 +1492,7 @@ test("every payment line mismatch rolls back webhook, payment, stock, order, out
   for (const [index, scenario] of scenarios.entries()) {
     await t.test(scenario.name, async () => {
       const { database, store } = createFixture();
-      const now = "2026-08-10T12:00:00.000Z";
+      const now = "2099-08-10T12:00:00.000Z";
       const variantId = "variant_boxer_pourpre_l";
       const alternateVariantId = "variant_boxer_rose-pale_l";
       const suffix = `mismatch_${index}`;
@@ -1385,7 +1503,7 @@ test("every payment line mismatch rolls back webhook, payment, stock, order, out
       validateReserves(database, [variantId]);
       await store.createCart({
         id: cartId,
-        expiresAt: "2026-08-10T14:00:00.000Z",
+        expiresAt: "2099-08-10T14:00:00.000Z",
         now,
       });
       await store.reserveStock({
@@ -1394,7 +1512,7 @@ test("every payment line mismatch rolls back webhook, payment, stock, order, out
         variantId,
         quantity: 1,
         idempotencyKey: `reserve_${suffix}`,
-        expiresAt: "2026-08-10T13:00:00.000Z",
+        expiresAt: "2099-08-10T13:00:00.000Z",
         now,
       });
       insertPendingOrder(database, {
@@ -1414,7 +1532,7 @@ test("every payment line mismatch rolls back webhook, payment, stock, order, out
         providerPaymentId: `payment_${suffix}`,
         orderId,
         amountCents,
-        occurredAt: "2026-08-10T12:10:00.000Z",
+        occurredAt: "2099-08-10T12:10:00.000Z",
       });
 
       await assert.rejects(
@@ -1483,13 +1601,13 @@ test("every payment line mismatch rolls back webhook, payment, stock, order, out
 
 test("expired reservations and order-cart mismatches cannot be converted", async () => {
   const { database, store } = createFixture();
-  const now = "2026-08-10T12:00:00.000Z";
+  const now = "2099-08-10T12:00:00.000Z";
   const variantId = "variant_boxer_lilas-bleu-clair_l";
   await store.seedLaunchCatalog(now);
   validateReserves(database, [variantId]);
   await store.createCart({
     id: "cart_expired_sale",
-    expiresAt: "2026-08-10T14:00:00.000Z",
+    expiresAt: "2099-08-10T14:00:00.000Z",
     now,
   });
   await store.reserveStock({
@@ -1498,7 +1616,7 @@ test("expired reservations and order-cart mismatches cannot be converted", async
     variantId,
     quantity: 1,
     idempotencyKey: "reserve_expired_sale",
-    expiresAt: "2026-08-10T12:30:00.000Z",
+    expiresAt: "2099-08-10T12:30:00.000Z",
     now,
   });
   insertPendingOrder(database, {
@@ -1513,7 +1631,7 @@ test("expired reservations and order-cart mismatches cannot be converted", async
     providerPaymentId: "payment_expired_sale",
     orderId: "order_expired_sale",
     amountCents: 2999,
-    occurredAt: "2026-08-10T12:30:00.000Z",
+    occurredAt: "2099-08-10T12:30:00.000Z",
   });
   await assert.rejects(
     () => store.processPaymentSucceeded(expiredEvent),
@@ -1524,7 +1642,7 @@ test("expired reservations and order-cart mismatches cannot be converted", async
 
   await store.createCart({
     id: "cart_wrong_order",
-    expiresAt: "2026-08-10T14:00:00.000Z",
+    expiresAt: "2099-08-10T14:00:00.000Z",
     now,
   });
   insertPendingOrder(database, {
@@ -1539,7 +1657,7 @@ test("expired reservations and order-cart mismatches cannot be converted", async
     providerPaymentId: "payment_wrong_cart",
     orderId: "order_wrong_cart",
     amountCents: 2999,
-    occurredAt: "2026-08-10T12:10:00.000Z",
+    occurredAt: "2099-08-10T12:10:00.000Z",
   });
   await assert.rejects(
     () => store.processPaymentSucceeded(wrongCartEvent),

@@ -1,7 +1,11 @@
-import type { ProductVariant } from "./types";
-import { products, sizes } from "../products";
-import { getInternalStockPosition } from "./internal-stock";
-import { createApollonInternalReference } from "./internal-reference";
+import type { ProductVariant } from "./types.ts";
+import { products, sizes } from "../products.ts";
+import { getInternalStockPosition } from "./internal-stock.ts";
+import {
+  createApollonInternalReference,
+  createLaunchVariantId,
+  LAUNCH_PRODUCT_ID,
+} from "./product-identifiers.ts";
 
 /**
  * Catalogue de simulation : les quantités restent dans le registre interne.
@@ -12,8 +16,8 @@ export const launchVariants: ProductVariant[] = products.flatMap((product) =>
     const stock = getInternalStockPosition(product.slug, size);
 
     return {
-      id: `variant_boxer_${product.slug}_${size.toLowerCase()}`,
-      productId: `product_boxer_${product.slug}`,
+      id: createLaunchVariantId(product.slug, size),
+      productId: LAUNCH_PRODUCT_ID,
       productSlug: product.slug,
       productName: product.model,
       title: `${product.name} / ${size}`,
