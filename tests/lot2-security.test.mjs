@@ -25,6 +25,55 @@ test("creates random one-time tokens and stores only a SHA-256 hash", async () =
   assert.equal(first.token.includes("="), false);
 });
 
+test("verifies primitive strings only without coercing caller-controlled values", async () => {
+  const validToken = "A".repeat(43);
+  const validHash = await hashOneTimeAccessToken(validToken);
+  let callerExecutionCount = 0;
+  const coercibleObject = {
+    toString() {
+      callerExecutionCount += 1;
+      return validToken;
+    },
+    [Symbol.toPrimitive]() {
+      callerExecutionCount += 1;
+      return validToken;
+    },
+  };
+  const hostileProxy = new Proxy(coercibleObject, {
+    get(target, key, receiver) {
+      callerExecutionCount += 1;
+      return Reflect.get(target, key, receiver);
+    },
+  });
+
+  for (const candidate of [
+    Symbol("token"),
+    1,
+    1n,
+    true,
+    null,
+    undefined,
+    coercibleObject,
+    hostileProxy,
+  ]) {
+    assert.equal(
+      await verifyOneTimeAccessToken(candidate, validHash),
+      false,
+    );
+    assert.equal(
+      await verifyOneTimeAccessToken(validToken, candidate),
+      false,
+    );
+  }
+  assert.equal(callerExecutionCount, 0);
+
+  const revoked = Proxy.revocable({}, {});
+  revoked.revoke();
+  assert.equal(await verifyOneTimeAccessToken(revoked.proxy, validHash), false);
+  assert.equal(await verifyOneTimeAccessToken(validToken, revoked.proxy), false);
+  assert.equal(await verifyOneTimeAccessToken(validToken, validHash), true);
+});
+
 test("rejects consumed, revoked, expired and malformed access records", () => {
   const now = new Date("2026-08-10T20:00:00.000Z");
   assert.equal(

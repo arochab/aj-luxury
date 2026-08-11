@@ -28,16 +28,89 @@ export type TransactionalEmail = {
   text: string;
 };
 
+export const transactionalEmailKindAvailability = Object.freeze({
+  "order-confirmation": Object.freeze({ available: true } as const),
+  "payment-confirmation": Object.freeze({ available: true } as const),
+  "shipment-confirmation": Object.freeze({
+    available: false,
+    reason: "server-owned-carrier-policy-required",
+  } as const),
+  "withdrawal-acknowledgement": Object.freeze({ available: true } as const),
+  "refund-confirmation": Object.freeze({ available: true } as const),
+  "account-access": Object.freeze({
+    available: false,
+    reason: "account-access-route-and-persistent-d1-token-store-required",
+  } as const),
+} as const);
+
 const transactionalEmailKindSet = new Set<string>(transactionalEmailKinds);
 const supportedLocaleSet = new Set<string>(["fr", "en"]);
 const safeEventId = /^[a-z0-9][a-z0-9_.-]{0,127}$/i;
 const safeOrderNumber = /^AJ-[A-Z0-9][A-Z0-9-]{0,31}$/;
-const safeAccessToken = /^[A-Za-z0-9_-]{43}$/;
-const ajAccountAccessOrigin = "https://ajluxurystore.com";
-const ajAccountAccessPath = "/account/access";
+const transactionalEmailInputKeys = new Set([
+  "kind",
+  "eventId",
+  "locale",
+  "recipientEmail",
+  "orderNumber",
+  "trackingUrl",
+  "accessUrl",
+]);
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
+type TransactionalEmailSnapshot = {
+  kind: unknown;
+  eventId: unknown;
+  locale: unknown;
+  recipientEmail: unknown;
+  orderNumber: unknown;
+  trackingUrl: unknown;
+  accessUrl: unknown;
+};
+
+function snapshotTransactionalEmailInput(
+  input: unknown,
+): TransactionalEmailSnapshot | null {
+  if (typeof input !== "object" || input === null) return null;
+
+  try {
+    if (Array.isArray(input) || Object.getPrototypeOf(input) !== Object.prototype) {
+      return null;
+    }
+
+    const descriptors = new Map<string, PropertyDescriptor>();
+    for (const key of Reflect.ownKeys(input)) {
+      if (typeof key !== "string" || !transactionalEmailInputKeys.has(key)) {
+        return null;
+      }
+
+      const descriptor = Object.getOwnPropertyDescriptor(input, key);
+      if (
+        !descriptor ||
+        !("value" in descriptor) ||
+        !descriptor.enumerable ||
+        (descriptor.value !== undefined && typeof descriptor.value !== "string")
+      ) {
+        return null;
+      }
+      descriptors.set(key, descriptor);
+    }
+
+    // All accepted own values are primitive data properties, so this clone
+    // cannot execute an accessor. It rejects transparent and revoked Proxies.
+    structuredClone(input);
+
+    return {
+      kind: descriptors.get("kind")?.value,
+      eventId: descriptors.get("eventId")?.value,
+      locale: descriptors.get("locale")?.value,
+      recipientEmail: descriptors.get("recipientEmail")?.value,
+      orderNumber: descriptors.get("orderNumber")?.value,
+      trackingUrl: descriptors.get("trackingUrl")?.value,
+      accessUrl: descriptors.get("accessUrl")?.value,
+    };
+  } catch {
+    return null;
+  }
 }
 
 function requireValue(value: unknown, field: string): string {
@@ -57,32 +130,6 @@ function requireIdentifier(
     throw new Error(`Invalid transactional email field: ${field}`);
   }
   return normalized;
-}
-
-function requireAjAccountAccessUrl(value: unknown): string {
-  const raw = requireValue(value, "accessUrl");
-  let url: URL;
-  try {
-    url = new URL(raw);
-  } catch {
-    throw new Error("Invalid transactional email field: accessUrl");
-  }
-
-  const queryKeys = [...url.searchParams.keys()];
-  const token = url.searchParams.get("token") ?? "";
-  if (
-    url.origin !== ajAccountAccessOrigin ||
-    url.pathname !== ajAccountAccessPath ||
-    Boolean(url.username) ||
-    Boolean(url.password) ||
-    Boolean(url.hash) ||
-    queryKeys.length !== 1 ||
-    queryKeys[0] !== "token" ||
-    !safeAccessToken.test(token)
-  ) {
-    throw new Error("Invalid transactional email field: accessUrl");
-  }
-  return url.toString();
 }
 
 function bytesToHex(bytes: Uint8Array): string {
@@ -135,53 +182,58 @@ function isStrictMailboxAddress(value: string): boolean {
   return true;
 }
 
+function requireStrictMailboxAddress(value: unknown): string {
+  if (typeof value !== "string" || value.length === 0) {
+    throw new Error("Missing transactional email field: recipientEmail");
+  }
+
+  // Validate the raw caller string before trimming or case normalization.
+  // This excludes Unicode lookalikes, non-ASCII whitespace and control bytes.
+  if (!/^[\x20-\x7e]+$/.test(value)) {
+    throw new Error("Invalid transactional email recipient.");
+  }
+
+  const mailbox = value.replace(/^ +| +$/g, "");
+  if (!isStrictMailboxAddress(mailbox)) {
+    throw new Error("Invalid transactional email recipient.");
+  }
+
+  const atIndex = mailbox.indexOf("@");
+  const localPart = mailbox.slice(0, atIndex);
+  const domain = mailbox.slice(atIndex + 1).toLowerCase();
+  return `${localPart}@${domain}`;
+}
+
 export function buildTransactionalEmail(
   input: TransactionalEmailInput,
 ): Promise<TransactionalEmail>;
 export async function buildTransactionalEmail(
   input: unknown,
 ): Promise<TransactionalEmail> {
-  if (!isRecord(input)) {
+  const snapshot = snapshotTransactionalEmailInput(input);
+  if (!snapshot) {
     throw new Error("Invalid transactional email input.");
   }
   if (
-    typeof input.kind !== "string" ||
-    !transactionalEmailKindSet.has(input.kind)
+    typeof snapshot.kind !== "string" ||
+    !transactionalEmailKindSet.has(snapshot.kind)
   ) {
     throw new Error("Invalid transactional email field: kind");
   }
   if (
-    typeof input.locale !== "string" ||
-    !supportedLocaleSet.has(input.locale)
+    typeof snapshot.locale !== "string" ||
+    !supportedLocaleSet.has(snapshot.locale)
   ) {
     throw new Error("Invalid transactional email field: locale");
   }
 
-  const kind = input.kind as TransactionalEmailKind;
-  const locale = input.locale as "fr" | "en";
-  const eventId = requireIdentifier(input.eventId, "eventId", safeEventId);
-  const recipient = requireValue(input.recipientEmail, "recipientEmail")
-    .toLowerCase();
-  if (!isStrictMailboxAddress(recipient)) {
-    throw new Error("Invalid transactional email recipient.");
-  }
-  const recipientFingerprint = await fingerprintRecipient(recipient);
+  const kind = snapshot.kind as TransactionalEmailKind;
+  const locale = snapshot.locale as "fr" | "en";
 
   if (kind === "account-access") {
-    const accessUrl = requireAjAccountAccessUrl(input.accessUrl);
-    return {
-      deduplicationKey: `${kind}:${eventId}:${recipientFingerprint}`,
-      deduplicationPersisted: false,
-      recipientEmail: recipient,
-      subject:
-        locale === "fr"
-          ? "Votre accès sécurisé AJ Luxury"
-          : "Your secure AJ Luxury access",
-      text:
-        locale === "fr"
-          ? `Utilisez ce lien à usage unique pour accéder à votre compte AJ Luxury : ${accessUrl}`
-          : `Use this one-time link to access your AJ Luxury account: ${accessUrl}`,
-    };
+    throw new Error(
+      "Account access email is unavailable until the account-access route and persistent D1 token store are implemented.",
+    );
   }
 
   if (kind === "shipment-confirmation") {
@@ -190,8 +242,11 @@ export async function buildTransactionalEmail(
     );
   }
 
+  const eventId = requireIdentifier(snapshot.eventId, "eventId", safeEventId);
+  const recipient = requireStrictMailboxAddress(snapshot.recipientEmail);
+  const recipientFingerprint = await fingerprintRecipient(recipient);
   const orderNumber = requireIdentifier(
-    input.orderNumber,
+    snapshot.orderNumber,
     "orderNumber",
     safeOrderNumber,
   );

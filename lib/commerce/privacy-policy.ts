@@ -137,25 +137,53 @@ export type DataRightsRequestKind =
   (typeof commerceDataRules.customerRights)[number];
 
 export function canEraseCommerceRecord(input: unknown): boolean {
-  if (!isRecord(input) || Array.isArray(input)) return false;
+  if (!isRecord(input)) return false;
 
   try {
-    // structuredClone rejects Proxy objects and removes any time-of-check /
-    // time-of-use gap. Only a plain data record with two explicit booleans can
-    // authorize erasure; every malformed or active object fails closed.
+    if (Array.isArray(input)) return false;
     if (Object.getPrototypeOf(input) !== Object.prototype) return false;
-    const snapshot: unknown = structuredClone(input);
+
+    const keys = Reflect.ownKeys(input);
     if (
-      !isRecord(snapshot) ||
-      Array.isArray(snapshot) ||
-      Object.getPrototypeOf(snapshot) !== Object.prototype
+      keys.length !== 2 ||
+      !keys.includes("legalRetentionRequired") ||
+      !keys.includes("activeDispute")
     ) {
       return false;
     }
 
+    const legalRetentionDescriptor = Object.getOwnPropertyDescriptor(
+      input,
+      "legalRetentionRequired",
+    );
+    const activeDisputeDescriptor = Object.getOwnPropertyDescriptor(
+      input,
+      "activeDispute",
+    );
+    if (
+      !legalRetentionDescriptor ||
+      !("value" in legalRetentionDescriptor) ||
+      !legalRetentionDescriptor.enumerable ||
+      typeof legalRetentionDescriptor.value !== "boolean" ||
+      !activeDisputeDescriptor ||
+      !("value" in activeDisputeDescriptor) ||
+      !activeDisputeDescriptor.enumerable ||
+      typeof activeDisputeDescriptor.value !== "boolean"
+    ) {
+      return false;
+    }
+
+    // Descriptor inspection above guarantees that cloning cannot invoke a
+    // getter. The platform clone is then used only as a Proxy rejection gate:
+    // ECMAScript Proxy objects are not structured-cloneable.
+    const snapshot: unknown = structuredClone(input);
+    if (!isRecord(snapshot) || Object.getPrototypeOf(snapshot) !== Object.prototype) {
+      return false;
+    }
+
     return (
-      snapshot.legalRetentionRequired === false &&
-      snapshot.activeDispute === false
+      legalRetentionDescriptor.value === false &&
+      activeDisputeDescriptor.value === false
     );
   } catch {
     return false;

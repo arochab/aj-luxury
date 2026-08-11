@@ -27,6 +27,7 @@ import {
 import { iso3166Alpha2CountryCodes } from "../lib/commerce/iso-country-codes.ts";
 import {
   buildTransactionalEmail,
+  transactionalEmailKindAvailability,
   transactionalEmailKinds,
 } from "../lib/commerce/transactional-email.ts";
 import {
@@ -36,6 +37,7 @@ import {
   sanitizeCommerceLogMetadata,
 } from "../lib/commerce/privacy-policy.ts";
 import { products, sizes as catalogueSizes } from "../lib/products.ts";
+import { deepFreeze } from "../lib/deep-freeze.ts";
 
 function assertDeeplyFrozen(value, seen = new Set()) {
   if (
@@ -132,6 +134,37 @@ test("deep-freezes products and launch variants at every runtime layer", () => {
   assert.equal(products[0].gallery[0].src, originalImage);
 });
 
+test("deep-freezes cyclic and shallow-frozen data graphs without caller execution", () => {
+  const mutableChild = { nested: { value: 1 } };
+  const shallowFrozenRoot = Object.freeze({ mutableChild });
+  assert.equal(Object.isFrozen(mutableChild), false);
+  assert.equal(deepFreeze(shallowFrozenRoot), shallowFrozenRoot);
+  assertDeeplyFrozen(shallowFrozenRoot);
+
+  const cyclic = { child: { values: [1, 2, 3] } };
+  cyclic.self = cyclic;
+  cyclic.child.parent = cyclic;
+  assert.doesNotThrow(() => deepFreeze(cyclic));
+  assertDeeplyFrozen(cyclic);
+
+  let getterCalls = 0;
+  const accessorRecord = {
+    child: {},
+    get computed() {
+      getterCalls += 1;
+      return {};
+    },
+  };
+  assert.doesNotThrow(() => deepFreeze(accessorRecord));
+  assert.equal(getterCalls, 0);
+  assert.equal(Object.isFrozen(accessorRecord), true);
+  assert.equal(Object.isFrozen(accessorRecord.child), true);
+
+  const revoked = Proxy.revocable({}, {});
+  revoked.revoke();
+  assert.doesNotThrow(() => deepFreeze(revoked.proxy));
+});
+
 test("recognizes only launch zones and blocks special territories", () => {
   assert.deepEqual(resolveLaunchShippingScope({ countryCode: "FR", postalCode: "75001" }), {
     inScope: true,
@@ -197,30 +230,134 @@ test("recognizes only launch zones and blocks special territories", () => {
   }
 });
 
-test("snapshots hostile shipping inputs exactly once and fails closed on traps", () => {
-  const addressReads = new Map();
-  const alternatingAddress = new Proxy(
-    { countryCode: "US", postalCode: undefined, regionCode: "PR" },
+test("preserves the complete launch geography and 38 closed territory cases", () => {
+  const euCountries = [
+    "AT", "BE", "BG", "HR", "CY", "CZ", "DE", "DK", "EE",
+    "ES", "FI", "FR", "GR", "HU", "IE", "IT", "LT", "LU",
+    "LV", "MT", "NL", "PL", "PT", "RO", "SE", "SI", "SK",
+  ];
+  assert.equal(euCountries.length, 27);
+  for (const countryCode of euCountries) {
+    assert.equal(resolveLaunchShippingScope({ countryCode }).zone, "EU");
+  }
+
+  const usStatesAndDc = [
+    "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "DC",
+    "FL", "GA", "HI", "ID", "IL", "IN", "IA", "KS", "KY",
+    "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO", "MT",
+    "NE", "NV", "NH", "NJ", "NM", "NY", "NC", "ND", "OH",
+    "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT",
+    "VT", "VA", "WA", "WV", "WI", "WY",
+  ];
+  assert.equal(usStatesAndDc.length, 51);
+  for (const regionCode of usStatesAndDc) {
+    assert.equal(
+      resolveLaunchShippingScope({ countryCode: "US", regionCode }).zone,
+      "US",
+    );
+  }
+  assert.equal(resolveLaunchShippingScope({ countryCode: "GB" }).zone, "UK");
+  assert.equal(resolveLaunchShippingScope({ countryCode: "CA" }).zone, "CA");
+
+  const specialTerritoryCases = [
+    ...[
+      "97100", "97200", "97300", "97400", "97500", "97600",
+      "97700", "97800", "98400", "98600", "98700", "98800",
+    ].map((postalCode) => ({ countryCode: "FR", postalCode })),
+    ...["JE1 1AA", "GY1 1AA", "IM1 1AA", "GX11 1AA"].map(
+      (postalCode) => ({ countryCode: "GB", postalCode }),
+    ),
+    ...["AA", "AE", "AP", "AS", "GU", "MP", "PR", "UM", "VI"].map(
+      (regionCode) => ({ countryCode: "US", regionCode }),
+    ),
+    { countryCode: "GR", postalCode: "63086" },
+    { countryCode: "GR", postalCode: "GR-63086" },
+    ...["35001", "38001", "51001", "52001"].map((postalCode) => ({
+      countryCode: "ES",
+      postalCode,
+    })),
+    { countryCode: "PT", postalCode: "9000-001" },
+    { countryCode: "PT", postalCode: "9500-001" },
+    { countryCode: "FI", postalCode: "22100" },
+    { countryCode: "DE", postalCode: "27498" },
+    { countryCode: "DE", postalCode: "78266" },
+    { countryCode: "IT", postalCode: "22061" },
+    { countryCode: "IT", postalCode: "23041" },
+  ];
+  assert.equal(specialTerritoryCases.length, 38);
+  for (const address of specialTerritoryCases) {
+    assert.equal(
+      resolveLaunchShippingScope(address).reason,
+      "special-territory-needs-explicit-validation",
+    );
+  }
+});
+
+test("rejects active shipping inputs without invoking getters", () => {
+  let getterCalls = 0;
+  const accessorAddress = {
+    get countryCode() {
+      getterCalls += 1;
+      return "FR";
+    },
+    postalCode: "75001",
+  };
+  assert.equal(
+    resolveLaunchShippingScope(accessorAddress).reason,
+    "invalid-address-input",
+  );
+  assert.equal(getterCalls, 0);
+
+  let proxyGetCalls = 0;
+  const proxiedAddress = new Proxy(
+    { countryCode: "US", regionCode: "PR" },
     {
       get(target, key, receiver) {
-        addressReads.set(key, (addressReads.get(key) ?? 0) + 1);
-        if (key === "regionCode") {
-          return addressReads.get(key) === 1 ? "PR" : "CA";
-        }
+        proxyGetCalls += 1;
         return Reflect.get(target, key, receiver);
       },
     },
   );
-
   assert.equal(
-    resolveLaunchShippingScope(alternatingAddress).reason,
-    "special-territory-needs-explicit-validation",
+    resolveLaunchShippingScope(proxiedAddress).reason,
+    "invalid-address-input",
   );
-  assert.deepEqual(Object.fromEntries(addressReads), {
-    countryCode: 1,
-    postalCode: 1,
-    regionCode: 1,
-  });
+  assert.equal(proxyGetCalls, 0);
+
+  const revokedAddress = Proxy.revocable({ countryCode: "FR" }, {});
+  revokedAddress.revoke();
+  assert.equal(
+    resolveLaunchShippingScope(revokedAddress.proxy).reason,
+    "invalid-address-input",
+  );
+});
+
+test("rejects malformed shipping codes before ASCII normalization", () => {
+  for (const countryCode of [" FR", "FR ", "F\u200bR", "ＦＲ", "F\u00a0R"] ) {
+    assert.equal(
+      resolveLaunchShippingScope({ countryCode }).reason,
+      "invalid-country-code",
+    );
+  }
+
+  for (const address of [
+    { countryCode: "FR", postalCode: "75 001" },
+    { countryCode: "FR", postalCode: "９７１００" },
+    { countryCode: "FR", postalCode: "97\u200b100" },
+    { countryCode: "GB", postalCode: "SW1A\u00a01AA" },
+    { countryCode: "US", regionCode: "C\u200bA" },
+    { countryCode: "US", regionCode: "ＣＡ" },
+    { countryCode: "US", regionCode: "CA " },
+    { countryCode: "CA", postalCode: "K1A--0B1" },
+  ]) {
+    assert.equal(
+      resolveLaunchShippingScope(address).reason,
+      "invalid-address-input",
+    );
+  }
+});
+
+test("snapshots zone activation fields once and fails closed on traps", () => {
 
   const activationReads = new Map();
   const countReads = (target, prefix) =>
@@ -510,7 +647,7 @@ test("builds deterministic transactional messages and rejects incomplete input",
     recipientEmail: " CLIENT@EXAMPLE.COM ",
     orderNumber: "AJ-2026-0001",
   });
-  assert.equal(email.recipientEmail, "client@example.com");
+  assert.equal(email.recipientEmail, "CLIENT@example.com");
   assert.equal(email.deduplicationPersisted, false);
   assert.match(
     email.deduplicationKey,
@@ -526,7 +663,6 @@ test("builds deterministic transactional messages and rejects incomplete input",
         recipientEmail: "client@example.com",
         orderNumber: "AJ-2026-0001",
         trackingUrl: "javascript:alert(1)",
-        allowedUrlHosts: ["tracking.example.com"],
       }),
     /server-owned carrier policy/,
   );
@@ -541,20 +677,21 @@ test("builds deterministic transactional messages and rejects incomplete input",
       }),
     /orderNumber/,
   );
-  const accessToken = "A".repeat(43);
-  const access = await buildTransactionalEmail({
-    kind: "account-access",
-    eventId: "evt_access_1",
-    locale: "fr",
-    recipientEmail: "client@example.com",
-    accessUrl: `https://ajluxurystore.com/account/access?token=${accessToken}`,
+  assert.deepEqual(transactionalEmailKindAvailability["account-access"], {
+    available: false,
+    reason: "account-access-route-and-persistent-d1-token-store-required",
   });
-  assert.match(
-    access.deduplicationKey,
-    /^account-access:evt_access_1:[0-9a-f]{64}$/,
+  await assert.rejects(
+    () =>
+      buildTransactionalEmail({
+        kind: "account-access",
+        eventId: "evt_access_1",
+        locale: "fr",
+        recipientEmail: "client@example.com",
+        accessUrl: `https://ajluxurystore.com/account/access?token=${"A".repeat(43)}`,
+      }),
+    /unavailable until the account-access route and persistent D1 token store/,
   );
-  assert.doesNotMatch(access.deduplicationKey, /token|client@/i);
-  assert.equal(access.deduplicationPersisted, false);
 
   for (const recipientEmail of [
     "client@example.com,attacker",
@@ -574,29 +711,6 @@ test("builds deterministic transactional messages and rejects incomplete input",
     );
   }
 
-  await assert.rejects(
-    () =>
-      buildTransactionalEmail({
-        kind: "account-access",
-        eventId: "evt_access_evil",
-        locale: "fr",
-        recipientEmail: "client@example.com",
-        accessUrl: `https://evil.example/account/access?token=${accessToken}`,
-        allowedUrlHosts: ["evil.example"],
-      }),
-    /accessUrl/,
-  );
-  await assert.rejects(
-    () =>
-      buildTransactionalEmail({
-        kind: "account-access",
-        eventId: "evt_access_www",
-        locale: "fr",
-        recipientEmail: "client@example.com",
-        accessUrl: `https://www.ajluxurystore.com/account/access?token=${accessToken}`,
-      }),
-    /accessUrl/,
-  );
   await assert.rejects(
     () =>
       buildTransactionalEmail({
@@ -635,6 +749,84 @@ test("builds deterministic transactional messages and rejects incomplete input",
   });
   assert.notEqual(email.deduplicationKey, differentOrder.deduplicationKey);
   assert.notEqual(email.deduplicationKey, differentRecipient.deduplicationKey);
+});
+
+test("snapshots email data without getters and normalizes only the domain", async () => {
+  const mixedCase = await buildTransactionalEmail({
+    kind: "payment-confirmation",
+    eventId: "evt_case",
+    locale: "en",
+    recipientEmail: "Case.Tag@EXAMPLE.COM",
+    orderNumber: "AJ-2026-0003",
+  });
+  assert.equal(mixedCase.recipientEmail, "Case.Tag@example.com");
+  assert.equal(mixedCase.deduplicationPersisted, false);
+
+  let getterCalls = 0;
+  const accessorInput = {
+    get kind() {
+      getterCalls += 1;
+      return "payment-confirmation";
+    },
+    eventId: "evt_accessor",
+    locale: "fr",
+    recipientEmail: "client@example.com",
+    orderNumber: "AJ-2026-0001",
+  };
+  await assert.rejects(
+    () => buildTransactionalEmail(accessorInput),
+    /Invalid transactional email input/,
+  );
+  assert.equal(getterCalls, 0);
+
+  let proxyGetCalls = 0;
+  const descriptorReads = new Map();
+  const proxyInput = new Proxy(
+    {
+      kind: "payment-confirmation",
+      eventId: "evt_proxy",
+      locale: "fr",
+      recipientEmail: "client@example.com",
+      orderNumber: "AJ-2026-0001",
+    },
+    {
+      get(target, key, receiver) {
+        proxyGetCalls += 1;
+        return Reflect.get(target, key, receiver);
+      },
+      getOwnPropertyDescriptor(target, key) {
+        descriptorReads.set(key, (descriptorReads.get(key) ?? 0) + 1);
+        return Reflect.getOwnPropertyDescriptor(target, key);
+      },
+    },
+  );
+  await assert.rejects(
+    () => buildTransactionalEmail(proxyInput),
+    /Invalid transactional email input/,
+  );
+  assert.equal(proxyGetCalls, 0);
+  assert.deepEqual([...descriptorReads.values()], [1, 1, 1, 1, 1]);
+
+  for (const recipientEmail of [
+    "client@exämple.com",
+    "clіent@example.com",
+    "client＠example.com",
+    "client@example.com\r\nBcc:attacker@example.com",
+    "client@example.com\u200b",
+    "\u00a0client@example.com\u00a0",
+  ]) {
+    await assert.rejects(
+      () =>
+        buildTransactionalEmail({
+          kind: "payment-confirmation",
+          eventId: "evt_unicode_recipient",
+          locale: "fr",
+          recipientEmail,
+          orderNumber: "AJ-2026-0001",
+        }),
+      /recipient/,
+    );
+  }
 });
 
 test("allowlists operational logs and preserves legal-retention gates", () => {
@@ -728,18 +920,63 @@ test("allowlists operational logs and preserves legal-retention gates", () => {
     0,
     { legalRetentionRequired: "false", activeDispute: false },
     { legalRetentionRequired: false, activeDispute: 0 },
+    {
+      legalRetentionRequired: false,
+      activeDispute: false,
+      unexpected: false,
+    },
+    Object.assign(Object.create(null), {
+      legalRetentionRequired: false,
+      activeDispute: false,
+    }),
   ]) {
     assert.equal(canEraseCommerceRecord(invalidInput), false);
   }
+
+  let erasureGetterCalls = 0;
+  const erasureAccessor = {
+    get legalRetentionRequired() {
+      erasureGetterCalls += 1;
+      return false;
+    },
+    activeDispute: false,
+  };
+  assert.equal(canEraseCommerceRecord(erasureAccessor), false);
+  assert.equal(erasureGetterCalls, 0);
+
+  const nonEnumerableErasureInput = {
+    legalRetentionRequired: false,
+    activeDispute: false,
+  };
+  Object.defineProperty(nonEnumerableErasureInput, "activeDispute", {
+    value: false,
+    enumerable: false,
+  });
+  assert.equal(canEraseCommerceRecord(nonEnumerableErasureInput), false);
+
+  let erasureProxyGets = 0;
   assert.equal(
     canEraseCommerceRecord(
       new Proxy(
         { legalRetentionRequired: false, activeDispute: false },
-        {},
+        {
+          get(target, key, receiver) {
+            erasureProxyGets += 1;
+            return Reflect.get(target, key, receiver);
+          },
+        },
       ),
     ),
     false,
   );
+  assert.equal(erasureProxyGets, 0);
+  const revokedErasureInput = Proxy.revocable(
+    { legalRetentionRequired: false, activeDispute: false },
+    {},
+  );
+  revokedErasureInput.revoke();
+  assert.doesNotThrow(() => canEraseCommerceRecord(revokedErasureInput.proxy));
+  assert.equal(canEraseCommerceRecord(revokedErasureInput.proxy), false);
   assert.equal(
     canEraseCommerceRecord(
       new Proxy(

@@ -135,13 +135,68 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function normalizeCountryCode(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  const normalized = value.trim().toUpperCase();
+  if (typeof value !== "string" || !/^[A-Za-z]{2}$/.test(value)) return null;
+  const normalized = value.toUpperCase();
   return isIso3166Alpha2CountryCode(normalized) ? normalized : null;
 }
 
-function normalizePostalCode(value: string | undefined): string {
-  return (value ?? "").replace(/\s+/g, "").toUpperCase();
+const shippingAddressInputKeys = new Set([
+  "countryCode",
+  "postalCode",
+  "regionCode",
+]);
+
+const postalCodePatterns: Readonly<Record<string, RegExp>> = Object.freeze({
+  AT: /^\d{4}$/,
+  BE: /^\d{4}$/,
+  BG: /^\d{4}$/,
+  CA: /^[ABCEGHJ-NPRSTVXY]\d[A-Z][ -]?\d[A-Z]\d$/i,
+  CY: /^\d{4}$/,
+  CZ: /^\d{3} ?\d{2}$/,
+  DE: /^\d{5}$/,
+  DK: /^\d{4}$/,
+  EE: /^\d{5}$/,
+  ES: /^\d{5}$/,
+  FI: /^\d{5}$/,
+  FR: /^\d{5}$/,
+  GB: /^(?:GIR ?0AA|(?:[A-Z]{1,2}\d[A-Z\d]?|[A-Z]{1,2}\d{1,2}) ?\d[A-Z]{2})$/i,
+  GR: /^(?:GR-?)?\d{5}$/i,
+  HR: /^\d{5}$/,
+  HU: /^\d{4}$/,
+  IE: /^[A-Z0-9]{3} ?[A-Z0-9]{4}$/i,
+  IT: /^\d{5}$/,
+  LT: /^(?:LT-?)?\d{5}$/i,
+  LU: /^\d{4}$/,
+  LV: /^(?:LV-?)?\d{4}$/i,
+  MT: /^[A-Z]{3} ?\d{4}$/i,
+  NL: /^\d{4} ?[A-Z]{2}$/i,
+  PL: /^\d{2}-?\d{3}$/,
+  PT: /^\d{4}-?\d{3}$/,
+  RO: /^\d{6}$/,
+  SE: /^\d{3} ?\d{2}$/,
+  SI: /^(?:SI-?)?\d{4}$/i,
+  SK: /^\d{3} ?\d{2}$/,
+  US: /^\d{5}(?:-\d{4})?$/,
+});
+
+function normalizePostalCode(
+  value: string | undefined,
+  country: string,
+): string | undefined | null {
+  if (value === undefined) return undefined;
+  if (
+    value.length === 0 ||
+    value.length > 16 ||
+    !/^[\x20-\x7e]+$/.test(value)
+  ) {
+    return null;
+  }
+
+  const countryPattern = postalCodePatterns[country];
+  const genericPattern = /^[A-Za-z0-9]+(?:[ -][A-Za-z0-9]+)*$/;
+  if (!(countryPattern ?? genericPattern).test(value)) return null;
+
+  return value.toUpperCase().replace(/[ -]/g, "");
 }
 
 function snapshotShippingAddressScopeInput(
@@ -150,11 +205,34 @@ function snapshotShippingAddressScopeInput(
   if (!isRecord(value)) return null;
 
   try {
-    // Read each untrusted property exactly once, then make every decision from
-    // this plain snapshot. This closes accessor/Proxy TOCTOU switching.
-    const countryCode = value.countryCode;
-    const postalCode = value.postalCode;
-    const regionCode = value.regionCode;
+    if (Array.isArray(value) || Object.getPrototypeOf(value) !== Object.prototype) {
+      return null;
+    }
+
+    const descriptors = new Map<string, PropertyDescriptor>();
+    for (const key of Reflect.ownKeys(value)) {
+      if (typeof key !== "string" || !shippingAddressInputKeys.has(key)) {
+        return null;
+      }
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (
+        !descriptor ||
+        !("value" in descriptor) ||
+        !descriptor.enumerable ||
+        (descriptor.value !== undefined && typeof descriptor.value !== "string")
+      ) {
+        return null;
+      }
+      descriptors.set(key, descriptor);
+    }
+
+    // With primitive data properties established, structured cloning cannot
+    // execute getters and provides a deterministic Proxy rejection gate.
+    structuredClone(value);
+
+    const countryCode = descriptors.get("countryCode")?.value;
+    const postalCode = descriptors.get("postalCode")?.value;
+    const regionCode = descriptors.get("regionCode")?.value;
     if (
       typeof countryCode !== "string" ||
       (postalCode !== undefined && typeof postalCode !== "string") ||
@@ -170,17 +248,14 @@ function snapshotShippingAddressScopeInput(
 
 function normalizeRegionCode(value: string | undefined): string | null {
   if (value === undefined) return null;
-  const normalized = value.trim().toUpperCase();
-  return /^[A-Z]{2}$/.test(normalized) ? normalized : null;
+  return /^[A-Za-z]{2}$/.test(value) ? value.toUpperCase() : null;
 }
 
 function isSpecialTerritory(
-  input: ShippingAddressScopeInput,
   country: string,
+  postal: string,
   region: string | null,
 ): boolean {
-  const postal = normalizePostalCode(input.postalCode);
-
   if (country === "FR") {
     return /^(97[1-8]|98[4-8])/.test(postal);
   }
@@ -246,8 +321,13 @@ export function resolveLaunchShippingScope(
     };
   }
 
+  const postal = normalizePostalCode(snapshot.postalCode, country);
   const region = normalizeRegionCode(snapshot.regionCode);
-  if (country === "US" && region === null) {
+  if (
+    postal === null ||
+    (snapshot.regionCode !== undefined && region === null) ||
+    (country === "US" && region === null)
+  ) {
     return {
       inScope: false,
       zone: null,
@@ -256,7 +336,7 @@ export function resolveLaunchShippingScope(
     };
   }
 
-  if (isSpecialTerritory(snapshot, country, region)) {
+  if (isSpecialTerritory(country, postal ?? "", region)) {
     return {
       inScope: false,
       zone: null,

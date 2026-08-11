@@ -59,10 +59,12 @@ export async function hashOneTimeAccessToken(token: string): Promise<string> {
 }
 
 export async function verifyOneTimeAccessToken(
-  providedToken: string,
-  storedTokenHash: string,
+  providedToken: unknown,
+  storedTokenHash: unknown,
 ): Promise<boolean> {
   if (
+    typeof providedToken !== "string" ||
+    typeof storedTokenHash !== "string" ||
     !/^[A-Za-z0-9_-]{43}$/.test(providedToken) ||
     !/^[0-9a-f]{64}$/i.test(storedTokenHash)
   ) {
