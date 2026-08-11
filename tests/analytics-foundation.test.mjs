@@ -136,6 +136,13 @@ function viteOutputArtifacts(result) {
   );
 }
 
+function viteOutputModuleIds(result) {
+  const outputs = Array.isArray(result) ? result : [result];
+  return outputs.flatMap((output) =>
+    (output.output ?? []).flatMap((entry) => entry.moduleIds ?? []),
+  );
+}
+
 const COLORS = [
   { code: "POU", slug: "pourpre", path: "/products/pourpre" },
   { code: "ROS", slug: "rose-pale", path: "/products/rose-pale" },
@@ -410,16 +417,18 @@ test("every deep server file fails an actual browser bundle", async () => {
   }
 });
 
-test("Vite 8.1.5 rejects the seven historical client paths and uppercase raw/url variants", async () => {
+test("Vite 8.1.5 rejects server modules and resources that it actually materializes", async () => {
   assert.equal(viteVersion, "8.1.5");
   for (const fixture of [
     "raw.mjs",
     "url.mjs",
     "subpath.mjs",
+    "dynamic-literal.mjs",
     "dynamic-computed.mjs",
     "dynamic-template.mjs",
     "glob.mjs",
     "new-url.mjs",
+    "new-url-line-break.mjs",
     "uppercase-raw.mjs",
     "uppercase-url.mjs",
   ]) {
@@ -432,32 +441,59 @@ test("Vite 8.1.5 rejects the seven historical client paths and uppercase raw/url
   }
 });
 
-test("Vite AST analysis rejects whitespace, constants and a trivial URL alias", async () => {
+test("genuinely unresolved runtime specifiers emit no analytics server module or capability", async () => {
   for (const fixture of [
-    "new-url-line-break.mjs",
-    "new-url-comments.mjs",
     "dynamic-const.mjs",
     "new-url-const.mjs",
     "new-url-alias.mjs",
+    "new-url-comments.mjs",
   ]) {
-    await assert.rejects(
-      () => viteFixtureBuild(join(boundaryFixtureRoot, fixture)),
-      (error) => String(error).includes(ANALYTICS_CLIENT_BOUNDARY_ERROR),
-      `${fixture} unexpectedly passed a real Vite client build`,
+    const result = await viteFixtureBuild(join(boundaryFixtureRoot, fixture));
+    assert.deepEqual(
+      findArtifactLeaks(viteOutputArtifacts(result)),
+      [],
+      `${fixture} emitted analytics server capability bytes`,
+    );
+    assert.equal(
+      viteOutputModuleIds(result).some((id) =>
+        isAnalyticsServerModule(id, projectRoot),
+      ),
+      false,
+      `${fixture} resolved an analytics server module in production`,
     );
   }
 });
 
-test("the boundary matcher is case-insensitive before filesystem resolution", () => {
+test("homonymous bindings in separate scopes create neither false positives nor server output", async () => {
+  for (const fixture of [
+    "homonymous-parameter.mjs",
+    "homonymous-shadow.mjs",
+  ]) {
+    const result = await viteFixtureBuild(join(boundaryFixtureRoot, fixture));
+    assert.deepEqual(findArtifactLeaks(viteOutputArtifacts(result)), []);
+    assert.equal(
+      viteOutputModuleIds(result).some((id) =>
+        isAnalyticsServerModule(id, projectRoot),
+      ),
+      false,
+    );
+    assert.doesNotMatch(viteOutputCode(result), /server-events/);
+  }
+});
+
+test("the resolved-module matcher is case-insensitive", () => {
   assert.equal(
     isAnalyticsServerModule(
-      "../../../lib/analytics/Server-events.ts?raw",
+      `${join(projectRoot, "lib", "analytics", "Server-events.ts")}?raw`,
       projectRoot,
     ),
     true,
   );
   assert.equal(
-    isAnalyticsServerModule("../../../LIB/ANALYTICS/SERVER.TS?url", projectRoot),
+    isAnalyticsServerModule(
+      `${join(projectRoot, "LIB", "ANALYTICS", "SERVER.TS")}?url`,
+      projectRoot,
+    ),
     true,
   );
 });
@@ -480,11 +516,12 @@ test("Vite applies negative import.meta.glob patterns before the boundary guard"
 });
 
 test("the Vite build rejects forbidden markers in JavaScript and non-JavaScript assets", async () => {
-  for (const [fixture, marker, options] of [
-    ["asset-js.mjs", "order_paid", {}],
+  for (const [fixture, marker, extension, options] of [
+    ["asset-js.mjs", "order_paid", ".js", {}],
     [
       "asset-non-js.mjs",
       "canonical_commerce_d1_not_integrated",
+      ".txt",
       { assetsInlineLimit: 0 },
     ],
   ]) {
@@ -495,7 +532,8 @@ test("the Vite build rejects forbidden markers in JavaScript and non-JavaScript 
         return (
           message.includes(ANALYTICS_CLIENT_BOUNDARY_ERROR) &&
           message.includes("emitted-artifact") &&
-          message.includes(marker)
+          message.includes(marker) &&
+          message.includes(extension)
         );
       },
       `${fixture} unexpectedly emitted a forbidden client artifact`,
@@ -519,14 +557,43 @@ test("the real Vite boundary gates source and emitted artifacts during build", a
     join(projectRoot, "lib", "build", "analytics-server-boundary.ts"),
     "utf8",
   );
+  const buildCanarySource = await readFile(
+    join(projectRoot, "scripts", "check-analytics-build-canaries.mjs"),
+    "utf8",
+  );
   assert.match(packageManifest.scripts.prebuild, /check:analytics-boundary/);
   assert.match(packageManifest.scripts.postbuild, /check:analytics-artifacts/);
   assert.match(packageManifest.scripts.prelint, /check:analytics-boundary/);
+  assert.match(packageManifest.scripts.test, /test:analytics-build-canaries/);
   assert.match(boundaryCheckSource, /build as viteBuild/);
   assert.match(boundaryCheckSource, /dist.+client/);
+  assert.match(buildCanarySource, /spawn/);
+  assert.match(buildCanarySource, /npmCli, "run", "build"/);
   assert.match(viteConfigSource, /analyticsServerBoundaryPlugin\(\)/);
   assert.match(boundarySource, /generateBundle/);
-  assert.doesNotMatch(boundarySource, /code\.includes\(/);
+  assert.doesNotMatch(
+    boundarySource,
+    /from "typescript"|createSourceFile|collectConstBindings|resolveConst|\btransform\s*\(/,
+  );
+  assert.ok(
+    boundarySource.split(/\r?\n/).length < 180,
+    "the boundary must remain a small build guard, not a source compiler",
+  );
+});
+
+test("every analytics server entry carries a final-artifact marker", async () => {
+  const serverEntryPoints = (await listFilesRecursively(analyticsRoot)).filter(
+    (path) => /^server(?:-.+)?\.ts$/.test(basename(path)),
+  );
+  for (const path of serverEntryPoints) {
+    const contents = await readFile(path);
+    assert.ok(
+      ANALYTICS_SERVER_ARTIFACT_MARKERS.some((marker) =>
+        contents.includes(Buffer.from(marker)),
+      ),
+      `${basename(path)} needs a binary final-artifact marker`,
+    );
+  }
 });
 
 test("the Vite client guard leaves explicit SSR and RSC server builds authorized", async () => {

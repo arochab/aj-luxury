@@ -12,6 +12,8 @@ Base du worktree Analytics isolé : `c7362d3d04af6fc6070a15112a1fdff7878e09bd`
 
 Base gelée de la correction après red-team : `56b97412522fa5564921db2cacdcb749c9ba80ce`
 
+Base gelée de la frontière build simplifiée : `d4481e45ddf0350f806d79202bb81515d3a09703`
+
 ## Verdict
 
 Le Lot 2 doit apporter à AJ Luxury une lecture courte et exploitable de son
@@ -52,7 +54,8 @@ résultat de succès. Il conserve seulement un contrat serveur interne gelé qui
 déclare `unavailable` avec le blocker
 `canonical_commerce_d1_not_integrated`. Sa future autorité devra être la
 transaction payée de la D1 commerce canonique, une fois cette D1 réellement
-intégrée. Tous les fichiers serveur profonds font échouer un bundle navigateur.
+intégrée. Un fichier serveur profond réellement résolu ou chargé par Vite fait
+échouer le build client, quelle que soit la casse du chemin.
 
 Bornes V3 : identifiants produit/variante présents dans le catalogue commerce
 réel de cette branche et limités à 64 caractères ; quantité et nombre d’articles de 1 à 99 ;
@@ -122,10 +125,20 @@ jour des pages confidentialité/cookies avant toute activation.
   réellement résolue en production, puis rejouées dans les tests de bundle ;
 - build Vite réel de l’entrée publique obligatoire avant lint et build, complété
   par un plugin limité aux environnements client ; ses hooks bloquent les modules
-  serveur réellement résolus ou chargés, sans réimplémenter la résolution ni les
-  globs de Vite, et un petit contrôle AST couvre les imports calculés non résolus
-  ainsi que `new URL(..., import.meta.url)` ; les imports de types effacés et les
-  exclusions négatives de `import.meta.glob` restent autorisés, comme SSR et RSC ;
+  serveur réellement résolus ou chargés, sans parser le source, propager des
+  constantes, suivre des alias, réimplémenter la résolution ou réinterpréter les
+  globs de Vite ; `?raw`, `?url`, les globs et `new URL(..., import.meta.url)` sont
+  donc bloqués lorsqu’ils sont effectivement matérialisés par Vite ; les imports
+  de types effacés et les exclusions négatives de `import.meta.glob` restent
+  autorisés, comme SSR et RSC ;
+- `generateBundle` refuse tout chunk dont les identifiants de modules révèlent
+  une entrée Analytics serveur et inspecte en binaire les chunks et assets, y
+  compris les data URI encodées ; le `postbuild` automatique relit ensuite tous
+  les fichiers de `dist/client`, JavaScript et non-JavaScript ; chaque entrée
+  serveur actuelle porte au moins un marqueur final contrôlé par test ;
+- quatre canaris `raw`, `url`, JavaScript et TXT sont injectés comme vraies
+  entrées client de build et prouvent que `npm run build` échoue, les deux
+  derniers au stade de l’inspection des artefacts émis ;
 - bundles adversariaux exécutés avec Vite 8.1.5, bundle navigateur de l’index
   construit par esbuild et inspection binaire de tous les fichiers émis dans le
   `dist/client` final produit par Vinext, y compris les assets non JavaScript ;
@@ -148,6 +161,24 @@ jour des pages confidentialité/cookies avant toute activation.
 Il n’existe volontairement aucun appel réseau, token, SDK, cookie analytics,
 table D1, endpoint de collecte ou branchement dans l’interface. Ce module reste
 une proposition isolée ; il ne constitue pas à lui seul le Lot 2 backend.
+
+### Invariant de frontière client
+
+Le build client ne peut émettre aucun module, asset ni octet de capacité
+Analytics serveur : les modules réellement résolus ou chargés sont
+refusés avant émission, les identifiants et contenus binaires sont refusés dans
+`generateBundle`, puis l’intégralité de `dist/client` est relue après le vrai
+build Vinext. Toute nouvelle entrée serveur devra contenir un marqueur final ou
+faire évoluer la liste de marqueurs dans le même commit ; un test impose cette
+couverture à toutes les entrées `server*.ts` actuelles.
+
+Un import dynamique que Vite ne résout réellement pas peut rester sous forme de
+spécificateur runtime. Il n’est autorisé par cette frontière que parce que le
+build de production n’a chargé aucun module serveur, n’a émis aucun fichier
+serveur et ne contient aucun octet de capacité serveur. Il n’est pas revendiqué
+que toute expression dynamique échoue au build ; les tests vérifient au
+contraire cette limite honnête ainsi que l’absence de faux positif entre noms
+homonymes de portées différentes.
 
 L’idempotence durable n’est pas revendiquée dans ce candidat. Son schéma devra
 être conçu à partir de la D1 commerce canonique et de sa transaction de paiement,
@@ -183,11 +214,12 @@ de conservation restent à valider avant construction du tableau de bord.
 Le socle passe cette phase si :
 
 1. le bundle navigateur réel de l’index et le `dist/client` final Vinext ne
-   contiennent jamais `order_paid`, le blocker D1 ni une outbox serveur ;
+   contiennent aucun module, asset ou marqueur de capacité Analytics serveur ;
 2. la garde pré-build/pré-lint et les builds Vite 8.1.5 adversariaux bloquent
-   les imports directs, sous-chemins, `?raw`, `?url`, glob et imports dynamiques
-   calculés des fichiers serveur, y compris avec une casse différente sur un
-   système insensible à la casse, sans bloquer les types, les exclusions de glob,
+   les imports directs, littéraux, sous-chemins, `?raw`, `?url`, glob, imports
+   dynamiques et `new URL` que Vite résout ou matérialise réellement, y compris
+   avec une casse différente sur un système insensible à la casse, sans bloquer
+   les types, les exclusions de glob, les spécificateurs réellement non résolus,
    SSR ou RSC ;
 3. la façade client ne possède aucun collecteur et laisse passer le prochain
    task sans exécuter un callback CPU hostile ;

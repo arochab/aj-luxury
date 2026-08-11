@@ -5,8 +5,8 @@ import { build as viteBuild } from "vite";
 
 import {
   ANALYTICS_CLIENT_BOUNDARY_ERROR,
-  ANALYTICS_SERVER_ARTIFACT_MARKERS,
   analyticsServerBoundaryPlugin,
+  findAnalyticsServerArtifactMarker,
 } from "../lib/build/analytics-server-boundary.ts";
 
 const projectRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -27,9 +27,7 @@ if (process.argv.includes("--artifacts")) {
   const clientRoot = join(projectRoot, "dist", "client");
   for (const path of await listFiles(clientRoot)) {
     const contents = await readFile(path);
-    const marker = ANALYTICS_SERVER_ARTIFACT_MARKERS.find((candidate) =>
-      contents.includes(Buffer.from(candidate)),
-    );
+    const marker = findAnalyticsServerArtifactMarker(contents);
     if (marker) {
       throw new Error(
         `${ANALYTICS_CLIENT_BOUNDARY_ERROR}: ${path.slice(clientRoot.length + 1)} emitted-artifact ${JSON.stringify(marker)}`,
