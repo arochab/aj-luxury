@@ -44,5 +44,6 @@ next-env.d.ts
 /output/
 /inputs_assets/
 /deliverables/
+/docs/internal/evidence/
 /tsconfig.tsbuildinfo
 /.openai/*.tar.gz

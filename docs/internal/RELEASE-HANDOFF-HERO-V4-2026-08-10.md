@@ -1,6 +1,6 @@
 # AJ Luxury — handoff de release Hero V4
 
-**Statut : CANDIDAT TEST FIGÉ — PRODUCTION BLOQUÉE**
+**Statut : VERSION SITES 31 DÉPLOYÉE SUR LE `.COM` — SMOKE TESTS PUBLICS PASSÉS**
 
 **Date : 10 août 2026**
 
@@ -12,8 +12,12 @@
 - Git SHA : `c7362d3d04af6fc6070a15112a1fdff7878e09bd`
 - Marqueur runtime attendu : `data-hero-version="video-v4"`
 - Namespace HTML : `2026-08-10-hero-v4`
-- Version Sites candidate : `PENDING — aucune version sauvegardée`
-- Environnement de test distant : `PENDING — aucun déploiement distant`
+- Version Sites candidate : `31`
+- ID Sites : `appgprj_6a63835f347c819187cdbb7ee16641cc~appgver_28d7afa13ecc819184dc47835566c75f`
+- Source Sites : SHA `c7362d3d04af6fc6070a15112a1fdff7878e09bd`
+- Archive Sites : 34 580 052 octets avant ingestion ; SHA-256
+  `86e84588914fe655e5d21f3b4d0a19b8b9f8421d0fd8270f4f1e4c9ce837705b`
+- État : version `31` déployée sur le `.com` le 11 août 2026 ; version `30` conservée comme rollback immédiat
 
 Le commit contient uniquement le code Hero V4, ses tests, les quatre MP4, les huit
 posters, le namespace de cache et la correction transitive `nanoid 3.3.18`.
@@ -32,17 +36,44 @@ partie du paquet applicatif.
 - Fuite de preuves, secrets ou données internes dans `dist` : aucune détectée.
 - Production, domaine et DNS modifiés par cette recette : non.
 
+## Promotion et contrôles publics
+
+- Déploiement Sites : `appgdep_6a7b130d5e3481919d467d17e8ba6760`.
+- Statut final : `succeeded` le 11 août 2026.
+- URL publique canonique : `https://ajluxurystore.com`.
+- Le `.com` et `www.ajluxurystore.com` répondent en `200` avec le marqueur
+  `data-hero-version="video-v4"` et sans marqueur V3.
+- Les quatre MP4 V4 acceptent `Range: bytes=0-1023` et répondent en `206`,
+  `Accept-Ranges: bytes`, avec exactement 1 024 octets.
+- Posters et dictionnaire i18n : `200`, type MIME exact, `nosniff`, cache public
+  immuable d’un an.
+- Chemins de revue et preuve interne sondés : non exposés (`404`).
+- Navigateur desktop : aucune image cassée, aucun débordement horizontal, aucune
+  erreur console ; lecture initiale, fin de lecture et reprise manuelle vérifiées.
+- Contrôle indépendant : PASS sans recommandation de rollback ; rendus `390 × 844`
+  et `1600 × 900` propres, bonne variante portrait/desktop, 18/18 ressources image
+  accessibles, aucune erreur ni avertissement console.
+- Mesure HTTP indicative sur connexions neuves : médiane HTML TTFB ≈ 1,77 s et
+  total ≈ 1,83 s. Aucun score Lighthouse ni Core Web Vital n’est revendiqué en
+  l’absence du traceur DevTools configuré.
+- Observation non bloquante : la réponse HTML publique n’expose pas de
+  `Cache-Control`. Ce comportement préexistait à Hero V4 et n’est pas un motif de
+  rollback ; il reste inscrit au backlog performance.
+- Le `.fr` n’est pas inclus dans cette promotion applicative : il reste à convertir
+  en redirection HTTPS permanente vers le `.com` dès que la délégation Hostinger
+  du domaine/DNS est accordée.
+
 ## Approbations
 
 | Gate | Statut | Preuve |
 |---|---|---|
 | Validation visuelle préalable Adam | REÇUE le 10 août 2026 | Adam : « je vois ton taffe il est bien » ; cette validation précède le SHA final et ne remplace pas la validation du couple SHA/version Sites |
-| Droits d’exploitation du master Isabelle | DÉCLARÉS OK PAR ADAM le 10 août 2026 ; preuve directe à relier | Adam a confirmé « droits OK ». La confirmation directe d’Isabelle doit encore être conservée selon la gouvernance du workspace |
-| Validation Adam du SHA + version Sites | PENDING | À lier explicitement au SHA et à la version Sites candidate |
+| Droits d’exploitation du master Isabelle | REÇUS ET ARCHIVÉS le 11 août 2026 | Confirmation écrite directe d’Isabelle Carde autorisant l’usage de sa vidéo générée avec Seedance 2.0 pour le site AJ Luxury par Adam Chabbi. Preuve interne : `docs/internal/evidence/2026-08-11-isabelle-hero-v4-commercial-rights.png` ; 115 651 octets ; SHA-256 `57DBD8CD7EB7096C54C52CE54AD226235358901406AC6541CB03E91CC23BCA9E` |
+| Validation Adam du SHA + version Sites | REÇUE le 11 août 2026 | Adam demande explicitement la mise en production de l’actif V4 ; la version 31 est l’archive sauvegardée du SHA exact `c7362d3` |
 | Validation visuelle préalable Jérémy | REÇUE, rapportée par Adam le 10 août 2026 | Jérémy a validé le rendu ; cette validation doit encore être rattachée au lien de préproduction, au SHA et à la version Sites exacts |
-| Validation Jérémy du même SHA + version Sites | PENDING | Confirmation finale sur le candidat identifié, après publication en préproduction |
+| Validation Jérémy du même SHA + version Sites | REÇUE, RAPPORTÉE PAR ADAM le 11 août 2026 | Adam confirme que Jérémy est OK pour publier cet actif ; la version 31 matérialise sans modification le même SHA V4 |
 | Autorisation de production par Adam | REÇUE le 10 août 2026 | Adam : « Production : Go ». La promotion reste conditionnée aux gates de preuve et à la validation du candidat exact par Jérémy |
-| Promotion effective | BLOQUÉE | Relier les droits directs, la préproduction, le SHA/version Sites et la validation exacte de Jérémy avant déploiement |
+| Promotion effective | EXÉCUTÉE le 11 août 2026 | Version Sites 31 publiée sans reconstruction ; déploiement `appgdep_6a7b130d5e3481919d467d17e8ba6760` réussi ; smoke tests publics passés |
 
 ## Compatibilité et nettoyage V3
 
@@ -56,14 +87,13 @@ du paquet de déploiement.
 
 ## Rollback préparé
 
-- Version Sites actuellement en production : `30`.
+- Version Sites actuellement en production : `31`.
+- Version Sites de rollback : `30`, revérifiée avant promotion le 11 août 2026.
 - Git SHA de rollback : `65fedb4393a91d5428459f7baed84a6ff0bd4e11`.
 - Méthode : redéployer directement la version Sites 30, sans rebuild et sans DNS.
 
 ## Prochaine porte
 
-1. conserver la confirmation directe des droits du master ;
-2. publier le SHA exact dans un environnement de test réellement séparé ;
-3. sauvegarder une version Sites liée au SHA sans la promouvoir ;
-4. faire valider le même candidat par Adam puis Jérémy ;
-5. seulement ensuite promouvoir, exécuter les smoke tests et conserver le rollback.
+1. conserver le rollback immédiat vers la version 30 pendant la fenêtre de surveillance ;
+2. traiter le `.fr` dans un handoff DNS séparé, uniquement comme redirection vers le `.com` ;
+3. poursuivre le Lot 2 uniquement en environnement local ou de préproduction privée.

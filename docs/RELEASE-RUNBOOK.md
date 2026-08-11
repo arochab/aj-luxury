@@ -9,6 +9,10 @@ A production release is anchored by both:
 
 Before deployment, the release owner records the candidate SHA, the new Sites
 version ID and the currently deployed Sites version ID in the release handoff.
+The handoff must also record the dated approval from Adam CHABBI and then the
+dated approval from Jérémy SCHEPPLER, both explicitly tied to that exact SHA and
+that exact Sites version. Without both approvals, the candidate remains in the
+test environment and production stays read-only.
 The gate requires a successful build, lint, complete automated test suite,
 responsive visual QA, and a clean runtime-reference audit.
 
@@ -24,11 +28,26 @@ After deployment, verify the public domain:
   `Accept-Ranges: bytes` and exactly 1,024 bytes;
 - `/media/i18n/en.json?v=v3` is immutable JSON with `nosniff`;
 - `/images/review/*` and `/media/images/review/*` do not expose review proofs;
+- `docs/internal/**` and client evidence are not bundled, routed or publicly served;
 - no console error, broken image, horizontal overflow or language regression;
 - private commerce routes remain excluded from shared HTML caching.
 
 Do not close the release until the deployment status is successful and these
 checks pass on `https://ajluxurystore.com`.
+
+## Canonical and defensive domains
+
+`ajluxurystore.com` is the sole production canonical domain. The registered
+`ajluxurystore.fr` domain is a defensive asset and is outside a normal
+application release: never publish a duplicate site or create mail service on
+it by implication.
+
+Any future `.fr` redirect requires a separately approved domain handoff tied to
+`docs/internal/DOMAIN-PROTECTION-FR-2026-08-10.md`. It must cover the DNS and the
+HTTP redirect service, HTTPS on the apex and `www`, a one-hop permanent `301` or
+`308` redirect to the `.com`, an immediately prior zone snapshot, the explicit
+e-mail policy, verification evidence and a documented rollback. Without that
+exact handoff and Adam’s then Jérémy’s approval, leave the `.fr` unchanged.
 
 ## Application rollback
 
@@ -47,3 +66,5 @@ release.
 DNS changes are outside normal application rollback. Use the scoped domain
 rollback procedure only when the incident is demonstrably DNS-related. Never
 mix a DNS rollback with an application rollback without recording both actions.
+Treat the `.com` and `.fr` zones independently; never restore one by copying the
+other zone wholesale.
