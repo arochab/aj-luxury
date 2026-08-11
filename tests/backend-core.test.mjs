@@ -205,22 +205,45 @@ class SQLiteD1Database {
   }
 }
 
-function createFixture() {
+function applyMigration(database, migrationPath) {
+  const migration = readFileSync(migrationPath, "utf8");
+  for (const statement of migration.split("--> statement-breakpoint")) {
+    const sql = statement.trim();
+    if (sql) database.exec(sql);
+  }
+}
+
+function createFixture({ migrationCount = migrationPaths.length } = {}) {
   const database = new DatabaseSync(":memory:");
   database.exec("PRAGMA foreign_keys = ON");
 
-  for (const migrationPath of migrationPaths) {
-    const migration = readFileSync(migrationPath, "utf8");
-    for (const statement of migration.split("--> statement-breakpoint")) {
-      const sql = statement.trim();
-      if (sql) database.exec(sql);
-    }
+  for (const migrationPath of migrationPaths.slice(0, migrationCount)) {
+    applyMigration(database, migrationPath);
   }
 
   return {
     database,
     store: new D1CommerceStore(new SQLiteD1Database(database)),
   };
+}
+
+function insertCartLines(database, input) {
+  const insertCartLine = database.prepare(
+    `INSERT INTO cart_lines (
+      id, cart_id, variant_id, quantity, unit_price_cents, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  );
+  input.lines.forEach((line, index) => {
+    insertCartLine.run(
+      `${input.cartId}_line_${index}`,
+      input.cartId,
+      line.variantId,
+      line.quantity,
+      line.unitPriceCents ?? 2_999,
+      input.now,
+      input.now,
+    );
+  });
 }
 
 function validateReserves(database, variantIds = null) {
@@ -274,23 +297,9 @@ function insertPendingOrder(database, input) {
       size, quantity, unit_price_cents, line_total_cents, created_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
-  const insertCartLine = database.prepare(
-    `INSERT INTO cart_lines (
-      id, cart_id, variant_id, quantity, unit_price_cents, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-  );
   input.lines.forEach((line, index) => {
     const variant = variantQuery.get(line.variantId);
     const unitPriceCents = line.unitPriceCents ?? 2_999;
-    insertCartLine.run(
-      `${input.cartId}_line_${index}`,
-      input.cartId,
-      line.variantId,
-      line.quantity,
-      unitPriceCents,
-      input.now,
-      input.now,
-    );
     insertLine.run(
       `${input.id}_line_${index}`,
       input.id,
@@ -1007,6 +1016,14 @@ test("shared transition keys stay reservation-scoped across release, expiration 
       now,
     });
   }
+  insertCartLines(database, {
+    cartId: "cart_shared_convert",
+    now,
+    lines: [
+      { variantId: saleVariants[0], quantity: 1 },
+      { variantId: saleVariants[1], quantity: 2 },
+    ],
+  });
 
   const reservationSpecs = [
     ["release_a", "cart_shared_release", releaseVariant, 1],
@@ -1178,6 +1195,14 @@ test("verified payment atomically converts every line once and writes outbox plu
     email: "client@example.com",
     expiresAt: "2099-08-10T14:00:00.000Z",
     now,
+  });
+  insertCartLines(database, {
+    cartId: "cart_paid",
+    now,
+    lines: [
+      { variantId: firstVariant, quantity: 2 },
+      { variantId: secondVariant, quantity: 1 },
+    ],
   });
   await Promise.all([
     store.reserveStock({
@@ -1491,7 +1516,7 @@ test("every payment line mismatch rolls back webhook, payment, stock, order, out
 
   for (const [index, scenario] of scenarios.entries()) {
     await t.test(scenario.name, async () => {
-      const { database, store } = createFixture();
+      const { database, store } = createFixture({ migrationCount: 2 });
       const now = "2099-08-10T12:00:00.000Z";
       const variantId = "variant_boxer_pourpre_l";
       const alternateVariantId = "variant_boxer_rose-pale_l";
@@ -1505,6 +1530,11 @@ test("every payment line mismatch rolls back webhook, payment, stock, order, out
         id: cartId,
         expiresAt: "2099-08-10T14:00:00.000Z",
         now,
+      });
+      insertCartLines(database, {
+        cartId,
+        now,
+        lines: [{ variantId, quantity: 1 }],
       });
       await store.reserveStock({
         reservationId,
@@ -1527,6 +1557,7 @@ test("every payment line mismatch rolls back webhook, payment, stock, order, out
         now,
         orderId,
       });
+      applyMigration(database, migrationPaths[2]);
       const event = await createVerifiedEvent({
         providerEventId: `event_${suffix}`,
         providerPaymentId: `payment_${suffix}`,
@@ -1610,6 +1641,11 @@ test("expired reservations and order-cart mismatches cannot be converted", async
     expiresAt: "2099-08-10T14:00:00.000Z",
     now,
   });
+  insertCartLines(database, {
+    cartId: "cart_expired_sale",
+    now,
+    lines: [{ variantId, quantity: 1 }],
+  });
   await store.reserveStock({
     reservationId: "reservation_expired_sale",
     cartId: "cart_expired_sale",
@@ -1644,6 +1680,11 @@ test("expired reservations and order-cart mismatches cannot be converted", async
     id: "cart_wrong_order",
     expiresAt: "2099-08-10T14:00:00.000Z",
     now,
+  });
+  insertCartLines(database, {
+    cartId: "cart_wrong_order",
+    now,
+    lines: [{ variantId, quantity: 1 }],
   });
   insertPendingOrder(database, {
     id: "order_wrong_cart",

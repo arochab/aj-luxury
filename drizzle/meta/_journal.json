@@ -15,6 +15,13 @@
       "when": 1786411726568,
       "tag": "0001_lock_cart_line_price_provenance",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1786418415978,
+      "tag": "0002_lock_order_line_snapshots",
+      "breakpoints": true
     }
   ]
 }
