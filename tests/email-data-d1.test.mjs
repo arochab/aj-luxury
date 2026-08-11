@@ -13,9 +13,13 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 const projectRoot = fileURLToPath(new URL("../", import.meta.url));
-const workspaceRoot = fileURLToPath(new URL("../../../../../../", import.meta.url));
-const workspaceWrangler = fileURLToPath(
-  new URL("../../../node_modules/wrangler/wrangler-dist/cli.js", import.meta.url),
+const workspaceRoot = projectRoot;
+const workspaceWrangler = join(
+  projectRoot,
+  "node_modules",
+  "wrangler",
+  "wrangler-dist",
+  "cli.js",
 );
 const migrationNames = [
   "0000_flimsy_rhino.sql",
@@ -100,9 +104,7 @@ function query(configPath, state, proofRoot, command) {
 
 test("real local D1 applies 0000 through 0004, upgrades 0002 and 0003, and replays without drift", (t) => {
   assert.ok(existsSync(workspaceWrangler), "workspace Wrangler must exist");
-  const proofParent = fileURLToPath(
-    new URL("../../../../../../.aj-luxury-d1-proofs/", import.meta.url),
-  );
+  const proofParent = join(projectRoot, ".aj-luxury-d1-proofs");
   mkdirSync(proofParent, { recursive: true });
   const proofRoot = mkdtempSync(join(proofParent, "d02-"));
   assert.ok(!relative(workspaceRoot, proofRoot).startsWith(".."));

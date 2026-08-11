@@ -42,6 +42,8 @@ next-env.d.ts
 /work/
 /tmp/
 /output/
+/migration-staging/
+/.aj-luxury-d1-proofs/
 /inputs_assets/
 /deliverables/
 /docs/internal/evidence/
