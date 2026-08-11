@@ -4,7 +4,7 @@ import {
   isPlainRecord,
   MAX_ITEM_COUNT,
   MAX_VALUE_MINOR,
-  normalizeAnalyticsCatalog,
+  readCanonicalAnalyticsCatalog,
   sanitizeIdentifier,
   sanitizePositiveInteger,
 } from "./catalog-policy.ts";
@@ -45,7 +45,6 @@ type SanitizedClientInput = {
 function sanitizeClientInput(
   name: unknown,
   input: unknown,
-  policy: AnalyticsDataPolicy | unknown,
 ): SanitizedClientInput | null {
   try {
     if (
@@ -55,7 +54,7 @@ function sanitizeClientInput(
     ) {
       return null;
     }
-    const catalog = normalizeAnalyticsCatalog(policy);
+    const catalog = readCanonicalAnalyticsCatalog();
     if (!catalog) return null;
 
     switch (name as ClientAnalyticsEventName) {
@@ -143,7 +142,7 @@ export function prepareClientAnalyticsEvent(
 ): ClientAnalyticsEvent | null {
   try {
     const occurredAt = safeTimestamp(clock);
-    const sanitized = sanitizeClientInput(name, input, policy);
+    const sanitized = sanitizeClientInput(name, input);
     const sanitizedContext = sanitizeAnalyticsContext(context, policy);
     if (!occurredAt || !sanitized || !sanitizedContext) return null;
     return {

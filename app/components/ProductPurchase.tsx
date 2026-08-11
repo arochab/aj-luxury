@@ -275,7 +275,7 @@ export default function ProductPurchase({
       {added && (
         <Link
           className={styles.cartLink}
-          href={`/cart?variant=variant_boxer_${product.slug}_${selectedSize?.toLowerCase()}`}
+          href={`/cart?variant=${product.commerceProductId}-${selectedSize}`}
         >
           {t("product.viewCart")}
         </Link>

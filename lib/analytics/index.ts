@@ -12,7 +12,6 @@ export {
   ANALYTICS_UTM_KEYS,
 } from "./shared.ts";
 export type {
-  AnalyticsCatalogVariant,
   AnalyticsContextInput,
   AnalyticsDataPolicy,
   AnalyticsLineInput,

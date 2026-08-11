@@ -2,13 +2,15 @@
 
 Statut : `MODULE PROPOSÉ — TEST UNIQUEMENT — NON INTÉGRÉ — AUCUNE MESURE ACTIVE`
 
-Date : 10 août 2026
+Date : 11 août 2026
 
 Responsable de l’intégration : Adam CHABBI
 
 Cible d’intégration frontend finale : `c7362d3d04af6fc6070a15112a1fdff7878e09bd`
 
 Base du worktree Analytics isolé : `c7362d3d04af6fc6070a15112a1fdff7878e09bd`
+
+Base gelée de la correction P1 : `e972daf3bdc62adff7d97b1ebc9763069baed184`
 
 ## Verdict
 
@@ -42,17 +44,18 @@ attente.
 | `product_view` | Navigateur après consentement | `productId`, `variantId` facultatif | Identifiants validés par le catalogue | Intérêt produit |
 | `add_to_cart` | Navigateur après consentement | `productId`, `variantId`, `quantity` | Prix, valeur et devise dérivés de la variante gouvernée | Intention d’achat |
 | `checkout_started` | Navigateur après consentement | Lignes `variantId` et `quantity` | Nombre d’articles, valeur et devise dérivés du catalogue | Friction panier vers paiement |
-| `order_paid` | Serveur après paiement vérifié et consentement conservé | Snapshot payé vérifié, montants réconciliés et clé d’idempotence | Nombre d’articles, total payé et devise, sans identifiant de commande | Conversion et revenu fiables |
+| `order_paid` | Futur serveur commerce canonique | Aucune entrée acceptée dans ce candidat | Rien : événement techniquement indisponible | Conversion et revenu fiables après intégration D1 |
 
-`order_paid` ne peut pas être appelé par l’index ni la façade client. Constantes,
-types, sanitization et entrée serveur résident dans des fichiers physiquement
-séparés du graphe client. L’entrée serveur utilise une résolution conditionnelle
-qui fait échouer un bundle ciblant le navigateur, plus une garde d’exécution. Sa
-source d’autorité future est le backend de paiement après vérification du
-statut payé.
+`order_paid` ne peut pas être appelé par l’index ni la façade client. Le candidat
+ne possède aucun recorder, validateur de snapshot, callback de stockage ou
+résultat de succès. Il conserve seulement un contrat serveur interne gelé qui
+déclare `unavailable` avec le blocker
+`canonical_commerce_d1_not_integrated`. Sa future autorité devra être la
+transaction payée de la D1 commerce canonique, une fois cette D1 réellement
+intégrée. Tous les fichiers serveur profonds font échouer un bundle navigateur.
 
-Bornes V3 : identifiants produit/variante présents dans la nomenclature catalogue
-injectée et limités à 64 caractères ; quantité et nombre d’articles de 1 à 99 ;
+Bornes V3 : identifiants produit/variante présents dans le catalogue commerce
+réel de cette branche et limités à 64 caractères ; quantité et nombre d’articles de 1 à 99 ;
 valeur en unité monétaire mineure de 1 à 100 000 000 ; devise sur trois lettres
 majuscules. Une valeur hors bornes ou inconnue fait rejeter l’événement complet.
 Chaque variante est liée à un seul produit, un prix unitaire et une devise. Un
@@ -106,9 +109,11 @@ jour des pages confidentialité/cookies avant toute activation.
   `analytics_inactive` ; cette garantie ne couvre pas un contrôleur de
   consentement tiers volontairement bloquant ;
 - contrat de préparation client dormant, non exporté par l’index et jamais
-  appelé par la façade inactive ;
+  appelé par la façade inactive ; il projette directement `launchVariants`,
+  sans fixture catalogue injectable ;
 - constantes et types client dans un graphe physique distinct du serveur ;
-- entrée serveur séparée et non réexportée pour `order_paid` ; la résolution
+- entrée serveur séparée et non réexportée pour `order_paid`, réduite à un
+  constat d’indisponibilité sans fonction d’acceptation ; la résolution
   conditionnelle donne explicitement priorité à `react-server`, `workerd`,
   `worker` et `node`, puis bloque `browser`, avec une garde d’exécution
   complémentaire ;
@@ -116,31 +121,31 @@ jour des pages confidentialité/cookies avant toute activation.
   réellement résolue en production, puis rejouées dans les tests de bundle ;
 - bundle navigateur réel de l’index construit par esbuild et inspecté durant la
   recette, plus inspection de tous les fichiers JavaScript du `dist/client`
-  final produit par Vinext ; tentative de bundle navigateur de l’entrée serveur
-  obligatoirement en échec ;
+  final produit par Vinext ; tentative de bundle navigateur de chacun des
+  fichiers serveur profonds obligatoirement en échec ;
 - aucun collecteur, callback, buffer ou dispatcher côté navigateur ;
-- outbox mémoire présente uniquement dans les tests serveur ;
-- politique injectée et fail-closed pour routes, référents, UTM, produits et
-  variantes ;
-- origine canonique HTTPS obligatoire et catalogue gouverné reliant chaque
-  variante à son produit, son prix et sa devise ;
+- aucune outbox, même simulée, et aucun callback de persistance injectable ;
+- politique injectée et fail-closed uniquement pour routes, référents et UTM ;
+- origine canonique HTTPS obligatoire et catalogue commerce réel reliant les
+  douze variantes `AJ-APO` à leur produit, leur prix de 2 999 centimes et EUR ;
 - validation d’exécution des noms, champs, formats, montants et quantités ;
 - sanitization centralisée des chemins, référents et UTM ;
-- snapshot payé vérifié : douze variantes `AJ-APO`, montants marchandise,
-  livraison, taxe, remise et total réconciliés avant émission ;
-- clé d’idempotence obligatoire et écriture atomique `storeOnce` avant toute
-  évacuation future ;
-- indisponibilité de l’outbox renvoyée sans prétendre que l’événement a été
-  enregistré.
+- contrat `order_paid` dormant et explicitement indisponible tant que la D1
+  commerce canonique n’est pas intégrée ;
+- aucune structure de snapshot ne peut être présentée comme « vérifiée » et
+  aucune fonction arbitraire ne peut simuler une persistance acceptée ;
+- typecheck Analytics sans exclusion et typecheck racine avec delta Lot 2 nul :
+  seuls les sept diagnostics historiques hors périmètre restent autorisés par
+  la preuve automatisée.
 
 Il n’existe volontairement aucun appel réseau, token, SDK, cookie analytics,
 table D1, endpoint de collecte ou branchement dans l’interface. Ce module reste
 une proposition isolée ; il ne constitue pas à lui seul le Lot 2 backend.
 
-L’idempotence durable n’est pas revendiquée dans ce candidat : le test utilise
-une mémoire locale, tandis que l’activation exigera une réclamation atomique en
-D1 et une stratégie transactionnelle de type outbox. Sans cette persistance,
-aucun `order_paid` ne doit être activé.
+L’idempotence durable n’est pas revendiquée dans ce candidat. Son schéma devra
+être conçu à partir de la D1 commerce canonique et de sa transaction de paiement,
+pas à partir d’un snapshot structurel ou d’une fausse outbox de test. Avant cette
+intégration, `order_paid` reste techniquement indisponible.
 
 ## Indicateurs du tableau de bord futur
 
@@ -171,20 +176,23 @@ de conservation restent à valider avant construction du tableau de bord.
 Le socle passe cette phase si :
 
 1. le bundle navigateur réel de l’index et le `dist/client` final Vinext ne
-   contiennent jamais `order_paid`, les marqueurs de snapshot payé ni l’outbox
-   serveur ;
-2. le bundle navigateur direct de l’entrée serveur échoue ;
+   contiennent jamais `order_paid`, le blocker D1 ni une outbox serveur ;
+2. le bundle navigateur direct de chacun des quatre fichiers serveur profonds
+   échoue ;
 3. la façade client ne possède aucun collecteur et laisse passer le prochain
    task sans exécuter un callback CPU hostile ;
 4. la façade reste inactive même avec consentement accordé ;
 5. `unknown` et `denied` restent fail-closed ;
-6. les douze variantes `AJ-APO`, leurs produits, prix et devise sont gouvernés ;
+6. les douze variantes `AJ-APO`, leurs produits, prix et devise proviennent du
+   catalogue commerce réel ;
 7. ajout panier et checkout dérivent leurs valeurs du catalogue ;
-8. `order_paid` exige un snapshot vérifié, arithmétiquement réconcilié et une
-   écriture outbox atomique par clé d’idempotence ;
+8. `order_paid` expose seulement un contrat interne `unavailable` et aucun
+   mécanisme ne peut accepter un snapshot ou une persistance injectée ;
 9. toute URL d’une origine différente de l’origine canonique est rejetée ;
 10. le code ne contient aucun transport réseau ni SDK fournisseur ;
-11. lint, build, test de types et suite complète restent verts.
+11. le typecheck ciblé reste vert et le typecheck racine ne contient aucun
+    diagnostic Lot 2 nouveau ;
+12. lint, build et suite complète restent verts.
 
 L’activation reste bloquée par le choix du fournisseur, la validation juridique
 et client des textes et durées, la connexion du backend commerce, une recette

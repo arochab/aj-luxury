@@ -10,6 +10,7 @@ export type ProductMedia = {
 
 export type Product = {
   slug: string;
+  commerceProductId: `AJ-APO-${"POU" | "ROS" | "LIL"}`;
   modelId: "boxer-aj-luxury";
   model: string;
   name: string;
@@ -57,6 +58,7 @@ const features = [
 export const products: Product[] = [
   {
     slug: "pourpre",
+    commerceProductId: "AJ-APO-POU",
     modelId: "boxer-aj-luxury",
     model: "Apollon",
     name: "Pourpre Impérial",
@@ -92,6 +94,7 @@ export const products: Product[] = [
   },
   {
     slug: "rose-pale",
+    commerceProductId: "AJ-APO-ROS",
     modelId: "boxer-aj-luxury",
     model: "Apollon",
     name: "Rose Velours",
@@ -126,6 +129,7 @@ export const products: Product[] = [
   },
   {
     slug: "lilas-bleu-clair",
+    commerceProductId: "AJ-APO-LIL",
     modelId: "boxer-aj-luxury",
     model: "Apollon",
     name: "Lilas Céleste",

@@ -10,7 +10,7 @@
     "build": "vinext build",
     "start": "vinext start",
     "deploy:preview": "npm run build && wrangler deploy --config dist/server/wrangler.json --name aj-luxury-preview",
-    "test": "npm run build && npm run test:analytics-types && node --experimental-strip-types --test tests/hero-video.test.mjs tests/motion-lifecycle.test.mjs tests/commerce-pricing.test.mjs tests/stock-privacy.test.mjs tests/analytics-foundation.test.mjs && node --test tests/i18n-dictionaries.test.mjs tests/i18n-provider.test.mjs tests/model-identity.test.mjs tests/product-gallery-layout.test.mjs tests/rendered-html.test.mjs",
+    "test": "npm run build && npm run test:analytics-types && node --experimental-strip-types --test tests/hero-video.test.mjs tests/motion-lifecycle.test.mjs tests/commerce-pricing.test.mjs tests/stock-privacy.test.mjs tests/analytics-foundation.test.mjs tests/root-typecheck-delta.test.mjs && node --test tests/i18n-dictionaries.test.mjs tests/i18n-provider.test.mjs tests/model-identity.test.mjs tests/product-gallery-layout.test.mjs tests/rendered-html.test.mjs",
     "test:analytics-types": "tsc --project tsconfig.analytics.json",
     "lint": "eslint app lib tests --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate"
@@ -56,6 +56,14 @@
       "node": "./lib/analytics/server-runtime-guard.ts",
       "browser": "./lib/analytics/server-browser-forbidden.ts",
       "default": "./lib/analytics/server-runtime-guard.ts"
+    },
+    "#analytics-server-runtime": {
+      "react-server": "./lib/analytics/runtime-allowed.ts",
+      "workerd": "./lib/analytics/runtime-allowed.ts",
+      "worker": "./lib/analytics/runtime-allowed.ts",
+      "node": "./lib/analytics/runtime-allowed.ts",
+      "browser": "./lib/analytics/server-browser-forbidden.ts",
+      "default": "./lib/analytics/runtime-allowed.ts"
     }
   },
   "type": "module"

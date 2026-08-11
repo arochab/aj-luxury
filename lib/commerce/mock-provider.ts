@@ -147,7 +147,7 @@ export const mockCommerceProvider: CommerceProvider = {
 };
 
 export async function createDemoCart(
-  variantId = "variant_boxer_pourpre_m",
+  variantId = "AJ-APO-POU-M",
 ) {
   const emptyCart = await mockCommerceProvider.createCart();
   return mockCommerceProvider.addCartLine(emptyCart, variantId, 1);

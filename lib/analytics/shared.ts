@@ -9,19 +9,9 @@ export const ANALYTICS_UTM_KEYS = [
 export type AnalyticsUtmKey = (typeof ANALYTICS_UTM_KEYS)[number];
 export type AnalyticsUtm = Partial<Record<AnalyticsUtmKey, string>>;
 
-export type AnalyticsCatalogVariant = Readonly<{
-  variantId: string;
-  productId: string;
-  unitPriceMinor: number;
-  currency: string;
-}>;
-
 export type AnalyticsDataPolicy = Readonly<{
   canonicalOrigin: string;
   allowedPaths: readonly string[];
-  catalog: Readonly<{
-    variants: readonly AnalyticsCatalogVariant[];
-  }>;
   attribution: Readonly<{
     allowedReferrerOrigins: readonly string[];
     allowedUtmValues: Readonly<

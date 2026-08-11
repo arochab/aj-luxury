@@ -1,19 +1,20 @@
 import assert from "node:assert/strict";
 import { readdir, readFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 import { build } from "esbuild";
 import { resolveConfig } from "vite";
 import * as analyticsPublicApi from "../lib/analytics/index.ts";
+import * as analyticsServerApi from "../lib/analytics/server.ts";
 import { prepareClientAnalyticsEvent } from "../lib/analytics/client-preparation.ts";
 import {
   sanitizeAnalyticsContext,
   sanitizeAnalyticsPath,
   sanitizeReferrerOrigin,
 } from "../lib/analytics/context-sanitization.ts";
-import { createServerOrderPaidEmitter } from "../lib/analytics/server.ts";
+import { launchVariants } from "../lib/commerce/catalog.ts";
 
 const {
   ANALYTICS_SCHEMA_VERSION,
@@ -77,19 +78,13 @@ const COLORS = [
   },
 ];
 const SIZES = ["S", "M", "L", "XL"];
-const AJ_APO_VARIANTS = COLORS.flatMap((color) =>
-  SIZES.map((size) => ({
-    variantId: `AJ-APO-${color.code}-${size}`,
-    productId: color.productId,
-    unitPriceMinor: 2999,
-    currency: "EUR",
-  })),
+const EXPECTED_AJ_APO_VARIANT_IDS = COLORS.flatMap((color) =>
+  SIZES.map((size) => `${color.productId}-${size}`),
 );
 
 const TEST_POLICY = {
   canonicalOrigin: "https://ajluxurystore.com",
   allowedPaths: ["/", ...COLORS.map((color) => color.path), "/checkout"],
-  catalog: { variants: AJ_APO_VARIANTS },
   attribution: {
     allowedReferrerOrigins: [
       "https://instagram.com",
@@ -103,54 +98,29 @@ const TEST_POLICY = {
   },
 };
 
-function createMemoryOutbox() {
-  const keys = new Set();
-  const records = [];
-  return {
-    keys,
-    records,
-    storeOnce(record) {
-      if (keys.has(record.idempotencyKey)) return "duplicate";
-      keys.add(record.idempotencyKey);
-      records.push(structuredClone(record));
-      return "stored";
-    },
-  };
-}
-
-function createPaidSnapshot(overrides = {}) {
-  return {
-    snapshotVersion: 1,
-    verification: "payment-provider-webhook-verified",
-    idempotencyKey: "stripe:evt_paid_0001",
-    paidAt: "2026-08-10T12:05:00.000Z",
-    lines: [
-      { variantId: "AJ-APO-POU-S", quantity: 2 },
-      { variantId: "AJ-APO-ROS-M", quantity: 1 },
-    ],
-    amounts: {
-      merchandiseMinor: 8997,
-      shippingMinor: 500,
-      taxMinor: 0,
-      discountMinor: 0,
-      totalPaidMinor: 9497,
-      currency: "EUR",
-    },
-    ...overrides,
-  };
-}
-
-test("the real AJ-APO fixture contains exactly twelve governed variants", () => {
-  assert.equal(AJ_APO_VARIANTS.length, 12);
-  assert.equal(new Set(AJ_APO_VARIANTS.map((variant) => variant.variantId)).size, 12);
+test("the real commerce catalogue contains exactly twelve AJ-APO variants", () => {
+  assert.equal(launchVariants.length, 12);
+  assert.equal(new Set(launchVariants.map((variant) => variant.id)).size, 12);
   assert.deepEqual(
-    AJ_APO_VARIANTS.slice(0, 4).map((variant) => variant.variantId),
-    ["AJ-APO-POU-S", "AJ-APO-POU-M", "AJ-APO-POU-L", "AJ-APO-POU-XL"],
+    launchVariants.map((variant) => variant.id),
+    EXPECTED_AJ_APO_VARIANT_IDS,
+  );
+  assert.deepEqual(
+    [...new Set(launchVariants.map((variant) => variant.productId))],
+    COLORS.map((color) => color.productId),
   );
   assert.ok(
-    AJ_APO_VARIANTS.every(
-      (variant) => variant.unitPriceMinor === 2999 && variant.currency === "EUR",
+    launchVariants.every(
+      (variant) =>
+        variant.sku === variant.id &&
+        variant.id.startsWith(`${variant.productId}-`) &&
+        variant.price.amountCents === 2999 &&
+        variant.price.currency === "EUR",
     ),
+  );
+  assert.deepEqual(
+    [...new Set(launchVariants.map((variant) => variant.size))],
+    SIZES,
   );
 });
 
@@ -171,6 +141,7 @@ test("the public client schema contains only three browser events", () => {
     "utm_medium",
     "utm_campaign",
   ]);
+  assert.equal("ORDER_PAID_INTERNAL_CONTRACT" in analyticsPublicApi, false);
   assert.equal("createServerOrderPaidEmitter" in analyticsPublicApi, false);
 });
 
@@ -189,8 +160,7 @@ test("an actual browser bundle of the client index contains no paid-order author
   });
   const code = result.outputFiles.map((file) => file.text).join("\n");
   assert.doesNotMatch(code, /order_paid/);
-  assert.doesNotMatch(code, /payment-provider-webhook-verified/);
-  assert.doesNotMatch(code, /idempotencyKey/);
+  assert.doesNotMatch(code, /canonical_commerce_d1_not_integrated/);
 });
 
 test("the final Vinext client artifacts contain no paid-order or server-outbox code", async () => {
@@ -209,54 +179,78 @@ test("the final Vinext client artifacts contain no paid-order or server-outbox c
   ).join("\n");
   for (const forbidden of [
     /order_paid/,
-    /payment-provider-webhook-verified/,
-    /idempotencyKey/,
-    /outbox_unavailable/,
+    /canonical_commerce_d1_not_integrated/,
     /storeOnce/,
   ]) {
     assert.doesNotMatch(bundle, forbidden);
   }
 });
 
-test("the server entry is not bundleable for a browser target", async () => {
+test("every deep server file fails an actual browser bundle", async () => {
   const { client: conditions } = await resolveVinextProductionConditions();
-  await assert.rejects(
-    () =>
-      build({
-        absWorkingDir: projectRoot,
-        entryPoints: [join(analyticsRoot, "server.ts")],
-        bundle: true,
-        platform: "browser",
-        format: "esm",
-        conditions,
-        write: false,
-        logLevel: "silent",
-      }),
-    (error) =>
-      /analytics-server-entry-is-not-browser-bundleable/.test(String(error)),
+  const serverEntryPoints = (await listFilesRecursively(analyticsRoot)).filter(
+    (path) => /^server(?:-.+)?\.ts$/.test(basename(path)),
   );
+  assert.deepEqual(
+    serverEntryPoints.map((path) => basename(path)).sort(),
+    [
+      "server-browser-forbidden.ts",
+      "server-events.ts",
+      "server-runtime-guard.ts",
+      "server.ts",
+    ],
+  );
+
+  for (const entryPoint of serverEntryPoints) {
+    await assert.rejects(
+      () =>
+        build({
+          absWorkingDir: projectRoot,
+          entryPoints: [entryPoint],
+          bundle: true,
+          platform: "browser",
+          format: "esm",
+          conditions,
+          write: false,
+          logLevel: "silent",
+        }),
+      (error) =>
+        /analytics-server-entry-is-not-browser-bundleable/.test(String(error)),
+      `${basename(entryPoint)} unexpectedly bundled for a browser`,
+    );
+  }
 });
 
-test("the guarded server entry bundles for the actual Vinext SSR and RSC Worker targets", async () => {
+test("guarded server files bundle for the actual Vinext SSR and RSC Worker targets", async () => {
   const resolved = await resolveVinextProductionConditions();
-  for (const conditions of [resolved.ssr, resolved.rsc]) {
-    const result = await build({
-      absWorkingDir: projectRoot,
-      entryPoints: [join(analyticsRoot, "server.ts")],
-      bundle: true,
-      platform: "neutral",
-      format: "esm",
-      conditions,
-      treeShaking: true,
-      write: false,
-      logLevel: "silent",
-    });
-    const code = result.outputFiles.map((file) => file.text).join("\n");
-    assert.match(code, /order_paid/);
-    assert.doesNotMatch(
-      code,
-      /analytics-server-entry-is-not-browser-bundleable/,
-    );
+  const guardedEntryPoints = [
+    "server.ts",
+    "server-events.ts",
+    "server-runtime-guard.ts",
+  ].map((file) => join(analyticsRoot, file));
+
+  for (const entryPoint of guardedEntryPoints) {
+    for (const conditions of [resolved.ssr, resolved.rsc]) {
+      const result = await build({
+        absWorkingDir: projectRoot,
+        entryPoints: [entryPoint],
+        bundle: true,
+        platform: "neutral",
+        format: "esm",
+        conditions,
+        treeShaking: true,
+        write: false,
+        logLevel: "silent",
+      });
+      const code = result.outputFiles.map((file) => file.text).join("\n");
+      assert.doesNotMatch(
+        code,
+        /analytics-server-entry-is-not-browser-bundleable/,
+      );
+      if (basename(entryPoint) !== "server-runtime-guard.ts") {
+        assert.match(code, /order_paid/);
+      }
+    }
   }
 });
 
@@ -364,6 +358,44 @@ test("client preparation derives AJ-APO add-to-cart totals without collecting", 
   });
 });
 
+test("an injected fixture cannot override the commerce catalogue", () => {
+  const policyWithForgedCatalogue = {
+    ...TEST_POLICY,
+    catalog: { variants: [] },
+  };
+  const event = prepareClientAnalyticsEvent(
+    "add_to_cart",
+    {
+      productId: "AJ-APO-POU",
+      variantId: "AJ-APO-POU-S",
+      quantity: 1,
+    },
+    { url: "https://ajluxurystore.com/products/pourpre" },
+    policyWithForgedCatalogue,
+  );
+
+  assert.deepEqual(event?.payload, {
+    productId: "AJ-APO-POU",
+    variantId: "AJ-APO-POU-S",
+    quantity: 1,
+    valueMinor: 2999,
+    currency: "EUR",
+  });
+  assert.equal(
+    prepareClientAnalyticsEvent(
+      "add_to_cart",
+      {
+        productId: "AJ-FORGED",
+        variantId: "AJ-FORGED-XS",
+        quantity: 1,
+      },
+      { url: "https://ajluxurystore.com/products/pourpre" },
+      policyWithForgedCatalogue,
+    ),
+    null,
+  );
+});
+
 test("product and variant relationships reject mismatches and supplied totals", () => {
   assert.equal(
     prepareClientAnalyticsEvent(
@@ -381,8 +413,8 @@ test("product and variant relationships reject mismatches and supplied totals", 
         productId: "AJ-APO-POU",
         variantId: "AJ-APO-POU-S",
         quantity: 1,
-        valueMinor: 1,
-        currency: "USD",
+        valueMinor: 2999,
+        currency: "EUR",
       },
       { url: "https://ajluxurystore.com/products/pourpre" },
       TEST_POLICY,
@@ -454,90 +486,29 @@ test("canonical origin, referrer and governed UTM values remain strict", () => {
   );
 });
 
-test("a verified paid snapshot is aggregated into the outbox exactly once", async () => {
-  const outbox = createMemoryOutbox();
-  const server = createServerOrderPaidEmitter({
-    consent: createAnalyticsConsentController("granted"),
-    policy: TEST_POLICY,
-    storeOnce: outbox.storeOnce,
+test("order_paid is honestly unavailable until canonical commerce D1 exists", async () => {
+  assert.deepEqual(analyticsServerApi.ORDER_PAID_INTERNAL_CONTRACT, {
+    eventName: "order_paid",
+    availability: "unavailable",
+    blocker: "canonical_commerce_d1_not_integrated",
+    requiredAuthority: "canonical_commerce_d1_paid_order_transaction",
   });
-  const snapshot = createPaidSnapshot();
+  assert.ok(Object.isFrozen(analyticsServerApi.ORDER_PAID_INTERNAL_CONTRACT));
+  assert.deepEqual(Object.keys(analyticsServerApi), [
+    "ORDER_PAID_INTERNAL_CONTRACT",
+  ]);
 
-  assert.deepEqual(await server.record(snapshot), { accepted: true });
-  assert.deepEqual(await server.record(snapshot), {
-    accepted: false,
-    reason: "duplicate_snapshot",
-  });
-  assert.equal(outbox.records.length, 1);
-  assert.deepEqual(outbox.records[0].event, {
-    schemaVersion: 3,
-    name: "order_paid",
-    occurredAt: "2026-08-10T12:05:00.000Z",
-    context: { path: "/checkout" },
-    payload: { itemCount: 3, valueMinor: 9497, currency: "EUR" },
-  });
-  assert.doesNotMatch(
-    JSON.stringify(outbox.records[0].event),
-    /idempotency|stripe|variantId|orderId|email|customer/i,
-  );
-});
-
-test("unverified or inconsistent snapshots fail before the outbox", async () => {
-  const outbox = createMemoryOutbox();
-  const server = createServerOrderPaidEmitter({
-    consent: createAnalyticsConsentController("granted"),
-    policy: TEST_POLICY,
-    storeOnce: outbox.storeOnce,
-  });
-
-  for (const snapshot of [
-    createPaidSnapshot({ verification: "browser-confirmed" }),
-    createPaidSnapshot({
-      amounts: {
-        ...createPaidSnapshot().amounts,
-        merchandiseMinor: 1,
-      },
-    }),
-    createPaidSnapshot({
-      amounts: {
-        ...createPaidSnapshot().amounts,
-        totalPaidMinor: 1,
-      },
-    }),
-  ]) {
-    assert.deepEqual(await server.record(snapshot), {
-      accepted: false,
-      reason: "invalid_snapshot",
-    });
-  }
-  assert.equal(outbox.keys.size, 0);
-  assert.equal(outbox.records.length, 0);
-});
-
-test("server paid-order recording remains consent gated and reports outbox failure", async () => {
-  const outbox = createMemoryOutbox();
-  const denied = createServerOrderPaidEmitter({
-    consent: createAnalyticsConsentController("unknown"),
-    policy: TEST_POLICY,
-    storeOnce: outbox.storeOnce,
-  });
-  assert.deepEqual(await denied.record(createPaidSnapshot()), {
-    accepted: false,
-    reason: "consent_not_granted",
-  });
-
-  const unavailable = createServerOrderPaidEmitter({
-    consent: createAnalyticsConsentController("granted"),
-    policy: TEST_POLICY,
-    storeOnce() {
-      throw new Error("D1 unavailable");
-    },
-  });
-  assert.deepEqual(await unavailable.record(createPaidSnapshot()), {
-    accepted: false,
-    reason: "outbox_unavailable",
-  });
-  assert.equal(outbox.records.length, 0);
+  const serverSources = (
+    await Promise.all(
+      (await listFilesRecursively(analyticsRoot))
+        .filter((path) => /^server(?:-.+)?\.ts$/.test(basename(path)))
+        .map((path) => readFile(path, "utf8")),
+    )
+  ).join("\n");
+  assert.doesNotMatch(serverSources, /storeOnce/);
+  assert.doesNotMatch(serverSources, /accepted\s*:\s*true/);
+  assert.doesNotMatch(serverSources, /VerifiedPaidOrderSnapshot/);
+  assert.doesNotMatch(serverSources, /payment-provider-webhook-verified/);
 });
 
 async function listFilesRecursively(directory) {
