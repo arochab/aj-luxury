@@ -1,98 +1,50 @@
-# vinext-starter
+# AJ Luxury
 
-A clean full-stack starter running on
-[vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and
-Drizzle support.
+Source privée et gouvernée du site e-commerce AJ Luxury.
 
-## Prerequisites
+## État courant
 
-- Node.js `>=22.13.0`
+- Production canonique : [ajluxurystore.com](https://ajluxurystore.com)
+- Domaine `.fr` : réservation défensive, hors chemin critique
+- Production : lecture seule ; aucune modification sans validation d'Adam CHABBI puis de Jérémy SCHEPPLER
+- Backend Lot 2 : développé sur des branches dédiées, non connecté et non déployé tant que les gates ne sont pas passés
+- Shopify : explicitement exclu
 
-## Quick Start
+Les règles permanentes sont dans [`AGENTS.md`](./AGENTS.md). La baseline et l'état détaillé restent dans [`docs/PROJECT-BASELINE.md`](./docs/PROJECT-BASELINE.md) et [`docs/LOT-2-IMPLEMENTATION-STATUS.md`](./docs/LOT-2-IMPLEMENTATION-STATUS.md).
+
+## Dépôts GitHub
+
+- Code, tests, migrations et documentation gouvernée : `arochab/aj-luxury`
+- Contrats, preuves, voix et médias sources : [`arochab/aj-luxury-private-vault`](https://github.com/arochab/aj-luxury-private-vault), accès privé uniquement
+
+Les données client sensibles ne doivent jamais être ajoutées au dépôt code. Elles sont conservées sous forme d'archives privées avec manifeste et hashes dans le coffre séparé.
+
+## Démarrage local
+
+Prérequis : Node.js `>=22.13.0`.
 
 ```bash
-npm install
-npm run dev
-npm run build
+git clone https://github.com/arochab/aj-luxury.git
+cd aj-luxury
+npm ci
+npm run lint
+npm test
 ```
 
-This starter does not use `wrangler.jsonc`.
+`npm test` exécute le build puis les tests de non-régression. Les branches Lot 2 disposent de tests supplémentaires propres à leur périmètre.
 
-## Included Shape
+## Branches importantes au gel GitHub
 
-- edit site code under `app/`
-- `.openai/hosting.json` declares optional Sites D1 and R2 bindings
-- `vite.config.ts` simulates declared bindings for local development
-- `db/schema.ts` starts intentionally empty
-- `examples/d1/` contains an optional D1 example surface
-- `drizzle.config.ts` supports local migration generation when needed
+- `main` : baseline gouvernée du frontend validé
+- `candidate/hero-v4-2026-08-10` : candidat vidéo d'accueil validé
+- `codex/lot2-integrated-i06-20260811` : intégration Lot 2 actuellement acceptée comme fondation
+- `codex/lot2-customer-journey-demo-20260811` : démonstration locale isolée, données fictives uniquement
+- `codex/lot2-d03-fulfillment-20260811` : travail fulfillment conservé en WIP, non approuvé pour production
 
-## Workspace Auth Headers
+Les autres branches historiques sont conservées sur GitHub pour traçabilité. Elles ne deviennent pas automatiquement des sources de vérité.
 
-OpenAI workspace sites can read the current user's email from
-`oai-authenticated-user-email`.
+## Déploiement
 
-SIWC-authenticated workspace sites may also receive
-`oai-authenticated-user-full-name` when the user's SIWC profile has a non-empty
-`name` claim. The full-name value is percent-encoded UTF-8 and is accompanied by
-`oai-authenticated-user-full-name-encoding: percent-encoded-utf-8`.
+Le dépôt GitHub est la source de collaboration et de reprise. Le remote `sites-origin` reste le canal technique d'hébergement. Un push GitHub ne déploie rien en production.
 
-Treat the full name as optional and fall back to email when it is absent:
-
-```tsx
-import { headers } from "next/headers";
-
-export default async function Home() {
-  const requestHeaders = await headers();
-  const email = requestHeaders.get("oai-authenticated-user-email");
-  const encodedFullName = requestHeaders.get("oai-authenticated-user-full-name");
-  const fullName =
-    encodedFullName &&
-    requestHeaders.get("oai-authenticated-user-full-name-encoding") ===
-      "percent-encoded-utf-8"
-      ? decodeURIComponent(encodedFullName)
-      : null;
-
-  const displayName = fullName ?? email;
-  // ...
-}
-```
-
-## Optional Dispatch-Owned ChatGPT Sign-In
-
-Import the ready-to-use helpers from `app/chatgpt-auth.ts` when the site needs
-optional or required ChatGPT sign-in:
-
-- Use `getChatGPTUser()` for optional signed-in UI.
-- Use `requireChatGPTUser(returnTo)` for server-rendered pages that should send
-  anonymous visitors through Sign in with ChatGPT.
-- Use `chatGPTSignInPath(returnTo)` and `chatGPTSignOutPath(returnTo)` for
-  browser links or actions.
-- Pass a same-origin relative `returnTo` path for the destination after sign-in
-  or sign-out. The helper validates and safely encodes it.
-- Mark protected pages with `export const dynamic = "force-dynamic"` because
-  they depend on per-request identity headers.
-
-Dispatch owns `/signin-with-chatgpt`, `/signout-with-chatgpt`, `/callback`, the
-OAuth cookies, and identity header injection. Do not implement app routes for
-those reserved paths. Routes that do not import and call the helper remain
-anonymous-compatible.
-
-SIWC establishes identity only; it does not prove workspace membership. Use the
-Sites hosting platform's access policy controls for workspace-wide restrictions,
-or enforce explicit server-side membership or allowlist checks.
-
-Use SIWC for account pages, user-specific dashboards, saved records, and write
-actions tied to the current ChatGPT user. Leave public content anonymous.
-
-## Useful Commands
-
-- `npm run dev`: start local development
-- `npm run build`: verify the vinext build output
-- `npm test`: build the starter and verify its rendered loading skeleton
-- `npm run db:generate`: generate Drizzle migrations after schema changes
-
-## Learn More
-
-- [vinext Documentation](https://github.com/cloudflare/vinext)
-- [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
+Avant toute promotion : build, lint, tests, revue sécurité, validation d'Adam puis validation de Jérémy, avec rollback documenté.
