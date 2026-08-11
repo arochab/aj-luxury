@@ -172,9 +172,22 @@ test("recognizes only launch zones and blocks special territories", () => {
     checkoutEnabled: false,
     reason: "carrier-and-rate-configuration-pending",
   });
-  assert.equal(resolveLaunchShippingScope({ countryCode: "DE" }).zone, "EU");
-  assert.equal(resolveLaunchShippingScope({ countryCode: "GB" }).zone, "UK");
-  assert.equal(resolveLaunchShippingScope({ countryCode: "US", regionCode: "CA" }).zone, "US");
+  assert.equal(
+    resolveLaunchShippingScope({ countryCode: "DE", postalCode: "10115" }).zone,
+    "EU",
+  );
+  assert.equal(
+    resolveLaunchShippingScope({ countryCode: "GB", postalCode: "SW1A 1AA" }).zone,
+    "UK",
+  );
+  assert.equal(
+    resolveLaunchShippingScope({
+      countryCode: "US",
+      postalCode: "90210",
+      regionCode: "CA",
+    }).zone,
+    "US",
+  );
   assert.equal(
     resolveLaunchShippingScope({ countryCode: "US" }).reason,
     "invalid-address-input",
@@ -183,13 +196,20 @@ test("recognizes only launch zones and blocks special territories", () => {
     resolveLaunchShippingScope({ countryCode: "US", regionCode: "XX" }).reason,
     "invalid-address-input",
   );
-  assert.equal(resolveLaunchShippingScope({ countryCode: "CA" }).zone, "CA");
+  assert.equal(
+    resolveLaunchShippingScope({ countryCode: "CA", postalCode: "K1A 0B1" }).zone,
+    "CA",
+  );
   assert.equal(
     resolveLaunchShippingScope({ countryCode: "FR", postalCode: "97100" }).reason,
     "special-territory-needs-explicit-validation",
   );
   assert.equal(
-    resolveLaunchShippingScope({ countryCode: "US", regionCode: "PR" }).reason,
+    resolveLaunchShippingScope({
+      countryCode: "US",
+      postalCode: "90210",
+      regionCode: "PR",
+    }).reason,
     "special-territory-needs-explicit-validation",
   );
   assert.equal(
@@ -218,7 +238,11 @@ test("recognizes only launch zones and blocks special territories", () => {
   }
   for (const regionCode of ["AA", "AE", "AP"]) {
     assert.equal(
-      resolveLaunchShippingScope({ countryCode: "US", regionCode }).reason,
+      resolveLaunchShippingScope({
+        countryCode: "US",
+        postalCode: "90210",
+        regionCode,
+      }).reason,
       "special-territory-needs-explicit-validation",
     );
   }
@@ -231,14 +255,41 @@ test("recognizes only launch zones and blocks special territories", () => {
 });
 
 test("preserves the complete launch geography and 38 closed territory cases", () => {
-  const euCountries = [
-    "AT", "BE", "BG", "HR", "CY", "CZ", "DE", "DK", "EE",
-    "ES", "FI", "FR", "GR", "HU", "IE", "IT", "LT", "LU",
-    "LV", "MT", "NL", "PL", "PT", "RO", "SE", "SI", "SK",
+  const euAddresses = [
+    ["AT", "1010"],
+    ["BE", "1000"],
+    ["BG", "1000"],
+    ["HR", "10000"],
+    ["CY", "1010"],
+    ["CZ", "110 00"],
+    ["DE", "10115"],
+    ["DK", "1000"],
+    ["EE", "10111"],
+    ["ES", "28001"],
+    ["FI", "00100"],
+    ["FR", "75001"],
+    ["GR", "10558"],
+    ["HU", "1011"],
+    ["IE", "D02 X285"],
+    ["IT", "00118"],
+    ["LT", "LT-01100"],
+    ["LU", "1111"],
+    ["LV", "LV-1050"],
+    ["MT", "VLT 1117"],
+    ["NL", "1012 AB"],
+    ["PL", "00-001"],
+    ["PT", "1000-001"],
+    ["RO", "010011"],
+    ["SE", "111 20"],
+    ["SI", "SI-1000"],
+    ["SK", "811 01"],
   ];
-  assert.equal(euCountries.length, 27);
-  for (const countryCode of euCountries) {
-    assert.equal(resolveLaunchShippingScope({ countryCode }).zone, "EU");
+  assert.equal(euAddresses.length, 27);
+  for (const [countryCode, postalCode] of euAddresses) {
+    assert.equal(
+      resolveLaunchShippingScope({ countryCode, postalCode }).zone,
+      "EU",
+    );
   }
 
   const usStatesAndDc = [
@@ -252,12 +303,22 @@ test("preserves the complete launch geography and 38 closed territory cases", ()
   assert.equal(usStatesAndDc.length, 51);
   for (const regionCode of usStatesAndDc) {
     assert.equal(
-      resolveLaunchShippingScope({ countryCode: "US", regionCode }).zone,
+      resolveLaunchShippingScope({
+        countryCode: "US",
+        postalCode: "10001",
+        regionCode,
+      }).zone,
       "US",
     );
   }
-  assert.equal(resolveLaunchShippingScope({ countryCode: "GB" }).zone, "UK");
-  assert.equal(resolveLaunchShippingScope({ countryCode: "CA" }).zone, "CA");
+  assert.equal(
+    resolveLaunchShippingScope({ countryCode: "GB", postalCode: "SW1A 1AA" }).zone,
+    "UK",
+  );
+  assert.equal(
+    resolveLaunchShippingScope({ countryCode: "CA", postalCode: "K1A 0B1" }).zone,
+    "CA",
+  );
 
   const specialTerritoryCases = [
     ...[
@@ -268,7 +329,7 @@ test("preserves the complete launch geography and 38 closed territory cases", ()
       (postalCode) => ({ countryCode: "GB", postalCode }),
     ),
     ...["AA", "AE", "AP", "AS", "GU", "MP", "PR", "UM", "VI"].map(
-      (regionCode) => ({ countryCode: "US", regionCode }),
+      (regionCode) => ({ countryCode: "US", postalCode: "90210", regionCode }),
     ),
     { countryCode: "GR", postalCode: "63086" },
     { countryCode: "GR", postalCode: "GR-63086" },
@@ -290,6 +351,148 @@ test("preserves the complete launch geography and 38 closed territory cases", ()
       resolveLaunchShippingScope(address).reason,
       "special-territory-needs-explicit-validation",
     );
+  }
+});
+
+test("requires a postal code for every launch country and a region for the US", () => {
+  const launchCountryCodes = [
+    "AT", "BE", "BG", "HR", "CY", "CZ", "DE", "DK", "EE",
+    "ES", "FI", "FR", "GR", "HU", "IE", "IT", "LT", "LU",
+    "LV", "MT", "NL", "PL", "PT", "RO", "SE", "SI", "SK",
+    "GB", "CA", "US",
+  ];
+
+  for (const countryCode of launchCountryCodes) {
+    const address = countryCode === "US"
+      ? { countryCode, regionCode: "CA" }
+      : { countryCode };
+    assert.deepEqual(resolveLaunchShippingScope(address), {
+      inScope: false,
+      zone: null,
+      checkoutEnabled: false,
+      reason: "invalid-address-input",
+    });
+  }
+
+  for (const address of [
+    { countryCode: "US", postalCode: "90210" },
+    { countryCode: "US", regionCode: "PR" },
+    { countryCode: "US", regionCode: "AA" },
+    { countryCode: "US", postalCode: "90210", regionCode: "XX" },
+    { countryCode: "US", postalCode: "00601", regionCode: "XX" },
+    { countryCode: "US", postalCode: "9021", regionCode: "CA" },
+  ]) {
+    assert.equal(
+      resolveLaunchShippingScope(address).reason,
+      "invalid-address-input",
+    );
+  }
+  assert.equal(
+    resolveLaunchShippingScope({
+      countryCode: "CA",
+      postalCode: undefined,
+    }).reason,
+    "invalid-address-input",
+  );
+});
+
+test("blocks US territory and military ZIP ranges independently of region", () => {
+  const excludedPostalCodes = [
+    "00601",
+    "00799",
+    "00801",
+    "00999",
+    "09000",
+    "09899",
+    "34000",
+    "96200",
+    "96699",
+    "96799",
+    "96898",
+    "96900",
+    "96999",
+    "00601-1234",
+    "96799-9999",
+    "96898-1234",
+    "96950-1234",
+  ];
+  for (const postalCode of excludedPostalCodes) {
+    assert.deepEqual(
+      resolveLaunchShippingScope({
+        countryCode: "US",
+        postalCode,
+        regionCode: "CA",
+      }),
+      {
+        inScope: false,
+        zone: null,
+        checkoutEnabled: false,
+        reason: "special-territory-needs-explicit-validation",
+      },
+    );
+  }
+
+  for (const postalCode of [
+    "00599", "01000", "08999", "09900", "33999", "34100",
+    "96199", "96798", "96800", "97000",
+  ]) {
+    assert.equal(
+      resolveLaunchShippingScope({
+        countryCode: "US",
+        postalCode,
+        regionCode: "CA",
+      }).zone,
+      "US",
+    );
+  }
+});
+
+test("enforces plausible ASCII postal syntax without claiming address existence", () => {
+  const validPostalCases = [
+    [{ countryCode: "CA", postalCode: "K1A 0B1" }, "CA"],
+    [{ countryCode: "CA", postalCode: "h0h0h0" }, "CA"],
+    [{ countryCode: "IE", postalCode: "D02 X285" }, "EU"],
+    [{ countryCode: "IE", postalCode: "d6wf2h3" }, "EU"],
+    [{ countryCode: "NL", postalCode: "1012 AB" }, "EU"],
+    [{ countryCode: "NL", postalCode: "1012ab" }, "EU"],
+    [{ countryCode: "GB", postalCode: "SW1A 1AA" }, "UK"],
+    [{ countryCode: "GB", postalCode: "ec1a1bb" }, "UK"],
+    [{ countryCode: "GB", postalCode: "GIR 0AA" }, "UK"],
+  ];
+  for (const [address, zone] of validPostalCases) {
+    const decision = resolveLaunchShippingScope(address);
+    assert.equal(decision.zone, zone);
+    assert.equal(decision.checkoutEnabled, false);
+  }
+
+  const invalidPostalCases = [
+    { countryCode: "CA", postalCode: "K1D 0A0" },
+    { countryCode: "CA", postalCode: "k1d0a0" },
+    { countryCode: "CA", postalCode: "K1A 0F0" },
+    { countryCode: "CA", postalCode: "k1a0f0" },
+    { countryCode: "IE", postalCode: "123 4567" },
+    { countryCode: "IE", postalCode: "1234567" },
+    { countryCode: "IE", postalCode: "B12 C345" },
+    { countryCode: "NL", postalCode: "0000 AA" },
+    { countryCode: "NL", postalCode: "0000AA" },
+    { countryCode: "NL", postalCode: "0000 aa" },
+    { countryCode: "NL", postalCode: "1234 SA" },
+    { countryCode: "NL", postalCode: "1234 sd" },
+    { countryCode: "NL", postalCode: "1234SS" },
+    { countryCode: "GB", postalCode: "ZZ1 1ZZ" },
+    { countryCode: "GB", postalCode: "zz1 1zz" },
+    { countryCode: "GB", postalCode: "ZZ11ZZ" },
+    { countryCode: "GB", postalCode: "QV1 1AA" },
+    { countryCode: "GB", postalCode: "AI1 1AA" },
+    { countryCode: "GB", postalCode: "EC1A 1CI" },
+  ];
+  for (const address of invalidPostalCases) {
+    assert.deepEqual(resolveLaunchShippingScope(address), {
+      inScope: false,
+      zone: null,
+      checkoutEnabled: false,
+      reason: "invalid-address-input",
+    });
   }
 });
 

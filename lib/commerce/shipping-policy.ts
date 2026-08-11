@@ -150,7 +150,7 @@ const postalCodePatterns: Readonly<Record<string, RegExp>> = Object.freeze({
   AT: /^\d{4}$/,
   BE: /^\d{4}$/,
   BG: /^\d{4}$/,
-  CA: /^[ABCEGHJ-NPRSTVXY]\d[A-Z][ -]?\d[A-Z]\d$/i,
+  CA: /^[ABCEGHJKLMNPRSTVXY]\d[ABCEGHJKLMNPRSTVWXYZ][ -]?\d[ABCEGHJKLMNPRSTVWXYZ]\d$/i,
   CY: /^\d{4}$/,
   CZ: /^\d{3} ?\d{2}$/,
   DE: /^\d{5}$/,
@@ -159,17 +159,17 @@ const postalCodePatterns: Readonly<Record<string, RegExp>> = Object.freeze({
   ES: /^\d{5}$/,
   FI: /^\d{5}$/,
   FR: /^\d{5}$/,
-  GB: /^(?:GIR ?0AA|(?:[A-Z]{1,2}\d[A-Z\d]?|[A-Z]{1,2}\d{1,2}) ?\d[A-Z]{2})$/i,
+  GB: /^(?:GIR ?0AA|[A-PR-UWYZ](?:\d{1,2}|[A-HK-Y]\d{1,2}|\d[A-HJKPSTUW]|[A-HK-Y]\d[ABEHMNPRV-Y]) ?\d[ABD-HJLNP-UW-Z]{2})$/i,
   GR: /^(?:GR-?)?\d{5}$/i,
   HR: /^\d{5}$/,
   HU: /^\d{4}$/,
-  IE: /^[A-Z0-9]{3} ?[A-Z0-9]{4}$/i,
+  IE: /^(?:D6W|[AC-FHKNPRTV-Y]\d{2}) ?[0-9AC-FHKNPRTV-Y]{4}$/i,
   IT: /^\d{5}$/,
   LT: /^(?:LT-?)?\d{5}$/i,
   LU: /^\d{4}$/,
   LV: /^(?:LV-?)?\d{4}$/i,
   MT: /^[A-Z]{3} ?\d{4}$/i,
-  NL: /^\d{4} ?[A-Z]{2}$/i,
+  NL: /^[1-9]\d{3} ?(?!SA|SD|SS)[A-Z]{2}$/i,
   PL: /^\d{2}-?\d{3}$/,
   PT: /^\d{4}-?\d{3}$/,
   RO: /^\d{6}$/,
@@ -178,6 +178,10 @@ const postalCodePatterns: Readonly<Record<string, RegExp>> = Object.freeze({
   SK: /^\d{3} ?\d{2}$/,
   US: /^\d{5}(?:-\d{4})?$/,
 });
+
+// PR/VI, military mail, American Samoa, US minor islands and 969xx Pacific areas.
+const usSpecialPostalCodePattern =
+  /^(?:(?:00[6-9]|09[0-8]|340|96[2-6]|969)\d{2}|96799|96898)(?:\d{4})?$/;
 
 function normalizePostalCode(
   value: string | undefined,
@@ -265,7 +269,10 @@ function isSpecialTerritory(
   }
 
   if (country === "US") {
-    return region !== null && usSpecialRegions.has(region);
+    return (
+      (region !== null && usSpecialRegions.has(region)) ||
+      usSpecialPostalCodePattern.test(postal)
+    );
   }
 
   if (country === "GR") {
@@ -295,6 +302,10 @@ function isSpecialTerritory(
   return false;
 }
 
+/**
+ * Validates launch-scope syntax and known territorial exclusions only.
+ * Address existence and postal/region matching require future carrier validation.
+ */
 export function resolveLaunchShippingScope(
   input: ShippingAddressScopeInput,
 ): ShippingScopeDecision;
@@ -321,12 +332,24 @@ export function resolveLaunchShippingScope(
     };
   }
 
+  const zone = euCountryCodes.has(country)
+    ? "EU"
+    : country === "GB"
+      ? "UK"
+      : country === "US"
+        ? "US"
+        : country === "CA"
+          ? "CA"
+          : null;
   const postal = normalizePostalCode(snapshot.postalCode, country);
   const region = normalizeRegionCode(snapshot.regionCode);
   if (
     postal === null ||
+    (zone !== null && postal === undefined) ||
     (snapshot.regionCode !== undefined && region === null) ||
-    (country === "US" && region === null)
+    (country === "US" &&
+      (region === null ||
+        (!usLaunchRegions.has(region) && !usSpecialRegions.has(region))))
   ) {
     return {
       inScope: false,
@@ -344,25 +367,6 @@ export function resolveLaunchShippingScope(
       reason: "special-territory-needs-explicit-validation",
     };
   }
-
-  if (country === "US" && !usLaunchRegions.has(region!)) {
-    return {
-      inScope: false,
-      zone: null,
-      checkoutEnabled: false,
-      reason: "invalid-address-input",
-    };
-  }
-
-  const zone = euCountryCodes.has(country)
-    ? "EU"
-    : country === "GB"
-      ? "UK"
-      : country === "US"
-        ? "US"
-        : country === "CA"
-          ? "CA"
-          : null;
 
   if (!zone) {
     return {
