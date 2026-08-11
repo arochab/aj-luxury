@@ -1,5 +1,7 @@
 import type { AdminRole } from "./access-control.ts";
 import {
+  accessTokenHashContexts,
+  type AccessTokenHashContext,
   createOneTimeAccessToken,
   createOpaqueAccessToken,
   hashOneTimeAccessToken,
@@ -18,6 +20,7 @@ const durations = Object.freeze({
   guest: Object.freeze({ absoluteMs: 24 * 60 * 60_000, idleMs: 15 * 60_000 }),
   admin: Object.freeze({ absoluteMs: 8 * 60 * 60_000, idleMs: 15 * 60_000 }),
 });
+const accessRequestMinimumDurationMs = 120;
 
 export class IdentityAccessError extends Error {
   readonly code:
@@ -71,6 +74,15 @@ export interface ExternalMfaPort {
   verify(assertion: unknown): Promise<VerifiedExternalMfa | null>;
 }
 
+export interface IdentityBackgroundPort {
+  defer(task: () => Promise<void>): void;
+}
+
+export interface IdentityTimingPort {
+  monotonicMilliseconds(): number;
+  wait(milliseconds: number): Promise<void>;
+}
+
 const closedDeliveryPort: IdentityDeliveryPort = Object.freeze({
   async deliver() {
     throw new IdentityAccessError(
@@ -95,10 +107,32 @@ const closedMfaPort: ExternalMfaPort = Object.freeze({
   },
 });
 
+const closedBackgroundPort: IdentityBackgroundPort = Object.freeze({
+  defer() {
+    throw new IdentityAccessError(
+      "DEPENDENCY_UNAVAILABLE",
+      "Identity background execution is not configured.",
+    );
+  },
+});
+
+const systemTimingPort: IdentityTimingPort = Object.freeze({
+  monotonicMilliseconds() {
+    return performance.now();
+  },
+  async wait(milliseconds: number) {
+    await new Promise<void>((resolvePromise) => {
+      setTimeout(resolvePromise, milliseconds);
+    });
+  },
+});
+
 export const closedIdentityAccessPorts = Object.freeze({
   delivery: closedDeliveryPort,
   rateLimit: closedRateLimitPort,
   externalMfa: closedMfaPort,
+  background: closedBackgroundPort,
+  timing: systemTimingPort,
   available: false,
   reason: "external-identity-providers-not-configured",
 } as const);
@@ -158,11 +192,31 @@ function normalizeEmail(value: string): string {
 
 function isExpectedContention(error: unknown): boolean {
   const message = error instanceof Error ? error.message : "";
-  return /UNIQUE constraint failed|identity_.+_insert_not_allowed/.test(message);
+  return /UNIQUE constraint failed|identity_.+_(?:insert_not_allowed|consume_failed)/.test(
+    message,
+  );
 }
 
 function changed(result: { meta?: { changes?: number } } | undefined): number {
   return Number(result?.meta?.changes ?? 0);
+}
+
+type IdentitySessionKind = "customer" | "guest-order" | "admin";
+
+function sessionHashContext(kind: IdentitySessionKind): AccessTokenHashContext {
+  return kind === "customer"
+    ? accessTokenHashContexts.customerSession
+    : kind === "guest-order"
+      ? accessTokenHashContexts.guestOrderSession
+      : accessTokenHashContexts.adminSession;
+}
+
+function csrfHashContext(kind: IdentitySessionKind): AccessTokenHashContext {
+  return kind === "customer"
+    ? accessTokenHashContexts.customerCsrf
+    : kind === "guest-order"
+      ? accessTokenHashContexts.guestOrderCsrf
+      : accessTokenHashContexts.adminCsrf;
 }
 
 export class D1IdentityAccessStore {
@@ -171,6 +225,8 @@ export class D1IdentityAccessStore {
     delivery: IdentityDeliveryPort;
     rateLimit: IdentityRateLimitPort;
     externalMfa: ExternalMfaPort;
+    background: IdentityBackgroundPort;
+    timing: IdentityTimingPort;
   }>;
 
   constructor(
@@ -179,6 +235,8 @@ export class D1IdentityAccessStore {
       delivery: IdentityDeliveryPort;
       rateLimit: IdentityRateLimitPort;
       externalMfa: ExternalMfaPort;
+      background: IdentityBackgroundPort;
+      timing: IdentityTimingPort;
     }> = closedIdentityAccessPorts,
   ) {
     this.database = database;
@@ -193,76 +251,78 @@ export class D1IdentityAccessStore {
     const email = normalizeEmail(input.email);
     assertInternalId(input.challengeId, "Challenge id");
     assertTimestamp(input.now, "Now");
-
-    const discriminatorHash = await hashOneTimeAccessToken(email);
-    if (
-      !(await this.ports.rateLimit.take({
-        scope: "customer_sign_in",
-        discriminatorHash,
-        now: input.now,
-      }))
-    ) {
-      return genericAccessResponse;
-    }
-
-    const customer = await this.database
-      .prepare(
-        `SELECT id, email FROM customers
-        WHERE lower(email) = ? AND account_enabled_at IS NOT NULL
-          AND deleted_at IS NULL
-        LIMIT 1`,
-      )
-      .bind(email)
-      .first<{ id: string; email: string }>();
-    const challenge = await createOneTimeAccessToken(new Date(input.now));
-
-    await this.database
-      .prepare(
-        `INSERT INTO access_challenges (
-          id, purpose, customer_id, order_id, token_hash, expires_at,
-          dispatched_at, consumed_at, revoked_at, created_at
-        ) VALUES (?, 'customer_sign_in', ?, NULL, ?, ?, NULL, NULL, ?, ?)`,
-      )
-      .bind(
-        input.challengeId,
-        customer?.id ?? null,
-        challenge.tokenHash,
-        challenge.expiresAt,
-        customer === null ? input.now : null,
-        input.now,
-      )
-      .run();
-
-    if (customer === null) return genericAccessResponse;
+    const timingStartedAt = this.startAccessRequestTiming();
 
     try {
-      await this.ports.delivery.deliver({
-        destinationEmail: customer.email,
-        rawToken: challenge.token,
-        expiresAt: challenge.expiresAt,
-        purpose: "customer_sign_in",
-      });
-    } catch {
-      await this.revokeChallenge(input.challengeId, input.now);
-      return genericAccessResponse;
-    }
-
-    const dispatch = await this.database
-      .prepare(
-        `UPDATE access_challenges SET dispatched_at = ?
-        WHERE id = ? AND dispatched_at IS NULL AND consumed_at IS NULL
-          AND revoked_at IS NULL AND expires_at > ?`,
-      )
-      .bind(input.now, input.challengeId, input.now)
-      .run();
-    if (changed(dispatch) !== 1) {
-      throw new IdentityAccessError(
-        "PERSISTENCE_FAILURE",
-        "Delivered customer challenge could not be activated.",
+      const discriminatorHash = await hashOneTimeAccessToken(
+        email,
+        accessTokenHashContexts.customerRateLimit,
       );
-    }
+      if (
+        !(await this.ports.rateLimit.take({
+          scope: "customer_sign_in",
+          discriminatorHash,
+          now: input.now,
+        }))
+      ) {
+        return genericAccessResponse;
+      }
 
-    return genericAccessResponse;
+      const customer = await this.database
+        .prepare(
+          `SELECT id, email FROM customers
+          WHERE lower(email) = ? AND account_enabled_at IS NOT NULL
+            AND deleted_at IS NULL
+          LIMIT 1`,
+        )
+        .bind(email)
+        .first<{ id: string; email: string }>();
+      const challenge = await createOneTimeAccessToken(
+        new Date(input.now),
+        15,
+        accessTokenHashContexts.customerChallenge,
+      );
+
+      await this.database
+        .prepare(
+          `INSERT INTO access_challenges (
+            id, purpose, customer_id, order_id, token_hash, expires_at,
+            dispatched_at, consumed_at, revoked_at, created_at
+          ) VALUES (?, 'customer_sign_in', ?, NULL, ?, ?, NULL, NULL, ?, ?)`,
+        )
+        .bind(
+          input.challengeId,
+          customer?.id ?? null,
+          challenge.tokenHash,
+          challenge.expiresAt,
+          customer === null ? input.now : null,
+          input.now,
+        )
+        .run();
+
+      if (customer !== null) {
+        try {
+          this.ports.background.defer(() =>
+            this.deliverAndActivateChallenge({
+              challengeId: input.challengeId,
+              delivery: {
+                destinationEmail: customer.email,
+                rawToken: challenge.token,
+                expiresAt: challenge.expiresAt,
+                purpose: "customer_sign_in",
+              },
+              now: input.now,
+            }),
+          );
+        } catch {
+          await this.revokeChallenge(input.challengeId, input.now);
+        }
+      }
+
+      return genericAccessResponse;
+    } finally {
+      await this.concealAccessRequestTiming(timingStartedAt);
+    }
   }
 
   async requestGuestOrderAccess(input: Readonly<{
@@ -281,74 +341,77 @@ export class D1IdentityAccessStore {
     if (!/^[A-Z0-9][A-Z0-9_-]{2,63}$/.test(orderNumber)) {
       throw new IdentityAccessError("INVALID_INPUT", "Order number is invalid.");
     }
-
-    const discriminatorHash = await hashOneTimeAccessToken(`${orderNumber}\n${email}`);
-    if (
-      !(await this.ports.rateLimit.take({
-        scope: "guest_order_access",
-        discriminatorHash,
-        now: input.now,
-      }))
-    ) {
-      return genericAccessResponse;
-    }
-
-    const order = await this.database
-      .prepare(
-        `SELECT id, order_number, email FROM orders
-        WHERE order_number = ? AND lower(email) = ? AND customer_id IS NULL
-        LIMIT 1`,
-      )
-      .bind(orderNumber, email)
-      .first<{ id: string; order_number: string; email: string }>();
-    if (order === null) return genericAccessResponse;
-
-    const challenge = await createOneTimeAccessToken(new Date(input.now));
-    await this.database
-      .prepare(
-        `INSERT INTO access_challenges (
-          id, purpose, customer_id, order_id, token_hash, expires_at,
-          dispatched_at, consumed_at, revoked_at, created_at
-        ) VALUES (?, 'guest_order_access', NULL, ?, ?, ?, NULL, NULL, NULL, ?)`,
-      )
-      .bind(
-        input.challengeId,
-        order.id,
-        challenge.tokenHash,
-        challenge.expiresAt,
-        input.now,
-      )
-      .run();
+    const timingStartedAt = this.startAccessRequestTiming();
 
     try {
-      await this.ports.delivery.deliver({
-        destinationEmail: order.email,
-        rawToken: challenge.token,
-        expiresAt: challenge.expiresAt,
-        purpose: "guest_order_access",
-        orderNumber: order.order_number,
-      });
-    } catch {
-      await this.revokeChallenge(input.challengeId, input.now);
-      return genericAccessResponse;
-    }
-
-    const dispatch = await this.database
-      .prepare(
-        `UPDATE access_challenges SET dispatched_at = ?
-        WHERE id = ? AND dispatched_at IS NULL AND consumed_at IS NULL
-          AND revoked_at IS NULL AND expires_at > ?`,
-      )
-      .bind(input.now, input.challengeId, input.now)
-      .run();
-    if (changed(dispatch) !== 1) {
-      throw new IdentityAccessError(
-        "PERSISTENCE_FAILURE",
-        "Delivered guest challenge could not be activated.",
+      const discriminatorHash = await hashOneTimeAccessToken(
+        `${orderNumber}\n${email}`,
+        accessTokenHashContexts.guestOrderRateLimit,
       );
-    }
+      if (
+        !(await this.ports.rateLimit.take({
+          scope: "guest_order_access",
+          discriminatorHash,
+          now: input.now,
+        }))
+      ) {
+        return genericAccessResponse;
+      }
 
-    return genericAccessResponse;
+      const order = await this.database
+        .prepare(
+          `SELECT id, order_number, email FROM orders
+          WHERE order_number = ? AND lower(email) = ? AND customer_id IS NULL
+          LIMIT 1`,
+        )
+        .bind(orderNumber, email)
+        .first<{ id: string; order_number: string; email: string }>();
+      const challenge = await createOneTimeAccessToken(
+        new Date(input.now),
+        15,
+        accessTokenHashContexts.guestOrderChallenge,
+      );
+      await this.database
+        .prepare(
+          `INSERT INTO access_challenges (
+            id, purpose, customer_id, order_id, token_hash, expires_at,
+            dispatched_at, consumed_at, revoked_at, created_at
+          ) VALUES (?, 'guest_order_access', NULL, ?, ?, ?, NULL, NULL, ?, ?)`,
+        )
+        .bind(
+          input.challengeId,
+          order?.id ?? null,
+          challenge.tokenHash,
+          challenge.expiresAt,
+          order === null ? input.now : null,
+          input.now,
+        )
+        .run();
+
+      if (order !== null) {
+        try {
+          this.ports.background.defer(() =>
+            this.deliverAndActivateChallenge({
+              challengeId: input.challengeId,
+              delivery: {
+                destinationEmail: order.email,
+                rawToken: challenge.token,
+                expiresAt: challenge.expiresAt,
+                purpose: "guest_order_access",
+                orderNumber: order.order_number,
+              },
+              now: input.now,
+            }),
+          );
+        } catch {
+          await this.revokeChallenge(input.challengeId, input.now);
+        }
+      }
+
+      return genericAccessResponse;
+    } finally {
+      await this.concealAccessRequestTiming(timingStartedAt);
+    }
   }
 
   async consumeCustomerChallenge(input: Readonly<{
@@ -378,24 +441,25 @@ export class D1IdentityAccessStore {
     if (!isOpaqueAccessToken(input.rawChallengeToken)) return null;
     assertInternalId(input.sessionId, "Session id");
     assertTimestamp(input.now, "Now");
-    const challengeHash = await hashOneTimeAccessToken(input.rawChallengeToken);
-    const session = await createOpaqueAccessToken();
-    const csrf = await createOpaqueAccessToken();
+    const challengeHash = await hashOneTimeAccessToken(
+      input.rawChallengeToken,
+      kind === "customer"
+        ? accessTokenHashContexts.customerChallenge
+        : accessTokenHashContexts.guestOrderChallenge,
+    );
+    const session = await createOpaqueAccessToken(
+      kind === "customer"
+        ? accessTokenHashContexts.customerSession
+        : accessTokenHashContexts.guestOrderSession,
+    );
+    const csrf = await createOpaqueAccessToken(
+      kind === "customer"
+        ? accessTokenHashContexts.customerCsrf
+        : accessTokenHashContexts.guestOrderCsrf,
+    );
     const expiresAt = addMilliseconds(input.now, durations[kind].absoluteMs);
     const idleExpiresAt = addMilliseconds(input.now, durations[kind].idleMs);
 
-    const consume = this.database
-      .prepare(
-        `UPDATE access_challenges SET consumed_at = ?
-        WHERE token_hash = ? AND purpose = ? AND dispatched_at IS NOT NULL
-          AND consumed_at IS NULL AND revoked_at IS NULL AND expires_at > ?`,
-      )
-      .bind(
-        input.now,
-        challengeHash,
-        kind === "customer" ? "customer_sign_in" : "guest_order_access",
-        input.now,
-      );
     const create =
       kind === "customer"
         ? this.database
@@ -409,7 +473,9 @@ export class D1IdentityAccessStore {
               SELECT ?, customer_id, ?, ?, ?, 'challenge', id, NULL, ?, ?, NULL, NULL, ?
               FROM access_challenges
               WHERE token_hash = ? AND purpose = 'customer_sign_in'
-                AND customer_id IS NOT NULL AND consumed_at = ? AND revoked_at IS NULL`,
+                AND customer_id IS NOT NULL AND dispatched_at IS NOT NULL
+                AND consumed_at IS NULL AND revoked_at IS NULL
+                AND expires_at > ?`,
             )
             .bind(
               input.sessionId,
@@ -431,7 +497,9 @@ export class D1IdentityAccessStore {
               SELECT ?, order_id, ?, ?, id, ?, ?, NULL, NULL, ?
               FROM access_challenges
               WHERE token_hash = ? AND purpose = 'guest_order_access'
-                AND consumed_at = ? AND revoked_at IS NULL`,
+                AND order_id IS NOT NULL AND dispatched_at IS NOT NULL
+                AND consumed_at IS NULL AND revoked_at IS NULL
+                AND expires_at > ?`,
             )
             .bind(
               input.sessionId,
@@ -445,8 +513,8 @@ export class D1IdentityAccessStore {
             );
 
     try {
-      const results = await this.database.batch([consume, create]);
-      if (changed(results[0]) !== 1 || changed(results[1]) !== 1) return null;
+      const result = await create.run();
+      if (changed(result) !== 1) return null;
     } catch (error) {
       if (isExpectedContention(error)) return null;
       throw error;
@@ -468,7 +536,10 @@ export class D1IdentityAccessStore {
     if (!isOpaqueAccessToken(input.rawSessionToken)) return null;
     assertInternalId(input.newSessionId, "Session id");
     assertTimestamp(input.now, "Now");
-    const oldHash = await hashOneTimeAccessToken(input.rawSessionToken);
+    const oldHash = await hashOneTimeAccessToken(
+      input.rawSessionToken,
+      accessTokenHashContexts.customerSession,
+    );
     const current = await this.database
       .prepare(
         `SELECT expires_at FROM customer_sessions
@@ -479,8 +550,12 @@ export class D1IdentityAccessStore {
       .first<{ expires_at: string }>();
     if (current === null) return null;
 
-    const replacement = await createOpaqueAccessToken();
-    const csrf = await createOpaqueAccessToken();
+    const replacement = await createOpaqueAccessToken(
+      accessTokenHashContexts.customerSession,
+    );
+    const csrf = await createOpaqueAccessToken(
+      accessTokenHashContexts.customerCsrf,
+    );
     const idleExpiresAt = earlierTimestamp(
       addMilliseconds(input.now, durations.customer.idleMs),
       current.expires_at,
@@ -554,6 +629,20 @@ export class D1IdentityAccessStore {
       return null;
     }
 
+    const discriminatorHash = await hashOneTimeAccessToken(
+      evidence.externalSubjectHash,
+      accessTokenHashContexts.adminRateLimit,
+    );
+    if (
+      !(await this.ports.rateLimit.take({
+        scope: "admin_sign_in",
+        discriminatorHash,
+        now: input.now,
+      }))
+    ) {
+      return null;
+    }
+
     const administrator = await this.database
       .prepare(
         `SELECT id, role, authz_version FROM administrators
@@ -564,8 +653,12 @@ export class D1IdentityAccessStore {
       .first<{ id: string; role: AdminRole; authz_version: number }>();
     if (administrator === null) return null;
 
-    const session = await createOpaqueAccessToken();
-    const csrf = await createOpaqueAccessToken();
+    const session = await createOpaqueAccessToken(
+      accessTokenHashContexts.adminSession,
+    );
+    const csrf = await createOpaqueAccessToken(
+      accessTokenHashContexts.adminCsrf,
+    );
     const expiresAt = addMilliseconds(input.now, durations.admin.absoluteMs);
     const idleExpiresAt = addMilliseconds(input.now, durations.admin.idleMs);
     const result = await this.database
@@ -634,7 +727,10 @@ export class D1IdentityAccessStore {
       return null;
     }
     assertTimestamp(now, "Now");
-    const tokenHash = await hashOneTimeAccessToken(sessionToken);
+    const tokenHash = await hashOneTimeAccessToken(
+      sessionToken,
+      sessionHashContext(actorKind as IdentitySessionKind),
+    );
     let query: string;
     if (actorKind === "customer") {
       query = `SELECT customer_order.id, customer_order.order_number, customer_order.status
@@ -700,7 +796,10 @@ export class D1IdentityAccessStore {
       return false;
     }
     assertTimestamp(now, "Now");
-    const tokenHash = await hashOneTimeAccessToken(rawSessionToken);
+    const tokenHash = await hashOneTimeAccessToken(
+      rawSessionToken,
+      sessionHashContext(kind),
+    );
     const updateSql =
       kind === "customer"
         ? `UPDATE customer_sessions SET revoked_at = ?
@@ -715,6 +814,39 @@ export class D1IdentityAccessStore {
       .bind(now, tokenHash)
       .run();
     return changed(result) === 1;
+  }
+
+  async logoutAllCustomerSessions(
+    rawSessionToken: string,
+    now: string,
+  ): Promise<number> {
+    if (!isOpaqueAccessToken(rawSessionToken)) return 0;
+    assertTimestamp(now, "Now");
+    const tokenHash = await hashOneTimeAccessToken(
+      rawSessionToken,
+      accessTokenHashContexts.customerSession,
+    );
+    const result = await this.database
+      .prepare(
+        `UPDATE customer_sessions SET revoked_at = ?
+        WHERE revoked_at IS NULL
+          AND customer_id = (
+            SELECT current_session.customer_id
+            FROM customer_sessions AS current_session
+            INNER JOIN customers AS customer
+              ON customer.id = current_session.customer_id
+            WHERE current_session.token_hash = ?
+              AND current_session.revoked_at IS NULL
+              AND current_session.expires_at > ?
+              AND current_session.idle_expires_at > ?
+              AND customer.deleted_at IS NULL
+              AND customer.account_enabled_at IS NOT NULL
+            LIMIT 1
+          )`,
+      )
+      .bind(now, tokenHash, now, now)
+      .run();
+    return changed(result);
   }
 
   async authorizeSessionMutation(
@@ -732,8 +864,8 @@ export class D1IdentityAccessStore {
     }
     assertTimestamp(now, "Now");
     const [sessionHash, csrfHash] = await Promise.all([
-      hashOneTimeAccessToken(rawSessionToken),
-      hashOneTimeAccessToken(rawCsrfToken),
+      hashOneTimeAccessToken(rawSessionToken, sessionHashContext(kind)),
+      hashOneTimeAccessToken(rawCsrfToken, csrfHashContext(kind)),
     ]);
     const query =
       kind === "customer"
@@ -778,7 +910,10 @@ export class D1IdentityAccessStore {
       return false;
     }
     assertTimestamp(now, "Now");
-    const tokenHash = await hashOneTimeAccessToken(rawSessionToken);
+    const tokenHash = await hashOneTimeAccessToken(
+      rawSessionToken,
+      sessionHashContext(kind),
+    );
     const duration =
       kind === "customer"
         ? durations.customer
@@ -838,6 +973,64 @@ export class D1IdentityAccessStore {
       .bind(now, idleExpiresAt, tokenHash, now, now)
       .run();
     return changed(result) === 1;
+  }
+
+  private startAccessRequestTiming(): number {
+    const startedAt = this.ports.timing.monotonicMilliseconds();
+    if (!Number.isFinite(startedAt)) {
+      throw new IdentityAccessError(
+        "DEPENDENCY_UNAVAILABLE",
+        "Identity timing is not configured safely.",
+      );
+    }
+    return startedAt;
+  }
+
+  private async concealAccessRequestTiming(startedAt: number): Promise<void> {
+    const current = this.ports.timing.monotonicMilliseconds();
+    if (!Number.isFinite(current) || current < startedAt) {
+      throw new IdentityAccessError(
+        "DEPENDENCY_UNAVAILABLE",
+        "Identity timing is not configured safely.",
+      );
+    }
+    const remaining = accessRequestMinimumDurationMs - (current - startedAt);
+    if (remaining > 0) await this.ports.timing.wait(remaining);
+  }
+
+  private async deliverAndActivateChallenge(input: Readonly<{
+    challengeId: string;
+    delivery: IdentityDelivery;
+    now: string;
+  }>): Promise<void> {
+    try {
+      await this.ports.delivery.deliver(input.delivery);
+    } catch {
+      await this.revokeChallenge(input.challengeId, input.now);
+      return;
+    }
+
+    let dispatch;
+    try {
+      dispatch = await this.database
+        .prepare(
+          `UPDATE access_challenges SET dispatched_at = ?
+          WHERE id = ? AND dispatched_at IS NULL AND consumed_at IS NULL
+            AND revoked_at IS NULL AND expires_at > ?`,
+        )
+        .bind(input.now, input.challengeId, input.now)
+        .run();
+    } catch (error) {
+      await this.revokeChallenge(input.challengeId, input.now);
+      throw error;
+    }
+    if (changed(dispatch) !== 1) {
+      await this.revokeChallenge(input.challengeId, input.now);
+      throw new IdentityAccessError(
+        "PERSISTENCE_FAILURE",
+        "Delivered identity challenge could not be activated.",
+      );
+    }
   }
 
   private async revokeChallenge(challengeId: string, now: string): Promise<void> {

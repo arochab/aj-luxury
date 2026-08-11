@@ -1,6 +1,29 @@
 const TOKEN_BYTES = 32;
 const canonicalUtcTimestamp =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+const HASH_PROTOCOL = "aj-luxury.identity-token.v1";
+
+export const accessTokenHashContexts = Object.freeze({
+  oneTimeAccess: "one-time-access",
+  customerChallenge: "challenge:customer-sign-in",
+  guestOrderChallenge: "challenge:guest-order-access",
+  customerSession: "session:customer",
+  guestOrderSession: "session:guest-order",
+  adminSession: "session:admin",
+  customerCsrf: "csrf:customer",
+  guestOrderCsrf: "csrf:guest-order",
+  adminCsrf: "csrf:admin",
+  customerRateLimit: "rate-limit:customer-sign-in",
+  guestOrderRateLimit: "rate-limit:guest-order-access",
+  adminRateLimit: "rate-limit:admin-sign-in",
+} as const);
+
+export type AccessTokenHashContext =
+  (typeof accessTokenHashContexts)[keyof typeof accessTokenHashContexts];
+
+const allowedHashContexts = new Set<AccessTokenHashContext>(
+  Object.values(accessTokenHashContexts),
+);
 
 function bytesToBase64Url(bytes: Uint8Array): string {
   let binary = "";
@@ -30,20 +53,23 @@ export function isOpaqueAccessToken(value: unknown): value is string {
   return typeof value === "string" && /^[A-Za-z0-9_-]{43}$/.test(value);
 }
 
-export async function createOpaqueAccessToken(): Promise<OpaqueAccessToken> {
+export async function createOpaqueAccessToken(
+  hashContext: AccessTokenHashContext = accessTokenHashContexts.oneTimeAccess,
+): Promise<OpaqueAccessToken> {
   const tokenBytes = new Uint8Array(TOKEN_BYTES);
   crypto.getRandomValues(tokenBytes);
   const token = bytesToBase64Url(tokenBytes);
 
   return Object.freeze({
     token,
-    tokenHash: await hashOneTimeAccessToken(token),
+    tokenHash: await hashOneTimeAccessToken(token, hashContext),
   });
 }
 
 export async function createOneTimeAccessToken(
   now: Date,
   ttlMinutes = 15,
+  hashContext: AccessTokenHashContext = accessTokenHashContexts.oneTimeAccess,
 ): Promise<OneTimeAccessToken> {
   if (!Number.isInteger(ttlMinutes) || ttlMinutes < 1 || ttlMinutes > 60) {
     throw new Error("One-time access token TTL must be between 1 and 60 minutes.");
@@ -59,7 +85,7 @@ export async function createOneTimeAccessToken(
     throw new Error("One-time access token creation requires a valid Date.");
   }
 
-  const { token, tokenHash } = await createOpaqueAccessToken();
+  const { token, tokenHash } = await createOpaqueAccessToken(hashContext);
 
   return {
     token,
@@ -68,10 +94,19 @@ export async function createOneTimeAccessToken(
   };
 }
 
-export async function hashOneTimeAccessToken(token: string): Promise<string> {
+export async function hashOneTimeAccessToken(
+  token: string,
+  hashContext: AccessTokenHashContext = accessTokenHashContexts.oneTimeAccess,
+): Promise<string> {
+  if (
+    typeof token !== "string" ||
+    !allowedHashContexts.has(hashContext)
+  ) {
+    throw new Error("Access token hash input is invalid.");
+  }
   const digest = await crypto.subtle.digest(
     "SHA-256",
-    new TextEncoder().encode(token),
+    new TextEncoder().encode(`${HASH_PROTOCOL}\0${hashContext}\0${token}`),
   );
   return bytesToHex(new Uint8Array(digest));
 }
@@ -79,6 +114,7 @@ export async function hashOneTimeAccessToken(token: string): Promise<string> {
 export async function verifyOneTimeAccessToken(
   providedToken: unknown,
   storedTokenHash: unknown,
+  hashContext: AccessTokenHashContext = accessTokenHashContexts.oneTimeAccess,
 ): Promise<boolean> {
   if (
     typeof providedToken !== "string" ||
@@ -88,7 +124,7 @@ export async function verifyOneTimeAccessToken(
   ) {
     return false;
   }
-  const providedHash = await hashOneTimeAccessToken(providedToken);
+  const providedHash = await hashOneTimeAccessToken(providedToken, hashContext);
   let difference = 0;
   for (let index = 0; index < providedHash.length; index += 1) {
     difference |= providedHash.charCodeAt(index) ^ storedTokenHash.charCodeAt(index);

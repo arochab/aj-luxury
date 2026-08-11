@@ -2,51 +2,56 @@
 
 Statut : `CANDIDAT ISOLÉ, NON ACCEPTÉ, NON DÉPLOYABLE`
 
-Base d'entrée : `50cabaf93ed7da82871533c4a2acdf4e37181476`, elle-même refusée pour
-I02. Ce paquet ne peut être accepté qu'après portage sur le futur I03 accepté,
+Base d'entrée : `a169019894089ceb704813129f59cd3336da1896`, elle-même refusée.
+Ce paquet ne peut être accepté qu'après portage sur le futur I03 accepté,
 contre-audit indépendant et validation du candidat intégré exact.
 
 ## Ce que le paquet apporte
 
-- Accès client sans mot de passe par lien à usage unique, token brut remis
-  uniquement au port de livraison et hash SHA-256 conservé en D1.
-- Un client ne devient éligible à la connexion que lorsque
-  `customers.account_enabled_at` a été posé explicitement par le futur flux de
-  création de compte. Une ligne client ou marketing seule ne suffit pas. Les
-  comptes historiques restent donc désactivés après migration.
-- Achat invité maintenu : une session invitée ne donne accès qu'à une commande
-  sans compte client.
-- Sessions client rotatives, révocables, à expiration absolue et inactive ; les
-  anciennes sessions présentes avant D01 sont conservées mais révoquées pendant
-  la migration.
-- Administration lean avec deux rôles D1, `owner` et `operations`. La session
-  exige une preuve MFA externe `AAL >= 2`, un administrateur actif et une version
-  d'autorisation courante. Le hash unique du justificatif MFA interdit son rejeu
-  pour créer une deuxième session. Aucun rôle fourni par une requête n'est utilisé.
-- Autorisation de commande effectuée dans une requête SQL : compte A, compte B,
-  invité et administrateur ne partagent aucune décision en mémoire.
+- Accès client et invité sans mot de passe par lien à usage unique. Le token brut
+  n'est remis qu'au port de livraison ; seul un hash contextualisé est conservé.
+- Réponse d'une demande d'accès uniformisée : durée minimale de 120 ms pour les
+  cas connus et inconnus, même travail de persistance, réponse indépendante du
+  délai de livraison. L'adaptateur d'exécution en arrière-plan devra être relié
+  à un mécanisme de durée de vie garanti, par exemple `waitUntil`, avant routage.
+- Un challenge ciblé est créé inactif, puis activé seulement après livraison.
+  Un challenge sans cible est obligatoirement révoqué dès sa création ; la base
+  interdit son activation ou sa consommation.
+- Consommation atomique : l'insertion d'une session et la consommation de son
+  challenge forment une seule transaction SQLite contrôlée par triggers. Une
+  mise à jour directe de `consumed_at` sans session correspondante est refusée.
+- Sessions client rotatives, révocables, à expiration absolue et inactive. Le
+  logout-all révoque en une instruction toutes les sessions actives du client
+  authentifié ; chaque session révoquée produit son audit. Les anciennes sessions
+  présentes avant D01 restent conservées mais sont révoquées par la migration.
+- Achat invité maintenu : une session invitée ne donne accès qu'à sa commande.
+- Administration lean avec rôles D1 `owner` et `operations`. Une preuve MFA
+  externe `AAL >= 2` et récente est requise ; la limitation de débit intervient
+  avant toute recherche d'administrateur ou création de session.
+- Séparation cryptographique versionnée des domaines challenge, session, CSRF et
+  limitation de débit, pour client, invité et administrateur. Les anciens hashes
+  SHA-256 non contextualisés sont incompatibles et échouent fermés.
 - Cookies `__Host-`, origine HTTPS exacte, `Sec-Fetch-Site: same-origin` et paire
-  CSRF en fonctions pures. Le hash CSRF est aussi lié à la session D1 ; une route
-  de mutation doit passer le contrôle navigateur puis le contrôle D1.
-- Audit automatique limité à des identifiants internes et `{}` : aucun e-mail,
-  IP, user-agent, token, hash de token ou sujet externe.
+  CSRF. L'autorisation commande est évaluée par SQL et reste isolée entre
+  client A, client B, invité et administrateur.
+- Audit limité aux identifiants internes et à `{}` : aucun e-mail, IP,
+  user-agent, token, hash de token ou sujet externe.
 
 ## Limites et gates
 
-- Aucun fournisseur d'e-mail, de limitation de débit ou de MFA n'est branché.
-  Les ports sont fermés par défaut ; seuls les doubles de test peuvent les ouvrir.
-- Aucune route HTTP ou interface n'est ajoutée. Ce paquet est une fondation D1
+- Aucun fournisseur d'e-mail, de limitation de débit, de MFA ou adaptateur
+  d'arrière-plan n'est branché. Les ports sont fermés par défaut.
+- Aucune route HTTP ni interface n'est ajoutée. Ce paquet est une fondation D1
   testable, pas une fonctionnalité client activée.
 - Noms de cookies gelés : `__Host-aj_customer`, `__Host-aj_customer_csrf`,
   `__Host-aj_guest_order`, `__Host-aj_guest_order_csrf`, `__Host-aj_admin` et
   `__Host-aj_admin_csrf`. Les cookies de session sont `HttpOnly`; aucun cookie
   ne porte d'attribut `Domain`.
 - La migration `0003_identity_access.sql` est forward-only. Une future cible D1
-  réelle exige le gate existant : historique, snapshot restaurable, lecture seule
-  et preuve de répétition avant toute écriture.
-- Le test D1 partagé de la base attend encore exactement `0000..0002`. Il ne peut
-  pas être modifié dans ce paquet ; le gardien d'intégration devra l'étendre à
-  `0003` lors du portage sur I03.
+  exige le gate existant : historique, snapshot restaurable, lecture seule et
+  preuve de répétition avant toute écriture.
+- Les assertions partagées de comptage restent réservées au gardien d'intégration
+  lors du portage sur I03 ; ce candidat ne les modifie pas.
 
 ## Preuve dédiée
 
@@ -56,22 +61,23 @@ Commande locale :
 node --experimental-strip-types --test tests/identity-access-migration.test.mjs tests/identity-access-security.test.mjs
 ```
 
-Couverture : création et upgrade `0000..0003`, répétition avec journal, sentinelle,
-clés étrangères, double consommation et rotation, séparation A/B/invité/admin,
-MFA faible ou périmé, rejeu concurrent d'une preuve MFA, rôle de requête ignoré,
-version obsolète, activation explicite du compte, désactivation, expiration,
-inactivité, logout, cookies, CSRF lié en D1, origine, `Sec-Fetch-Site`, machine
-d'état des challenges et scan des audits.
+Couverture : création, upgrade et répétition `0000..0003`, sentinelle, clés
+étrangères, insertion targetless refusée, consommation atomique et concurrence
+client/invité, séparation A/B/invité/admin, logout-all concurrent et audité,
+padding anti-énumération, livraison non bloquante, séparation des hashes,
+incompatibilité fail-closed, rate limit admin, MFA, expiration, cookies, CSRF,
+origine, machine d'état et confidentialité des audits.
 
 Résultats locaux du 11 août 2026 :
 
-- 12 contrôles D01 sur 12 passent ;
-- Wrangler D1 local applique les quatre migrations, rejoue sans opération et ne
-  signale aucune erreur de clé étrangère. Un upgrade D1 local distinct depuis
-  `0000..0002` conserve sa sentinelle et révoque la session historique ;
+- 18 contrôles D01 sur 18 passent ;
+- Wrangler D1 local applique `0000..0003` sur une base vide et rejoue sans
+  opération. Un upgrade distinct depuis `0000..0002` conserve sa sentinelle,
+  révoque la session historique, journalise les quatre migrations et conserve
+  `PRAGMA foreign_key_check` vide ;
 - build et lint complets passent ;
 - delta TypeScript nul : les sept diagnostics Worker/Cloudflare de la base restent
   identiques et aucun diagnostic D01 n'est ajouté ;
 - 115 contrôles existants passent. Les deux seuls refus sont les assertions
-  partagées encore figées sur 15 tables et trois migrations. Leur adaptation est
-  explicitement réservée au gardien d'intégration.
+  partagées encore figées sur 15 tables et trois migrations ; leur adaptation
+  reste réservée au gardien d'intégration.
