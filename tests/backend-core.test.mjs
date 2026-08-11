@@ -1142,6 +1142,113 @@ test("reservations cannot exceed or exist outside their cart lines", async () =>
   database.close();
 });
 
+test("known reservation keys win before changed-state cart and capacity guards", async () => {
+  const { database, store } = createFixture();
+  const now = "2099-08-10T12:00:00.000Z";
+  const variantId = "variant_boxer_pourpre_s";
+  const cartId = "cart_reservation_known_key";
+  await store.seedLaunchCatalog(now);
+  validateReserves(database, [variantId]);
+  await store.createCart({
+    id: cartId,
+    expiresAt: "2099-08-10T14:00:00.000Z",
+    now,
+  });
+  insertCartLines(database, {
+    cartId,
+    now,
+    lines: [{ variantId, quantity: 1 }],
+  });
+  const input = {
+    reservationId: "reservation_known_key",
+    cartId,
+    variantId,
+    quantity: 1,
+    idempotencyKey: "reserve_known_key",
+    expiresAt: "2099-08-10T13:00:00.000Z",
+    now,
+  };
+  await store.reserveStock(input);
+  adjustPhysicalStock(database, {
+    id: "known_key_capacity_closed",
+    variantId,
+    targetQuantity: 1,
+    now: "2099-08-10T12:05:00.000Z",
+  });
+  database.prepare(
+    `UPDATE carts SET status = 'expired', updated_at = ? WHERE id = ?`,
+  ).run("2099-08-10T12:06:00.000Z", cartId);
+
+  const snapshot = () => ({
+    cart: { ...database.prepare(
+      "SELECT status, updated_at FROM carts WHERE id = ?",
+    ).get(cartId) },
+    inventory: { ...database.prepare(
+      `SELECT physical_quantity, active_reserved_quantity, sold_quantity,
+        version, updated_at FROM inventory WHERE variant_id = ?`,
+    ).get(variantId) },
+    movements: database.prepare(
+      `SELECT id, kind, quantity, reference_type, reference_id,
+        idempotency_key, created_at FROM inventory_movements
+      WHERE variant_id = ? ORDER BY id`,
+    ).all(variantId).map((row) => ({ ...row })),
+    reservations: database.prepare(
+      `SELECT id, cart_id, variant_id, quantity, status, idempotency_key,
+        last_transition_key, expires_at, converted_order_id, created_at,
+        updated_at FROM stock_reservations
+      WHERE idempotency_key = ? ORDER BY id`,
+    ).all(input.idempotencyKey).map((row) => ({ ...row })),
+  });
+  const closedCapacitySnapshot = snapshot();
+
+  const exactWhileClosed = await store.reserveStock({
+    ...input,
+    now: "2099-08-10T12:07:00.000Z",
+  });
+  assert.equal(exactWhileClosed.status, "active");
+  assert.deepEqual(snapshot(), closedCapacitySnapshot);
+  await assert.rejects(
+    () => store.reserveStock({
+      ...input,
+      quantity: 2,
+      now: "2099-08-10T12:08:00.000Z",
+    }),
+    (error) =>
+      error instanceof CommerceError &&
+      error.code === "IDEMPOTENCY_CONFLICT" &&
+      error.message ===
+        "The reservation idempotency key was already used for different input.",
+  );
+  assert.deepEqual(snapshot(), closedCapacitySnapshot);
+
+  await store.releaseStock({
+    reservationId: input.reservationId,
+    idempotencyKey: "release_known_key",
+    now: "2099-08-10T12:09:00.000Z",
+  });
+  const releasedSnapshot = snapshot();
+  const exactAfterStateChange = await store.reserveStock({
+    ...input,
+    now: "2099-08-10T12:10:00.000Z",
+  });
+  assert.equal(exactAfterStateChange.status, "released");
+  assert.deepEqual(snapshot(), releasedSnapshot);
+  await assert.rejects(
+    () => store.reserveStock({
+      ...input,
+      reservationId: "reservation_known_key_divergent",
+      now: "2099-08-10T12:11:00.000Z",
+    }),
+    (error) =>
+      error instanceof CommerceError &&
+      error.code === "IDEMPOTENCY_CONFLICT" &&
+      error.message ===
+        "The reservation idempotency key was already used for different input.",
+  );
+  assert.deepEqual(snapshot(), releasedSnapshot);
+  database.close();
+});
+
 test("concurrent buyers never oversell, including the last unit", async () => {
   const { database, store } = createFixture();
   const now = "2099-08-10T12:01:00.000Z";

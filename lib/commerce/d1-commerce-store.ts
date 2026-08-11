@@ -113,6 +113,26 @@ function toStockReservation(row: ReservationRow): StockReservation {
   };
 }
 
+function assertIdempotentReservationMatch(
+  reservation: StockReservation,
+  input: ReserveStockInput,
+): StockReservation {
+  if (
+    reservation.id !== input.reservationId ||
+    reservation.cartId !== input.cartId ||
+    reservation.variantId !== input.variantId ||
+    reservation.quantity !== input.quantity ||
+    reservation.expiresAt !== input.expiresAt
+  ) {
+    throw new CommerceError(
+      "IDEMPOTENCY_CONFLICT",
+      "The reservation idempotency key was already used for different input.",
+    );
+  }
+
+  return reservation;
+}
+
 function movementKey(action: "reserve", key: string): string;
 function movementKey(
   action: "release" | "expire" | "sale",
@@ -441,6 +461,13 @@ export class D1CommerceStore {
 
   async reserveStock(input: ReserveStockInput): Promise<StockReservation> {
     validateReserveStockInput(input);
+    const knownReservation = await this.getReservationByIdempotencyKey(
+      input.idempotencyKey,
+    );
+    if (knownReservation) {
+      return assertIdempotentReservationMatch(knownReservation, input);
+    }
+
     const reserveMovementKey = movementKey("reserve", input.idempotencyKey);
 
     try {
@@ -484,6 +511,12 @@ export class D1CommerceStore {
           ),
       ]);
     } catch (error) {
+      const racedReservation = await this.getReservationByIdempotencyKey(
+        input.idempotencyKey,
+      );
+      if (racedReservation) {
+        return assertIdempotentReservationMatch(racedReservation, input);
+      }
       mapCommerceDatabaseError(error);
     }
 
@@ -498,19 +531,7 @@ export class D1CommerceStore {
       );
     }
 
-    if (
-      reservation.cartId !== input.cartId ||
-      reservation.variantId !== input.variantId ||
-      reservation.quantity !== input.quantity ||
-      reservation.expiresAt !== input.expiresAt
-    ) {
-      throw new CommerceError(
-        "IDEMPOTENCY_CONFLICT",
-        "The reservation idempotency key was already used for different input.",
-      );
-    }
-
-    return reservation;
+    return assertIdempotentReservationMatch(reservation, input);
   }
 
   async releaseStock(input: ReleaseStockInput): Promise<StockReservation> {
