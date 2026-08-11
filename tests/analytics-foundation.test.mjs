@@ -419,7 +419,7 @@ test("every deep server file fails an actual browser bundle", async () => {
 
 test("Vite 8.1.5 rejects server modules and resources that it actually materializes", async () => {
   assert.equal(viteVersion, "8.1.5");
-  for (const fixture of [
+  const materializedFixtures = [
     "raw.mjs",
     "url.mjs",
     "subpath.mjs",
@@ -429,9 +429,11 @@ test("Vite 8.1.5 rejects server modules and resources that it actually materiali
     "glob.mjs",
     "new-url.mjs",
     "new-url-line-break.mjs",
-    "uppercase-raw.mjs",
-    "uppercase-url.mjs",
-  ]) {
+  ];
+  if (process.platform === "win32") {
+    materializedFixtures.push("uppercase-raw.mjs", "uppercase-url.mjs");
+  }
+  for (const fixture of materializedFixtures) {
     const fixturePath = join(boundaryFixtureRoot, fixture);
     await assert.rejects(
       () => viteFixtureBuild(fixturePath),
