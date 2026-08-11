@@ -1,23 +1,28 @@
 import type { ProductVariant } from "./types.ts";
 import { products, sizes } from "../products.ts";
 import { getInternalStockPosition } from "./internal-stock.ts";
+import { deepFreeze } from "../immutable.ts";
+import {
+  createApollonInternalReference,
+  createLaunchVariantId,
+  LAUNCH_PRODUCT_ID,
+} from "./product-identifiers.ts";
 
 /**
  * Catalogue de simulation : les quantités restent dans le registre interne.
  * La projection publique ne reçoit jamais la quantité disponible à la vente.
  */
-export const launchVariants: ProductVariant[] = products.flatMap((product) =>
+const canonicalLaunchVariants = deepFreeze(products.flatMap((product) =>
   sizes.map((size) => {
     const stock = getInternalStockPosition(product.slug, size);
-    const variantId = `${product.commerceProductId}-${size}`;
 
     return {
-      id: variantId,
-      productId: product.commerceProductId,
+      id: createLaunchVariantId(product.slug, size),
+      productId: LAUNCH_PRODUCT_ID,
       productSlug: product.slug,
       productName: product.model,
       title: `${product.name} / ${size}`,
-      sku: variantId,
+      sku: createApollonInternalReference(product.slug, size),
       options: [
         { name: "color" as const, value: product.name },
         { name: "size" as const, value: size },
@@ -37,15 +42,38 @@ export const launchVariants: ProductVariant[] = products.flatMap((product) =>
       inventoryQuantity: stock.availableToSell,
     };
   }),
-);
+));
+
+/** Frozen compatibility view over the private canonical catalogue. */
+export const launchVariants: readonly ProductVariant[] = canonicalLaunchVariants;
+
+function cloneVariant(variant: ProductVariant): ProductVariant {
+  return {
+    ...variant,
+    options: variant.options.map((option) => ({ ...option })),
+    color: { ...variant.color },
+    price: { ...variant.price },
+  };
+}
+
+export function listLaunchVariants(): ProductVariant[] {
+  return canonicalLaunchVariants.map(cloneVariant);
+}
 
 export function getLaunchVariant(variantId: string) {
-  return launchVariants.find((variant) => variant.id === variantId) ?? null;
+  const variant = canonicalLaunchVariants.find(
+    (candidate) => candidate.id === variantId,
+  );
+  return variant ? cloneVariant(variant) : null;
 }
 
 export function getDemoVariant() {
-  return launchVariants.find(
+  const variant = canonicalLaunchVariants.find(
     (variant) =>
       variant.color.name === "Pourpre Impérial" && variant.size === "M",
-  )!;
+  );
+  if (!variant) {
+    throw new Error("The canonical Apollon demo variant is unavailable.");
+  }
+  return cloneVariant(variant);
 }

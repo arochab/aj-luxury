@@ -1,5 +1,5 @@
-import { launchVariants } from "../commerce/catalog.ts";
 import type { CommerceSummary } from "./shared.ts";
+import { getPublicAnalyticsCatalog } from "./public-catalog.ts";
 
 export const MAX_ITEM_COUNT = 99;
 export const MAX_VALUE_MINOR = 100_000_000;
@@ -65,25 +65,26 @@ function sanitizeCurrency(value: unknown): string | null {
 }
 
 /**
- * Read the only commerce catalogue present in this branch. Analytics callers
- * cannot inject variants, prices or currencies into this projection.
+ * Read a fresh lookup from the frozen browser-safe product projection.
+ * Analytics callers cannot inject variants, prices or currencies, and this
+ * client import graph has no dependency on the internal inventory ledger.
  */
 export function readCanonicalAnalyticsCatalog(): NormalizedCatalog | null {
   try {
-    if (!Array.isArray(launchVariants) || launchVariants.length === 0) {
+    const publicCatalog = getPublicAnalyticsCatalog();
+    if (!Array.isArray(publicCatalog) || publicCatalog.length === 0) {
       return null;
     }
 
     const byVariantId = new Map<string, NormalizedCatalogVariant>();
     const productIds = new Set<string>();
-    for (const candidate of launchVariants) {
+    for (const candidate of publicCatalog) {
       if (!isPlainRecord(candidate)) return null;
 
-      const variantId = sanitizeIdentifier(candidate.id);
+      const variantId = sanitizeIdentifier(candidate.variantId);
       const productId = sanitizeIdentifier(candidate.productId);
-      const price = isPlainRecord(candidate.price) ? candidate.price : null;
-      const unitPriceMinor = price?.amountCents;
-      const currency = sanitizeCurrency(price?.currency);
+      const unitPriceMinor = candidate.unitPriceMinor;
+      const currency = sanitizeCurrency(candidate.currency);
       if (
         !variantId ||
         !productId ||

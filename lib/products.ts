@@ -1,33 +1,37 @@
-export const sizes = ["S", "M", "L", "XL"] as const;
+import { deepFreeze } from "./immutable.ts";
+
+export const sizes = deepFreeze(["S", "M", "L", "XL"] as const);
 
 export type ProductSize = (typeof sizes)[number];
 
 export type ProductMedia = {
-  src: string;
-  frame: "main" | "portrait" | "landscape";
-  objectPosition?: string;
+  readonly src: string;
+  readonly frame: "main" | "portrait" | "landscape";
+  readonly objectPosition?: string;
 };
 
 export type Product = {
-  slug: string;
-  commerceProductId: `AJ-APO-${"POU" | "ROS" | "LIL"}`;
-  modelId: "boxer-aj-luxury";
-  model: string;
-  name: string;
-  color: string;
-  tone: string;
-  swatch: string;
-  image: string;
-  gallery: ProductMedia[];
-  tagline: string;
-  description: string;
-  details: string[];
-  features: string[];
-  priceCents: number;
-  status: "launch-product";
-  statusLabel: string;
-  primaryModel: boolean;
-  benefits: Array<{ title: string; text: string }>;
+  readonly slug: string;
+  readonly modelId: "boxer-aj-luxury";
+  readonly model: string;
+  readonly name: string;
+  readonly color: string;
+  readonly tone: string;
+  readonly swatch: string;
+  readonly image: string;
+  readonly gallery: readonly ProductMedia[];
+  readonly tagline: string;
+  readonly description: string;
+  readonly details: readonly string[];
+  readonly features: readonly string[];
+  readonly priceCents: number;
+  readonly status: "launch-product";
+  readonly statusLabel: string;
+  readonly primaryModel: boolean;
+  readonly benefits: ReadonlyArray<{
+    readonly title: string;
+    readonly text: string;
+  }>;
 };
 
 const benefits = [
@@ -55,10 +59,9 @@ const features = [
   "Maintien optimal au quotidien",
 ];
 
-export const products: Product[] = [
+export const products: readonly Product[] = deepFreeze([
   {
     slug: "pourpre",
-    commerceProductId: "AJ-APO-POU",
     modelId: "boxer-aj-luxury",
     model: "Apollon",
     name: "Pourpre Impérial",
@@ -94,7 +97,6 @@ export const products: Product[] = [
   },
   {
     slug: "rose-pale",
-    commerceProductId: "AJ-APO-ROS",
     modelId: "boxer-aj-luxury",
     model: "Apollon",
     name: "Rose Velours",
@@ -129,7 +131,6 @@ export const products: Product[] = [
   },
   {
     slug: "lilas-bleu-clair",
-    commerceProductId: "AJ-APO-LIL",
     modelId: "boxer-aj-luxury",
     model: "Apollon",
     name: "Lilas Céleste",
@@ -163,7 +164,7 @@ export const products: Product[] = [
     primaryModel: true,
     benefits,
   },
-];
+] satisfies Product[]);
 
 export function getProducts() {
   return products;

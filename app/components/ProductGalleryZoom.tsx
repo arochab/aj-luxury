@@ -8,7 +8,7 @@ import type { ProductMedia } from "@/lib/products";
 import styles from "./ProductPage.module.css";
 
 type ProductGalleryZoomProps = {
-  images: ProductMedia[];
+  images: readonly ProductMedia[];
   model: string;
   color: string;
 };

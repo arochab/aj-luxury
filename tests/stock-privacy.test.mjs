@@ -145,8 +145,8 @@ test("client bundles and RSC HTML contain no internal stock payload", async () =
 
   for (const pathname of [
     "/products/pourpre",
-    "/cart?variant=AJ-APO-POU-M",
-    "/checkout?variant=AJ-APO-POU-M",
+    "/cart?variant=variant_boxer_pourpre_m",
+    "/checkout?variant=variant_boxer_pourpre_m",
   ]) {
     const response = await render(pathname);
     const html = await response.text();

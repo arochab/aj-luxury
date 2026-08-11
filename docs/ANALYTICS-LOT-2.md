@@ -10,7 +10,7 @@ Cible d’intégration frontend finale : `c7362d3d04af6fc6070a15112a1fdff7878e09
 
 Base du worktree Analytics isolé : `c7362d3d04af6fc6070a15112a1fdff7878e09bd`
 
-Base gelée de la correction P1 : `e972daf3bdc62adff7d97b1ebc9763069baed184`
+Base gelée de la correction après red-team : `56b97412522fa5564921db2cacdcb749c9ba80ce`
 
 ## Verdict
 
@@ -109,8 +109,9 @@ jour des pages confidentialité/cookies avant toute activation.
   `analytics_inactive` ; cette garantie ne couvre pas un contrôleur de
   consentement tiers volontairement bloquant ;
 - contrat de préparation client dormant, non exporté par l’index et jamais
-  appelé par la façade inactive ; il projette directement `launchVariants`,
-  sans fixture catalogue injectable ;
+  appelé par la façade inactive ; il lit une projection publique minimale,
+  profondément gelée et construite depuis les seules données produit publiques,
+  sans stock, quantité d’inventaire ni fixture catalogue injectable ;
 - constantes et types client dans un graphe physique distinct du serveur ;
 - entrée serveur séparée et non réexportée pour `order_paid`, réduite à un
   constat d’indisponibilité sans fonction d’acceptation ; la résolution
@@ -119,15 +120,20 @@ jour des pages confidentialité/cookies avant toute activation.
   complémentaire ;
 - conditions client, SSR et RSC lues depuis la configuration Vinext/Vite
   réellement résolue en production, puis rejouées dans les tests de bundle ;
-- bundle navigateur réel de l’index construit par esbuild et inspecté durant la
-  recette, plus inspection de tous les fichiers JavaScript du `dist/client`
-  final produit par Vinext ; tentative de bundle navigateur de chacun des
-  fichiers serveur profonds obligatoirement en échec ;
+- garde structurelle obligatoire avant lint et build, complétée par un plugin
+  limité aux environnements Vite de type client ; les imports directs,
+  sous-chemins, `?raw`, `?url`, `import.meta.glob`, `new URL(..., import.meta.url)`
+  et imports dynamiques calculés visant `lib/analytics/server*.ts` font échouer
+  le build, tandis que SSR et RSC restent autorisés ;
+- bundles adversariaux exécutés avec Vite 8.1.5, bundle navigateur de l’index
+  construit par esbuild et inspection de tous les fichiers JavaScript du
+  `dist/client` final produit par Vinext ;
 - aucun collecteur, callback, buffer ou dispatcher côté navigateur ;
 - aucune outbox, même simulée, et aucun callback de persistance injectable ;
 - politique injectée et fail-closed uniquement pour routes, référents et UTM ;
-- origine canonique HTTPS obligatoire et catalogue commerce réel reliant les
-  douze variantes `AJ-APO` à leur produit, leur prix de 2 999 centimes et EUR ;
+- origine canonique HTTPS obligatoire et contrat commerce reliant l’unique
+  produit `product_apollon` aux douze IDs runtime `variant_boxer_*`, avec douze
+  références internes distinctes `AJ-APO-*`, un prix de 2 999 centimes et EUR ;
 - validation d’exécution des noms, champs, formats, montants et quantités ;
 - sanitization centralisée des chemins, référents et UTM ;
 - contrat `order_paid` dormant et explicitement indisponible tant que la D1
@@ -177,14 +183,16 @@ Le socle passe cette phase si :
 
 1. le bundle navigateur réel de l’index et le `dist/client` final Vinext ne
    contiennent jamais `order_paid`, le blocker D1 ni une outbox serveur ;
-2. le bundle navigateur direct de chacun des quatre fichiers serveur profonds
-   échoue ;
+2. la garde pré-build/pré-lint et les builds Vite 8.1.5 adversariaux bloquent
+   les imports directs, sous-chemins, `?raw`, `?url`, glob et imports dynamiques
+   calculés des fichiers serveur, sans bloquer SSR ou RSC ;
 3. la façade client ne possède aucun collecteur et laisse passer le prochain
    task sans exécuter un callback CPU hostile ;
 4. la façade reste inactive même avec consentement accordé ;
 5. `unknown` et `denied` restent fail-closed ;
-6. les douze variantes `AJ-APO`, leurs produits, prix et devise proviennent du
-   catalogue commerce réel ;
+6. les douze IDs runtime `variant_boxer_*`, le produit `product_apollon`, les
+   douze références internes `AJ-APO-*`, le prix et la devise suivent le contrat
+   commerce/D1 canonique ;
 7. ajout panier et checkout dérivent leurs valeurs du catalogue ;
 8. `order_paid` expose seulement un contrat interne `unavailable` et aucun
    mécanisme ne peut accepter un snapshot ou une persistance injectée ;

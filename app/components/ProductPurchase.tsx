@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { getLocalizedProductCopy } from "@/lib/i18n/product-copy";
+import { createLaunchVariantId } from "../../lib/commerce/product-identifiers";
 import type { PublicStockBySize } from "../../lib/commerce/public-stock";
 import type { Product, ProductSize } from "../../lib/products";
 import { formatPrice, sizes } from "../../lib/products";
@@ -11,7 +12,7 @@ import styles from "./ProductPage.module.css";
 
 type ProductPurchaseProps = {
   product: Product;
-  products: Product[];
+  products: readonly Product[];
   availability: PublicStockBySize;
 };
 
@@ -272,10 +273,10 @@ export default function ProductPurchase({
           : t("product.paymentDisabled")}
       </p>
 
-      {added && (
+      {added && selectedSize && (
         <Link
           className={styles.cartLink}
-          href={`/cart?variant=${product.commerceProductId}-${selectedSize}`}
+          href={`/cart?variant=${createLaunchVariantId(product.slug, selectedSize)}`}
         >
           {t("product.viewCart")}
         </Link>

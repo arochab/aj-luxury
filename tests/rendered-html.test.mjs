@@ -490,7 +490,7 @@ test("withdrawal route is visible but cannot fake a live order workflow", async 
 
 test("cart keeps the selected color and size", async () => {
   const response = await render(
-    "/cart?variant=AJ-APO-ROS-XL",
+    "/cart?variant=variant_boxer_rose-pale_xl",
   );
   assert.equal(response.status, 200);
   const html = await response.text();
@@ -499,14 +499,14 @@ test("cart keeps the selected color and size", async () => {
   assert.match(html, /29,99(?:\s|&nbsp;|&#xA0;)*€/);
 
   const checkout = await render(
-    "/checkout?variant=AJ-APO-ROS-XL",
+    "/checkout?variant=variant_boxer_rose-pale_xl",
   );
   const checkoutHtml = await checkout.text();
   assert.match(checkoutHtml, /Rose Velours/);
   assert.match(checkoutHtml, /29,99(?:\s|&nbsp;|&#xA0;)*€/);
   assert.match(
     checkoutHtml,
-    /\/cart\?variant=AJ-APO-ROS-XL/,
+    /\/cart\?variant=variant_boxer_rose-pale_xl/,
   );
 });
 

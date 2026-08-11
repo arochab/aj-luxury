@@ -1,4 +1,4 @@
-import { getLaunchVariant, launchVariants } from "./catalog";
+import { getLaunchVariant, listLaunchVariants } from "./catalog.ts";
 import type {
   Cart,
   CartLine,
@@ -46,7 +46,7 @@ export const mockCommerceProvider: CommerceProvider = {
   mode: "simulation",
 
   async listLaunchVariants(): Promise<ProductVariant[]> {
-    return launchVariants;
+    return listLaunchVariants();
   },
 
   async getVariant(variantId: string): Promise<ProductVariant | null> {
@@ -147,7 +147,7 @@ export const mockCommerceProvider: CommerceProvider = {
 };
 
 export async function createDemoCart(
-  variantId = "AJ-APO-POU-M",
+  variantId = "variant_boxer_pourpre_m",
 ) {
   const emptyCart = await mockCommerceProvider.createCart();
   return mockCommerceProvider.addCartLine(emptyCart, variantId, 1);
