@@ -113,7 +113,28 @@ function toStockReservation(row: ReservationRow): StockReservation {
   };
 }
 
-function movementKey(action: "reserve" | "release" | "expire" | "sale", key: string) {
+function movementKey(action: "reserve", key: string): string;
+function movementKey(
+  action: "release" | "expire" | "sale",
+  key: string,
+  reservationId: string,
+): string;
+function movementKey(
+  action: "reserve" | "release" | "expire" | "sale",
+  key: string,
+  reservationId?: string,
+) {
+  if (action !== "reserve" && !reservationId) {
+    throw new CommerceError(
+      "INVALID_INPUT",
+      "Reservation transitions require a reservation-scoped movement key.",
+    );
+  }
+
+  if (reservationId) {
+    return `${action}:${key}:${reservationId}`;
+  }
+
   return `${action}:${key}`;
 }
 
@@ -515,6 +536,7 @@ export class D1CommerceStore {
     const closeMovementKey = movementKey(
       input.targetStatus === "expired" ? "expire" : "release",
       input.idempotencyKey,
+      input.reservationId,
     );
     const expiryPredicate = input.requireExpired ? "AND expires_at <= ?" : "";
     const updateValues = input.requireExpired
@@ -601,7 +623,11 @@ export class D1CommerceStore {
     input: ConvertStockToSaleInput,
   ): Promise<StockReservation> {
     validateConvertStockToSaleInput(input);
-    const saleMovementKey = movementKey("sale", input.idempotencyKey);
+    const saleMovementKey = movementKey(
+      "sale",
+      input.idempotencyKey,
+      input.reservationId,
+    );
 
     try {
       await this.#database.batch([

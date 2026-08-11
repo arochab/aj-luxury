@@ -6,10 +6,8 @@ import {
   assertPositiveInteger,
   assertSafeIdentifier,
 } from "../../lib/commerce/backend-domain.ts";
-import {
-  registerVerifiedPaymentEventFromTrustedAdapter,
-  type VerifiedPaymentEvent,
-} from "../../lib/commerce/verified-payment-event.ts";
+import { registerVerifiedPaymentEventForNodeTest } from "../../lib/commerce/payment-event-registration.internal.ts";
+import type { VerifiedPaymentEvent } from "../../lib/commerce/verified-payment-event.ts";
 
 export type TestPaymentEventFixture = {
   providerEventId: string;
@@ -60,7 +58,7 @@ export async function verifyTestPaymentEvent(
     );
   }
 
-  return registerVerifiedPaymentEventFromTrustedAdapter({
+  return registerVerifiedPaymentEventForNodeTest({
     provider: "test",
     providerEventId: fixture.providerEventId,
     providerPaymentId: fixture.providerPaymentId,

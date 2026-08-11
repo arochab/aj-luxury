@@ -313,6 +313,23 @@ CREATE TABLE `webhook_events` (
 --> statement-breakpoint
 CREATE UNIQUE INDEX `ux_webhook_events_provider_event` ON `webhook_events` (`provider`,`provider_event_id`);--> statement-breakpoint
 CREATE INDEX `idx_webhook_events_status_received_at` ON `webhook_events` (`status`,`received_at`);--> statement-breakpoint
+CREATE TRIGGER `trg_cart_lines_validate_catalog_insert`
+BEFORE INSERT ON `cart_lines`
+BEGIN
+  SELECT CASE WHEN NOT EXISTS (
+    SELECT 1
+    FROM `carts` AS cart
+    INNER JOIN `variants` AS variant ON variant.`id` = NEW.`variant_id`
+    INNER JOIN `products` AS product ON product.`id` = variant.`product_id`
+    WHERE cart.`id` = NEW.`cart_id`
+      AND cart.`status` = 'open'
+      AND cart.`expires_at` > NEW.`created_at`
+      AND variant.`active` = 1
+      AND product.`status` = 'active'
+      AND product.`currency` = cart.`currency`
+      AND product.`price_cents` = NEW.`unit_price_cents`
+  ) THEN RAISE(ABORT, 'commerce_cart_line_catalog_mismatch') END;
+END;--> statement-breakpoint
 CREATE TRIGGER `trg_inventory_seed_ledger`
 AFTER INSERT ON `inventory`
 BEGIN
@@ -523,6 +540,21 @@ BEGIN
     SELECT SUM(`line_total_cents`) FROM `order_lines`
     WHERE `order_id` = NEW.`id`
   ), -1) <> NEW.`subtotal_cents`
+  OR EXISTS (
+    SELECT 1
+    FROM `order_lines` AS line
+    LEFT JOIN `variants` AS variant ON variant.`id` = line.`variant_id`
+    LEFT JOIN `products` AS product ON product.`id` = variant.`product_id`
+    WHERE line.`order_id` = NEW.`id`
+      AND (
+        variant.`id` IS NULL
+        OR product.`id` IS NULL
+        OR line.`internal_reference` <> variant.`internal_reference`
+        OR line.`product_name` <> product.`name`
+        OR line.`color_name` <> variant.`color_name`
+        OR line.`size` <> variant.`size`
+      )
+  )
   THEN RAISE(ABORT, 'commerce_order_payment_mismatch') END;
 
   SELECT CASE WHEN EXISTS (
@@ -545,6 +577,32 @@ BEGIN
     FROM `stock_reservations`
     WHERE `converted_order_id` = NEW.`id` AND `status` = 'converted'
     GROUP BY `variant_id`
+  ) THEN RAISE(ABORT, 'commerce_order_payment_mismatch') END;
+
+  SELECT CASE WHEN EXISTS (
+    SELECT `variant_id`, `unit_price_cents`, SUM(`quantity`) AS quantity,
+      SUM(`line_total_cents`) AS line_total_cents
+    FROM `order_lines`
+    WHERE `order_id` = NEW.`id`
+    GROUP BY `variant_id`, `unit_price_cents`
+    EXCEPT
+    SELECT `variant_id`, `unit_price_cents`, SUM(`quantity`) AS quantity,
+      SUM(`unit_price_cents` * `quantity`) AS line_total_cents
+    FROM `cart_lines`
+    WHERE `cart_id` = NEW.`cart_id`
+    GROUP BY `variant_id`, `unit_price_cents`
+  ) OR EXISTS (
+    SELECT `variant_id`, `unit_price_cents`, SUM(`quantity`) AS quantity,
+      SUM(`unit_price_cents` * `quantity`) AS line_total_cents
+    FROM `cart_lines`
+    WHERE `cart_id` = NEW.`cart_id`
+    GROUP BY `variant_id`, `unit_price_cents`
+    EXCEPT
+    SELECT `variant_id`, `unit_price_cents`, SUM(`quantity`) AS quantity,
+      SUM(`line_total_cents`) AS line_total_cents
+    FROM `order_lines`
+    WHERE `order_id` = NEW.`id`
+    GROUP BY `variant_id`, `unit_price_cents`
   ) THEN RAISE(ABORT, 'commerce_order_payment_mismatch') END;
 END;--> statement-breakpoint
 CREATE TRIGGER `trg_webhook_events_validate_processed`

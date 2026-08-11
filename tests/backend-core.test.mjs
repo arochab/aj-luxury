@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { spawnSync } from "node:child_process";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { runInNewContext } from "node:vm";
 import { build } from "esbuild";
+import ts from "typescript";
 import {
   LAUNCH_PHYSICAL_QUANTITY,
   LAUNCH_VARIANT_COUNT,
@@ -15,10 +18,18 @@ import {
   availableToSell,
 } from "../lib/commerce/backend-domain.ts";
 import { D1CommerceStore } from "../lib/commerce/d1-commerce-store.ts";
+import * as paymentAuthority from "../lib/commerce/verified-payment-event.ts";
 import { assertVerifiedPaymentEvent } from "../lib/commerce/verified-payment-event.ts";
 import { verifyTestPaymentEvent } from "./support/test-payment-event.ts";
 
 const drizzleDirectory = fileURLToPath(new URL("../drizzle/", import.meta.url));
+const projectRoot = fileURLToPath(new URL("../", import.meta.url));
+const paymentRegistrationPath = fileURLToPath(
+  new URL(
+    "../lib/commerce/payment-event-registration.internal.ts",
+    import.meta.url,
+  ),
+);
 const migrationPaths = readdirSync(drizzleDirectory)
   .filter((name) => /^\d+_.+\.sql$/.test(name))
   .sort()
@@ -30,6 +41,82 @@ function listSourceFiles(directory) {
     if (entry.isDirectory()) return listSourceFiles(path);
     return /\.(?:[cm]?js|tsx?)$/.test(entry.name) ? [path] : [];
   });
+}
+
+function evaluateStaticString(node) {
+  if (ts.isStringLiteralLike(node)) return node.text;
+  if (ts.isParenthesizedExpression(node)) {
+    return evaluateStaticString(node.expression);
+  }
+  if (
+    ts.isBinaryExpression(node) &&
+    node.operatorToken.kind === ts.SyntaxKind.PlusToken
+  ) {
+    const left = evaluateStaticString(node.left);
+    const right = evaluateStaticString(node.right);
+    return left === null || right === null ? null : left + right;
+  }
+  if (ts.isNoSubstitutionTemplateLiteral(node)) return node.text;
+  return null;
+}
+
+function resolveLocalModule(importerPath, specifier) {
+  let unresolved;
+  if (specifier.startsWith("@/")) {
+    unresolved = resolve(projectRoot, specifier.slice(2));
+  } else if (specifier.startsWith(".")) {
+    unresolved = resolve(dirname(importerPath), specifier);
+  } else {
+    return null;
+  }
+
+  const candidates = /\.[cm]?[jt]sx?$/i.test(unresolved)
+    ? [unresolved]
+    : [
+        unresolved,
+        ...[".ts", ".tsx", ".js", ".mjs", ".mts"].map(
+          (extension) => unresolved + extension,
+        ),
+        ...[".ts", ".tsx", ".js", ".mjs", ".mts"].map((extension) =>
+          join(unresolved, `index${extension}`),
+        ),
+      ];
+
+  return candidates.find((candidate) => existsSync(candidate)) ?? unresolved;
+}
+
+function collectResolvedLocalImports(sourceText, importerPath) {
+  const sourceFile = ts.createSourceFile(
+    importerPath,
+    sourceText,
+    ts.ScriptTarget.Latest,
+    true,
+  );
+  const resolvedImports = [];
+
+  function record(moduleNode) {
+    if (!moduleNode) return;
+    const specifier = evaluateStaticString(moduleNode);
+    if (specifier === null) return;
+    const target = resolveLocalModule(importerPath, specifier);
+    if (target) resolvedImports.push(target);
+  }
+
+  function visit(node) {
+    if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {
+      record(node.moduleSpecifier);
+    } else if (
+      ts.isCallExpression(node) &&
+      (node.expression.kind === ts.SyntaxKind.ImportKeyword ||
+        (ts.isIdentifier(node.expression) && node.expression.text === "require"))
+    ) {
+      record(node.arguments[0]);
+    }
+    ts.forEachChild(node, visit);
+  }
+
+  visit(sourceFile);
+  return resolvedImports;
 }
 
 class SQLiteD1Statement {
@@ -133,7 +220,8 @@ function validateReserves(database, variantIds = null) {
 
 function insertPendingOrder(database, input) {
   const subtotalCents = input.lines.reduce(
-    (total, line) => total + line.quantity * 2999,
+    (total, line) =>
+      total + line.quantity * (line.unitPriceCents ?? 2_999),
     0,
   );
   database
@@ -158,31 +246,89 @@ function insertPendingOrder(database, input) {
     );
 
   const variantQuery = database.prepare(
-    `SELECT internal_reference, color_name, size
-    FROM variants WHERE id = ?`,
+    `SELECT variant.internal_reference, variant.color_name, variant.size,
+      product.name AS product_name
+    FROM variants AS variant
+    INNER JOIN products AS product ON product.id = variant.product_id
+    WHERE variant.id = ?`,
   );
   const insertLine = database.prepare(
     `INSERT INTO order_lines (
       id, order_id, variant_id, internal_reference, product_name, color_name,
       size, quantity, unit_price_cents, line_total_cents, created_at
-    ) VALUES (?, ?, ?, ?, 'Apollon', ?, ?, ?, 2999, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  );
+  const insertCartLine = database.prepare(
+    `INSERT INTO cart_lines (
+      id, cart_id, variant_id, quantity, unit_price_cents, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
   );
   input.lines.forEach((line, index) => {
     const variant = variantQuery.get(line.variantId);
+    const unitPriceCents = line.unitPriceCents ?? 2_999;
+    insertCartLine.run(
+      `${input.cartId}_line_${index}`,
+      input.cartId,
+      line.variantId,
+      line.quantity,
+      unitPriceCents,
+      input.now,
+      input.now,
+    );
     insertLine.run(
       `${input.id}_line_${index}`,
       input.id,
       line.variantId,
       variant.internal_reference,
+      variant.product_name,
       variant.color_name,
       variant.size,
       line.quantity,
-      line.quantity * 2999,
+      unitPriceCents,
+      line.quantity * unitPriceCents,
       input.now,
     );
   });
 
   return subtotalCents;
+}
+
+function insertVerifiedPaymentPrerequisite(database, input) {
+  database
+    .prepare(
+      `INSERT INTO webhook_events (
+        id, provider, provider_event_id, event_type, payload_fingerprint,
+        verification_method, verified_at, order_id, provider_payment_id,
+        amount_cents, currency, status, attempts, received_at
+      ) VALUES (?, 'test', ?, 'payment.succeeded', ?, 'test_adapter', ?, ?, ?,
+        ?, 'EUR', 'verified', 0, ?)`,
+    )
+    .run(
+      `webhook_${input.providerEventId}`,
+      input.providerEventId,
+      `sha256:${input.providerEventId}`,
+      input.now,
+      input.orderId,
+      input.providerPaymentId,
+      input.amountCents,
+      input.now,
+    );
+  database
+    .prepare(
+      `INSERT INTO payments (
+        id, order_id, provider, provider_session_id, status, amount_cents,
+        currency, idempotency_key, created_at, updated_at
+      ) VALUES (?, ?, 'test', ?, 'succeeded', ?, 'EUR', ?, ?, ?)`,
+    )
+    .run(
+      `payment_${input.providerPaymentId}`,
+      input.orderId,
+      input.providerPaymentId,
+      input.amountCents,
+      `payment:test:${input.providerPaymentId}`,
+      input.now,
+      input.now,
+    );
 }
 
 async function createVerifiedEvent(input) {
@@ -344,6 +490,52 @@ test("foreign keys, unique constraints and checks reject impossible states", asy
   database.close();
 });
 
+test("cart price snapshots must originate from the active server catalog", async () => {
+  const { database, store } = createFixture();
+  const now = "2026-08-10T12:00:00.000Z";
+  const cartId = "cart_catalog_price";
+  const variantId = "variant_boxer_pourpre_s";
+  await store.seedLaunchCatalog(now);
+  await store.createCart({
+    id: cartId,
+    expiresAt: "2026-08-10T14:00:00.000Z",
+    now,
+  });
+
+  assert.throws(
+    () =>
+      database
+        .prepare(
+          `INSERT INTO cart_lines (
+            id, cart_id, variant_id, quantity, unit_price_cents,
+            created_at, updated_at
+          ) VALUES ('cart_line_tampered', ?, ?, 1, 1, ?, ?)`,
+        )
+        .run(cartId, variantId, now, now),
+    /commerce_cart_line_catalog_mismatch/,
+  );
+  database
+    .prepare(
+      `INSERT INTO cart_lines (
+        id, cart_id, variant_id, quantity, unit_price_cents,
+        created_at, updated_at
+      ) VALUES ('cart_line_catalog_snapshot', ?, ?, 1, 2999, ?, ?)`,
+    )
+    .run(cartId, variantId, now, now);
+  database
+    .prepare("UPDATE products SET price_cents = 3499 WHERE id = 'product_apollon'")
+    .run();
+  assert.equal(
+    database
+      .prepare(
+        "SELECT unit_price_cents FROM cart_lines WHERE id = 'cart_line_catalog_snapshot'",
+      )
+      .get().unit_price_cents,
+    2_999,
+  );
+  database.close();
+});
+
 test("timestamps are strict UTC and cart id collisions cannot alias different carts", async () => {
   const { database, store } = createFixture();
   const now = "2026-08-10T12:00:00.000Z";
@@ -421,20 +613,92 @@ test("payment authority is non-forgeable and the local verifier stays outside pr
       error instanceof CommerceError &&
       error.code === "PAYMENT_VERIFICATION_REQUIRED",
   );
+  for (const registrarName of [
+    "registerVerifiedPaymentEventFromTrustedAdapter",
+    "registerVerifiedPaymentEventForNodeTest",
+  ]) {
+    assert.equal(paymentAuthority[registrarName], undefined);
+  }
 
   const productionRoots = ["../app/", "../db/", "../lib/", "../worker/"];
-  const forbiddenRegistrarConsumers = productionRoots
+  const productionFiles = productionRoots
     .flatMap((relative) =>
       listSourceFiles(fileURLToPath(new URL(relative, import.meta.url))),
-    )
-    .filter(
-      (path) =>
-        !path.endsWith("verified-payment-event.ts") &&
-        readFileSync(path, "utf8").includes(
-          "registerVerifiedPaymentEventFromTrustedAdapter",
-        ),
     );
-  assert.deepEqual(forbiddenRegistrarConsumers, []);
+  const internalRegistrationConsumers = productionFiles.filter((path) =>
+    collectResolvedLocalImports(readFileSync(path, "utf8"), path).includes(
+      paymentRegistrationPath,
+    ),
+  );
+  assert.deepEqual(
+    internalRegistrationConsumers.map((path) => path.replaceAll("\\", "/")),
+    [
+      fileURLToPath(
+        new URL("../lib/commerce/verified-payment-event.ts", import.meta.url),
+      ).replaceAll("\\", "/"),
+    ],
+  );
+  const testVerifierPath = fileURLToPath(
+    new URL("./support/test-payment-event.ts", import.meta.url),
+  );
+  assert.deepEqual(
+    productionFiles.filter((path) =>
+      collectResolvedLocalImports(readFileSync(path, "utf8"), path).includes(
+        testVerifierPath,
+      ),
+    ),
+    [],
+  );
+
+  const adversarialImporter = join(projectRoot, "app/payment-authority-attack.ts");
+  const adversarialImports = collectResolvedLocalImports(
+    `
+      import * as namespaceAuthority from
+        "../lib/commerce/payment-event-registration.internal.ts";
+      void namespaceAuthority;
+      void import(
+        "../lib/commerce/" + "payment-event-registration.internal.ts"
+      );
+      export { registerVerifiedPaymentEventForNodeTest } from
+        "@/lib/commerce/payment-event-registration.internal";
+    `,
+    adversarialImporter,
+  ).filter((path) => path === paymentRegistrationPath);
+  assert.equal(adversarialImports.length, 3);
+
+  const childEnvironment = { ...process.env };
+  delete childEnvironment.NODE_TEST_CONTEXT;
+  const deepRuntimeAttack = `
+    const authority = await import(${JSON.stringify(pathToFileURL(paymentRegistrationPath).href)});
+    const register = authority[
+      "registerVerified" + "PaymentEventForNodeTest"
+    ];
+    try {
+      register({});
+      process.exitCode = 2;
+    } catch (error) {
+      if (error?.code !== "PAYMENT_VERIFICATION_REQUIRED") throw error;
+    }
+  `;
+  const childResult = spawnSync(
+    process.execPath,
+    [
+      "--experimental-strip-types",
+      "--input-type=module",
+      "--eval",
+      deepRuntimeAttack,
+    ],
+    {
+      cwd: projectRoot,
+      encoding: "utf8",
+      env: childEnvironment,
+    },
+  );
+  assert.equal(
+    childResult.status,
+    0,
+    `deep registrar import escaped its Node-test-only guard:\n${childResult.stderr}`,
+  );
 
   const storeBundle = await build({
     entryPoints: [
@@ -449,7 +713,53 @@ test("payment authority is non-forgeable and the local verifier stays outside pr
     write: false,
   });
   const storeCode = storeBundle.outputFiles[0].text;
-  assert.doesNotMatch(storeCode, /verifyTestPaymentEvent|test_adapter/);
+  assert.doesNotMatch(
+    storeCode,
+    /verifyTestPaymentEvent|registerVerifiedPaymentEventForNodeTest|NODE_TEST_CONTEXT/,
+  );
+
+  for (const platform of ["browser", "neutral"]) {
+    const attackBundle = await build({
+      stdin: {
+        contents: `
+          import * as deepAuthority from
+            "./lib/commerce/payment-event-registration.internal.ts";
+          globalThis.attemptPaymentForgery = () =>
+            deepAuthority[
+              "registerVerified" + "PaymentEventForNodeTest"
+            ]({
+              provider: "test",
+              providerEventId: "event_browser_attack",
+              providerPaymentId: "payment_browser_attack",
+              eventType: "payment.succeeded",
+              orderId: "order_browser_attack",
+              amountCents: 2999,
+              currency: "EUR",
+              occurredAt: "2026-08-10T12:00:00.000Z",
+              verifiedAt: "2026-08-10T12:00:01.000Z",
+              verificationMethod: "test_adapter",
+              payloadFingerprint: "sha256:browser-attack",
+            });
+        `,
+        loader: "ts",
+        resolveDir: projectRoot,
+        sourcefile: `${platform}-payment-authority-attack.ts`,
+      },
+      bundle: true,
+      format: "iife",
+      logLevel: "silent",
+      platform,
+      treeShaking: true,
+      write: false,
+    });
+    const sandbox = {};
+    runInNewContext(attackBundle.outputFiles[0].text, sandbox);
+    assert.throws(
+      () => sandbox.attemptPaymentForgery(),
+      (error) => error?.code === "PAYMENT_VERIFICATION_REQUIRED",
+      `${platform} bundle must not mint a verified payment event`,
+    );
+  }
 
   await assert.rejects(
     () =>
@@ -556,69 +866,182 @@ test("concurrent buyers never oversell, including the last unit", async () => {
   database.close();
 });
 
-test("manual release and operational expiration are each idempotent", async () => {
+test("shared transition keys stay reservation-scoped across release, expiration and sale retries", async () => {
   const { database, store } = createFixture();
   const now = "2026-08-10T12:00:00.000Z";
-  const variantId = "variant_boxer_rose-pale_m";
+  const releaseVariant = "variant_boxer_pourpre_s";
+  const expireVariant = "variant_boxer_rose-pale_m";
+  const saleVariants = [
+    "variant_boxer_lilas-bleu-clair_l",
+    "variant_boxer_lilas-bleu-clair_xl",
+  ];
   await store.seedLaunchCatalog(now);
-  validateReserves(database, [variantId]);
-  await store.createCart({
-    id: "cart_close_reservations",
-    expiresAt: "2026-08-10T14:00:00.000Z",
-    now,
-  });
-  for (const suffix of ["release", "expire"]) {
+  validateReserves(database, [releaseVariant, expireVariant, ...saleVariants]);
+
+  for (const cartId of [
+    "cart_shared_release",
+    "cart_shared_expire",
+    "cart_shared_convert",
+  ]) {
+    await store.createCart({
+      id: cartId,
+      expiresAt: "2026-08-10T14:00:00.000Z",
+      now,
+    });
+  }
+
+  const reservationSpecs = [
+    ["release_a", "cart_shared_release", releaseVariant, 1],
+    ["release_b", "cart_shared_release", releaseVariant, 2],
+    ["expire_a", "cart_shared_expire", expireVariant, 1],
+    ["expire_b", "cart_shared_expire", expireVariant, 2],
+    ["convert_a", "cart_shared_convert", saleVariants[0], 1],
+    ["convert_b", "cart_shared_convert", saleVariants[1], 2],
+  ];
+  for (const [suffix, cartId, variantId, quantity] of reservationSpecs) {
+    const reservationId = `reservation_shared_${suffix}`;
     await store.reserveStock({
-      reservationId: `reservation_${suffix}`,
-      cartId: "cart_close_reservations",
+      reservationId,
+      cartId,
       variantId,
-      quantity: 2,
-      idempotencyKey: `reserve_${suffix}`,
+      quantity,
+      idempotencyKey: `reserve_${reservationId}`,
       expiresAt: "2026-08-10T13:00:00.000Z",
       now,
     });
   }
-  await store.releaseStock({
-    reservationId: "reservation_release",
-    idempotencyKey: "release_once",
-    now: "2026-08-10T12:10:00.000Z",
-  });
-  await store.releaseStock({
-    reservationId: "reservation_release",
-    idempotencyKey: "release_once",
-    now: "2026-08-10T12:10:00.000Z",
-  });
+
+  for (const reservationId of [
+    "reservation_shared_release_a",
+    "reservation_shared_release_b",
+  ]) {
+    await store.releaseStock({
+      reservationId,
+      idempotencyKey: "shared_release_request",
+      now: "2026-08-10T12:10:00.000Z",
+    });
+    await store.releaseStock({
+      reservationId,
+      idempotencyKey: "shared_release_request",
+      now: "2026-08-10T12:11:00.000Z",
+    });
+  }
+
   await assert.rejects(
     () =>
       store.expireReservation({
-        reservationId: "reservation_expire",
-        idempotencyKey: "expire_once",
+        reservationId: "reservation_shared_expire_a",
+        idempotencyKey: "shared_expire_request",
         now: "2026-08-10T12:59:59.999Z",
       }),
     (error) =>
       error instanceof CommerceError && error.code === "RESERVATION_NOT_EXPIRED",
   );
-  await store.expireReservation({
-    reservationId: "reservation_expire",
-    idempotencyKey: "expire_once",
-    now: "2026-08-10T13:00:00.000Z",
-  });
-  await store.expireReservation({
-    reservationId: "reservation_expire",
-    idempotencyKey: "expire_once",
-    now: "2026-08-10T13:00:00.000Z",
-  });
+  for (const reservationId of [
+    "reservation_shared_expire_a",
+    "reservation_shared_expire_b",
+  ]) {
+    await store.expireReservation({
+      reservationId,
+      idempotencyKey: "shared_expire_request",
+      now: "2026-08-10T13:00:00.000Z",
+    });
+    await store.expireReservation({
+      reservationId,
+      idempotencyKey: "shared_expire_request",
+      now: "2026-08-10T13:01:00.000Z",
+    });
+  }
 
-  const position = await store.getInventoryPosition(variantId);
-  assert.equal(position.activeReservedQuantity, 0);
-  assert.equal(availableToSell(position), 103);
-  assert.equal(
+  const orderTotal = insertPendingOrder(database, {
+    id: "order_shared_convert",
+    number: "AJ-TEST-SHARED-CONVERT",
+    cartId: "cart_shared_convert",
+    now,
+    lines: [
+      { variantId: saleVariants[0], quantity: 1 },
+      { variantId: saleVariants[1], quantity: 2 },
+    ],
+  });
+  insertVerifiedPaymentPrerequisite(database, {
+    providerEventId: "event_shared_convert",
+    providerPaymentId: "payment_shared_convert",
+    orderId: "order_shared_convert",
+    amountCents: orderTotal,
+    now: "2026-08-10T12:20:00.000Z",
+  });
+  for (const reservationId of [
+    "reservation_shared_convert_a",
+    "reservation_shared_convert_b",
+  ]) {
+    await store.convertStockToSale({
+      reservationId,
+      orderId: "order_shared_convert",
+      idempotencyKey: "shared_convert_request",
+      now: "2026-08-10T12:20:00.000Z",
+    });
+    await store.convertStockToSale({
+      reservationId,
+      orderId: "order_shared_convert",
+      idempotencyKey: "shared_convert_request",
+      now: "2026-08-10T12:21:00.000Z",
+    });
+  }
+
+  const transitionRows = database
+    .prepare(
+      `SELECT kind, quantity, reference_type, reference_id, idempotency_key
+      FROM inventory_movements
+      WHERE idempotency_key LIKE 'release:shared_release_request:%'
+        OR idempotency_key LIKE 'expire:shared_expire_request:%'
+        OR idempotency_key LIKE 'sale:shared_convert_request:%'
+      ORDER BY idempotency_key`,
+    )
+    .all()
+    .map(
+      (row) =>
+        `${row.kind}|${row.quantity}|${row.reference_type}|${row.reference_id}|${row.idempotency_key}`,
+    );
+  assert.deepEqual(transitionRows, [
+    "release|1|expiration|reservation_shared_expire_a|expire:shared_expire_request:reservation_shared_expire_a",
+    "release|2|expiration|reservation_shared_expire_b|expire:shared_expire_request:reservation_shared_expire_b",
+    "release|1|reservation|reservation_shared_release_a|release:shared_release_request:reservation_shared_release_a",
+    "release|2|reservation|reservation_shared_release_b|release:shared_release_request:reservation_shared_release_b",
+    "sale|1|order|order_shared_convert|sale:shared_convert_request:reservation_shared_convert_a",
+    "sale|2|order|order_shared_convert|sale:shared_convert_request:reservation_shared_convert_b",
+  ]);
+
+  assert.deepEqual(
     database
       .prepare(
-        `SELECT COUNT(*) AS count FROM inventory_movements
-        WHERE variant_id = ? AND kind = 'release'`,
+        `SELECT id, status, last_transition_key FROM stock_reservations
+        WHERE id LIKE 'reservation_shared_%' ORDER BY id`,
       )
-      .get(variantId).count,
+      .all()
+      .map((row) => `${row.id}|${row.status}|${row.last_transition_key}`),
+    [
+      "reservation_shared_convert_a|converted|shared_convert_request",
+      "reservation_shared_convert_b|converted|shared_convert_request",
+      "reservation_shared_expire_a|expired|shared_expire_request",
+      "reservation_shared_expire_b|expired|shared_expire_request",
+      "reservation_shared_release_a|released|shared_release_request",
+      "reservation_shared_release_b|released|shared_release_request",
+    ],
+  );
+  assert.equal(
+    (await store.getInventoryPosition(releaseVariant)).activeReservedQuantity,
+    0,
+  );
+  assert.equal(
+    (await store.getInventoryPosition(expireVariant)).activeReservedQuantity,
+    0,
+  );
+  assert.equal(
+    (await store.getInventoryPosition(saleVariants[0])).soldQuantity,
+    1,
+  );
+  assert.equal(
+    (await store.getInventoryPosition(saleVariants[1])).soldQuantity,
     2,
   );
   database.close();
@@ -676,6 +1099,10 @@ test("verified payment atomically converts every line once and writes outbox plu
     occurredAt: paidAt,
   });
 
+  database
+    .prepare("UPDATE products SET price_cents = 3499 WHERE id = 'product_apollon'")
+    .run();
+
   const first = await store.processPaymentSucceeded(event);
   const retry = await store.processPaymentSucceeded(event);
   assert.deepEqual(first, { orderId: "order_paid", convertedReservations: 2 });
@@ -724,6 +1151,42 @@ test("verified payment atomically converts every line once and writes outbox plu
       .prepare("SELECT COUNT(*) AS count FROM inventory_movements WHERE kind = 'sale'")
       .get().count,
     2,
+  );
+  assert.deepEqual(
+    database
+      .prepare(
+        `SELECT idempotency_key FROM inventory_movements
+        WHERE kind = 'sale' ORDER BY idempotency_key`,
+      )
+      .all()
+      .map((row) => row.idempotency_key),
+    [
+      "sale:webhook:test:event_paid:reservation_paid_1",
+      "sale:webhook:test:event_paid:reservation_paid_2",
+    ],
+  );
+  assert.deepEqual(
+    {
+      ...database
+        .prepare(
+          `SELECT product.price_cents AS current_catalog_price,
+            cart_line.unit_price_cents AS cart_snapshot_price,
+            order_line.unit_price_cents AS order_snapshot_price
+          FROM products AS product
+          INNER JOIN variants AS variant ON variant.product_id = product.id
+          INNER JOIN cart_lines AS cart_line ON cart_line.variant_id = variant.id
+          INNER JOIN order_lines AS order_line
+            ON order_line.variant_id = variant.id
+          WHERE product.id = 'product_apollon'
+          LIMIT 1`,
+        )
+        .get(),
+    },
+    {
+      current_catalog_price: 3_499,
+      cart_snapshot_price: 2_999,
+      order_snapshot_price: 2_999,
+    },
   );
 
   const conflictingReplay = await createVerifiedEvent({
@@ -785,64 +1248,237 @@ test("verified payment atomically converts every line once and writes outbox plu
   database.close();
 });
 
-test("payment mismatch rolls back webhook, payment, stock, order, outbox and audit together", async () => {
-  const { database, store } = createFixture();
-  const now = "2026-08-10T12:00:00.000Z";
-  const variantId = "variant_boxer_pourpre_l";
-  await store.seedLaunchCatalog(now);
-  validateReserves(database, [variantId]);
-  await store.createCart({
-    id: "cart_bad_payment",
-    expiresAt: "2026-08-10T14:00:00.000Z",
-    now,
-  });
-  await store.reserveStock({
-    reservationId: "reservation_bad_payment",
-    cartId: "cart_bad_payment",
-    variantId,
-    quantity: 1,
-    idempotencyKey: "reserve_bad_payment",
-    expiresAt: "2026-08-10T13:00:00.000Z",
-    now,
-  });
-  insertPendingOrder(database, {
-    id: "order_bad_payment",
-    number: "AJ-TEST-BAD",
-    cartId: "cart_bad_payment",
-    now,
-    lines: [{ variantId, quantity: 1 }],
-  });
-  const event = await createVerifiedEvent({
-    providerEventId: "event_bad_amount",
-    providerPaymentId: "payment_bad_amount",
-    orderId: "order_bad_payment",
-    amountCents: 1,
-    occurredAt: "2026-08-10T12:10:00.000Z",
-  });
-
-  await assert.rejects(
-    () => store.processPaymentSucceeded(event),
-    (error) =>
-      error instanceof CommerceError && error.code === "ORDER_PAYMENT_MISMATCH",
-  );
-  assert.deepEqual(
+test("every payment line mismatch rolls back webhook, payment, stock, order, outbox and audit", async (t) => {
+  const scenarios = [
     {
-      ...database
-        .prepare("SELECT status FROM orders WHERE id = 'order_bad_payment'")
-        .get(),
+      name: "missing order line",
+      mutate(database, context) {
+        database
+          .prepare("DELETE FROM order_lines WHERE order_id = ?")
+          .run(context.orderId);
+        return 2_999;
+      },
     },
-    { status: "pending_payment" },
-  );
-  assert.equal((await store.getInventoryPosition(variantId)).activeReservedQuantity, 1);
-  assert.equal((await store.getInventoryPosition(variantId)).soldQuantity, 0);
-  for (const table of ["webhook_events", "payments", "email_outbox", "audit_log"]) {
-    assert.equal(
-      database.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get().count,
-      0,
-      `${table} must roll back`,
-    );
+    {
+      name: "extra order line",
+      mutate(database, context) {
+        database
+          .prepare(
+            `INSERT INTO order_lines (
+              id, order_id, variant_id, internal_reference, product_name,
+              color_name, size, quantity, unit_price_cents, line_total_cents,
+              created_at
+            )
+            SELECT ?, ?, variant.id, variant.internal_reference, product.name,
+              variant.color_name, variant.size, 1, 0, 0, ?
+            FROM variants AS variant
+            INNER JOIN products AS product ON product.id = variant.product_id
+            WHERE variant.id = ?`,
+          )
+          .run(
+            `${context.orderId}_extra_line`,
+            context.orderId,
+            context.now,
+            context.alternateVariantId,
+          );
+        return 2_999;
+      },
+    },
+    {
+      name: "quantity divergence",
+      mutate(database, context) {
+        database
+          .prepare(
+            `UPDATE order_lines
+            SET quantity = 2, line_total_cents = 5998
+            WHERE order_id = ?`,
+          )
+          .run(context.orderId);
+        database
+          .prepare(
+            `UPDATE orders SET subtotal_cents = 5998, total_cents = 5998
+            WHERE id = ?`,
+          )
+          .run(context.orderId);
+        return 5_998;
+      },
+    },
+    {
+      name: "unit-price and amount divergence",
+      mutate(database, context) {
+        database
+          .prepare(
+            `UPDATE order_lines
+            SET unit_price_cents = 3099, line_total_cents = 3099
+            WHERE order_id = ?`,
+          )
+          .run(context.orderId);
+        database
+          .prepare(
+            `UPDATE orders SET subtotal_cents = 3099, total_cents = 3099
+            WHERE id = ?`,
+          )
+          .run(context.orderId);
+        return 3_099;
+      },
+    },
+    {
+      name: "variant divergence",
+      mutate(database, context) {
+        const alternate = database
+          .prepare(
+            `SELECT variant.id, variant.internal_reference, variant.color_name,
+              variant.size, product.name AS product_name
+            FROM variants AS variant
+            INNER JOIN products AS product ON product.id = variant.product_id
+            WHERE variant.id = ?`,
+          )
+          .get(context.alternateVariantId);
+        database
+          .prepare(
+            `UPDATE order_lines SET variant_id = ?, internal_reference = ?,
+              product_name = ?, color_name = ?, size = ?
+            WHERE order_id = ?`,
+          )
+          .run(
+            alternate.id,
+            alternate.internal_reference,
+            alternate.product_name,
+            alternate.color_name,
+            alternate.size,
+            context.orderId,
+          );
+        return 2_999;
+      },
+    },
+    {
+      name: "provider amount divergence",
+      mutate() {
+        return 1;
+      },
+    },
+    {
+      name: "catalog identity divergence",
+      mutate(database, context) {
+        database
+          .prepare(
+            `UPDATE order_lines SET internal_reference = 'AJ-TAMPERED'
+            WHERE order_id = ?`,
+          )
+          .run(context.orderId);
+        return 2_999;
+      },
+    },
+  ];
+
+  for (const [index, scenario] of scenarios.entries()) {
+    await t.test(scenario.name, async () => {
+      const { database, store } = createFixture();
+      const now = "2026-08-10T12:00:00.000Z";
+      const variantId = "variant_boxer_pourpre_l";
+      const alternateVariantId = "variant_boxer_rose-pale_l";
+      const suffix = `mismatch_${index}`;
+      const cartId = `cart_${suffix}`;
+      const orderId = `order_${suffix}`;
+      const reservationId = `reservation_${suffix}`;
+      await store.seedLaunchCatalog(now);
+      validateReserves(database, [variantId]);
+      await store.createCart({
+        id: cartId,
+        expiresAt: "2026-08-10T14:00:00.000Z",
+        now,
+      });
+      await store.reserveStock({
+        reservationId,
+        cartId,
+        variantId,
+        quantity: 1,
+        idempotencyKey: `reserve_${suffix}`,
+        expiresAt: "2026-08-10T13:00:00.000Z",
+        now,
+      });
+      insertPendingOrder(database, {
+        id: orderId,
+        number: `AJ-TEST-MISMATCH-${index}`,
+        cartId,
+        now,
+        lines: [{ variantId, quantity: 1 }],
+      });
+      const amountCents = scenario.mutate(database, {
+        alternateVariantId,
+        now,
+        orderId,
+      });
+      const event = await createVerifiedEvent({
+        providerEventId: `event_${suffix}`,
+        providerPaymentId: `payment_${suffix}`,
+        orderId,
+        amountCents,
+        occurredAt: "2026-08-10T12:10:00.000Z",
+      });
+
+      await assert.rejects(
+        () => store.processPaymentSucceeded(event),
+        (error) =>
+          error instanceof CommerceError &&
+          error.code === "ORDER_PAYMENT_MISMATCH",
+      );
+      assert.deepEqual(
+        {
+          ...database
+            .prepare(
+              `SELECT orders.status AS order_status,
+                carts.status AS cart_status
+              FROM orders
+              INNER JOIN carts ON carts.id = orders.cart_id
+              WHERE orders.id = ?`,
+            )
+            .get(orderId),
+        },
+        { order_status: "pending_payment", cart_status: "open" },
+      );
+      assert.deepEqual(
+        {
+          ...database
+            .prepare(
+              `SELECT status, last_transition_key, converted_order_id
+              FROM stock_reservations WHERE id = ?`,
+            )
+            .get(reservationId),
+        },
+        {
+          status: "active",
+          last_transition_key: null,
+          converted_order_id: null,
+        },
+      );
+      const inventory = await store.getInventoryPosition(variantId);
+      assert.equal(inventory.activeReservedQuantity, 1);
+      assert.equal(inventory.soldQuantity, 0);
+      assert.equal(
+        database
+          .prepare(
+            "SELECT COUNT(*) AS count FROM inventory_movements WHERE kind = 'sale'",
+          )
+          .get().count,
+        0,
+      );
+      for (const table of [
+        "webhook_events",
+        "payments",
+        "email_outbox",
+        "audit_log",
+      ]) {
+        assert.equal(
+          database.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get()
+            .count,
+          0,
+          `${scenario.name}: ${table} must roll back`,
+        );
+      }
+      database.close();
+    });
   }
-  database.close();
 });
 
 test("expired reservations and order-cart mismatches cannot be converted", async () => {
