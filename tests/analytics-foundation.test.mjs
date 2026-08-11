@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readdir, readFile } from "node:fs/promises";
-import { basename, dirname, extname, join, relative } from "node:path";
+import { basename, dirname, join, relative } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
@@ -13,6 +13,7 @@ import { getPublicAnalyticsCatalog } from "../lib/analytics/public-catalog.ts";
 import { prepareClientAnalyticsEvent } from "../lib/analytics/client-preparation.ts";
 import {
   ANALYTICS_CLIENT_BOUNDARY_ERROR,
+  ANALYTICS_SERVER_ARTIFACT_MARKERS,
   analyticsServerBoundaryPlugin,
   isAnalyticsServerModule,
 } from "../lib/build/analytics-server-boundary.ts";
@@ -117,15 +118,9 @@ function viteOutputCode(result) {
     .join("\n");
 }
 
-const FORBIDDEN_CLIENT_ARTIFACT_MARKERS = [
-  "order_paid",
-  "canonical_commerce_d1_not_integrated",
-  "storeOnce",
-];
-
 function findArtifactLeaks(artifacts) {
   return artifacts.flatMap(({ name, contents }) =>
-    FORBIDDEN_CLIENT_ARTIFACT_MARKERS.filter((marker) =>
+    ANALYTICS_SERVER_ARTIFACT_MARKERS.filter((marker) =>
       contents.includes(Buffer.from(marker)),
     ).map((marker) => ({ name, marker })),
   );
@@ -437,6 +432,22 @@ test("Vite 8.1.5 rejects the seven historical client paths and uppercase raw/url
   }
 });
 
+test("Vite AST analysis rejects whitespace, constants and a trivial URL alias", async () => {
+  for (const fixture of [
+    "new-url-line-break.mjs",
+    "new-url-comments.mjs",
+    "dynamic-const.mjs",
+    "new-url-const.mjs",
+    "new-url-alias.mjs",
+  ]) {
+    await assert.rejects(
+      () => viteFixtureBuild(join(boundaryFixtureRoot, fixture)),
+      (error) => String(error).includes(ANALYTICS_CLIENT_BOUNDARY_ERROR),
+      `${fixture} unexpectedly passed a real Vite client build`,
+    );
+  }
+});
+
 test("the boundary matcher is case-insensitive before filesystem resolution", () => {
   assert.equal(
     isAnalyticsServerModule(
@@ -468,28 +479,31 @@ test("Vite applies negative import.meta.glob patterns before the boundary guard"
   );
 });
 
-test("the artifact proof detects forbidden content in emitted non-JavaScript assets", async () => {
-  const result = await viteFixtureBuild(
-    join(boundaryFixtureRoot, "asset-non-js.mjs"),
-    { assetsInlineLimit: 0 },
-  );
-  const artifacts = viteOutputArtifacts(result);
-  const nonJavaScriptAsset = artifacts.find(
-    ({ name }) => extname(name).toLowerCase() === ".txt",
-  );
-  assert.ok(
-    nonJavaScriptAsset,
-    "Vite must emit the canary as a non-JavaScript asset",
-  );
-  assert.deepEqual(findArtifactLeaks([nonJavaScriptAsset]), [
-    {
-      name: nonJavaScriptAsset.name,
-      marker: "canonical_commerce_d1_not_integrated",
-    },
-  ]);
+test("the Vite build rejects forbidden markers in JavaScript and non-JavaScript assets", async () => {
+  for (const [fixture, marker, options] of [
+    ["asset-js.mjs", "order_paid", {}],
+    [
+      "asset-non-js.mjs",
+      "canonical_commerce_d1_not_integrated",
+      { assetsInlineLimit: 0 },
+    ],
+  ]) {
+    await assert.rejects(
+      () => viteFixtureBuild(join(boundaryFixtureRoot, fixture), options),
+      (error) => {
+        const message = String(error);
+        return (
+          message.includes(ANALYTICS_CLIENT_BOUNDARY_ERROR) &&
+          message.includes("emitted-artifact") &&
+          message.includes(marker)
+        );
+      },
+      `${fixture} unexpectedly emitted a forbidden client artifact`,
+    );
+  }
 });
 
-test("the real Vite boundary is a mandatory pre-build and pre-lint gate", async () => {
+test("the real Vite boundary gates source and emitted artifacts during build", async () => {
   const packageManifest = JSON.parse(
     await readFile(join(projectRoot, "package.json"), "utf8"),
   );
@@ -501,10 +515,18 @@ test("the real Vite boundary is a mandatory pre-build and pre-lint gate", async 
     join(projectRoot, "vite.config.ts"),
     "utf8",
   );
+  const boundarySource = await readFile(
+    join(projectRoot, "lib", "build", "analytics-server-boundary.ts"),
+    "utf8",
+  );
   assert.match(packageManifest.scripts.prebuild, /check:analytics-boundary/);
+  assert.match(packageManifest.scripts.postbuild, /check:analytics-artifacts/);
   assert.match(packageManifest.scripts.prelint, /check:analytics-boundary/);
   assert.match(boundaryCheckSource, /build as viteBuild/);
+  assert.match(boundaryCheckSource, /dist.+client/);
   assert.match(viteConfigSource, /analyticsServerBoundaryPlugin\(\)/);
+  assert.match(boundarySource, /generateBundle/);
+  assert.doesNotMatch(boundarySource, /code\.includes\(/);
 });
 
 test("the Vite client guard leaves explicit SSR and RSC server builds authorized", async () => {
