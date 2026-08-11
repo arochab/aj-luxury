@@ -110,4 +110,3 @@ checkouts, ratios, chemins/référents/UTM et, séparément, commandes/CA commer
 - [California DOJ — Global Privacy Control](https://oag.ca.gov/privacy/ccpa/gpc)
 - [OPC Canada — meaningful consent](https://www.priv.gc.ca/en/privacy-topics/privacy-for-businesses/appropriate-handling-of-personal-information/collecting-personal-information-and-consent/consent/gl_omc_201805/)
 - [CAI Québec — Loi 25](https://www.cai.gouv.qc.ca/protection-renseignements-personnels/sujets-et-domaines-dinteret/principaux-changements-loi-25)
-
