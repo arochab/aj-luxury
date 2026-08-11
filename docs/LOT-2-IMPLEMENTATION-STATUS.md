@@ -74,7 +74,7 @@ construire puis connecter.
 | `LIVE` | Front `.com` et Hero V4 | Version Sites 31, smoke indépendant PASS | Surveillance ; rollback 30 conservé |
 | `TEST LOCAL` | Commerce, stock, comptes, admin, e-mails/RGPD | Version intégrée locale, 21 tables, 188/188 tests verts en un seul lancement | Socle accepté ; aucune activation réelle |
 | `À CONSTRUIRE` | Expédition, suivi, retours, remboursements | Périmètre audité et exécution locale lancée ; aucun candidat encore accepté | Candidat figé puis contrôle indépendant |
-| `À CONSTRUIRE` | Cookies, consentement, analytics | Mesure d’audience présente mais inactive ; aucune collecte | Après le bloc logistique |
+| `À CONSTRUIRE` | Cookies, consentement, analytics | Périmètre lean audité ; mesure présente mais inactive, aucune collecte | Après le bloc logistique |
 | `BLOQUÉ` | Redirection `.fr` vers `.com` | Domaine parqué ; aucune duplication du site | Jérémy partage la gestion domaine/DNS dans Hostinger |
 
 ## Suite
@@ -107,6 +107,6 @@ Les cinq lignes doivent être vertes ensemble :
 
 - [Release Hero V4](internal/RELEASE-HANDOFF-HERO-V4-2026-08-10.md)
 - [Plan Lot 2](BACKEND-LOT-2-ACTION-PLAN.md)
-- [Périmètre logistique D03](internal/LOT-2-D03-FULFILLMENT-SCOPE-2026-08-11.md)
+- Périmètres approuvés : [logistique D03](internal/LOT-2-D03-FULFILLMENT-SCOPE-2026-08-11.md) et [consentement A02](internal/LOT-2-A02-CONSENT-ANALYTICS-SCOPE-2026-08-11.md)
 - [Journal technique détaillé](internal/LOT-2-TECHNICAL-JOURNAL-2026-08-11.md)
 - [Domaine `.fr`](internal/DOMAIN-PROTECTION-FR-2026-08-10.md)
