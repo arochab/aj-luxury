@@ -12,7 +12,7 @@ import {
  * Catalogue de simulation : les quantités restent dans le registre interne.
  * La projection publique ne reçoit jamais la quantité disponible à la vente.
  */
-export const launchVariants: ProductVariant[] = deepFreeze(
+const canonicalLaunchVariants: readonly ProductVariant[] = deepFreeze(
   products.flatMap((product) =>
     sizes.map((size) => {
       const stock = getInternalStockPosition(product.slug, size);
@@ -46,13 +46,36 @@ export const launchVariants: ProductVariant[] = deepFreeze(
   ),
 );
 
+/** Frozen compatibility view over the private canonical catalogue. */
+export const launchVariants: readonly ProductVariant[] = canonicalLaunchVariants;
+
+function cloneVariant(variant: ProductVariant): ProductVariant {
+  return {
+    ...variant,
+    options: variant.options.map((option) => ({ ...option })),
+    color: { ...variant.color },
+    price: { ...variant.price },
+  };
+}
+
+export function listLaunchVariants(): ProductVariant[] {
+  return canonicalLaunchVariants.map(cloneVariant);
+}
+
 export function getLaunchVariant(variantId: string) {
-  return launchVariants.find((variant) => variant.id === variantId) ?? null;
+  const variant = canonicalLaunchVariants.find(
+    (candidate) => candidate.id === variantId,
+  );
+  return variant ? cloneVariant(variant) : null;
 }
 
 export function getDemoVariant() {
-  return launchVariants.find(
+  const variant = canonicalLaunchVariants.find(
     (variant) =>
       variant.color.name === "Pourpre Impérial" && variant.size === "M",
-  )!;
+  );
+  if (!variant) {
+    throw new Error("The canonical Apollon demo variant is unavailable.");
+  }
+  return cloneVariant(variant);
 }
