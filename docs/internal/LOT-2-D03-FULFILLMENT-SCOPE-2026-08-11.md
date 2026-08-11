@@ -1,6 +1,6 @@
 # AJ Luxury — contrat d’exécution D03 logistique
 
-**Statut : PASS DE CONCEPTION LEAN — AUCUN CODE D03 ENCORE ÉCRIT**
+**Statut : PASS DE CONCEPTION LEAN — IMPLÉMENTATION LOCALE EN COURS, CANDIDAT NON GELÉ ET NON ACCEPTÉ**
 
 **Base gelée : `f5ba52d94c53963f52a24b9edcc6c84033b2f1f6`**
 

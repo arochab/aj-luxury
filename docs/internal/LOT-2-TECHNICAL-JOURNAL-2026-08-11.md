@@ -89,22 +89,16 @@ jury. Un commit refusé reste isolé et n’entre pas dans le candidat d’inté
 
 | Ligne MECE | Périmètre | Agent actif | Entrée gelée | Sortie attendue |
 |---|---|---|---|---|
-| Transaction commerce | Catalogue, panier, stock, commande, paiement, audit | Rejeu déterministe I06 en cours | I06 `f5ba52d` gelé ; jury métier PASS, jury technique bloqué par un `fetch failed` Wrangler local | Obtenir une suite complète verte et reproductible sur le SHA exact |
-| Client et conformité | Comptes, administration, e-mails, RGPD, cookies, analytics | I06 accepté sur le fond, activation interdite | D01, D02 et Analytics dormant réunis dans `f5ba52d` | Lever uniquement le défaut de reproductibilité du test local |
-| Fulfillment | Zones, expédition, suivi, retours, remboursements | Oracle D03 terminé, implémentation en attente du PASS I06 | Spécification `0005` et tests veto prêts | Exécuter D03 seulement après le PASS reproductible I06 |
+| Transaction commerce | Catalogue, panier, stock, commande, paiement, audit | I06 accepté localement, activation interdite | I06 `f5ba52d` gelé ; gate complet PASS 188/188 | Conserver cette base immuable pendant D03 |
+| Client et conformité | Comptes, administration, e-mails, RGPD, cookies, analytics | I06 accepté localement, activation interdite | D01, D02 et Analytics dormant réunis dans `f5ba52d` | Construire A02 seulement après acceptation de D03 |
+| Fulfillment | Zones, expédition, suivi, retours, remboursements | Implémentation D03 locale en correction adversariale | Base I06 `f5ba52d` et spécification `0005` | Geler un candidat, rejouer les migrations puis obtenir les PASS indépendants |
 
-Vague active : I06 est gelée au SHA `f5ba52d94c53963f52a24b9edcc6c84033b2f1f6`.
-La suite intégrée de l’exécutant est verte : commerce 81/81, identité 24/24,
-e-mails/RGPD 12/12, migrations D1 canonique et ciblée vertes, rendu/i18n 47/47 et
-politiques 22/22. Un jury indépendant a confirmé 117/117 contrôles ciblés et le fond
-I06. Un second jury a validé build, canaries, tests principaux, identité, e-mail, lint
-et sécurité, mais son test D1 Wrangler local a terminé sur `fetch failed`. Ce résultat
-ne prouve pas une régression métier, mais interdit encore le PASS final jusqu’à un
-rejeu complet reproductible.
-Analytics reste dormant et aucun prestataire réel n’est activé.
-Le portage Analytics `e8d2f18`
-reste provisoirement accepté mais ne sera reporté qu’après acceptation I04/D01/D02.
-D01/D02/D03/A02 restent numérotés `0003` à `0006`.
+Base acceptée : I06 est gelée au SHA `f5ba52d94c53963f52a24b9edcc6c84033b2f1f6`.
+Après le `fetch failed` local transitoire, un gate complet indépendant a rejoué la suite
+en une seule exécution fraîche : 188/188 tests, migrations D1 canoniques et ciblées,
+build et contrôles de sécurité verts, sans service distant ni activation. D03 est
+désormais en implémentation locale isolée sur cette base. Analytics reste dormant et
+aucun prestataire réel n’est activé. D01/D02/D03/A02 restent numérotés `0003` à `0006`.
 
 Les branches isolées `codex/lot2-integration-wave1-20260811` et
 `codex/lot2-integration-i03-20260811` portent les SHA refusés `50cabaf` et `f0b91e2`.
@@ -161,7 +155,7 @@ Toutes restent locales, non intégrées au checkout canonique et non publiées.
 | `L2-D02` | QA e-mails et droits indépendante | `4338271` | FAIL : 4 P1 migration/token/dédup/reprise + 1 P2 suppression preuve terminale |
 | `L2-D02` | Exécutant correction 2 | `9e17159` | Gelé : cinq findings corrigés, tests composants et D1 réels verts ; QA indépendante en cours |
 | `L2-D02` | QA fix2 indépendante | `9e17159` | PASS isolé strict, 0 P0/P1/P2 ; portage puis nouvelle QA intégrée requis |
-| `L2-I06` | Exécutant intégration I05+D01+D02+Analytics | Bases isolées acceptées | En cours selon manifeste ; aucune activation |
+| `L2-I06` | Exécutant intégration I05+D01+D02+Analytics | Bases isolées acceptées | Terminé et gelé ; aucune activation |
 | `L2-I06` | Cross-read identité/e-mail indépendant | Tip picks `53cbda0` | FAIL intégration : garde token contextualisée, double chemin d’envoi et expiration à résoudre |
 | `L2-I06` | Cross-read Guardian frontend/analytics | Tip picks `53cbda0` | FAIL intégration : suites manquantes, schéma/meta incomplets et blocker analytics obsolète |
 | `L2-I06` | Exécutant correction des jonctions | Base `53cbda0` | En cours ; lien compte éphémère unique, account_access durable désactivé, Guardian à compléter |
@@ -170,9 +164,9 @@ Toutes restent locales, non intégrées au checkout canonique et non publiées.
 | `L2-I06` | Jury technique indépendant | `f5ba52d` | PASS intégrité/build/canaries/81+24+12/lint/sécurité ; verdict global retenu à cause d’un `fetch failed` Wrangler local avant la fin de la suite |
 | `L2-I06` | Diagnostic indépendant | `f5ba52d` | Rejeu D1 isolé 1/1 PASS en 298,454 s ; incident local Miniflare/workerd transitoire, aucune correction source |
 | `L2-I06` | Gate complet indépendant | `f5ba52d` | PASS final : une exécution fraîche `npm test`, exit 0, 188/188 tests, D1 canonique et ciblée vertes, Git propre, aucun retry/remote/provider/déploiement |
-| `L2-D03` | Oracle fulfillment indépendant | Base gelée `f5ba52d` | Spécification `0005`, huit tables, invariants et tests veto prêts ; aucune écriture ni activation |
-| `L2-D03` | Jury périmètre fulfillment indépendant | Contrat oracle | FAIL initial sur quantités inspectées et preuves ; PASS exécuteur après corrections inscrites dans `docs/internal/LOT-2-D03-FULFILLMENT-SCOPE-2026-08-11.md` ; toujours aucun code |
-| `L2-D03` | Exécutant fulfillment | Base acceptée `f5ba52d` | Exécution locale isolée lancée après PASS I06 ; aucune activation ni production |
+| `L2-D03` | Oracle fulfillment indépendant | Base gelée `f5ba52d` | Spécification `0005`, huit tables, invariants et tests veto prêts |
+| `L2-D03` | Jury périmètre fulfillment indépendant | Contrat oracle | FAIL initial sur quantités inspectées et preuves ; contrat corrigé puis accepté |
+| `L2-D03` | Exécutant fulfillment | Base acceptée `f5ba52d` | Implémentation locale isolée en correction après red team ; candidat non gelé, aucune activation ni production |
 | `L2-X01` | Audit exécutif mindmap et captures | Bloc dirigeant | FAIL : 1 P1 statuts/MECE + 2 P2 jargon/légende livraison |
 | `L2-X01` | Réaudit exécutif indépendant | Bloc dirigeant corrigé | PASS : 0 P1/P2, lecture dirigeant en deux minutes |
 
