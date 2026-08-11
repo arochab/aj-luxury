@@ -130,6 +130,24 @@ test("real local D1 applies 0000 through 0004, upgrades 0003 and replays without
       idempotency_key, metadata_json, created_at) VALUES ('d02_d1_sentinel',
       'system', 'sentinel', 'migration', '0003', 'd02:d1:sentinel', '{}',
       '2026-08-11T12:00:00.000Z')`);
+  query(upgradeConfig, upgradeState, upgradeRoot,
+    `INSERT INTO orders (id, order_number, email, status, currency,
+      subtotal_cents, shipping_cents, tax_cents, total_cents,
+      shipping_country_code, shipping_address_json, billing_address_json,
+      terms_version, privacy_version, paid_at, created_at, updated_at)
+    VALUES ('d02_order_unpaid', 'AJ-D02-UNPAID', 'unpaid@example.com',
+      'pending_payment', 'EUR', 2999, 0, 0, 2999, 'FR', '{}', '{}',
+      'terms-v1', 'privacy-v1', NULL, '2026-08-11T12:00:00.000Z',
+      '2026-08-11T12:00:00.000Z')`);
+  query(upgradeConfig, upgradeState, upgradeRoot,
+    `INSERT INTO email_outbox (id, kind, recipient_email, order_id, locale,
+      template_version, payload_json, status, attempts, next_attempt_at,
+      last_error_code, idempotency_key, created_at, sent_at)
+    VALUES ('d02_legacy_unpaid_sent', 'order_confirmation',
+      'unpaid@example.com', 'd02_order_unpaid', 'fr', 'legacy-v1', '{}',
+      'sent', 1, '2026-08-11T12:00:00.000Z', NULL,
+      'legacy:d02:unpaid:sent', '2026-08-11T12:00:00.000Z',
+      '2026-08-11T12:00:00.000Z')`);
   copyFileSync(
     join(projectRoot, "drizzle", migrationNames.at(-1)),
     join(upgradeRoot, "migrations", migrationNames.at(-1)),
@@ -138,6 +156,26 @@ test("real local D1 applies 0000 through 0004, upgrades 0003 and replays without
   apply(upgradeConfig, upgradeState, upgradeRoot);
   assert.equal(query(upgradeConfig, upgradeState, upgradeRoot,
     "SELECT COUNT(*) AS count FROM audit_log WHERE id='d02_d1_sentinel'"
+  )[0].count, 1);
+  assert.deepEqual(query(upgradeConfig, upgradeState, upgradeRoot,
+    `SELECT kind, status, sent_at, last_error_code,
+      provider_idempotency_key, terminal_at IS NOT NULL AS terminal
+    FROM email_outbox WHERE id='d02_legacy_unpaid_sent'`
+  ), [{
+    kind: "order_confirmation",
+    status: "cancelled",
+    sent_at: null,
+    last_error_code: "legacy_unverified_payment_intent",
+    provider_idempotency_key: "legacy_email:d02_legacy_unpaid_sent",
+    terminal: 1,
+  }]);
+  run([
+    "d1", "execute", "DB", "--local", "--config", upgradeConfig,
+    "--persist-to", upgradeState, "--command",
+    "DELETE FROM email_outbox WHERE id='d02_legacy_unpaid_sent'",
+  ], upgradeRoot, true);
+  assert.equal(query(upgradeConfig, upgradeState, upgradeRoot,
+    "SELECT COUNT(*) AS count FROM email_outbox WHERE id='d02_legacy_unpaid_sent'"
   )[0].count, 1);
   assert.deepEqual(query(upgradeConfig, upgradeState, upgradeRoot,
     "PRAGMA foreign_key_check"), []);

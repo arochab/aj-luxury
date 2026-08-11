@@ -450,7 +450,7 @@ test("migration applies locally and launch seed replay keeps inventory and ledge
       sku: variant.internal_reference,
     }));
 
-  assert.equal(tableCount, 15);
+  assert.equal(tableCount, 21);
   assert.equal(LAUNCH_VARIANT_COUNT, 12);
   assert.equal(LAUNCH_PHYSICAL_QUANTITY, 756);
   assert.deepEqual({ ...totals }, {
@@ -1609,6 +1609,12 @@ test("verified payment atomically converts every line once and writes outbox plu
     database.prepare("SELECT COUNT(*) AS count FROM email_outbox").get().count,
     1,
   );
+  assert.deepEqual({ ...database.prepare(`SELECT kind, status,
+    provider_idempotency_key FROM email_outbox`).get() }, {
+    kind: "payment_confirmation",
+    status: "pending",
+    provider_idempotency_key: "payment_confirmation:order_paid",
+  });
   assert.equal(
     database.prepare("SELECT COUNT(*) AS count FROM audit_log").get().count,
     1,

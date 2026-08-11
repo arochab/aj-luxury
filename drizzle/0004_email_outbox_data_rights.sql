@@ -21,6 +21,7 @@ CREATE TABLE `email_outbox` (
 	`lease_expires_at` text,
 	`last_error_code` text,
 	`idempotency_key` text NOT NULL,
+	`provider_idempotency_key` text DEFAULT 'compat:pending' NOT NULL,
 	`created_at` text NOT NULL,
 	`updated_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL,
 	`sent_at` text,
@@ -51,7 +52,7 @@ CREATE TABLE `email_outbox` (
 	CONSTRAINT `ck_email_outbox_error_code` CHECK(`last_error_code` IS NULL OR `last_error_code` IN (
 		'provider_rejected', 'delivery_ambiguous', 'attempts_exhausted',
 		'legacy_magic_link_invalidated', 'legacy_unverified_payment_intent',
-		'legacy_ambiguous_delivery'
+		'legacy_ambiguous_delivery', 'legacy_duplicate_intent'
 	)),
 	CONSTRAINT `ck_email_outbox_content_purge` CHECK(
 		(`purged_at` IS NULL AND `recipient_email` IS NOT NULL AND `payload_json` IS NOT NULL)
@@ -78,18 +79,42 @@ CREATE TABLE `email_outbox` (
 	))
 );--> statement-breakpoint
 
+WITH `legacy_classified` AS (
+	SELECT legacy.*,
+		CASE WHEN legacy.`kind` = 'order_confirmation' AND EXISTS (
+			SELECT 1 FROM `orders` AS customer_order
+			INNER JOIN `payments` AS payment ON payment.`order_id` = customer_order.`id`
+			WHERE customer_order.`id` = legacy.`order_id`
+				AND customer_order.`paid_at` IS NOT NULL
+				AND payment.`status` = 'succeeded'
+				AND payment.`amount_cents` = customer_order.`total_cents`
+				AND payment.`currency` = customer_order.`currency`
+		) THEN 1 ELSE 0 END AS `payment_proven`,
+		CASE WHEN legacy.`kind` = 'order_confirmation'
+			AND legacy.`id` = (
+				SELECT MIN(candidate.`id`)
+				FROM `email_outbox_legacy_d02` AS candidate
+				WHERE candidate.`kind` = 'order_confirmation'
+					AND candidate.`order_id` IS legacy.`order_id`
+			) THEN 1 ELSE 0 END AS `canonical_payment_intent`
+	FROM `email_outbox_legacy_d02` AS legacy
+)
 INSERT INTO `email_outbox` (
 	`id`, `kind`, `transaction_intent`, `source_event_id`, `recipient_email`,
 	`order_id`, `access_challenge_id`, `locale`, `template_version`, `payload_json`,
 	`status`, `attempts`, `max_attempts`, `next_attempt_at`, `lease_token_hash`,
 	`leased_at`, `lease_expires_at`, `last_error_code`, `idempotency_key`,
-	`created_at`, `updated_at`, `sent_at`, `terminal_at`, `purged_at`
+	`provider_idempotency_key`, `created_at`, `updated_at`, `sent_at`, `terminal_at`, `purged_at`
 )
 SELECT
 	legacy.`id`,
 	CASE legacy.`kind`
 		WHEN 'magic_link' THEN 'account_access'
-		WHEN 'order_confirmation' THEN 'payment_confirmation'
+		WHEN 'order_confirmation' THEN CASE
+			WHEN legacy.`payment_proven` = 1 AND legacy.`canonical_payment_intent` = 1
+				THEN 'payment_confirmation'
+			ELSE 'order_confirmation'
+		END
 		WHEN 'payment_failed' THEN 'payment_failed'
 		WHEN 'shipment_confirmation' THEN 'shipment_confirmation'
 		ELSE 'refund_confirmation'
@@ -110,12 +135,9 @@ SELECT
 	CASE
 		WHEN legacy.`kind` = 'magic_link' THEN 'failed'
 		WHEN legacy.`status` = 'sending' THEN 'failed'
-		WHEN legacy.`kind` = 'order_confirmation' AND NOT EXISTS (
-			SELECT 1 FROM `orders` AS customer_order
-			INNER JOIN `payments` AS payment ON payment.`order_id` = customer_order.`id`
-			WHERE customer_order.`id` = legacy.`order_id`
-				AND customer_order.`paid_at` IS NOT NULL AND payment.`status` = 'succeeded'
-		) THEN 'cancelled'
+		WHEN legacy.`kind` = 'order_confirmation'
+			AND (legacy.`payment_proven` = 0 OR legacy.`canonical_payment_intent` = 0)
+			THEN 'cancelled'
 		ELSE legacy.`status`
 	END,
 	CASE WHEN legacy.`kind` = 'magic_link' THEN 1
@@ -124,44 +146,46 @@ SELECT
 	CASE WHEN legacy.`kind` = 'magic_link' THEN 1
 		WHEN legacy.`attempts` > 5 THEN legacy.`attempts` ELSE 5 END,
 	CASE WHEN legacy.`status` = 'pending' AND legacy.`kind` <> 'magic_link'
-		AND NOT (legacy.`kind` = 'order_confirmation' AND NOT EXISTS (
-			SELECT 1 FROM `orders` AS customer_order
-			INNER JOIN `payments` AS payment ON payment.`order_id` = customer_order.`id`
-			WHERE customer_order.`id` = legacy.`order_id`
-				AND customer_order.`paid_at` IS NOT NULL AND payment.`status` = 'succeeded'
-		)) THEN COALESCE(strftime('%Y-%m-%dT%H:%M:%fZ', legacy.`next_attempt_at`), strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+		AND NOT (legacy.`kind` = 'order_confirmation'
+			AND (legacy.`payment_proven` = 0 OR legacy.`canonical_payment_intent` = 0))
+		THEN COALESCE(strftime('%Y-%m-%dT%H:%M:%fZ', legacy.`next_attempt_at`), strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 		ELSE NULL END,
 	NULL, NULL, NULL,
 	CASE
 		WHEN legacy.`kind` = 'magic_link' THEN 'legacy_magic_link_invalidated'
 		WHEN legacy.`status` = 'sending' THEN 'legacy_ambiguous_delivery'
-		WHEN legacy.`kind` = 'order_confirmation' AND NOT EXISTS (
-			SELECT 1 FROM `orders` AS customer_order
-			INNER JOIN `payments` AS payment ON payment.`order_id` = customer_order.`id`
-			WHERE customer_order.`id` = legacy.`order_id`
-				AND customer_order.`paid_at` IS NOT NULL AND payment.`status` = 'succeeded'
-		) THEN 'legacy_unverified_payment_intent'
+		WHEN legacy.`kind` = 'order_confirmation' AND legacy.`payment_proven` = 0
+			THEN 'legacy_unverified_payment_intent'
+		WHEN legacy.`kind` = 'order_confirmation' AND legacy.`canonical_payment_intent` = 0
+			THEN 'legacy_duplicate_intent'
 		WHEN legacy.`last_error_code` IS NOT NULL THEN 'provider_rejected'
 		ELSE NULL
 	END,
 	legacy.`idempotency_key`,
+	CASE WHEN legacy.`kind` = 'order_confirmation'
+		AND legacy.`payment_proven` = 1 AND legacy.`canonical_payment_intent` = 1
+		THEN 'payment_confirmation:' || legacy.`order_id`
+		ELSE 'legacy_email:' || legacy.`id`
+	END,
 	COALESCE(strftime('%Y-%m-%dT%H:%M:%fZ', legacy.`created_at`), strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
 	strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
 	CASE WHEN legacy.`status` = 'sent' AND legacy.`kind` <> 'magic_link'
+		AND NOT (legacy.`kind` = 'order_confirmation'
+			AND (legacy.`payment_proven` = 0 OR legacy.`canonical_payment_intent` = 0))
 		THEN COALESCE(strftime('%Y-%m-%dT%H:%M:%fZ', legacy.`sent_at`), strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) ELSE NULL END,
 	CASE WHEN legacy.`status` IN ('sent', 'failed', 'sending') OR legacy.`kind` = 'magic_link'
-		OR (legacy.`kind` = 'order_confirmation' AND NOT EXISTS (
-			SELECT 1 FROM `orders` AS customer_order
-			INNER JOIN `payments` AS payment ON payment.`order_id` = customer_order.`id`
-			WHERE customer_order.`id` = legacy.`order_id`
-				AND customer_order.`paid_at` IS NOT NULL AND payment.`status` = 'succeeded'
-		)) THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now') ELSE NULL END,
+		OR (legacy.`kind` = 'order_confirmation'
+			AND (legacy.`payment_proven` = 0 OR legacy.`canonical_payment_intent` = 0))
+		THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now') ELSE NULL END,
 	CASE WHEN legacy.`kind` = 'magic_link' THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now') ELSE NULL END
-FROM `email_outbox_legacy_d02` AS legacy;--> statement-breakpoint
+FROM `legacy_classified` AS legacy;--> statement-breakpoint
 
 DROP TABLE `email_outbox_legacy_d02`;--> statement-breakpoint
 CREATE UNIQUE INDEX `ux_email_outbox_idempotency_key` ON `email_outbox` (`idempotency_key`);--> statement-breakpoint
 CREATE UNIQUE INDEX `ux_email_outbox_intent_source` ON `email_outbox` (`transaction_intent`,`source_event_id`);--> statement-breakpoint
+CREATE UNIQUE INDEX `ux_email_outbox_provider_idempotency_key` ON `email_outbox` (`provider_idempotency_key`);--> statement-breakpoint
+CREATE UNIQUE INDEX `ux_email_outbox_account_access_challenge` ON `email_outbox` (`access_challenge_id`) WHERE `kind` = 'account_access' AND `access_challenge_id` IS NOT NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX `ux_email_outbox_payment_confirmation_order` ON `email_outbox` (`order_id`) WHERE `kind` = 'payment_confirmation';--> statement-breakpoint
 CREATE UNIQUE INDEX `ux_email_outbox_active_lease` ON `email_outbox` (`lease_token_hash`) WHERE `lease_token_hash` IS NOT NULL;--> statement-breakpoint
 CREATE INDEX `idx_email_outbox_claim` ON `email_outbox` (`status`,`next_attempt_at`,`created_at`);--> statement-breakpoint
 CREATE INDEX `idx_email_outbox_stale_lease` ON `email_outbox` (`status`,`lease_expires_at`);--> statement-breakpoint
@@ -169,9 +193,20 @@ CREATE INDEX `idx_email_outbox_stale_lease` ON `email_outbox` (`status`,`lease_e
 CREATE TRIGGER `trg_email_outbox_normalize_verified_legacy_insert`
 AFTER INSERT ON `email_outbox`
 WHEN NEW.`kind` = 'order_confirmation' AND NEW.`source_event_id` = 'compat:pending'
+	AND EXISTS (
+		SELECT 1 FROM `orders` AS customer_order
+		INNER JOIN `payments` AS payment ON payment.`order_id` = customer_order.`id`
+		WHERE customer_order.`id` = NEW.`order_id`
+			AND customer_order.`paid_at` IS NOT NULL
+			AND payment.`status` = 'succeeded'
+			AND payment.`amount_cents` = customer_order.`total_cents`
+			AND payment.`currency` = customer_order.`currency`
+	)
 BEGIN
 	UPDATE `email_outbox` SET `kind` = 'payment_confirmation',
-		`source_event_id` = 'payment:' || NEW.`order_id`, `updated_at` = NEW.`created_at`
+		`source_event_id` = 'payment:' || NEW.`order_id`,
+		`provider_idempotency_key` = 'payment_confirmation:' || NEW.`order_id`,
+		`updated_at` = NEW.`created_at`
 	WHERE `id` = NEW.`id`;
 END;--> statement-breakpoint
 
@@ -179,6 +214,16 @@ CREATE TRIGGER `trg_email_outbox_validate_insert`
 BEFORE INSERT ON `email_outbox`
 WHEN NEW.`status` <> 'pending' OR NEW.`attempts` <> 0
 	OR NEW.`purged_at` IS NOT NULL
+	OR NOT (
+		(NEW.`kind` = 'order_confirmation' AND NEW.`source_event_id` = 'compat:pending'
+			AND NEW.`provider_idempotency_key` = 'compat:pending')
+		OR NEW.`provider_idempotency_key` = CASE
+			WHEN NEW.`kind` = 'account_access' THEN 'account_access:' || NEW.`access_challenge_id`
+			WHEN NEW.`kind` IN ('payment_confirmation', 'order_confirmation')
+				THEN 'payment_confirmation:' || NEW.`order_id`
+			ELSE NEW.`kind` || ':' || NEW.`source_event_id`
+		END
+	)
 	OR (NEW.`kind` = 'order_confirmation' AND NEW.`source_event_id` <> 'compat:pending')
 	OR (NEW.`kind` = 'account_access' AND NOT EXISTS (
 		SELECT 1 FROM `access_challenges` AS challenge
@@ -221,6 +266,8 @@ WHEN NOT (
 	OLD.`kind` = 'order_confirmation' AND NEW.`kind` = 'payment_confirmation'
 	AND OLD.`source_event_id` = 'compat:pending'
 	AND NEW.`source_event_id` = 'payment:' || OLD.`order_id`
+	AND OLD.`provider_idempotency_key` = 'compat:pending'
+	AND NEW.`provider_idempotency_key` = 'payment_confirmation:' || OLD.`order_id`
 	AND OLD.`status` = 'pending' AND NEW.`status` = 'pending'
 ) AND (OLD.`id` IS NOT NEW.`id` OR OLD.`kind` IS NOT NEW.`kind`
 	OR OLD.`transaction_intent` IS NOT NEW.`transaction_intent`
@@ -230,6 +277,7 @@ WHEN NOT (
 	OR OLD.`locale` IS NOT NEW.`locale` OR OLD.`template_version` IS NOT NEW.`template_version`
 	OR OLD.`max_attempts` IS NOT NEW.`max_attempts`
 	OR OLD.`idempotency_key` IS NOT NEW.`idempotency_key`
+	OR OLD.`provider_idempotency_key` IS NOT NEW.`provider_idempotency_key`
 	OR OLD.`created_at` IS NOT NEW.`created_at`
 	OR (OLD.`purged_at` IS NOT NULL AND (
 		OLD.`purged_at` IS NOT NEW.`purged_at` OR NEW.`recipient_email` IS NOT NULL OR NEW.`payload_json` IS NOT NULL
@@ -247,6 +295,8 @@ WHEN NOT (
 	(OLD.`kind` = 'order_confirmation' AND NEW.`kind` = 'payment_confirmation'
 		AND OLD.`source_event_id` = 'compat:pending'
 		AND NEW.`source_event_id` = 'payment:' || OLD.`order_id`
+		AND OLD.`provider_idempotency_key` = 'compat:pending'
+		AND NEW.`provider_idempotency_key` = 'payment_confirmation:' || OLD.`order_id`
 		AND OLD.`status` = 'pending' AND NEW.`status` = 'pending'
 		AND NEW.`attempts` = OLD.`attempts`)
 	OR
@@ -275,6 +325,12 @@ WHEN OLD.`status` IN ('sent', 'failed', 'cancelled') AND (
 )
 BEGIN
 	SELECT RAISE(ABORT, 'email_outbox_terminal_is_append_only');
+END;--> statement-breakpoint
+
+CREATE TRIGGER `trg_email_outbox_retain_delete`
+BEFORE DELETE ON `email_outbox`
+BEGIN
+	SELECT RAISE(ABORT, 'email_outbox_evidence_is_immutable');
 END;--> statement-breakpoint
 
 CREATE TRIGGER `trg_email_outbox_account_access_sent`

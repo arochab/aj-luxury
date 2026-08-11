@@ -33,6 +33,8 @@ const expectedMigrationNames = [
   "0000_flimsy_rhino.sql",
   "0001_lock_cart_line_price_provenance.sql",
   "0002_lock_order_line_snapshots.sql",
+  "0003_identity_access.sql",
+  "0004_email_outbox_data_rights.sql",
 ];
 const expectedHardeningTriggerNames = [
   "trg_audit_log_immutable_update",
@@ -334,7 +336,7 @@ function migrationRows(input) {
   });
 }
 
-test("Wrangler applies 0000+0001+0002 on empty and journaled D1 databases, then replays as a no-op", async (t) => {
+test("Wrangler applies the canonical D1 chain on empty and journaled databases, then replays as a no-op", async (t) => {
   assert.ok(existsSync(canonicalConfigPath), "npm run build must create Wrangler config");
   assert.ok(existsSync(wranglerCliPath), "local Wrangler must be installed");
   assert.deepEqual(
@@ -722,7 +724,7 @@ test("Wrangler applies 0000+0001+0002 on empty and journaled D1 databases, then 
   await applyMigrations({
     configPath: canonicalConfigPath,
     environment,
-    expectedLastMigration: expectedMigrationNames[2],
+    expectedLastMigration: expectedMigrationNames.at(-1),
     statePath: pre0002State,
   });
   const upgradedFrom0001Rows = migrationRows({
