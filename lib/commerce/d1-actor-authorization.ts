@@ -13,9 +13,14 @@ export type D1MutationActor = Readonly<{
 }>;
 
 export type ResolvedD1Actor =
-  | Readonly<{ kind: "customer"; customerId: string }>
-  | Readonly<{ kind: "guest"; orderId: string }>
-  | Readonly<{ kind: "admin"; administratorId: string; role: "owner" | "operations" }>;
+  | Readonly<{ kind: "customer"; customerId: string; sessionId: string }>
+  | Readonly<{ kind: "guest"; orderId: string; sessionId: string }>
+  | Readonly<{
+      kind: "admin";
+      administratorId: string;
+      role: "owner" | "operations";
+      sessionId: string;
+    }>;
 
 export async function resolveD1MutationActor(
   database: CommerceD1Database,
@@ -48,7 +53,7 @@ export async function resolveD1MutationActor(
   if (actor.kind === "customer") {
     const row = await database
       .prepare(
-        `SELECT session.customer_id
+        `SELECT session.id AS session_id, session.customer_id
         FROM customer_sessions AS session
         INNER JOIN customers AS customer ON customer.id = session.customer_id
         WHERE session.token_hash = ? AND session.csrf_token_hash = ?
@@ -57,13 +62,19 @@ export async function resolveD1MutationActor(
           AND customer.account_enabled_at IS NOT NULL LIMIT 1`,
       )
       .bind(sessionHash, csrfHash, now, now)
-      .first<{ customer_id: string }>();
-    return row ? Object.freeze({ kind: "customer", customerId: row.customer_id }) : null;
+      .first<{ session_id: string; customer_id: string }>();
+    return row
+      ? Object.freeze({
+          kind: "customer",
+          customerId: row.customer_id,
+          sessionId: row.session_id,
+        })
+      : null;
   }
   if (actor.kind === "guest-order") {
     const row = await database
       .prepare(
-        `SELECT session.order_id
+        `SELECT session.id AS session_id, session.order_id
         FROM guest_order_sessions AS session
         INNER JOIN orders AS customer_order ON customer_order.id = session.order_id
         WHERE session.token_hash = ? AND session.csrf_token_hash = ?
@@ -72,12 +83,18 @@ export async function resolveD1MutationActor(
         LIMIT 1`,
       )
       .bind(sessionHash, csrfHash, now, now)
-      .first<{ order_id: string }>();
-    return row ? Object.freeze({ kind: "guest", orderId: row.order_id }) : null;
+      .first<{ session_id: string; order_id: string }>();
+    return row
+      ? Object.freeze({
+          kind: "guest",
+          orderId: row.order_id,
+          sessionId: row.session_id,
+        })
+      : null;
   }
   const row = await database
     .prepare(
-      `SELECT administrator.id, administrator.role
+      `SELECT session.id AS session_id, administrator.id, administrator.role
       FROM admin_sessions AS session
       INNER JOIN administrators AS administrator
         ON administrator.id = session.administrator_id
@@ -89,12 +106,13 @@ export async function resolveD1MutationActor(
         AND administrator.role IN ('owner', 'operations') LIMIT 1`,
     )
     .bind(sessionHash, csrfHash, now, now)
-    .first<{ id: string; role: "owner" | "operations" }>();
+    .first<{ session_id: string; id: string; role: "owner" | "operations" }>();
   return row
     ? Object.freeze({
         kind: "admin",
         administratorId: row.id,
         role: row.role,
+        sessionId: row.session_id,
       })
     : null;
 }

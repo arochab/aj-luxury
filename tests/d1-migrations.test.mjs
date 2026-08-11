@@ -16,7 +16,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 const projectRoot = fileURLToPath(new URL("../", import.meta.url));
-const canonicalConfigPath = join(projectRoot, "dist", "server", "wrangler.json");
+const builtConfigPath = join(projectRoot, "dist", "server", "wrangler.json");
 const migrationDirectory = join(projectRoot, "drizzle");
 const baselineMigrationPath = join(
   migrationDirectory,
@@ -341,16 +341,21 @@ function migrationRows(input) {
 }
 
 test("Wrangler applies the canonical D1 chain on empty and journaled databases, then replays as a no-op", async (t) => {
-  assert.ok(existsSync(canonicalConfigPath), "npm run build must create Wrangler config");
+  assert.ok(existsSync(builtConfigPath), "npm run build must create Wrangler config");
   assert.ok(existsSync(wranglerCliPath), "local Wrangler must be installed");
+  const migrationNames = readdirSync(migrationDirectory)
+    .filter((name) => /^\d+_.+\.sql$/.test(name))
+    .sort();
   assert.deepEqual(
-    readdirSync(migrationDirectory)
-      .filter((name) => /^\d+_.+\.sql$/.test(name))
-      .sort(),
+    migrationNames.filter((name) => expectedMigrationNames.includes(name)),
     expectedMigrationNames,
   );
+  assert.deepEqual(
+    migrationNames.filter((name) => !expectedMigrationNames.includes(name)),
+    ["0005_fulfillment_returns_refunds.sql"],
+  );
 
-  const canonicalConfig = JSON.parse(readFileSync(canonicalConfigPath, "utf8"));
+  const canonicalConfig = JSON.parse(readFileSync(builtConfigPath, "utf8"));
   assert.equal(canonicalConfig.d1_databases[0].migrations_dir, "../../drizzle");
 
   const baseline = readFileSync(baselineMigrationPath, "utf8").replaceAll(
@@ -375,6 +380,12 @@ test("Wrangler applies the canonical D1 chain on empty and journaled databases, 
   const proofRoot = mkdtempSync(join(proofParent, "m"));
   assertProjectLocal(proofRoot);
   const environment = createWranglerEnvironment(proofRoot);
+  const canonicalConfigPath = createMigrationSubsetConfig({
+    canonicalConfig,
+    migrationNames: expectedMigrationNames,
+    root: join(proofRoot, "c"),
+    workerName: "aj-luxury-d1-legacy-chain-proof",
+  });
   t.after(() => {
     assertProjectLocal(proofRoot);
     rmSync(proofRoot, {

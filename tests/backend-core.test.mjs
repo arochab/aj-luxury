@@ -32,7 +32,7 @@ const paymentRegistrationPath = fileURLToPath(
   ),
 );
 const migrationPaths = readdirSync(drizzleDirectory)
-  .filter((name) => /^\d+_.+\.sql$/.test(name))
+  .filter((name) => /^000[0-4]_.+\.sql$/.test(name))
   .sort()
   .map((name) => `${drizzleDirectory}${name}`);
 

@@ -11,6 +11,7 @@ export type EmailOutboxKind =
   | "payment_failed"
   | "shipment_confirmation"
   | "refund_confirmation"
+  | "return_acknowledgement"
   | "withdrawal_acknowledgement";
 
 export type EmailOutboxClaim = Readonly<{
@@ -217,6 +218,7 @@ export class D1EmailOutbox {
       payment_failed: "payment_failed",
       shipment_confirmation: "shipment_created",
       refund_confirmation: "refund_succeeded",
+      return_acknowledgement: "return_received",
       withdrawal_acknowledgement: "withdrawal_received",
     };
     const payloadJson = JSON.stringify({ subject: input.subject, text: input.text });

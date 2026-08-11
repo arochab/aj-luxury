@@ -857,6 +857,22 @@ test("builds deterministic transactional messages and rejects incomplete input",
     /^payment-confirmation:evt_payment_1:AJ-2026-0001:[0-9a-f]{64}$/,
   );
   assert.match(email.subject, /AJ-2026-0001/);
+  const returnEmail = await buildTransactionalEmail({
+    kind: "return-acknowledgement",
+    eventId: "evt_return_1",
+    locale: "fr",
+    recipientEmail: "client@example.com",
+    orderNumber: "AJ-2026-0001",
+  });
+  assert.equal(returnEmail.subject, "Demande de retour reçue AJ-2026-0001");
+  assert.equal(
+    returnEmail.text,
+    "Nous avons reçu votre demande de retour pour la commande AJ-2026-0001.",
+  );
+  assert.match(
+    returnEmail.deduplicationKey,
+    /^return-acknowledgement:evt_return_1:AJ-2026-0001:[0-9a-f]{64}$/,
+  );
   await assert.rejects(
     () =>
       buildTransactionalEmail({
