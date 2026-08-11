@@ -1,26 +1,22 @@
 import type { ProductSize } from "../products.ts";
+import {
+  createApollonInternalReference,
+  isLaunchProductSize,
+  isLaunchProductSlug,
+  parseApollonInternalReference,
+  type LaunchProductSlug,
+} from "./product-identifiers.ts";
 
-const MODEL_CODE = "APO";
-
-// Deliberately independent from the exported catalogue array: reference
-// validation must not change if another module mutates catalogue input.
-const referenceSizes = Object.freeze(["S", "M", "L", "XL"] as const);
-const referenceSizeSet = new Set<string>(referenceSizes);
-
-const colorCodes = {
-  pourpre: "POU",
-  "rose-pale": "ROS",
-  "lilas-bleu-clair": "LIL",
-} as const;
-
-export type LaunchColorSlug = keyof typeof colorCodes;
+export type LaunchColorSlug = LaunchProductSlug;
+export type InternalReferenceSize = ProductSize;
+export { createApollonInternalReference };
 
 export function isLaunchColorSlug(value: string): value is LaunchColorSlug {
-  return Object.hasOwn(colorCodes, value);
+  return isLaunchProductSlug(value);
 }
 
 export function isProductSize(value: string): value is ProductSize {
-  return referenceSizeSet.has(value);
+  return isLaunchProductSize(value);
 }
 
 /**
@@ -34,26 +30,15 @@ export function buildInternalVariantReference(
   if (!isLaunchColorSlug(colorSlug) || !isProductSize(size)) {
     throw new Error("Unsupported AJ Luxury launch variant.");
   }
-  return `AJ-${MODEL_CODE}-${colorCodes[colorSlug]}-${size}`;
+  return createApollonInternalReference(colorSlug, size);
 }
 
 export function parseInternalVariantReference(reference: string): {
   colorSlug: LaunchColorSlug;
   size: ProductSize;
 } | null {
-  const match = /^AJ-APO-(POU|ROS|LIL)-(S|M|L|XL)$/.exec(reference);
-
-  if (!match) {
-    return null;
-  }
-
-  const colorSlug = Object.entries(colorCodes).find(
-    ([, code]) => code === match[1],
-  )?.[0];
-
-  if (!colorSlug || !isLaunchColorSlug(colorSlug) || !isProductSize(match[2])) {
-    return null;
-  }
-
-  return { colorSlug, size: match[2] };
+  const parsed = parseApollonInternalReference(reference);
+  return parsed
+    ? { colorSlug: parsed.productSlug, size: parsed.size }
+    : null;
 }
