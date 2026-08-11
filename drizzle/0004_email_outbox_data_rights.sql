@@ -59,6 +59,16 @@ CREATE TABLE `email_outbox` (
 		OR (`purged_at` IS NOT NULL AND `recipient_email` IS NULL AND `payload_json` IS NULL
 			AND `status` IN ('sent', 'failed', 'cancelled'))
 	),
+	CONSTRAINT `ck_email_outbox_account_access_historical` CHECK(
+		`kind` <> 'account_access' OR (
+			`status` IN ('sent', 'failed', 'cancelled')
+			AND `purged_at` IS NOT NULL
+			AND `recipient_email` IS NULL AND `payload_json` IS NULL
+			AND `next_attempt_at` IS NULL
+			AND `lease_token_hash` IS NULL AND `leased_at` IS NULL
+			AND `lease_expires_at` IS NULL AND `terminal_at` IS NOT NULL
+		)
+	),
 	CONSTRAINT `ck_email_outbox_state_shape` CHECK(
 		(`status` = 'pending' AND `next_attempt_at` IS NOT NULL
 			AND `lease_token_hash` IS NULL AND `leased_at` IS NULL AND `lease_expires_at` IS NULL
@@ -133,6 +143,9 @@ SELECT
 	legacy.`template_version`,
 	CASE WHEN legacy.`kind` = 'magic_link' THEN NULL ELSE legacy.`payload_json` END,
 	CASE
+		WHEN legacy.`kind` = 'magic_link' AND legacy.`status` = 'pending' THEN 'cancelled'
+		WHEN legacy.`kind` = 'magic_link' AND legacy.`status` = 'sending' THEN 'failed'
+		WHEN legacy.`kind` = 'magic_link' AND legacy.`status` = 'sent' THEN 'sent'
 		WHEN legacy.`kind` = 'magic_link' THEN 'failed'
 		WHEN legacy.`status` = 'sending' THEN 'failed'
 		WHEN legacy.`kind` = 'order_confirmation'
@@ -140,7 +153,10 @@ SELECT
 			THEN 'cancelled'
 		ELSE legacy.`status`
 	END,
-	CASE WHEN legacy.`kind` = 'magic_link' THEN 1
+	CASE WHEN legacy.`kind` = 'magic_link' AND legacy.`status` = 'pending' THEN 0
+		WHEN legacy.`kind` = 'magic_link' AND legacy.`status` = 'sending' THEN 1
+		WHEN legacy.`kind` = 'magic_link' AND legacy.`status` = 'sent' THEN 1
+		WHEN legacy.`kind` = 'magic_link' AND legacy.`status` = 'failed' THEN 1
 		WHEN legacy.`status` = 'sending' AND legacy.`attempts` < 1 THEN 1
 		ELSE legacy.`attempts` END,
 	CASE WHEN legacy.`kind` = 'magic_link' THEN 1
@@ -152,7 +168,13 @@ SELECT
 		ELSE NULL END,
 	NULL, NULL, NULL,
 	CASE
-		WHEN legacy.`kind` = 'magic_link' THEN 'legacy_magic_link_invalidated'
+		WHEN legacy.`kind` = 'magic_link' AND legacy.`status` = 'pending'
+			THEN 'legacy_magic_link_invalidated'
+		WHEN legacy.`kind` = 'magic_link' AND legacy.`status` = 'sending'
+			THEN 'legacy_ambiguous_delivery'
+		WHEN legacy.`kind` = 'magic_link' AND legacy.`status` = 'sent' THEN NULL
+		WHEN legacy.`kind` = 'magic_link' AND legacy.`status` = 'failed'
+			AND legacy.`last_error_code` IS NOT NULL THEN 'provider_rejected'
 		WHEN legacy.`status` = 'sending' THEN 'legacy_ambiguous_delivery'
 		WHEN legacy.`kind` = 'order_confirmation' AND legacy.`payment_proven` = 0
 			THEN 'legacy_unverified_payment_intent'
@@ -169,7 +191,7 @@ SELECT
 	END,
 	COALESCE(strftime('%Y-%m-%dT%H:%M:%fZ', legacy.`created_at`), strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
 	strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
-	CASE WHEN legacy.`status` = 'sent' AND legacy.`kind` <> 'magic_link'
+	CASE WHEN legacy.`status` = 'sent'
 		AND NOT (legacy.`kind` = 'order_confirmation'
 			AND (legacy.`payment_proven` = 0 OR legacy.`canonical_payment_intent` = 0))
 		THEN COALESCE(strftime('%Y-%m-%dT%H:%M:%fZ', legacy.`sent_at`), strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) ELSE NULL END,
@@ -260,6 +282,13 @@ BEGIN
 	SELECT RAISE(ABORT, 'email_outbox_transaction_intent_not_verified');
 END;--> statement-breakpoint
 
+CREATE TRIGGER `trg_email_outbox_account_access_insert_disabled`
+BEFORE INSERT ON `email_outbox`
+WHEN NEW.`kind` = 'account_access'
+BEGIN
+	SELECT RAISE(ABORT, 'email_outbox_account_access_is_historical_only');
+END;--> statement-breakpoint
+
 CREATE TRIGGER `trg_email_outbox_immutable_identity`
 BEFORE UPDATE ON `email_outbox`
 WHEN NOT (
@@ -333,21 +362,20 @@ BEGIN
 	SELECT RAISE(ABORT, 'email_outbox_evidence_is_immutable');
 END;--> statement-breakpoint
 
-CREATE TRIGGER `trg_email_outbox_account_access_sent`
-AFTER UPDATE OF `status` ON `email_outbox`
-WHEN OLD.`status` = 'sending' AND NEW.`status` = 'sent' AND NEW.`kind` = 'account_access'
+CREATE TRIGGER `trg_email_outbox_account_access_lifecycle_disabled`
+BEFORE UPDATE ON `email_outbox`
+WHEN OLD.`kind` = 'account_access' AND (
+	NEW.`status` IS NOT OLD.`status` OR NEW.`attempts` IS NOT OLD.`attempts`
+	OR NEW.`next_attempt_at` IS NOT OLD.`next_attempt_at`
+	OR NEW.`lease_token_hash` IS NOT OLD.`lease_token_hash`
+	OR NEW.`leased_at` IS NOT OLD.`leased_at`
+	OR NEW.`lease_expires_at` IS NOT OLD.`lease_expires_at`
+	OR NEW.`last_error_code` IS NOT OLD.`last_error_code`
+	OR NEW.`sent_at` IS NOT OLD.`sent_at`
+	OR NEW.`terminal_at` IS NOT OLD.`terminal_at`
+)
 BEGIN
-	UPDATE `access_challenges` SET `dispatched_at` = NEW.`sent_at`
-	WHERE `id` = NEW.`access_challenge_id` AND `dispatched_at` IS NULL
-		AND `consumed_at` IS NULL AND `revoked_at` IS NULL;
-END;--> statement-breakpoint
-
-CREATE TRIGGER `trg_email_outbox_account_access_failed`
-AFTER UPDATE OF `status` ON `email_outbox`
-WHEN OLD.`status` = 'sending' AND NEW.`status` = 'failed' AND NEW.`kind` = 'account_access'
-BEGIN
-	UPDATE `access_challenges` SET `revoked_at` = NEW.`terminal_at`
-	WHERE `id` = NEW.`access_challenge_id` AND `consumed_at` IS NULL AND `revoked_at` IS NULL;
+	SELECT RAISE(ABORT, 'email_outbox_account_access_is_historical_only');
 END;--> statement-breakpoint
 
 CREATE TRIGGER `trg_email_outbox_audit_insert`

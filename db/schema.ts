@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  type AnySQLiteColumn,
   check,
   index,
   integer,
@@ -46,11 +47,22 @@ export const customers = sqliteTable(
       .notNull()
       .default(false),
     marketingConsentAt: text("marketing_consent_at"),
+    accountEnabledAt: text("account_enabled_at"),
     createdAt: text("created_at").notNull().default(utcNow),
     updatedAt: text("updated_at").notNull().default(utcNow),
     deletedAt: text("deleted_at"),
   },
-  (table) => [uniqueIndex("ux_customers_email").on(table.email)],
+  (table) => [
+    uniqueIndex("ux_customers_email").on(table.email),
+    index("idx_customers_account_enabled")
+      .on(table.accountEnabledAt)
+      .where(
+        sql`${table.accountEnabledAt} IS NOT NULL AND ${table.deletedAt} IS NULL`,
+      ),
+    index("idx_customers_email_normalized")
+      .on(sql`lower(${table.email})`)
+      .where(sql`${table.deletedAt} IS NULL`),
+  ],
 );
 
 export const variants = sqliteTable(
@@ -410,6 +422,72 @@ export const webhookEvents = sqliteTable(
   ],
 );
 
+export const accessChallenges = sqliteTable(
+  "access_challenges",
+  {
+    id: text("id").primaryKey(),
+    purpose: text("purpose", {
+      enum: ["customer_sign_in", "guest_order_access"],
+    }).notNull(),
+    customerId: text("customer_id").references(() => customers.id, {
+      onDelete: "cascade",
+    }),
+    orderId: text("order_id").references(() => orders.id, {
+      onDelete: "cascade",
+    }),
+    tokenHash: text("token_hash").notNull(),
+    expiresAt: text("expires_at").notNull(),
+    dispatchedAt: text("dispatched_at"),
+    consumedAt: text("consumed_at"),
+    revokedAt: text("revoked_at"),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("ux_access_challenges_token_hash").on(table.tokenHash),
+    index("idx_access_challenges_customer_active").on(
+      table.customerId,
+      table.purpose,
+      table.expiresAt,
+    ),
+    index("idx_access_challenges_order_active").on(
+      table.orderId,
+      table.purpose,
+      table.expiresAt,
+    ),
+    check(
+      "ck_access_challenges_purpose",
+      sql`${table.purpose} IN ('customer_sign_in', 'guest_order_access')`,
+    ),
+    check(
+      "ck_access_challenges_target",
+      sql`(
+        ${table.purpose} = 'customer_sign_in' AND ${table.orderId} IS NULL
+        AND (${table.customerId} IS NOT NULL OR ${table.revokedAt} IS NOT NULL)
+      ) OR (
+        ${table.purpose} = 'guest_order_access' AND ${table.customerId} IS NULL
+        AND (${table.orderId} IS NOT NULL OR ${table.revokedAt} IS NOT NULL)
+      )`,
+    ),
+    check(
+      "ck_access_challenges_token_hash",
+      sql`length(${table.tokenHash}) = 64
+        AND ${table.tokenHash} = lower(${table.tokenHash})
+        AND ${table.tokenHash} NOT GLOB '*[^0-9a-f]*'`,
+    ),
+    check(
+      "ck_access_challenges_timestamps",
+      sql`strftime('%Y-%m-%dT%H:%M:%fZ', ${table.createdAt}) = ${table.createdAt}
+        AND strftime('%Y-%m-%dT%H:%M:%fZ', ${table.expiresAt}) = ${table.expiresAt}
+        AND ${table.expiresAt} > ${table.createdAt}
+        AND CAST(strftime('%s', ${table.expiresAt}) AS integer)
+          - CAST(strftime('%s', ${table.createdAt}) AS integer) <= 3600
+        AND (${table.dispatchedAt} IS NULL OR strftime('%Y-%m-%dT%H:%M:%fZ', ${table.dispatchedAt}) = ${table.dispatchedAt})
+        AND (${table.consumedAt} IS NULL OR strftime('%Y-%m-%dT%H:%M:%fZ', ${table.consumedAt}) = ${table.consumedAt})
+        AND (${table.revokedAt} IS NULL OR strftime('%Y-%m-%dT%H:%M:%fZ', ${table.revokedAt}) = ${table.revokedAt})`,
+    ),
+  ],
+);
+
 export const customerSessions = sqliteTable(
   "customer_sessions",
   {
@@ -418,16 +496,219 @@ export const customerSessions = sqliteTable(
       .notNull()
       .references(() => customers.id, { onDelete: "cascade" }),
     tokenHash: text("token_hash").notNull(),
+    csrfTokenHash: text("csrf_token_hash"),
+    sessionFamilyId: text("session_family_id").notNull(),
+    authenticationSource: text("authentication_source", {
+      enum: ["challenge", "rotation", "legacy_revoked"],
+    }).notNull(),
+    issuedByChallengeId: text("issued_by_challenge_id").references(
+      () => accessChallenges.id,
+      { onDelete: "restrict" },
+    ),
+    rotatedFromSessionId: text("rotated_from_session_id").references(
+      (): AnySQLiteColumn => customerSessions.id,
+      { onDelete: "restrict" },
+    ),
     expiresAt: text("expires_at").notNull(),
+    idleExpiresAt: text("idle_expires_at").notNull(),
     lastSeenAt: text("last_seen_at"),
     revokedAt: text("revoked_at"),
-    createdAt: text("created_at").notNull().default(utcNow),
+    createdAt: text("created_at").notNull(),
   },
   (table) => [
     uniqueIndex("ux_customer_sessions_token_hash").on(table.tokenHash),
+    uniqueIndex("ux_customer_sessions_issued_challenge")
+      .on(table.issuedByChallengeId)
+      .where(sql`${table.issuedByChallengeId} IS NOT NULL`),
+    uniqueIndex("ux_customer_sessions_rotated_from")
+      .on(table.rotatedFromSessionId)
+      .where(sql`${table.rotatedFromSessionId} IS NOT NULL`),
     index("idx_customer_sessions_customer_expires_at").on(
       table.customerId,
       table.expiresAt,
+    ),
+    index("idx_customer_sessions_family_created_at").on(
+      table.sessionFamilyId,
+      table.createdAt,
+    ),
+    check(
+      "ck_customer_sessions_authentication_source",
+      sql`${table.authenticationSource} IN ('challenge', 'rotation', 'legacy_revoked')`,
+    ),
+    check(
+      "ck_customer_sessions_source_shape",
+      sql`(
+        ${table.authenticationSource} = 'challenge'
+        AND ${table.issuedByChallengeId} IS NOT NULL
+        AND ${table.rotatedFromSessionId} IS NULL
+      ) OR (
+        ${table.authenticationSource} = 'rotation'
+        AND ${table.issuedByChallengeId} IS NULL
+        AND ${table.rotatedFromSessionId} IS NOT NULL
+      ) OR (
+        ${table.authenticationSource} = 'legacy_revoked'
+        AND ${table.issuedByChallengeId} IS NULL
+        AND ${table.rotatedFromSessionId} IS NULL
+        AND ${table.revokedAt} IS NOT NULL
+      )`,
+    ),
+  ],
+);
+
+export const guestOrderSessions = sqliteTable(
+  "guest_order_sessions",
+  {
+    id: text("id").primaryKey(),
+    orderId: text("order_id")
+      .notNull()
+      .references(() => orders.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull(),
+    csrfTokenHash: text("csrf_token_hash").notNull(),
+    issuedByChallengeId: text("issued_by_challenge_id")
+      .notNull()
+      .references(() => accessChallenges.id, { onDelete: "restrict" }),
+    expiresAt: text("expires_at").notNull(),
+    idleExpiresAt: text("idle_expires_at").notNull(),
+    lastSeenAt: text("last_seen_at"),
+    revokedAt: text("revoked_at"),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("ux_guest_order_sessions_token_hash").on(table.tokenHash),
+    uniqueIndex("ux_guest_order_sessions_issued_challenge").on(
+      table.issuedByChallengeId,
+    ),
+    index("idx_guest_order_sessions_order_expires_at").on(
+      table.orderId,
+      table.expiresAt,
+    ),
+    check(
+      "ck_guest_order_sessions_token_hash",
+      sql`length(${table.tokenHash}) = 64
+        AND ${table.tokenHash} = lower(${table.tokenHash})
+        AND ${table.tokenHash} NOT GLOB '*[^0-9a-f]*'
+        AND length(${table.csrfTokenHash}) = 64
+        AND ${table.csrfTokenHash} = lower(${table.csrfTokenHash})
+        AND ${table.csrfTokenHash} NOT GLOB '*[^0-9a-f]*'`,
+    ),
+    check(
+      "ck_guest_order_sessions_timestamps",
+      sql`strftime('%Y-%m-%dT%H:%M:%fZ', ${table.createdAt}) = ${table.createdAt}
+        AND strftime('%Y-%m-%dT%H:%M:%fZ', ${table.expiresAt}) = ${table.expiresAt}
+        AND strftime('%Y-%m-%dT%H:%M:%fZ', ${table.idleExpiresAt}) = ${table.idleExpiresAt}
+        AND ${table.expiresAt} > ${table.createdAt}
+        AND ${table.idleExpiresAt} > ${table.createdAt}
+        AND ${table.idleExpiresAt} <= ${table.expiresAt}
+        AND CAST(strftime('%s', ${table.expiresAt}) AS integer)
+          - CAST(strftime('%s', ${table.createdAt}) AS integer) <= 86400
+        AND CAST(strftime('%s', ${table.idleExpiresAt}) AS integer)
+          - CAST(strftime('%s', ${table.createdAt}) AS integer) <= 900
+        AND (${table.lastSeenAt} IS NULL OR strftime('%Y-%m-%dT%H:%M:%fZ', ${table.lastSeenAt}) = ${table.lastSeenAt})
+        AND (${table.revokedAt} IS NULL OR strftime('%Y-%m-%dT%H:%M:%fZ', ${table.revokedAt}) = ${table.revokedAt})`,
+    ),
+  ],
+);
+
+export const administrators = sqliteTable(
+  "administrators",
+  {
+    id: text("id").primaryKey(),
+    externalSubjectHash: text("external_subject_hash").notNull(),
+    role: text("role", { enum: ["owner", "operations"] }).notNull(),
+    enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+    authzVersion: integer("authz_version").notNull().default(1),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("ux_administrators_external_subject_hash").on(
+      table.externalSubjectHash,
+    ),
+    index("idx_administrators_enabled_role").on(table.enabled, table.role),
+    check(
+      "ck_administrators_subject_hash",
+      sql`length(${table.externalSubjectHash}) = 64
+        AND ${table.externalSubjectHash} = lower(${table.externalSubjectHash})
+        AND ${table.externalSubjectHash} NOT GLOB '*[^0-9a-f]*'`,
+    ),
+    check(
+      "ck_administrators_role",
+      sql`${table.role} IN ('owner', 'operations')`,
+    ),
+    check(
+      "ck_administrators_enabled",
+      sql`${table.enabled} IN (0, 1)`,
+    ),
+    check(
+      "ck_administrators_authz_version",
+      sql`${table.authzVersion} > 0`,
+    ),
+    check(
+      "ck_administrators_timestamps",
+      sql`strftime('%Y-%m-%dT%H:%M:%fZ', ${table.createdAt}) = ${table.createdAt}
+        AND strftime('%Y-%m-%dT%H:%M:%fZ', ${table.updatedAt}) = ${table.updatedAt}
+        AND ${table.updatedAt} >= ${table.createdAt}`,
+    ),
+  ],
+);
+
+export const adminSessions = sqliteTable(
+  "admin_sessions",
+  {
+    id: text("id").primaryKey(),
+    administratorId: text("administrator_id")
+      .notNull()
+      .references(() => administrators.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull(),
+    csrfTokenHash: text("csrf_token_hash").notNull(),
+    evidenceHash: text("evidence_hash").notNull(),
+    authzVersion: integer("authz_version").notNull(),
+    aal: integer("aal").notNull(),
+    externalAuthenticatedAt: text("external_authenticated_at").notNull(),
+    expiresAt: text("expires_at").notNull(),
+    idleExpiresAt: text("idle_expires_at").notNull(),
+    lastSeenAt: text("last_seen_at"),
+    revokedAt: text("revoked_at"),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("ux_admin_sessions_token_hash").on(table.tokenHash),
+    uniqueIndex("ux_admin_sessions_evidence_hash").on(table.evidenceHash),
+    index("idx_admin_sessions_admin_expires_at").on(
+      table.administratorId,
+      table.expiresAt,
+    ),
+    check(
+      "ck_admin_sessions_token_hash",
+      sql`length(${table.tokenHash}) = 64
+        AND ${table.tokenHash} = lower(${table.tokenHash})
+        AND ${table.tokenHash} NOT GLOB '*[^0-9a-f]*'
+        AND length(${table.csrfTokenHash}) = 64
+        AND ${table.csrfTokenHash} = lower(${table.csrfTokenHash})
+        AND ${table.csrfTokenHash} NOT GLOB '*[^0-9a-f]*'
+        AND length(${table.evidenceHash}) = 64
+        AND ${table.evidenceHash} = lower(${table.evidenceHash})
+        AND ${table.evidenceHash} NOT GLOB '*[^0-9a-f]*'`,
+    ),
+    check("ck_admin_sessions_aal", sql`${table.aal} >= 2`),
+    check(
+      "ck_admin_sessions_timestamps",
+      sql`strftime('%Y-%m-%dT%H:%M:%fZ', ${table.externalAuthenticatedAt}) = ${table.externalAuthenticatedAt}
+        AND strftime('%Y-%m-%dT%H:%M:%fZ', ${table.createdAt}) = ${table.createdAt}
+        AND strftime('%Y-%m-%dT%H:%M:%fZ', ${table.expiresAt}) = ${table.expiresAt}
+        AND strftime('%Y-%m-%dT%H:%M:%fZ', ${table.idleExpiresAt}) = ${table.idleExpiresAt}
+        AND ${table.externalAuthenticatedAt} <= ${table.createdAt}
+        AND ${table.expiresAt} > ${table.createdAt}
+        AND ${table.idleExpiresAt} > ${table.createdAt}
+        AND ${table.idleExpiresAt} <= ${table.expiresAt}
+        AND CAST(strftime('%s', ${table.createdAt}) AS integer)
+          - CAST(strftime('%s', ${table.externalAuthenticatedAt}) AS integer) <= 300
+        AND CAST(strftime('%s', ${table.expiresAt}) AS integer)
+          - CAST(strftime('%s', ${table.createdAt}) AS integer) <= 28800
+        AND CAST(strftime('%s', ${table.idleExpiresAt}) AS integer)
+          - CAST(strftime('%s', ${table.createdAt}) AS integer) <= 900
+        AND (${table.lastSeenAt} IS NULL OR strftime('%Y-%m-%dT%H:%M:%fZ', ${table.lastSeenAt}) = ${table.lastSeenAt})
+        AND (${table.revokedAt} IS NULL OR strftime('%Y-%m-%dT%H:%M:%fZ', ${table.revokedAt}) = ${table.revokedAt})`,
     ),
   ],
 );
@@ -438,48 +719,312 @@ export const emailOutbox = sqliteTable(
     id: text("id").primaryKey(),
     kind: text("kind", {
       enum: [
-        "magic_link",
+        "payment_confirmation",
         "order_confirmation",
         "payment_failed",
         "shipment_confirmation",
         "refund_confirmation",
+        "withdrawal_acknowledgement",
+        "account_access",
       ],
     }).notNull(),
-    recipientEmail: text("recipient_email").notNull(),
+    transactionIntent: text("transaction_intent", {
+      enum: [
+        "payment_succeeded",
+        "payment_failed",
+        "shipment_created",
+        "refund_succeeded",
+        "withdrawal_received",
+        "account_access_challenge",
+      ],
+    })
+      .notNull()
+      .default("payment_succeeded"),
+    sourceEventId: text("source_event_id").notNull().default("compat:pending"),
+    recipientEmail: text("recipient_email"),
     orderId: text("order_id").references(() => orders.id, {
-      onDelete: "set null",
+      onDelete: "restrict",
     }),
-    locale: text("locale").notNull().default("fr"),
+    accessChallengeId: text("access_challenge_id").references(
+      () => accessChallenges.id,
+      { onDelete: "restrict" },
+    ),
+    locale: text("locale", { enum: ["fr", "en"] })
+      .notNull()
+      .default("fr"),
     templateVersion: text("template_version").notNull(),
-    payloadJson: text("payload_json").notNull(),
-    status: text("status", { enum: ["pending", "sending", "sent", "failed"] })
+    payloadJson: text("payload_json"),
+    status: text("status", {
+      enum: ["pending", "sending", "sent", "failed", "cancelled"],
+    })
       .notNull()
       .default("pending"),
     attempts: integer("attempts").notNull().default(0),
-    nextAttemptAt: text("next_attempt_at").notNull().default(utcNow),
+    maxAttempts: integer("max_attempts").notNull().default(5),
+    nextAttemptAt: text("next_attempt_at"),
+    leaseTokenHash: text("lease_token_hash"),
+    leasedAt: text("leased_at"),
+    leaseExpiresAt: text("lease_expires_at"),
     lastErrorCode: text("last_error_code"),
     idempotencyKey: text("idempotency_key").notNull(),
-    createdAt: text("created_at").notNull().default(utcNow),
+    providerIdempotencyKey: text("provider_idempotency_key")
+      .notNull()
+      .default("compat:pending"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull().default(utcNow),
     sentAt: text("sent_at"),
+    terminalAt: text("terminal_at"),
+    purgedAt: text("purged_at"),
   },
   (table) => [
     uniqueIndex("ux_email_outbox_idempotency_key").on(table.idempotencyKey),
-    index("idx_email_outbox_status_next_attempt").on(
+    uniqueIndex("ux_email_outbox_intent_source").on(
+      table.transactionIntent,
+      table.sourceEventId,
+    ),
+    uniqueIndex("ux_email_outbox_provider_idempotency_key").on(
+      table.providerIdempotencyKey,
+    ),
+    uniqueIndex("ux_email_outbox_account_access_challenge")
+      .on(table.accessChallengeId)
+      .where(
+        sql`${table.kind} = 'account_access' AND ${table.accessChallengeId} IS NOT NULL`,
+      ),
+    uniqueIndex("ux_email_outbox_payment_confirmation_order")
+      .on(table.orderId)
+      .where(sql`${table.kind} = 'payment_confirmation'`),
+    uniqueIndex("ux_email_outbox_active_lease")
+      .on(table.leaseTokenHash)
+      .where(sql`${table.leaseTokenHash} IS NOT NULL`),
+    index("idx_email_outbox_claim").on(
       table.status,
       table.nextAttemptAt,
+      table.createdAt,
+    ),
+    index("idx_email_outbox_stale_lease").on(
+      table.status,
+      table.leaseExpiresAt,
     ),
     check(
       "ck_email_outbox_kind",
       sql`${table.kind} IN (
-        'magic_link', 'order_confirmation', 'payment_failed',
-        'shipment_confirmation', 'refund_confirmation'
+        'payment_confirmation', 'payment_failed', 'shipment_confirmation',
+        'refund_confirmation', 'withdrawal_acknowledgement', 'account_access',
+        'order_confirmation'
       )`,
     ),
     check(
-      "ck_email_outbox_status",
-      sql`${table.status} IN ('pending', 'sending', 'sent', 'failed')`,
+      "ck_email_outbox_intent",
+      sql`(${table.kind} = 'payment_confirmation' AND ${table.transactionIntent} = 'payment_succeeded')
+        OR (${table.kind} = 'payment_failed' AND ${table.transactionIntent} = 'payment_failed')
+        OR (${table.kind} = 'shipment_confirmation' AND ${table.transactionIntent} = 'shipment_created')
+        OR (${table.kind} = 'refund_confirmation' AND ${table.transactionIntent} = 'refund_succeeded')
+        OR (${table.kind} = 'withdrawal_acknowledgement' AND ${table.transactionIntent} = 'withdrawal_received')
+        OR (${table.kind} = 'account_access' AND ${table.transactionIntent} = 'account_access_challenge')
+        OR (${table.kind} = 'order_confirmation' AND ${table.transactionIntent} = 'payment_succeeded')`,
     ),
-    check("ck_email_outbox_attempts_non_negative", sql`${table.attempts} >= 0`),
+    check(
+      "ck_email_outbox_status",
+      sql`${table.status} IN ('pending', 'sending', 'sent', 'failed', 'cancelled')`,
+    ),
+    check(
+      "ck_email_outbox_locale",
+      sql`${table.locale} IN ('fr', 'en')`,
+    ),
+    check(
+      "ck_email_outbox_attempts",
+      sql`${table.attempts} >= 0 AND ${table.maxAttempts} >= 1
+        AND ${table.attempts} <= ${table.maxAttempts}
+        AND (${table.kind} <> 'account_access' OR ${table.maxAttempts} = 1)`,
+    ),
+    check(
+      "ck_email_outbox_error_code",
+      sql`${table.lastErrorCode} IS NULL OR ${table.lastErrorCode} IN (
+        'provider_rejected', 'delivery_ambiguous', 'attempts_exhausted',
+        'legacy_magic_link_invalidated', 'legacy_unverified_payment_intent',
+        'legacy_ambiguous_delivery', 'legacy_duplicate_intent'
+      )`,
+    ),
+    check(
+      "ck_email_outbox_content_purge",
+      sql`(${table.purgedAt} IS NULL AND ${table.recipientEmail} IS NOT NULL AND ${table.payloadJson} IS NOT NULL)
+        OR (${table.purgedAt} IS NOT NULL AND ${table.recipientEmail} IS NULL
+          AND ${table.payloadJson} IS NULL
+          AND ${table.status} IN ('sent', 'failed', 'cancelled'))`,
+    ),
+    check(
+      "ck_email_outbox_account_access_historical",
+      sql`${table.kind} <> 'account_access' OR (
+        ${table.status} IN ('sent', 'failed', 'cancelled')
+        AND ${table.purgedAt} IS NOT NULL
+        AND ${table.recipientEmail} IS NULL AND ${table.payloadJson} IS NULL
+        AND ${table.nextAttemptAt} IS NULL
+        AND ${table.leaseTokenHash} IS NULL AND ${table.leasedAt} IS NULL
+        AND ${table.leaseExpiresAt} IS NULL AND ${table.terminalAt} IS NOT NULL
+      )`,
+    ),
+    check(
+      "ck_email_outbox_state_shape",
+      sql`(${table.status} = 'pending' AND ${table.nextAttemptAt} IS NOT NULL
+          AND ${table.leaseTokenHash} IS NULL AND ${table.leasedAt} IS NULL
+          AND ${table.leaseExpiresAt} IS NULL AND ${table.sentAt} IS NULL
+          AND ${table.terminalAt} IS NULL)
+        OR (${table.status} = 'sending' AND ${table.attempts} >= 1
+          AND ${table.nextAttemptAt} IS NULL AND ${table.leaseTokenHash} IS NOT NULL
+          AND ${table.leasedAt} IS NOT NULL AND ${table.leaseExpiresAt} IS NOT NULL
+          AND ${table.sentAt} IS NULL AND ${table.terminalAt} IS NULL)
+        OR (${table.status} = 'sent' AND ${table.nextAttemptAt} IS NULL
+          AND ${table.leaseTokenHash} IS NULL AND ${table.leasedAt} IS NULL
+          AND ${table.leaseExpiresAt} IS NULL AND ${table.sentAt} IS NOT NULL
+          AND ${table.terminalAt} IS NOT NULL)
+        OR (${table.status} IN ('failed', 'cancelled') AND ${table.nextAttemptAt} IS NULL
+          AND ${table.leaseTokenHash} IS NULL AND ${table.leasedAt} IS NULL
+          AND ${table.leaseExpiresAt} IS NULL AND ${table.sentAt} IS NULL
+          AND ${table.terminalAt} IS NOT NULL)`,
+    ),
+    check(
+      "ck_email_outbox_lease_hash",
+      sql`${table.leaseTokenHash} IS NULL OR (
+        length(${table.leaseTokenHash}) = 64
+        AND ${table.leaseTokenHash} = lower(${table.leaseTokenHash})
+        AND ${table.leaseTokenHash} NOT GLOB '*[^0-9a-f]*'
+      )`,
+    ),
+  ],
+);
+
+export const dataRetentionRules = sqliteTable(
+  "data_retention_rules",
+  {
+    id: text("id").primaryKey(),
+    recordClass: text("record_class", {
+      enum: ["customer_profile", "email_content", "order_record"],
+    }).notNull(),
+    policyVersion: text("policy_version").notNull(),
+    retentionSeconds: integer("retention_seconds"),
+    active: integer("active", { mode: "boolean" }).notNull().default(false),
+    effectiveAt: text("effective_at"),
+    createdByAdminId: text("created_by_admin_id").references(
+      () => administrators.id,
+      { onDelete: "restrict" },
+    ),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("ux_data_retention_active_class")
+      .on(table.recordClass)
+      .where(sql`${table.active} = 1`),
+    check(
+      "ck_data_retention_class",
+      sql`${table.recordClass} IN ('customer_profile', 'email_content', 'order_record')`,
+    ),
+    check("ck_data_retention_active", sql`${table.active} IN (0, 1)`),
+    check(
+      "ck_data_retention_duration",
+      sql`${table.retentionSeconds} IS NULL OR ${table.retentionSeconds} >= 0`,
+    ),
+    check(
+      "ck_data_retention_activation",
+      sql`${table.active} = 0 OR (
+        ${table.retentionSeconds} IS NOT NULL AND ${table.effectiveAt} IS NOT NULL
+        AND ${table.createdByAdminId} IS NOT NULL
+      )`,
+    ),
+  ],
+);
+
+export const dataRightsRequests = sqliteTable(
+  "data_rights_requests",
+  {
+    id: text("id").primaryKey(),
+    kind: text("kind", { enum: ["export", "rectification", "erasure"] })
+      .notNull(),
+    actorType: text("actor_type", { enum: ["customer", "guest", "admin"] })
+      .notNull(),
+    actorCustomerId: text("actor_customer_id").references(() => customers.id, {
+      onDelete: "restrict",
+    }),
+    actorOrderId: text("actor_order_id").references(() => orders.id, {
+      onDelete: "restrict",
+    }),
+    actorAdminId: text("actor_admin_id").references(() => administrators.id, {
+      onDelete: "restrict",
+    }),
+    targetCustomerId: text("target_customer_id").references(
+      () => customers.id,
+      { onDelete: "restrict" },
+    ),
+    targetOrderId: text("target_order_id").references(() => orders.id, {
+      onDelete: "restrict",
+    }),
+    requestedFieldsJson: text("requested_fields_json").notNull().default("[]"),
+    status: text("status", { enum: ["pending", "completed", "rejected"] })
+      .notNull()
+      .default("pending"),
+    retentionDecision: text("retention_decision", {
+      enum: ["unevaluated", "retain", "erase"],
+    })
+      .notNull()
+      .default("unevaluated"),
+    retentionPolicyVersion: text("retention_policy_version"),
+    retentionRequiredUntil: text("retention_required_until"),
+    activeDispute: integer("active_dispute", { mode: "boolean" }),
+    idempotencyKey: text("idempotency_key").notNull(),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+    completedAt: text("completed_at"),
+  },
+  (table) => [
+    uniqueIndex("ux_data_rights_idempotency").on(table.idempotencyKey),
+    index("idx_data_rights_target_customer").on(
+      table.targetCustomerId,
+      table.createdAt,
+    ),
+    index("idx_data_rights_target_order").on(
+      table.targetOrderId,
+      table.createdAt,
+    ),
+    check(
+      "ck_data_rights_kind",
+      sql`${table.kind} IN ('export', 'rectification', 'erasure')`,
+    ),
+    check(
+      "ck_data_rights_status",
+      sql`${table.status} IN ('pending', 'completed', 'rejected')`,
+    ),
+    check(
+      "ck_data_rights_actor",
+      sql`(${table.actorType} = 'customer' AND ${table.actorCustomerId} IS NOT NULL
+          AND ${table.actorOrderId} IS NULL AND ${table.actorAdminId} IS NULL
+          AND ${table.targetCustomerId} = ${table.actorCustomerId}
+          AND ${table.targetOrderId} IS NULL)
+        OR (${table.actorType} = 'guest' AND ${table.actorCustomerId} IS NULL
+          AND ${table.actorOrderId} IS NOT NULL AND ${table.actorAdminId} IS NULL
+          AND ${table.targetCustomerId} IS NULL
+          AND ${table.targetOrderId} = ${table.actorOrderId})
+        OR (${table.actorType} = 'admin' AND ${table.actorCustomerId} IS NULL
+          AND ${table.actorOrderId} IS NULL AND ${table.actorAdminId} IS NOT NULL
+          AND ((${table.targetCustomerId} IS NOT NULL AND ${table.targetOrderId} IS NULL)
+            OR (${table.targetCustomerId} IS NULL AND ${table.targetOrderId} IS NOT NULL)))`,
+    ),
+    check(
+      "ck_data_rights_retention",
+      sql`(${table.retentionDecision} = 'unevaluated'
+          AND ${table.retentionPolicyVersion} IS NULL
+          AND ${table.retentionRequiredUntil} IS NULL
+          AND ${table.activeDispute} IS NULL)
+        OR (${table.retentionDecision} IN ('retain', 'erase')
+          AND ${table.retentionPolicyVersion} IS NOT NULL
+          AND ${table.retentionRequiredUntil} IS NOT NULL
+          AND ${table.activeDispute} IN (0, 1))`,
+    ),
+    check(
+      "ck_data_rights_completion",
+      sql`(${table.status} = 'pending' AND ${table.completedAt} IS NULL)
+        OR (${table.status} IN ('completed', 'rejected')
+          AND ${table.completedAt} IS NOT NULL)`,
+    ),
   ],
 );
 

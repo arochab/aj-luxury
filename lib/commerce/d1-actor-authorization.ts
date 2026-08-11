@@ -1,4 +1,5 @@
 import {
+  accessTokenHashContexts,
   hashOneTimeAccessToken,
   isCanonicalUtcTimestamp,
   isOpaqueAccessToken,
@@ -30,9 +31,19 @@ export async function resolveD1MutationActor(
   ) {
     return null;
   }
+  const sessionContext = actor.kind === "customer"
+    ? accessTokenHashContexts.customerSession
+    : actor.kind === "guest-order"
+      ? accessTokenHashContexts.guestOrderSession
+      : accessTokenHashContexts.adminSession;
+  const csrfContext = actor.kind === "customer"
+    ? accessTokenHashContexts.customerCsrf
+    : actor.kind === "guest-order"
+      ? accessTokenHashContexts.guestOrderCsrf
+      : accessTokenHashContexts.adminCsrf;
   const [sessionHash, csrfHash] = await Promise.all([
-    hashOneTimeAccessToken(actor.sessionToken),
-    hashOneTimeAccessToken(actor.csrfToken),
+    hashOneTimeAccessToken(actor.sessionToken, sessionContext),
+    hashOneTimeAccessToken(actor.csrfToken, csrfContext),
   ]);
   if (actor.kind === "customer") {
     const row = await database

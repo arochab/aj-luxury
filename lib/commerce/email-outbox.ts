@@ -1,7 +1,4 @@
-import {
-  hashOneTimeAccessToken,
-  isCanonicalUtcTimestamp,
-} from "./account-security.ts";
+import { isCanonicalUtcTimestamp } from "./account-security.ts";
 import type { CommerceD1Database, CommerceD1Result } from "./d1-port.ts";
 
 export const transactionalEmailProviderClosed = Object.freeze({
@@ -14,8 +11,7 @@ export type EmailOutboxKind =
   | "payment_failed"
   | "shipment_confirmation"
   | "refund_confirmation"
-  | "withdrawal_acknowledgement"
-  | "account_access";
+  | "withdrawal_acknowledgement";
 
 export type EmailOutboxClaim = Readonly<{
   id: string;
@@ -23,7 +19,6 @@ export type EmailOutboxClaim = Readonly<{
   sourceEventId: string;
   recipientEmail: string;
   orderId: string | null;
-  accessChallengeId: string | null;
   locale: "fr" | "en";
   templateVersion: string;
   payloadJson: string;
@@ -79,10 +74,6 @@ const safeId = /^[a-z0-9][a-z0-9_.:-]{0,191}$/i;
 const hash = /^[0-9a-f]{64}$/;
 const mailbox = /^[\x21-\x7e]+@[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$/;
 const retrySeconds = Object.freeze([60, 300, 1_800, 7_200] as const);
-const opaqueTokenRun = /[A-Za-z0-9_-]{43,}/g;
-const opaqueTokenLength = 43;
-const maxOpaqueTokenRunLength = 256;
-const maxOpaqueTokenCandidates = 1_024;
 
 function changed(result: CommerceD1Result<object>): number {
   return Number(result.meta?.changes ?? 0);
@@ -112,57 +103,11 @@ function providerIdempotencyKey(input: Readonly<{
   kind: EmailOutboxKind;
   sourceEventId: string;
   orderId?: string;
-  accessChallengeId?: string;
 }>): string {
-  if (input.kind === "account_access") {
-    return `account_access:${input.accessChallengeId}`;
-  }
   if (input.kind === "payment_confirmation") {
     return `payment_confirmation:${input.orderId}`;
   }
   return `${input.kind}:${input.sourceEventId}`;
-}
-
-async function assertAccountAccessFieldsContainNoRawToken(
-  database: CommerceD1Database,
-  accessChallengeId: string,
-  durableFields: readonly string[],
-): Promise<void> {
-  const challenge = await database
-    .prepare("SELECT token_hash FROM access_challenges WHERE id = ?")
-    .bind(accessChallengeId)
-    .first<{ token_hash: string }>();
-  if (!challenge || !hash.test(challenge.token_hash)) {
-    throw new EmailOutboxError("INVALID_INPUT", "Access challenge is invalid.");
-  }
-
-  let candidates = 0;
-  for (const field of durableFields) {
-    for (const run of field.match(opaqueTokenRun) ?? []) {
-      if (run.length > maxOpaqueTokenRunLength) {
-        throw new EmailOutboxError(
-          "INVALID_INPUT",
-          "Account access content contains forbidden token-shaped data.",
-        );
-      }
-      for (let offset = 0; offset <= run.length - opaqueTokenLength; offset += 1) {
-        candidates += 1;
-        if (candidates > maxOpaqueTokenCandidates) {
-          throw new EmailOutboxError(
-            "INVALID_INPUT",
-            "Account access content contains too much token-shaped data.",
-          );
-        }
-        const candidate = run.slice(offset, offset + opaqueTokenLength);
-        if ((await hashOneTimeAccessToken(candidate)) === challenge.token_hash) {
-          throw new EmailOutboxError(
-            "INVALID_INPUT",
-            "Account access tokens must never enter durable email fields.",
-          );
-        }
-      }
-    }
-  }
 }
 
 type ClaimRow = {
@@ -171,7 +116,6 @@ type ClaimRow = {
   source_event_id: string;
   recipient_email: string;
   order_id: string | null;
-  access_challenge_id: string | null;
   locale: "fr" | "en";
   template_version: string;
   payload_json: string;
@@ -188,7 +132,6 @@ function freezeClaim(row: ClaimRow): EmailOutboxClaim {
     sourceEventId: row.source_event_id,
     recipientEmail: row.recipient_email,
     orderId: row.order_id,
-    accessChallengeId: row.access_challenge_id,
     locale: row.locale,
     templateVersion: row.template_version,
     payloadJson: row.payload_json,
@@ -217,7 +160,6 @@ export class D1EmailOutbox {
     sourceEventId: string;
     recipientEmail: string;
     orderId?: string;
-    accessChallengeId?: string;
     locale: "fr" | "en";
     templateVersion: string;
     subject: string;
@@ -231,7 +173,9 @@ export class D1EmailOutbox {
       sourceEventId: candidate.sourceEventId,
       recipientEmail: candidate.recipientEmail,
       orderId: candidate.orderId,
-      accessChallengeId: candidate.accessChallengeId,
+      unexpectedAccessChallengeId: (
+        candidate as Readonly<{ accessChallengeId?: unknown }>
+      ).accessChallengeId,
       locale: candidate.locale,
       templateVersion: candidate.templateVersion,
       subject: candidate.subject,
@@ -239,6 +183,12 @@ export class D1EmailOutbox {
       idempotencyKey: candidate.idempotencyKey,
       createdAt: candidate.createdAt,
     });
+    if ((input.kind as string) === "account_access") {
+      throw new EmailOutboxError(
+        "INVALID_INPUT",
+        "Account access delivery is disabled for the durable outbox.",
+      );
+    }
     assertId(input.id, "Outbox id");
     assertId(input.sourceEventId, "Source event id");
     assertId(input.templateVersion, "Template version");
@@ -257,25 +207,10 @@ export class D1EmailOutbox {
     ) {
       throw new EmailOutboxError("INVALID_INPUT", "Email copy is invalid.");
     }
-    let orderId: string | undefined;
-    let accessChallengeId: string | undefined;
-    if (input.kind === "account_access") {
-      const candidate = input.accessChallengeId;
-      assertId(candidate, "Access challenge id");
-      accessChallengeId = candidate;
-      if (input.orderId !== undefined) {
-        throw new EmailOutboxError(
-          "INVALID_INPUT",
-          "Account access emails cannot reference an order directly.",
-        );
-      }
-    } else {
-      const candidate = input.orderId;
-      assertId(candidate, "Order id");
-      orderId = candidate;
-      if (input.accessChallengeId !== undefined) {
-        throw new EmailOutboxError("INVALID_INPUT", "Unexpected access challenge.");
-      }
+    const orderId = input.orderId;
+    assertId(orderId, "Order id");
+    if (input.unexpectedAccessChallengeId !== undefined) {
+      throw new EmailOutboxError("INVALID_INPUT", "Unexpected access challenge.");
     }
     const intents: Record<EmailOutboxKind, string> = {
       payment_confirmation: "payment_succeeded",
@@ -283,36 +218,14 @@ export class D1EmailOutbox {
       shipment_confirmation: "shipment_created",
       refund_confirmation: "refund_succeeded",
       withdrawal_acknowledgement: "withdrawal_received",
-      account_access: "account_access_challenge",
     };
     const payloadJson = JSON.stringify({ subject: input.subject, text: input.text });
     const deliveryIdempotencyKey = providerIdempotencyKey({
       kind: input.kind,
       sourceEventId: input.sourceEventId,
       orderId,
-      accessChallengeId,
     });
-    if (accessChallengeId !== undefined) {
-      await assertAccountAccessFieldsContainNoRawToken(
-        this.database,
-        accessChallengeId,
-        Object.freeze([
-          input.id,
-          input.sourceEventId,
-          input.recipientEmail,
-          accessChallengeId,
-          input.locale,
-          input.templateVersion,
-          input.subject,
-          input.text,
-          input.idempotencyKey,
-          input.createdAt,
-          payloadJson,
-          deliveryIdempotencyKey,
-        ]),
-      );
-    }
-    const maxAttempts = input.kind === "account_access" ? 1 : 5;
+    const maxAttempts = 5;
     const insert = await this.database
       .prepare(
         `INSERT OR IGNORE INTO email_outbox (
@@ -328,8 +241,8 @@ export class D1EmailOutbox {
         intents[input.kind],
         input.sourceEventId,
         input.recipientEmail,
-        orderId ?? null,
-        accessChallengeId ?? null,
+        orderId,
+        null,
         input.locale,
         input.templateVersion,
         payloadJson,
@@ -342,15 +255,7 @@ export class D1EmailOutbox {
       )
       .run();
     let selection: Readonly<{ sql: string; value: string }>;
-    if (accessChallengeId !== undefined) {
-      selection = Object.freeze({
-        sql: `SELECT id, kind, source_event_id, recipient_email, order_id,
-          access_challenge_id, locale, template_version, payload_json,
-          idempotency_key, provider_idempotency_key FROM email_outbox
-          WHERE kind = 'account_access' AND access_challenge_id = ?`,
-        value: accessChallengeId,
-      });
-    } else if (input.kind === "payment_confirmation") {
+    if (input.kind === "payment_confirmation") {
       assertId(orderId, "Order id");
       selection = Object.freeze({
         sql: `SELECT id, kind, source_event_id, recipient_email, order_id,
@@ -384,13 +289,12 @@ export class D1EmailOutbox {
         idempotency_key: string;
         provider_idempotency_key: string;
       }>();
-    const hasBusinessDedupe =
-      input.kind === "account_access" || input.kind === "payment_confirmation";
+    const hasBusinessDedupe = input.kind === "payment_confirmation";
     if (
       !persisted || persisted.kind !== input.kind ||
       persisted.recipient_email !== input.recipientEmail ||
-      persisted.order_id !== (orderId ?? null) ||
-      persisted.access_challenge_id !== (accessChallengeId ?? null) ||
+      persisted.order_id !== orderId ||
+      persisted.access_challenge_id !== null ||
       persisted.locale !== input.locale ||
       persisted.template_version !== input.templateVersion ||
       persisted.payload_json !== payloadJson ||
@@ -430,9 +334,11 @@ export class D1EmailOutbox {
           lease_token_hash = ?, leased_at = ?, lease_expires_at = ?, updated_at = ?
         WHERE id = (
           SELECT id FROM email_outbox
-          WHERE status = 'pending' AND next_attempt_at <= ?
+          WHERE status = 'pending' AND kind <> 'account_access'
+            AND next_attempt_at <= ?
           ORDER BY next_attempt_at, created_at, id LIMIT 1
-        ) AND status = 'pending' AND next_attempt_at <= ?`,
+        ) AND status = 'pending' AND kind <> 'account_access'
+          AND next_attempt_at <= ?`,
       )
       .bind(
         input.leaseTokenHash,
@@ -447,7 +353,8 @@ export class D1EmailOutbox {
         `SELECT id, kind, source_event_id, recipient_email, order_id,
           access_challenge_id, locale, template_version, payload_json,
           attempts, max_attempts, lease_token_hash, provider_idempotency_key
-        FROM email_outbox WHERE lease_token_hash = ? AND status = 'sending'`,
+        FROM email_outbox WHERE lease_token_hash = ? AND status = 'sending'
+          AND kind <> 'account_access'`,
       )
       .bind(input.leaseTokenHash);
     const results = await this.database.batch([update, select]);
@@ -460,13 +367,15 @@ export class D1EmailOutbox {
   }
 
   async markSent(claim: EmailOutboxClaim, now: string): Promise<void> {
+    this.rejectHistoricalAccountAccessClaim(claim);
     assertTimestamp(now, "Now");
     const result = await this.database
       .prepare(
         `UPDATE email_outbox SET status = 'sent', lease_token_hash = NULL,
           leased_at = NULL, lease_expires_at = NULL, sent_at = ?, terminal_at = ?,
           last_error_code = NULL, updated_at = ?
-        WHERE id = ? AND status = 'sending' AND lease_token_hash = ?`,
+        WHERE id = ? AND status = 'sending' AND kind <> 'account_access'
+          AND lease_token_hash = ?`,
       )
       .bind(now, now, now, claim.id, claim.leaseTokenHash)
       .run();
@@ -480,9 +389,9 @@ export class D1EmailOutbox {
     now: string,
     ambiguous = false,
   ): Promise<"retry" | "failed"> {
+    this.rejectHistoricalAccountAccessClaim(claim);
     assertTimestamp(now, "Now");
-    const terminal =
-      claim.kind === "account_access" || claim.attempts >= claim.maxAttempts;
+    const terminal = claim.attempts >= claim.maxAttempts;
     const errorCode = ambiguous ? "delivery_ambiguous" : terminal
       ? "attempts_exhausted"
       : "provider_rejected";
@@ -497,7 +406,8 @@ export class D1EmailOutbox {
         `UPDATE email_outbox SET status = ?, next_attempt_at = ?,
           lease_token_hash = NULL, leased_at = NULL, lease_expires_at = NULL,
           last_error_code = ?, terminal_at = ?, updated_at = ?
-        WHERE id = ? AND status = 'sending' AND lease_token_hash = ?`,
+        WHERE id = ? AND status = 'sending' AND kind <> 'account_access'
+          AND lease_token_hash = ?`,
       )
       .bind(
         terminal ? "failed" : "pending",
@@ -522,7 +432,7 @@ export class D1EmailOutbox {
       .prepare(
         `SELECT id, kind, attempts, max_attempts, lease_token_hash
         FROM email_outbox WHERE id = ? AND status = 'sending'
-          AND lease_expires_at <= ?`,
+          AND kind <> 'account_access' AND lease_expires_at <= ?`,
       )
       .bind(id, now)
       .first<{
@@ -533,7 +443,7 @@ export class D1EmailOutbox {
         lease_token_hash: string;
       }>();
     if (!row) return null;
-    const terminal = row.kind === "account_access" || row.attempts >= row.max_attempts;
+    const terminal = row.attempts >= row.max_attempts;
     const nextAttemptAt = terminal
       ? null
       : addSeconds(
@@ -546,7 +456,7 @@ export class D1EmailOutbox {
           lease_token_hash = NULL, leased_at = NULL, lease_expires_at = NULL,
           last_error_code = 'delivery_ambiguous', terminal_at = ?, updated_at = ?
         WHERE id = ? AND status = 'sending' AND lease_token_hash = ?
-          AND lease_expires_at <= ?`,
+          AND kind <> 'account_access' AND lease_expires_at <= ?`,
       )
       .bind(
         terminal ? "failed" : "pending",
@@ -563,6 +473,9 @@ export class D1EmailOutbox {
   }
 
   async deliverClaim(claim: EmailOutboxClaim, now: string): Promise<"sent" | "retry" | "failed"> {
+    this.rejectHistoricalAccountAccessClaim(claim);
+    assertTimestamp(now, "Now");
+    const verifiedClaim = await this.readCurrentDeliverableClaim(claim, now);
     if (!this.provider) {
       throw new EmailOutboxError(
         "DEPENDENCY_UNAVAILABLE",
@@ -572,17 +485,56 @@ export class D1EmailOutbox {
     let receipt: TransactionalEmailDeliveryReceipt;
     try {
       receipt = await this.provider.deliver(Object.freeze({
-        message: claim,
-        idempotencyKey: claim.providerIdempotencyKey,
+        message: verifiedClaim,
+        idempotencyKey: verifiedClaim.providerIdempotencyKey,
       }));
     } catch {
-      return this.markDeliveryFailure(claim, now, true);
+      return this.markDeliveryFailure(verifiedClaim, now, true);
     }
-    if (!receipt || receipt.idempotencyKey !== claim.providerIdempotencyKey) {
-      return this.markDeliveryFailure(claim, now, true);
+    if (!receipt || receipt.idempotencyKey !== verifiedClaim.providerIdempotencyKey) {
+      return this.markDeliveryFailure(verifiedClaim, now, true);
     }
-    await this.markSent(claim, now);
+    await this.markSent(verifiedClaim, now);
     return "sent";
+  }
+
+  private async readCurrentDeliverableClaim(
+    claimed: EmailOutboxClaim,
+    now: string,
+  ): Promise<EmailOutboxClaim> {
+    const row = await this.database
+      .prepare(
+        `SELECT id, kind, source_event_id, recipient_email, order_id,
+          locale, template_version, payload_json, attempts, max_attempts,
+          lease_token_hash, provider_idempotency_key
+        FROM email_outbox
+        WHERE id = ? AND status = 'sending' AND kind <> 'account_access'
+          AND lease_token_hash = ? AND lease_expires_at > ?`,
+      )
+      .bind(claimed.id, claimed.leaseTokenHash, now)
+      .first<ClaimRow>();
+    if (!row) {
+      throw new EmailOutboxError("LEASE_LOST", "Email lease is no longer current.");
+    }
+    const current = freezeClaim(row);
+    for (const key of Object.keys(current) as (keyof EmailOutboxClaim)[]) {
+      if (current[key] !== claimed[key]) {
+        throw new EmailOutboxError(
+          "LEASE_LOST",
+          "Email claim does not match the durable lease.",
+        );
+      }
+    }
+    return current;
+  }
+
+  private rejectHistoricalAccountAccessClaim(claim: EmailOutboxClaim): void {
+    if ((claim as Readonly<{ kind?: unknown }>).kind === "account_access") {
+      throw new EmailOutboxError(
+        "INVALID_INPUT",
+        "Historical account access records cannot be delivered by the durable outbox.",
+      );
+    }
   }
 
   async purgeEligibleTerminalContent(now: string): Promise<number> {

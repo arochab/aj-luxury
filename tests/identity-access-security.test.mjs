@@ -119,22 +119,55 @@ function createFixture(options = {}) {
   for (const migrationPath of migrationPaths) applyMigration(database, migrationPath);
 
   const deliveries = [];
+  const deliveryAttempts = [];
+  const acceptedReceipts = new Map();
   const backgroundTasks = [];
   const rateLimitInputs = [];
   const externalMfaInputs = [];
   const identityCallOrder = [];
   let virtualMilliseconds = 0;
+  let utcNow = options.utcNow ?? "2026-08-11T12:00:00.000Z";
+  let utcClockFailure = options.utcClockFailure ?? false;
   const ports = {
     delivery: {
       async deliver(delivery) {
+        deliveryAttempts.push(Object.freeze({ ...delivery }));
         if (options.deliveryGate) await options.deliveryGate;
         if (options.deliveryDelayMs) {
           await new Promise((resolvePromise) => {
             setTimeout(resolvePromise, options.deliveryDelayMs);
           });
         }
-        if (options.deliveryError) throw new Error("test delivery failure");
+        if (options.deliveryError) {
+          if (typeof options.deliveryError === "function") {
+            await options.deliveryError({
+              setUtcNow(value) { utcNow = value; },
+              setUtcClockFailure(value) { utcClockFailure = value; },
+            });
+          }
+          throw new Error("test delivery failure");
+        }
+        if (
+          options.idempotentDelivery &&
+          acceptedReceipts.has(delivery.idempotencyKey)
+        ) {
+          return acceptedReceipts.get(delivery.idempotencyKey);
+        }
+        if (options.afterDeliveryAccepted) {
+          await options.afterDeliveryAccepted(delivery, {
+            setUtcNow(value) { utcNow = value; },
+            setUtcClockFailure(value) { utcClockFailure = value; },
+          });
+        }
+        const receipt = options.deliveryReceipt?.(delivery, utcNow) ?? {
+          idempotencyKey: delivery.idempotencyKey,
+          acceptedAt: utcNow,
+        };
         deliveries.push(Object.freeze({ ...delivery }));
+        if (options.idempotentDelivery) {
+          acceptedReceipts.set(delivery.idempotencyKey, Object.freeze({ ...receipt }));
+        }
+        return receipt;
       },
     },
     rateLimit: {
@@ -154,8 +187,7 @@ function createFixture(options = {}) {
     background: {
       defer(task) {
         if (options.backgroundError) throw new Error("test background failure");
-        const pending = Promise.resolve().then(task);
-        backgroundTasks.push(pending);
+        backgroundTasks.push(task);
       },
     },
     timing:
@@ -168,20 +200,39 @@ function createFixture(options = {}) {
           virtualMilliseconds += milliseconds;
         },
       },
+    utcClock: {
+      now() {
+        if (utcClockFailure) throw new Error("test UTC clock failure");
+        return utcNow;
+      },
+    },
   };
 
   return {
     backgroundTasks,
     database,
     deliveries,
+    deliveryAttempts,
+    duplicateNextBackgroundTask() {
+      if (backgroundTasks.length === 0) throw new Error("No task to duplicate.");
+      backgroundTasks.push(backgroundTasks[0]);
+    },
     externalMfaInputs,
     async flushBackground() {
-      const pending = backgroundTasks.splice(0);
-      await Promise.all(pending);
+      while (backgroundTasks.length > 0) {
+        const task = backgroundTasks.shift();
+        await task();
+      }
+    },
+    async flushBackgroundConcurrently() {
+      const tasks = backgroundTasks.splice(0);
+      await Promise.all(tasks.map((task) => task()));
     },
     ports,
     identityCallOrder,
     rateLimitInputs,
+    setUtcClockFailure(value) { utcClockFailure = value; },
+    setUtcNow(value) { utcNow = value; },
     store: new D1IdentityAccessStore(new SQLiteD1Database(database), ports),
   };
 }
@@ -223,6 +274,15 @@ function insertOrder(database, input) {
     );
 }
 
+function durableDatabaseDump(database) {
+  const tables = database.prepare(`SELECT name FROM sqlite_schema
+    WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name`).all();
+  return JSON.stringify(tables.map(({ name }) => ({
+    name,
+    rows: database.prepare(`SELECT * FROM "${name}"`).all(),
+  })));
+}
+
 test("known and unknown emails receive the exact same response without persisting a raw token", async () => {
   const { database, deliveries, flushBackground, store } = createFixture();
   const now = "2026-08-11T12:00:00.000Z";
@@ -254,6 +314,13 @@ test("known and unknown emails receive the exact same response without persistin
   assert.equal(deliveries.length, 1);
   assert.equal(deliveries[0].destinationEmail, "known@example.com");
   assert.match(deliveries[0].rawToken, /^[A-Za-z0-9_-]{43}$/);
+  assert.equal(deliveries[0].idempotencyKey, "account_access:challenge_known");
+  assert.equal(deliveries[0].notAfter, deliveries[0].expiresAt);
+  assert.equal(
+    database.prepare("SELECT COUNT(*) AS count FROM email_outbox").get().count,
+    0,
+    "account access has one direct ephemeral delivery path and no durable outbox copy",
+  );
 
   const challenges = database
     .prepare(
@@ -443,6 +510,247 @@ test("delivery failure remains enumeration-safe and revokes the unusable challen
     2,
   );
   database.close();
+});
+
+test("an expired challenge is revoked before delivery and makes zero provider calls", async () => {
+  const { database, deliveries, flushBackground, setUtcNow, store } = createFixture();
+  const createdAt = "2026-08-11T12:00:00.000Z";
+  insertCustomer(database, "customer_expired_before_delivery", "expired@example.com", createdAt);
+  await store.requestCustomerSignIn({
+    email: "expired@example.com",
+    challengeId: "challenge_expired_before_delivery",
+    now: createdAt,
+  });
+  setUtcNow("2026-08-11T12:15:00.000Z");
+  await flushBackground();
+
+  assert.equal(deliveries.length, 0);
+  assert.deepEqual({ ...database.prepare(`SELECT dispatched_at, revoked_at
+    FROM access_challenges WHERE id = 'challenge_expired_before_delivery'`).get() }, {
+    dispatched_at: null,
+    revoked_at: "2026-08-11T12:15:00.000Z",
+  });
+  database.close();
+});
+
+test("delivery activation requires an exact receipt and uses a fresh post-provider clock", async () => {
+  const context = createFixture({
+    afterDeliveryAccepted(_delivery, clock) {
+      clock.setUtcNow("2026-08-11T12:00:05.000Z");
+    },
+    deliveryReceipt(delivery) {
+      return {
+        idempotencyKey: delivery.idempotencyKey,
+        acceptedAt: "2026-08-11T12:00:01.000Z",
+      };
+    },
+  });
+  const createdAt = "2026-08-11T12:00:00.000Z";
+  insertCustomer(context.database, "customer_receipt", "receipt@example.com", createdAt);
+  await context.store.requestCustomerSignIn({
+    email: "receipt@example.com",
+    challengeId: "challenge_receipt",
+    now: createdAt,
+  });
+  await context.flushBackground();
+  assert.equal(context.deliveries.length, 1);
+  assert.deepEqual({ ...context.database.prepare(`SELECT dispatched_at, revoked_at
+    FROM access_challenges WHERE id = 'challenge_receipt'`).get() }, {
+    dispatched_at: "2026-08-11T12:00:01.000Z",
+    revoked_at: null,
+  });
+
+  const invalidReceipts = [
+    { id: "wrong_key", key: "account_access:wrong_challenge", acceptedAt: createdAt },
+    { id: "malformed_time", acceptedAt: "not-a-time" },
+    { id: "before_created", acceptedAt: "2026-08-11T11:59:59.999Z" },
+    { id: "at_expiry", acceptedAt: "2026-08-11T12:15:00.000Z" },
+    { id: "future_clock", acceptedAt: "2026-08-11T12:00:00.001Z" },
+  ];
+  for (const receiptCase of invalidReceipts) {
+    const invalid = createFixture({
+      deliveryReceipt(delivery) {
+        return {
+          idempotencyKey: receiptCase.key ?? delivery.idempotencyKey,
+          acceptedAt: receiptCase.acceptedAt,
+        };
+      },
+    });
+    const email = `${receiptCase.id}@example.com`;
+    const challengeId = `challenge_bad_receipt_${receiptCase.id}`;
+    insertCustomer(invalid.database, `customer_${receiptCase.id}`, email, createdAt);
+    await invalid.store.requestCustomerSignIn({ email, challengeId, now: createdAt });
+    await invalid.flushBackground();
+    assert.deepEqual({ ...invalid.database.prepare(`SELECT dispatched_at, revoked_at
+      FROM access_challenges WHERE id = ?`).get(challengeId) }, {
+      dispatched_at: null,
+      revoked_at: createdAt,
+    });
+    assert.doesNotMatch(
+      durableDatabaseDump(invalid.database),
+      new RegExp(invalid.deliveries[0].rawToken),
+    );
+    invalid.database.close();
+  }
+  context.database.close();
+});
+
+test("expiry or UTC clock failure during provider delivery revokes without activation", async () => {
+  const createdAt = "2026-08-11T12:00:00.000Z";
+  for (const scenario of [
+    {
+      id: "expiry_during_provider",
+      afterDeliveryAccepted(_delivery, clock) {
+        clock.setUtcNow("2026-08-11T12:15:00.000Z");
+      },
+      expectedRevokedAt: "2026-08-11T12:15:00.000Z",
+    },
+    {
+      id: "clock_failure_after_provider",
+      afterDeliveryAccepted(_delivery, clock) {
+        clock.setUtcClockFailure(true);
+      },
+      expectedRevokedAt: createdAt,
+    },
+    {
+      id: "clock_failure_on_provider_error",
+      deliveryError(clock) {
+        clock.setUtcClockFailure(true);
+      },
+      expectedRevokedAt: createdAt,
+    },
+  ]) {
+    const context = createFixture({
+      afterDeliveryAccepted: scenario.afterDeliveryAccepted,
+      deliveryError: scenario.deliveryError,
+      deliveryReceipt(delivery) {
+        return {
+          idempotencyKey: delivery.idempotencyKey,
+          acceptedAt: "2026-08-11T12:00:01.000Z",
+        };
+      },
+    });
+    insertCustomer(
+      context.database,
+      `customer_${scenario.id}`,
+      `${scenario.id}@example.com`,
+      createdAt,
+    );
+    await context.store.requestCustomerSignIn({
+      email: `${scenario.id}@example.com`,
+      challengeId: `challenge_${scenario.id}`,
+      now: createdAt,
+    });
+    await context.flushBackground();
+    assert.deepEqual({ ...context.database.prepare(`SELECT dispatched_at, revoked_at
+      FROM access_challenges WHERE id = ?`).get(`challenge_${scenario.id}`) }, {
+      dispatched_at: null,
+      revoked_at: scenario.expectedRevokedAt,
+    });
+    const rawToken = context.deliveryAttempts[0].rawToken;
+    assert.doesNotMatch(durableDatabaseDump(context.database), new RegExp(rawToken));
+    context.database.close();
+  }
+
+  const beforeProvider = createFixture();
+  insertCustomer(beforeProvider.database, "customer_clock_before", "clock-before@example.com", createdAt);
+  await beforeProvider.store.requestCustomerSignIn({
+    email: "clock-before@example.com",
+    challengeId: "challenge_clock_before",
+    now: createdAt,
+  });
+  beforeProvider.setUtcClockFailure(true);
+  await beforeProvider.flushBackground();
+  assert.equal(beforeProvider.deliveryAttempts.length, 0);
+  assert.equal(beforeProvider.database.prepare(`SELECT revoked_at
+    FROM access_challenges WHERE id = 'challenge_clock_before'`).get().revoked_at, createdAt);
+  beforeProvider.database.close();
+});
+
+test("concurrent duplicate tasks have one provider effect under the mandatory idempotency contract", async () => {
+  let releaseDelivery;
+  const deliveryGate = new Promise((resolvePromise) => {
+    releaseDelivery = resolvePromise;
+  });
+  const context = createFixture({ deliveryGate, idempotentDelivery: true });
+  const createdAt = "2026-08-11T12:00:00.000Z";
+  insertCustomer(context.database, "customer_duplicate", "duplicate@example.com", createdAt);
+  await context.store.requestCustomerSignIn({
+    email: "duplicate@example.com",
+    challengeId: "challenge_duplicate",
+    now: createdAt,
+  });
+  context.duplicateNextBackgroundTask();
+  const pending = context.flushBackgroundConcurrently();
+  await new Promise((resolvePromise) => setImmediate(resolvePromise));
+  assert.equal(context.deliveryAttempts.length, 2);
+  releaseDelivery();
+  await pending;
+  assert.equal(context.deliveries.length, 1);
+  assert.equal(context.database.prepare(`SELECT dispatched_at
+    FROM access_challenges WHERE id = 'challenge_duplicate'`).get().dispatched_at, createdAt);
+  context.database.close();
+});
+
+test("consume cannot beat activation and expiry cannot be resurrected by an in-flight delivery", async () => {
+  const createdAt = "2026-08-11T12:00:00.000Z";
+  for (const expiresDuringDelivery of [false, true]) {
+    let releaseDelivery;
+    const deliveryGate = new Promise((resolvePromise) => {
+      releaseDelivery = resolvePromise;
+    });
+    const context = createFixture({ deliveryGate });
+    const suffix = expiresDuringDelivery ? "expired" : "activated";
+    insertCustomer(context.database, `customer_race_${suffix}`, `race-${suffix}@example.com`, createdAt);
+    await context.store.requestCustomerSignIn({
+      email: `race-${suffix}@example.com`,
+      challengeId: `challenge_race_${suffix}`,
+      now: createdAt,
+    });
+    const delivery = context.flushBackgroundConcurrently();
+    await new Promise((resolvePromise) => setImmediate(resolvePromise));
+    const rawToken = context.deliveryAttempts[0].rawToken;
+    assert.equal(await context.store.consumeCustomerChallenge({
+      rawChallengeToken: rawToken,
+      sessionId: `session_race_early_${suffix}`,
+      now: "2026-08-11T12:00:01.000Z",
+    }), null);
+    if (expiresDuringDelivery) context.setUtcNow("2026-08-11T12:15:00.000Z");
+    releaseDelivery();
+    await delivery;
+    const after = await context.store.consumeCustomerChallenge({
+      rawChallengeToken: rawToken,
+      sessionId: `session_race_after_${suffix}`,
+      now: expiresDuringDelivery
+        ? "2026-08-11T12:15:00.000Z"
+        : "2026-08-11T12:00:02.000Z",
+    });
+    assert.equal(after !== null, !expiresDuringDelivery);
+    assert.doesNotMatch(durableDatabaseDump(context.database), new RegExp(rawToken));
+    context.database.close();
+  }
+});
+
+test("synchronous background scheduling failure keeps the acknowledgement generic and revokes safely", async () => {
+  const context = createFixture({ backgroundError: true });
+  const createdAt = "2026-08-11T12:00:00.000Z";
+  insertCustomer(context.database, "customer_background_failure", "background@example.com", createdAt);
+  const known = await context.store.requestCustomerSignIn({
+    email: "background@example.com",
+    challengeId: "challenge_background_failure",
+    now: createdAt,
+  });
+  const unknown = await context.store.requestCustomerSignIn({
+    email: "unknown-background@example.com",
+    challengeId: "challenge_unknown_background_failure",
+    now: createdAt,
+  });
+  assert.strictEqual(known, accessRequestAcknowledgement);
+  assert.deepEqual(known, unknown);
+  assert.equal(context.deliveryAttempts.length, 0);
+  assert.equal(context.database.prepare(`SELECT COUNT(*) AS count
+    FROM access_challenges WHERE revoked_at = created_at`).get().count, 2);
+  context.database.close();
 });
 
 test("customer challenge consumption and rotation each have exactly one concurrent winner", async () => {

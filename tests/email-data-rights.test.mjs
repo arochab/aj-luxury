@@ -77,12 +77,35 @@ function fixture(options = {}) {
   applyMigrations(database);
   const d1 = new SQLiteD1Database(database);
   const deliveries = [];
+  const backgroundTasks = [];
+  let utcNow = options.utcNow ?? "2026-08-11T12:00:00.000Z";
+  let virtualMilliseconds = 0;
   const identity = new D1IdentityAccessStore(d1, {
-    delivery: { async deliver(message) { deliveries.push(message); } },
+    delivery: {
+      async deliver(message) {
+        deliveries.push(Object.freeze({ ...message }));
+        return { idempotencyKey: message.idempotencyKey, acceptedAt: utcNow };
+      },
+    },
     rateLimit: { async take() { return true; } },
     externalMfa: { async verify() { return options.mfaEvidence ?? null; } },
+    background: { defer(task) { backgroundTasks.push(task); } },
+    timing: {
+      monotonicMilliseconds() { return virtualMilliseconds; },
+      async wait(milliseconds) { virtualMilliseconds += milliseconds; },
+    },
+    utcClock: { now() { return utcNow; } },
   });
-  return { database, d1, deliveries, identity };
+  return {
+    database,
+    d1,
+    deliveries,
+    async flushBackground() {
+      while (backgroundTasks.length > 0) await backgroundTasks.shift()();
+    },
+    identity,
+    setUtcNow(value) { utcNow = value; },
+  };
 }
 
 function insertCustomer(database, id, email, now = "2026-08-11T12:00:00.000Z") {
@@ -98,18 +121,21 @@ function insertOrder(database, input) {
     shipping_cents, tax_cents, total_cents, shipping_country_code,
     shipping_address_json, billing_address_json, terms_version, privacy_version,
     paid_at, created_at, updated_at
-  ) VALUES (?, ?, ?, ?, ?, 'EUR', 2999, 0, 0, 2999, 'FR', ?, ?,
-    'terms-v1', 'privacy-v1', ?, ?, ?)`)
+  ) VALUES (?, ?, ?, ?, 'pending_payment', 'EUR', 2999, 0, 0, 2999, 'FR', ?, ?,
+    'terms-v1', 'privacy-v1', NULL, ?, ?)`)
     .run(
       input.id, input.number, input.customerId ?? null, input.email,
-      input.status ?? "pending_payment",
       JSON.stringify({ firstName: "Ada", line1: "1 rue Test", postalCode: "75001", city: "Paris", countryCode: "FR", forbidden: "drop" }),
       JSON.stringify({ firstName: "Ada", line1: "1 rue Test", postalCode: "75001", city: "Paris", countryCode: "FR" }),
-      input.status === "paid" ? input.now : null, input.now, input.now,
+      input.now, input.now,
     );
+  if (input.status !== undefined && !["paid", "pending_payment"].includes(input.status)) {
+    throw new Error(`Unsupported test order status: ${input.status}`);
+  }
 }
 
 function insertSucceededPayment(database, orderId, providerId, now) {
+  const paidAt = new Date(Date.parse(now) + 1_000).toISOString();
   database.prepare(`INSERT INTO webhook_events (
     id, provider, provider_event_id, event_type, payload_fingerprint,
     verification_method, verified_at, order_id, provider_payment_id,
@@ -123,12 +149,19 @@ function insertSucceededPayment(database, orderId, providerId, now) {
     currency, idempotency_key, created_at, updated_at
   ) VALUES (?, ?, 'test', ?, 'succeeded', 2999, 'EUR', ?, ?, ?)`)
     .run(`payment_${providerId}`, orderId, providerId, `payment:${providerId}`, now, now);
+  const paidTransitionTrigger = database.prepare(`SELECT sql FROM sqlite_schema
+    WHERE type = 'trigger' AND name = 'trg_orders_validate_paid_transition'`).get().sql;
+  database.exec("DROP TRIGGER trg_orders_validate_paid_transition");
+  database.prepare(`UPDATE orders SET status = 'paid', paid_at = ?, updated_at = ?
+    WHERE id = ?`).run(paidAt, paidAt, orderId);
+  database.exec(paidTransitionTrigger);
 }
 
 async function createCustomerActor(context, id, email) {
   const now = "2026-08-11T12:00:00.000Z";
   insertCustomer(context.database, id, email, now);
   await context.identity.requestCustomerSignIn({ email, challengeId: `challenge_${id}`, now });
+  await context.flushBackground();
   const token = context.deliveries.at(-1).rawToken;
   const session = await context.identity.consumeCustomerChallenge({
     rawChallengeToken: token,
@@ -146,6 +179,7 @@ async function createGuestActor(context, orderId, email) {
     email, orderNumber: `AJ-${orderId.toUpperCase()}`,
     challengeId: `challenge_${orderId}`, now,
   });
+  await context.flushBackground();
   const session = await context.identity.consumeGuestOrderChallenge({
     rawChallengeToken: context.deliveries.at(-1).rawToken,
     sessionId: `session_${orderId}`,
@@ -215,7 +249,11 @@ test("ten concurrent workers claim one lease, retry safely and never change the 
   assert.equal(await outbox.deliverClaim(claim, "2026-08-11T12:00:01.000Z"), "retry");
   assert.deepEqual({ ...context.database.prepare(
     "SELECT status, total_cents, paid_at FROM orders WHERE id = 'order_paid'",
-  ).get() }, { status: "paid", total_cents: 2999, paid_at: now });
+  ).get() }, {
+    status: "paid",
+    total_cents: 2999,
+    paid_at: "2026-08-11T12:00:01.000Z",
+  });
   assert.equal(context.database.prepare(
     "SELECT status FROM payments WHERE order_id = 'order_paid'",
   ).get().status, "succeeded");
@@ -225,7 +263,7 @@ test("ten concurrent workers claim one lease, retry safely and never change the 
   context.database.close();
 });
 
-test("account access rejects its raw token in every durable field and deduplicates by challenge", async () => {
+test("account access has one ephemeral path and the durable outbox rejects every producer", async () => {
   const context = fixture();
   const now = "2026-08-11T12:00:00.000Z";
   insertCustomer(context.database, "customer_token_guard", "token-guard@example.com", now);
@@ -234,9 +272,10 @@ test("account access rejects its raw token in every durable field and deduplicat
     challengeId: "challenge_token_guard",
     now,
   });
+  await context.flushBackground();
   const rawToken = context.deliveries.at(-1).rawToken;
   const outbox = new D1EmailOutbox(context.d1);
-  const safe = {
+  const forbidden = {
     id: "email_token_guard",
     kind: "account_access",
     sourceEventId: "source_token_guard",
@@ -259,43 +298,32 @@ test("account access rejects its raw token in every durable field and deduplicat
   ];
   for (const mutation of adversarial) {
     await assert.rejects(
-      () => outbox.enqueue({ ...safe, ...mutation }),
-      /never enter durable email fields/i,
+      () => outbox.enqueue({ ...forbidden, ...mutation }),
+      /disabled for the durable outbox/i,
     );
   }
-  assert.equal(context.database.prepare(
-    "SELECT COUNT(*) AS count FROM email_outbox WHERE access_challenge_id = 'challenge_token_guard'",
-  ).get().count, 0);
   let textReads = 0;
   const getterCandidate = {
-    ...safe,
+    ...forbidden,
     get text() {
       textReads += 1;
-      return textReads === 1 ? safe.text : rawToken;
+      return textReads === 1 ? forbidden.text : rawToken;
     },
   };
-  assert.deepEqual(await outbox.enqueue(getterCandidate), {
-    id: "email_token_guard",
-    created: true,
-  });
+  await assert.rejects(
+    () => outbox.enqueue(getterCandidate),
+    /disabled for the durable outbox/i,
+  );
   assert.equal(textReads, 1);
-  const duplicates = await Promise.all(Array.from({ length: 8 }, (_, index) =>
-    outbox.enqueue({
-      ...safe,
-      id: `email_token_guard_retry_${index}`,
-      sourceEventId: `source_token_guard_retry_${index}`,
-      idempotencyKey: `email:access:token_guard:retry:${index}`,
-    })));
-  assert.ok(duplicates.every((result) =>
-    result.id === "email_token_guard" && result.created === false));
-  assert.deepEqual({ ...context.database.prepare(`SELECT COUNT(*) AS count,
-    MAX(max_attempts) AS max_attempts,
-    MAX(provider_idempotency_key) AS provider_idempotency_key
-    FROM email_outbox WHERE access_challenge_id = 'challenge_token_guard'`).get() }, {
-    count: 1,
-    max_attempts: 1,
-    provider_idempotency_key: "account_access:challenge_token_guard",
-  });
+  assert.equal(context.deliveries.length, 1);
+  assert.equal(
+    context.deliveries[0].idempotencyKey,
+    "account_access:challenge_token_guard",
+  );
+  assert.equal(context.deliveries[0].notAfter, context.deliveries[0].expiresAt);
+  assert.equal(context.database.prepare(
+    "SELECT COUNT(*) AS count FROM email_outbox",
+  ).get().count, 0);
   assert.doesNotMatch(JSON.stringify(context.database.prepare(
     "SELECT * FROM email_outbox",
   ).all()), new RegExp(rawToken));
@@ -421,37 +449,79 @@ test("provider delivery without an exact idempotency receipt fails closed", asyn
   context.database.close();
 });
 
-test("stale leases fail closed for account access and revoke the one-time challenge", async () => {
+test("forged historical account-access claims are rejected before any provider or state call", async () => {
   const context = fixture();
-  const actor = await createCustomerActor(context, "customer_access", "access@example.com");
-  void actor;
-  context.database.prepare(`INSERT INTO access_challenges (
-    id, purpose, customer_id, token_hash, expires_at, created_at
-  ) VALUES ('challenge_email_access', 'customer_sign_in', 'customer_access', ?,
-    '2026-08-11T12:17:00.000Z', '2026-08-11T12:02:00.000Z')`)
-    .run("7".repeat(64));
-  const outbox = new D1EmailOutbox(context.d1);
+  let providerCalls = 0;
+  const outbox = new D1EmailOutbox(context.d1, {
+    async deliver(delivery) {
+      providerCalls += 1;
+      return { idempotencyKey: delivery.idempotencyKey };
+    },
+  });
+  const forgedClaim = {
+    id: "legacy_account_access",
+    kind: "account_access",
+    sourceEventId: "legacy:access",
+    recipientEmail: "legacy@example.com",
+    orderId: null,
+    locale: "fr",
+    templateVersion: "legacy-v1",
+    payloadJson: "{}",
+    attempts: 1,
+    maxAttempts: 1,
+    leaseTokenHash: "a".repeat(64),
+    providerIdempotencyKey: "legacy_email:legacy_account_access",
+  };
+  await assert.rejects(
+    () => outbox.deliverClaim(forgedClaim, "2026-08-11T12:02:31.000Z"),
+    /historical account access records cannot be delivered/i,
+  );
+  await assert.rejects(
+    () => outbox.markSent(forgedClaim, "2026-08-11T12:02:31.000Z"),
+    /historical account access records cannot be delivered/i,
+  );
+  await assert.rejects(
+    () => outbox.markDeliveryFailure(forgedClaim, "2026-08-11T12:02:31.000Z"),
+    /historical account access records cannot be delivered/i,
+  );
+  assert.equal(providerCalls, 0);
+
+  const createdAt = "2026-08-11T12:00:00.000Z";
+  insertOrder(context.database, {
+    id: "order_forged_claim",
+    number: "AJ-FORGED-CLAIM",
+    email: "claim@example.com",
+    status: "paid",
+    now: createdAt,
+  });
+  insertSucceededPayment(context.database, "order_forged_claim", "provider_forged_claim", createdAt);
   await outbox.enqueue({
-    id: "email_access", kind: "account_access", sourceEventId: "challenge_email_access",
-    recipientEmail: "access@example.com", accessChallengeId: "challenge_email_access",
-    locale: "fr", templateVersion: "access-v1", subject: "Acces au compte",
-    text: "Utilisez le lien temporaire remis par le canal securise.",
-    idempotencyKey: "email:access:challenge_email_access",
+    id: "email_forged_claim",
+    kind: "payment_confirmation",
+    sourceEventId: "provider_forged_claim",
+    recipientEmail: "claim@example.com",
+    orderId: "order_forged_claim",
+    locale: "fr",
+    templateVersion: "payment-v1",
+    subject: "Paiement confirme",
+    text: "Paiement confirme.",
+    idempotencyKey: "email:forged-claim",
     createdAt: "2026-08-11T12:02:00.000Z",
   });
-  const claim = await outbox.claimNext({
-    leaseTokenHash: "a".repeat(64), now: "2026-08-11T12:02:00.000Z",
+  const validClaim = await outbox.claimNext({
+    leaseTokenHash: "f".repeat(64),
+    now: "2026-08-11T12:02:00.000Z",
     leaseExpiresAt: "2026-08-11T12:02:30.000Z",
   });
-  assert.ok(claim);
-  assert.equal(await outbox.recoverStaleLease("email_access", "2026-08-11T12:02:31.000Z"), "failed");
-  const state = { ...context.database.prepare(
-    "SELECT status, attempts, max_attempts, last_error_code FROM email_outbox WHERE id = 'email_access'",
-  ).get() };
-  assert.deepEqual(state, { status: "failed", attempts: 1, max_attempts: 1, last_error_code: "delivery_ambiguous" });
-  assert.ok(context.database.prepare(
-    "SELECT revoked_at FROM access_challenges WHERE id = 'challenge_email_access'",
-  ).get().revoked_at);
+  assert.ok(validClaim);
+  await assert.rejects(
+    () => outbox.deliverClaim(
+      { ...validClaim, recipientEmail: "attacker@example.com" },
+      "2026-08-11T12:02:01.000Z",
+    ),
+    /claim does not match the durable lease/i,
+  );
+  assert.equal(providerCalls, 0);
   context.database.close();
 });
 

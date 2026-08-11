@@ -48,12 +48,24 @@ export type IdentityDelivery = Readonly<{
   destinationEmail: string;
   rawToken: string;
   expiresAt: string;
+  idempotencyKey: string;
+  notAfter: string;
   purpose: "customer_sign_in" | "guest_order_access";
   orderNumber?: string;
 }>;
 
+export type IdentityDeliveryReceipt = Readonly<{
+  idempotencyKey: string;
+  acceptedAt: string;
+}>;
+
 export interface IdentityDeliveryPort {
-  deliver(input: IdentityDelivery): Promise<void>;
+  /**
+   * The adapter MUST atomically deduplicate concurrent/repeated calls by
+   * idempotencyKey, return the same acceptance receipt for every replay, and
+   * refuse provider acceptance at or after notAfter.
+   */
+  deliver(input: IdentityDelivery): Promise<IdentityDeliveryReceipt>;
 }
 
 export interface IdentityRateLimitPort {
@@ -82,6 +94,10 @@ export interface IdentityBackgroundPort {
 export interface IdentityTimingPort {
   monotonicMilliseconds(): number;
   wait(milliseconds: number): Promise<void>;
+}
+
+export interface IdentityUtcClockPort {
+  now(): string;
 }
 
 const closedDeliveryPort: IdentityDeliveryPort = Object.freeze({
@@ -134,12 +150,19 @@ const systemTimingPort: IdentityTimingPort = Object.freeze({
   },
 });
 
+const systemUtcClockPort: IdentityUtcClockPort = Object.freeze({
+  now() {
+    return new Date().toISOString();
+  },
+});
+
 export const closedIdentityAccessPorts = Object.freeze({
   delivery: closedDeliveryPort,
   rateLimit: closedRateLimitPort,
   externalMfa: closedMfaPort,
   background: closedBackgroundPort,
   timing: systemTimingPort,
+  utcClock: systemUtcClockPort,
   available: false,
   reason: "external-identity-providers-not-configured",
 } as const);
@@ -234,6 +257,7 @@ export class D1IdentityAccessStore {
     externalMfa: ExternalMfaPort;
     background: IdentityBackgroundPort;
     timing: IdentityTimingPort;
+    utcClock: IdentityUtcClockPort;
   }>;
 
   constructor(
@@ -244,6 +268,7 @@ export class D1IdentityAccessStore {
       externalMfa: ExternalMfaPort;
       background: IdentityBackgroundPort;
       timing: IdentityTimingPort;
+      utcClock: IdentityUtcClockPort;
     }> = closedIdentityAccessPorts,
   ) {
     this.database = database;
@@ -316,13 +341,17 @@ export class D1IdentityAccessStore {
                 destinationEmail: customer.email,
                 rawToken: challenge.token,
                 expiresAt: challenge.expiresAt,
+                idempotencyKey: `account_access:${input.challengeId}`,
+                notAfter: challenge.expiresAt,
                 purpose: "customer_sign_in",
               },
-              now: input.now,
             }),
           );
         } catch {
-          await this.revokeChallenge(input.challengeId, input.now);
+          await this.revokeChallenge(
+            input.challengeId,
+            this.readUtcClockOrFallback(input.now, input.now),
+          );
         }
       }
 
@@ -404,14 +433,18 @@ export class D1IdentityAccessStore {
                 destinationEmail: order.email,
                 rawToken: challenge.token,
                 expiresAt: challenge.expiresAt,
+                idempotencyKey: `account_access:${input.challengeId}`,
+                notAfter: challenge.expiresAt,
                 purpose: "guest_order_access",
                 orderNumber: order.order_number,
               },
-              now: input.now,
             }),
           );
         } catch {
-          await this.revokeChallenge(input.challengeId, input.now);
+          await this.revokeChallenge(
+            input.challengeId,
+            this.readUtcClockOrFallback(input.now, input.now),
+          );
         }
       }
 
@@ -1008,12 +1041,77 @@ export class D1IdentityAccessStore {
   private async deliverAndActivateChallenge(input: Readonly<{
     challengeId: string;
     delivery: IdentityDelivery;
-    now: string;
   }>): Promise<void> {
+    const challenge = await this.database
+      .prepare(
+        `SELECT created_at, expires_at FROM access_challenges
+        WHERE id = ? AND dispatched_at IS NULL AND consumed_at IS NULL
+          AND revoked_at IS NULL`,
+      )
+      .bind(input.challengeId)
+      .first<{ created_at: string; expires_at: string }>();
+    if (challenge === null) {
+      return;
+    }
+    let beforeDeliveryAt: string;
     try {
-      await this.ports.delivery.deliver(input.delivery);
+      beforeDeliveryAt = this.readUtcClock();
     } catch {
-      await this.revokeChallenge(input.challengeId, input.now);
+      await this.revokeChallenge(input.challengeId, challenge.created_at);
+      return;
+    }
+    if (
+      beforeDeliveryAt < challenge.created_at ||
+      beforeDeliveryAt >= challenge.expires_at
+    ) {
+      await this.revokeChallenge(
+        input.challengeId,
+        beforeDeliveryAt < challenge.created_at
+          ? challenge.created_at
+          : beforeDeliveryAt,
+      );
+      return;
+    }
+    if (
+      input.delivery.idempotencyKey !== `account_access:${input.challengeId}` ||
+      input.delivery.expiresAt !== challenge.expires_at ||
+      input.delivery.notAfter !== challenge.expires_at
+    ) {
+      await this.revokeChallenge(input.challengeId, beforeDeliveryAt);
+      throw new IdentityAccessError(
+        "INVALID_INPUT",
+        "Identity delivery contract does not match its challenge.",
+      );
+    }
+
+    let receipt: IdentityDeliveryReceipt;
+    try {
+      receipt = await this.ports.delivery.deliver(input.delivery);
+    } catch {
+      await this.revokeChallenge(
+        input.challengeId,
+        this.readUtcClockOrFallback(beforeDeliveryAt, beforeDeliveryAt),
+      );
+      return;
+    }
+
+    let afterDeliveryAt: string;
+    try {
+      afterDeliveryAt = this.readUtcClock(beforeDeliveryAt);
+    } catch {
+      await this.revokeChallenge(input.challengeId, beforeDeliveryAt);
+      return;
+    }
+    if (
+      !receipt ||
+      receipt.idempotencyKey !== input.delivery.idempotencyKey ||
+      !isCanonicalUtcTimestamp(receipt.acceptedAt) ||
+      receipt.acceptedAt < challenge.created_at ||
+      receipt.acceptedAt >= challenge.expires_at ||
+      receipt.acceptedAt > afterDeliveryAt ||
+      afterDeliveryAt >= challenge.expires_at
+    ) {
+      await this.revokeChallenge(input.challengeId, afterDeliveryAt);
       return;
     }
 
@@ -1023,16 +1121,28 @@ export class D1IdentityAccessStore {
         .prepare(
           `UPDATE access_challenges SET dispatched_at = ?
           WHERE id = ? AND dispatched_at IS NULL AND consumed_at IS NULL
-            AND revoked_at IS NULL AND expires_at > ?`,
+            AND revoked_at IS NULL AND created_at <= ? AND expires_at > ?
+            AND expires_at > ?`,
         )
-        .bind(input.now, input.challengeId, input.now)
+        .bind(
+          receipt.acceptedAt,
+          input.challengeId,
+          receipt.acceptedAt,
+          receipt.acceptedAt,
+          afterDeliveryAt,
+        )
         .run();
     } catch (error) {
-      await this.revokeChallenge(input.challengeId, input.now);
+      await this.revokeChallenge(input.challengeId, afterDeliveryAt);
       throw error;
     }
     if (changed(dispatch) !== 1) {
-      await this.revokeChallenge(input.challengeId, input.now);
+      const existing = await this.database
+        .prepare("SELECT dispatched_at FROM access_challenges WHERE id = ?")
+        .bind(input.challengeId)
+        .first<{ dispatched_at: string | null }>();
+      if (existing?.dispatched_at === receipt.acceptedAt) return;
+      await this.revokeChallenge(input.challengeId, afterDeliveryAt);
       throw new IdentityAccessError(
         "PERSISTENCE_FAILURE",
         "Delivered identity challenge could not be activated.",
@@ -1044,9 +1154,29 @@ export class D1IdentityAccessStore {
     await this.database
       .prepare(
         `UPDATE access_challenges SET revoked_at = ?
-        WHERE id = ? AND consumed_at IS NULL AND revoked_at IS NULL`,
+        WHERE id = ? AND dispatched_at IS NULL
+          AND consumed_at IS NULL AND revoked_at IS NULL`,
       )
       .bind(now, challengeId)
       .run();
+  }
+
+  private readUtcClock(notBefore?: string): string {
+    const now = this.ports.utcClock.now();
+    if (!isCanonicalUtcTimestamp(now) || (notBefore !== undefined && now < notBefore)) {
+      throw new IdentityAccessError(
+        "DEPENDENCY_UNAVAILABLE",
+        "Identity UTC clock is not configured safely.",
+      );
+    }
+    return now;
+  }
+
+  private readUtcClockOrFallback(fallback: string, notBefore?: string): string {
+    try {
+      return this.readUtcClock(notBefore);
+    } catch {
+      return fallback;
+    }
   }
 }

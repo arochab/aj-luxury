@@ -107,6 +107,10 @@ const expectedMigrationSha256 = {
     "bef3cc80b9201217050dd5e80362927f3c560bb1c239ac8fd08de2f88aaf08de",
   "0002_lock_order_line_snapshots.sql":
     "fe72f739c3459f931830054715b8efc268ab86c42d2479d99b4cedc7fe2196fa",
+  "0003_identity_access.sql":
+    "21c163102b0bdbdcdf871177667d92338ed4cad9e8ec1a0322025478f0efff09",
+  "0004_email_outbox_data_rights.sql":
+    "e36dfa8d25f863ab82f2ab3ba784574dd48e5d6d819be50226890a7a867cc91d",
 };
 const ansiPattern = /\u001B\[[0-?]*[ -/]*[@-~]/g;
 

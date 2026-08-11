@@ -7,7 +7,7 @@ export const ANALYTICS_CLIENT_BOUNDARY_ERROR = "analytics-server-module-forbidde
 // They are checked in emitted Vite chunks/assets and again in dist/client.
 export const ANALYTICS_SERVER_ARTIFACT_MARKERS = [
   "order_paid",
-  "canonical_commerce_d1_not_integrated",
+  "analytics_server_recorder_not_implemented",
   "storeOnce",
   "#analytics-server-only",
   "#analytics-server-runtime",

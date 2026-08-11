@@ -54,13 +54,17 @@ function insertOrder(db, id, number, status = "paid") {
     id, order_number, email, status, currency, subtotal_cents, shipping_cents,
     tax_cents, total_cents, shipping_country_code, shipping_address_json,
     billing_address_json, terms_version, privacy_version, paid_at, created_at, updated_at
-  ) VALUES (?, ?, 'customer@example.com', ?, 'EUR', 2999, 0, 0, 2999,
-    'FR', '{}', '{}', 'terms-v1', 'privacy-v1', ?, ?, ?)`)
-    .run(id, number, status, status === "paid" ? now : null, now, now);
+  ) VALUES (?, ?, 'customer@example.com', 'pending_payment', 'EUR', 2999, 0, 0, 2999,
+    'FR', '{}', '{}', 'terms-v1', 'privacy-v1', NULL, ?, ?)`)
+    .run(id, number, now, now);
+  if (!["paid", "pending_payment"].includes(status)) {
+    throw new Error(`Unsupported test order status: ${status}`);
+  }
 }
 
 function insertSucceededPayment(db, orderId, paymentId) {
   const now = "2026-08-11T12:00:00.000Z";
+  const paidAt = "2026-08-11T12:00:01.000Z";
   db.prepare(`INSERT INTO webhook_events (
     id, provider, provider_event_id, event_type, payload_fingerprint,
     verification_method, verified_at, order_id, provider_payment_id,
@@ -74,6 +78,12 @@ function insertSucceededPayment(db, orderId, paymentId) {
     currency, idempotency_key, created_at, updated_at
   ) VALUES (?, ?, 'test', ?, 'succeeded', 2999, 'EUR', ?, ?, ?)`)
     .run(`payment_${paymentId}`, orderId, paymentId, `payment:${paymentId}`, now, now);
+  const paidTransitionTrigger = db.prepare(`SELECT sql FROM sqlite_schema
+    WHERE type = 'trigger' AND name = 'trg_orders_validate_paid_transition'`).get().sql;
+  db.exec("DROP TRIGGER trg_orders_validate_paid_transition");
+  db.prepare(`UPDATE orders SET status = 'paid', paid_at = ?, updated_at = ?
+    WHERE id = ?`).run(paidAt, paidAt, orderId);
+  db.exec(paidTransitionTrigger);
 }
 
 test("0000 through 0004 create and replay the single outbox and data-rights boundary", () => {
@@ -118,7 +128,10 @@ test("0004 converts only verified post-payment confirmations and invalidates uns
     status, attempts, next_attempt_at, last_error_code, idempotency_key, created_at, sent_at
   ) VALUES (?, ?, ?, ?, 'fr', 'v1', ?, ?, ?, ?, ?, ?, ?, ?)`);
   const now = "2026-08-11T12:00:00.000Z";
-  insert.run("legacy_magic", "magic_link", "secret@example.com", null, '{"token":"raw-secret"}', "pending", 0, now, null, "legacy:magic", now, null);
+  insert.run("legacy_magic_pending", "magic_link", "secret-pending@example.com", null, '{"token":"raw-pending"}', "pending", 0, now, null, "legacy:magic:pending", now, null);
+  insert.run("legacy_magic_sending", "magic_link", "secret-sending@example.com", null, '{"token":"raw-sending"}', "sending", 1, now, "raw-provider-error", "legacy:magic:sending", now, null);
+  insert.run("legacy_magic_sent", "magic_link", "secret-sent@example.com", null, '{"token":"raw-sent"}', "sent", 1, now, null, "legacy:magic:sent", now, now);
+  insert.run("legacy_magic_failed", "magic_link", "secret-failed@example.com", null, '{"token":"raw-failed"}', "failed", 1, now, "raw-provider-error", "legacy:magic:failed", now, null);
   insert.run("legacy_paid", "order_confirmation", "paid@example.com", "order_paid", '{}', "pending", 0, now, null, "legacy:paid", now, null);
   insert.run("legacy_paid_duplicate", "order_confirmation", "paid@example.com", "order_paid", '{}', "sent", 1, now, null, "legacy:paid:duplicate", now, now);
   insert.run("legacy_unpaid", "order_confirmation", "unpaid@example.com", "order_unpaid", '{}', "pending", 0, now, null, "legacy:unpaid", now, null);
@@ -128,7 +141,7 @@ test("0004 converts only verified post-payment confirmations and invalidates uns
   applyTracked(db);
   const rows = db.prepare(`SELECT id, kind, transaction_intent, status,
     recipient_email, payload_json, access_challenge_id, last_error_code,
-    provider_idempotency_key, sent_at, terminal_at, purged_at
+    provider_idempotency_key, attempts, max_attempts, sent_at, terminal_at, purged_at
     FROM email_outbox ORDER BY id`).all();
   const byId = Object.fromEntries(rows.map((row) => [row.id, row]));
   assert.equal(byId.legacy_paid.kind, "payment_confirmation");
@@ -175,14 +188,14 @@ test("0004 converts only verified post-payment confirmations and invalidates uns
   );
   assert.deepEqual(
     {
-      status: byId.legacy_magic.status,
-      recipient: byId.legacy_magic.recipient_email,
-      payload: byId.legacy_magic.payload_json,
-      error: byId.legacy_magic.last_error_code,
-      purged: byId.legacy_magic.purged_at !== null,
+      status: byId.legacy_magic_pending.status,
+      recipient: byId.legacy_magic_pending.recipient_email,
+      payload: byId.legacy_magic_pending.payload_json,
+      error: byId.legacy_magic_pending.last_error_code,
+      purged: byId.legacy_magic_pending.purged_at !== null,
     },
     {
-      status: "failed",
+      status: "cancelled",
       recipient: null,
       payload: null,
       error: "legacy_magic_link_invalidated",
@@ -190,11 +203,49 @@ test("0004 converts only verified post-payment confirmations and invalidates uns
     },
   );
   assert.deepEqual(
+    ["legacy_magic_pending", "legacy_magic_sending", "legacy_magic_sent", "legacy_magic_failed"]
+      .map((id) => ({
+        id,
+        status: byId[id].status,
+        error: byId[id].last_error_code,
+        attempts: byId[id].attempts,
+        maxAttempts: byId[id].max_attempts,
+        sent: byId[id].sent_at !== null,
+        terminal: byId[id].terminal_at !== null,
+        purged: byId[id].purged_at !== null,
+        recipient: byId[id].recipient_email,
+        payload: byId[id].payload_json,
+      })),
+    [
+      { id: "legacy_magic_pending", status: "cancelled", error: "legacy_magic_link_invalidated", attempts: 0, maxAttempts: 1, sent: false, terminal: true, purged: true, recipient: null, payload: null },
+      { id: "legacy_magic_sending", status: "failed", error: "legacy_ambiguous_delivery", attempts: 1, maxAttempts: 1, sent: false, terminal: true, purged: true, recipient: null, payload: null },
+      { id: "legacy_magic_sent", status: "sent", error: null, attempts: 1, maxAttempts: 1, sent: true, terminal: true, purged: true, recipient: null, payload: null },
+      { id: "legacy_magic_failed", status: "failed", error: "provider_rejected", attempts: 1, maxAttempts: 1, sent: false, terminal: true, purged: true, recipient: null, payload: null },
+    ],
+  );
+  assert.deepEqual(
     { status: byId.legacy_sending.status, error: byId.legacy_sending.last_error_code },
     { status: "failed", error: "legacy_ambiguous_delivery" },
   );
   assert.doesNotMatch(JSON.stringify(db.prepare("SELECT * FROM audit_log").all()),
-    /secret@example\.com|raw-secret|ambiguous@example\.com|raw-provider-error/);
+    /secret-(?:pending|sending|sent|failed)@example\.com|raw-(?:pending|sending|sent|failed)|ambiguous@example\.com|raw-provider-error/);
+  assert.throws(() => db.prepare(`INSERT INTO email_outbox (
+    id, kind, transaction_intent, source_event_id, recipient_email,
+    access_challenge_id, locale, template_version, payload_json, status,
+    attempts, max_attempts, next_attempt_at, idempotency_key,
+    provider_idempotency_key, created_at, updated_at
+  ) VALUES ('forbidden_account_access', 'account_access',
+    'account_access_challenge', 'forbidden:account-access', 'forbidden@example.com',
+    NULL, 'fr', 'access-v1', '{}', 'pending', 0, 1, ?,
+    'forbidden:account-access', 'account_access:forbidden', ?, ?)`)
+    .run(now, now, now), /email_outbox_account_access_is_historical_only/);
+  assert.throws(() => db.prepare(`UPDATE email_outbox SET status = 'failed',
+    last_error_code = 'attempts_exhausted', terminal_at = ?, updated_at = ?
+    WHERE id = 'legacy_magic_pending'`).run(now, now),
+  /email_outbox_account_access_is_historical_only/);
+  assert.throws(() => db.prepare(
+    "DELETE FROM email_outbox WHERE id = 'legacy_magic_pending'",
+  ).run(), /email_outbox_evidence_is_immutable/);
   assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
   db.close();
 });

@@ -360,7 +360,7 @@ test("an actual browser bundle of the client index contains no paid-order author
   });
   const code = result.outputFiles.map((file) => file.text).join("\n");
   assert.doesNotMatch(code, /order_paid/);
-  assert.doesNotMatch(code, /canonical_commerce_d1_not_integrated/);
+  assert.doesNotMatch(code, /analytics_server_recorder_not_implemented/);
 });
 
 test("every final Vinext client artifact contains no paid-order or server-outbox code", async () => {
@@ -511,7 +511,7 @@ test("Vite applies negative import.meta.glob patterns before the boundary guard"
   );
   assert.doesNotMatch(
     viteOutputCode(result),
-    /order_paid|canonical_commerce_d1_not_integrated/,
+    /order_paid|analytics_server_recorder_not_implemented/,
   );
 });
 
@@ -520,7 +520,7 @@ test("the Vite build rejects forbidden markers in JavaScript and non-JavaScript 
     ["asset-js.mjs", "order_paid", ".js", {}],
     [
       "asset-non-js.mjs",
-      "canonical_commerce_d1_not_integrated",
+      "analytics_server_recorder_not_implemented",
       ".txt",
       { assetsInlineLimit: 0 },
     ],
@@ -874,11 +874,12 @@ test("canonical origin, referrer and governed UTM values remain strict", () => {
   );
 });
 
-test("order_paid is honestly unavailable until canonical commerce D1 exists", async () => {
+test("order_paid stays unavailable until a server recorder exists and activation is approved", async () => {
   assert.deepEqual(analyticsServerApi.ORDER_PAID_INTERNAL_CONTRACT, {
     eventName: "order_paid",
     availability: "unavailable",
-    blocker: "canonical_commerce_d1_not_integrated",
+    blocker: "analytics_server_recorder_not_implemented",
+    activation: "not_approved",
     requiredAuthority: "canonical_commerce_d1_paid_order_transaction",
   });
   assert.ok(Object.isFrozen(analyticsServerApi.ORDER_PAID_INTERNAL_CONTRACT));

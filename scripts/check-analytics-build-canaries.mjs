@@ -13,7 +13,7 @@ const canaries = {
   js: ["emitted-artifact", "order_paid", ".js"],
   txt: [
     "emitted-artifact",
-    "canonical_commerce_d1_not_integrated",
+    "analytics_server_recorder_not_implemented",
     ".txt",
   ],
 };

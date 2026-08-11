@@ -52,9 +52,10 @@ attente.
 ne possède aucun recorder, validateur de snapshot, callback de stockage ou
 résultat de succès. Il conserve seulement un contrat serveur interne gelé qui
 déclare `unavailable` avec le blocker
-`canonical_commerce_d1_not_integrated`. Sa future autorité devra être la
-transaction payée de la D1 commerce canonique, une fois cette D1 réellement
-intégrée. Un fichier serveur profond réellement résolu ou chargé par Vite fait
+`analytics_server_recorder_not_implemented` et une activation `not_approved`.
+La D1 commerce canonique est intégrée, mais aucun recorder analytics serveur
+n'existe et aucune activation n'est approuvée. Sa future autorité devra rester
+la transaction payée de cette D1. Un fichier serveur profond réellement résolu ou chargé par Vite fait
 échouer le build client, quelle que soit la casse du chemin.
 
 Bornes V3 : identifiants produit/variante présents dans le catalogue commerce
