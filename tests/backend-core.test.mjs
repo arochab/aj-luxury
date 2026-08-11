@@ -471,12 +471,13 @@ test("migration applies locally and launch seed replay keeps inventory and ledge
 });
 
 test("seed replay detects a broken ledger instead of silently inventing stock history", async () => {
-  const { database, store } = createFixture();
+  const { database, store } = createFixture({ migrationCount: 2 });
   const now = "2026-08-10T12:00:00.000Z";
   await store.seedLaunchCatalog(now);
   database
     .prepare("DELETE FROM inventory_movements WHERE idempotency_key = ?")
     .run("seed:variant_boxer_pourpre_s");
+  applyMigration(database, migrationPaths[2]);
 
   await assert.rejects(
     () => store.seedLaunchCatalog(now),
@@ -1500,18 +1501,6 @@ test("every payment line mismatch rolls back webhook, payment, stock, order, out
         return 1;
       },
     },
-    {
-      name: "catalog identity divergence",
-      mutate(database, context) {
-        database
-          .prepare(
-            `UPDATE order_lines SET internal_reference = 'AJ-TAMPERED'
-            WHERE order_id = ?`,
-          )
-          .run(context.orderId);
-        return 2_999;
-      },
-    },
   ];
 
   for (const [index, scenario] of scenarios.entries()) {
@@ -1628,6 +1617,81 @@ test("every payment line mismatch rolls back webhook, payment, stock, order, out
       database.close();
     });
   }
+});
+
+test("catalog labels are validated at snapshot creation and may change before payment", async () => {
+  const { database, store } = createFixture();
+  const now = "2099-08-10T12:00:00.000Z";
+  const variantId = "variant_boxer_pourpre_l";
+  const cartId = "cart_catalog_rename";
+  const orderId = "order_catalog_rename";
+  await store.seedLaunchCatalog(now);
+  validateReserves(database, [variantId]);
+  await store.createCart({
+    id: cartId,
+    expiresAt: "2099-08-10T14:00:00.000Z",
+    now,
+  });
+  insertCartLines(database, {
+    cartId,
+    now,
+    lines: [{ variantId, quantity: 1 }],
+  });
+  await store.reserveStock({
+    reservationId: "reservation_catalog_rename",
+    cartId,
+    variantId,
+    quantity: 1,
+    idempotencyKey: "reserve_catalog_rename",
+    expiresAt: "2099-08-10T13:00:00.000Z",
+    now,
+  });
+  const total = insertPendingOrder(database, {
+    id: orderId,
+    number: "AJ-TEST-CATALOG-RENAME",
+    cartId,
+    now,
+    lines: [{ variantId, quantity: 1 }],
+  });
+  const snapshotName = database
+    .prepare("SELECT product_name FROM order_lines WHERE order_id = ?")
+    .get(orderId).product_name;
+  database
+    .prepare("UPDATE products SET name = ? WHERE id = ?")
+    .run("Apollon Renommé", "product_apollon");
+
+  const result = await store.processPaymentSucceeded(
+    await createVerifiedEvent({
+      providerEventId: "event_catalog_rename",
+      providerPaymentId: "payment_catalog_rename",
+      orderId,
+      amountCents: total,
+      occurredAt: "2099-08-10T12:10:00.000Z",
+    }),
+  );
+
+  assert.deepEqual(result, { orderId, convertedReservations: 1 });
+  assert.deepEqual(
+    {
+      ...database
+        .prepare(
+          `SELECT line.product_name AS snapshot_name,
+            product.name AS current_catalog_name, orders.status
+          FROM order_lines AS line
+          INNER JOIN orders ON orders.id = line.order_id
+          INNER JOIN variants AS variant ON variant.id = line.variant_id
+          INNER JOIN products AS product ON product.id = variant.product_id
+          WHERE line.order_id = ?`,
+        )
+        .get(orderId),
+    },
+    {
+      snapshot_name: snapshotName,
+      current_catalog_name: "Apollon Renommé",
+      status: "paid",
+    },
+  );
+  database.close();
 });
 
 test("expired reservations and order-cart mismatches cannot be converted", async () => {

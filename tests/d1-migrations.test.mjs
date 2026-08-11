@@ -34,8 +34,73 @@ const expectedMigrationNames = [
   "0001_lock_cart_line_price_provenance.sql",
   "0002_lock_order_line_snapshots.sql",
 ];
-const expectedBaselineSha256 =
-  "6e6262fa635e9808c00493adb1badbf51a1c3d75b2e1112fe567632c526859b4";
+const expectedHardeningTriggerNames = [
+  "trg_audit_log_immutable_update",
+  "trg_audit_log_retain_delete",
+  "trg_audit_log_validate_insert_timestamp",
+  "trg_cart_lines_immutable_snapshot",
+  "trg_cart_lines_validate_catalog_insert",
+  "trg_cart_lines_validate_delete",
+  "trg_cart_lines_validate_quantity_update",
+  "trg_carts_lock_currency_with_lines",
+  "trg_carts_require_empty_delete",
+  "trg_inventory_movements_immutable_update",
+  "trg_inventory_movements_retain_delete",
+  "trg_inventory_movements_validate_insert_timestamp",
+  "trg_inventory_require_zero_lifecycle_insert",
+  "trg_inventory_retain_delete",
+  "trg_inventory_seed_ledger",
+  "trg_inventory_validate_reservation_counters",
+  "trg_inventory_validate_insert_timestamp",
+  "trg_inventory_validate_update_timestamp",
+  "trg_order_lines_immutable_update",
+  "trg_order_lines_retain_snapshot",
+  "trg_order_lines_validate_pending_insert",
+  "trg_orders_guard_paid_at",
+  "trg_orders_guard_payment_state",
+  "trg_orders_lock_snapshot_update",
+  "trg_orders_lock_updated_at_without_transition",
+  "trg_orders_require_paid_at_transition",
+  "trg_orders_require_pending_insert",
+  "trg_orders_validate_insert_timestamp",
+  "trg_orders_validate_paid_transition",
+  "trg_orders_validate_status_timestamp",
+  "trg_payments_lock_fields_without_transition",
+  "trg_payments_lock_identity_update",
+  "trg_payments_lock_terminal_update",
+  "trg_payments_require_verified_event_insert",
+  "trg_payments_require_verified_event_update",
+  "trg_payments_retain_delete",
+  "trg_payments_validate_insert_state",
+  "trg_payments_validate_insert_timestamp",
+  "trg_payments_validate_transition",
+  "trg_payments_validate_transition_payload",
+  "trg_payments_validate_transition_timestamp",
+  "trg_stock_reservations_lock_identity_update",
+  "trg_stock_reservations_lock_terminal_update",
+  "trg_stock_reservations_require_active_insert",
+  "trg_stock_reservations_require_transition_update",
+  "trg_stock_reservations_retain_delete",
+  "trg_stock_reservations_validate_insert_timestamp",
+  "trg_stock_reservations_validate_transition_payload",
+  "trg_stock_reservations_validate_transition_timestamp",
+  "trg_webhook_events_lock_fields_without_transition",
+  "trg_webhook_events_lock_identity_update",
+  "trg_webhook_events_retain_delete",
+  "trg_webhook_events_validate_insert_state",
+  "trg_webhook_events_validate_insert_timestamp",
+  "trg_webhook_events_validate_processed_timestamp",
+  "trg_webhook_events_validate_processing_update",
+  "trg_webhook_events_validate_transition",
+].sort();
+const expectedMigrationSha256 = {
+  "0000_flimsy_rhino.sql":
+    "6e6262fa635e9808c00493adb1badbf51a1c3d75b2e1112fe567632c526859b4",
+  "0001_lock_cart_line_price_provenance.sql":
+    "bef3cc80b9201217050dd5e80362927f3c560bb1c239ac8fd08de2f88aaf08de",
+  "0002_lock_order_line_snapshots.sql":
+    "dea8ea0d6f6c7acc804130b50a118eb6bbe3480e1a38f445c31a9d32da640103",
+};
 const ansiPattern = /\u001B\[[0-?]*[ -/]*[@-~]/g;
 
 function assertProjectLocal(candidatePath) {
@@ -281,10 +346,17 @@ test("Wrangler applies 0000+0001+0002 on empty and journaled D1 databases, then 
     "\r\n",
     "\n",
   );
-  assert.equal(
-    createHash("sha256").update(baseline).digest("hex"),
-    expectedBaselineSha256,
-  );
+  for (const migrationName of expectedMigrationNames) {
+    const normalizedMigration = readFileSync(
+      join(migrationDirectory, migrationName),
+      "utf8",
+    ).replaceAll("\r\n", "\n");
+    assert.equal(
+      createHash("sha256").update(normalizedMigration).digest("hex"),
+      expectedMigrationSha256[migrationName],
+      `${migrationName} differs from its reviewed LF-normalized bytes`,
+    );
+  }
   assert.doesNotMatch(baseline, /trg_cart_lines_validate_catalog_insert/);
 
   const proofParent = join(projectRoot, ".wrangler");
@@ -322,35 +394,30 @@ test("Wrangler applies 0000+0001+0002 on empty and journaled D1 databases, then 
   const triggerRows = queryD1({
     command: `SELECT name, sql FROM sqlite_schema
       WHERE type = 'trigger' AND name IN (
-        'trg_cart_lines_validate_catalog_insert',
-        'trg_cart_lines_immutable_snapshot',
-        'trg_cart_lines_validate_quantity_update',
-        'trg_cart_lines_validate_delete',
-        'trg_carts_lock_currency_with_lines',
-        'trg_carts_require_empty_delete',
-        'trg_order_lines_validate_pending_insert',
-        'trg_order_lines_immutable_update',
-        'trg_order_lines_retain_snapshot',
-        'trg_orders_guard_payment_state',
-        'trg_orders_guard_paid_at',
-        'trg_orders_require_paid_at_transition',
-        'trg_orders_lock_snapshot_update',
-        'trg_payments_lock_identity_update',
-        'trg_payments_require_verified_event_update',
-        'trg_payments_lock_succeeded_update',
-        'trg_payments_retain_succeeded_delete',
-        'trg_orders_validate_paid_transition'
+        ${expectedHardeningTriggerNames.map((name) => `'${name}'`).join(",\n        ")}
       ) ORDER BY name`,
     configPath: canonicalConfigPath,
     environment,
     statePath: emptyState,
   });
-  assert.equal(triggerRows.length, 18);
+  assert.deepEqual(
+    triggerRows.map((trigger) => trigger.name),
+    expectedHardeningTriggerNames,
+  );
   const paidTransition = triggerRows.find(
     (trigger) => trigger.name === "trg_orders_validate_paid_transition",
   );
-  assert.match(paidTransition.sql, /internal_reference/);
   assert.match(paidTransition.sql, /FROM `cart_lines`/);
+  assert.doesNotMatch(
+    paidTransition.sql,
+    /internal_reference|product_name|color_name|FROM `products`/,
+  );
+  const orderLineInsert = triggerRows.find(
+    (trigger) => trigger.name === "trg_order_lines_validate_pending_insert",
+  );
+  assert.match(orderLineInsert.sql, /internal_reference/);
+  assert.match(orderLineInsert.sql, /product_name/);
+  assert.match(orderLineInsert.sql, /FROM `orders` AS customer_order/);
   const cartLineInsert = triggerRows.find(
     (trigger) => trigger.name === "trg_cart_lines_validate_catalog_insert",
   );
@@ -590,7 +657,37 @@ test("Wrangler applies 0000+0001+0002 on empty and journaled D1 databases, then 
         'variant_snapshot_proof_s', 'AJ-SNAPSHOT-PROOF-S',
         'Snapshot Proof', 'Proof', 'S', 1, 2999, 2999,
         '2099-08-11T10:00:00.000Z'
-      )`,
+      );
+      INSERT INTO orders (
+        id, order_number, cart_id, customer_id, email, status, currency,
+        subtotal_cents, shipping_cents, tax_cents, total_cents,
+        shipping_country_code, shipping_address_json, billing_address_json,
+        terms_version, privacy_version, paid_at, created_at, updated_at
+      ) VALUES
+      ('order_state_cancelled', 'AJ-STATE-CANCELLED', NULL, NULL,
+        'cancelled@example.com', 'cancelled', 'EUR', 0, 0, 0, 0, 'FR',
+        '{}', '{}', 'terms-v1', 'privacy-v1', NULL,
+        '2099-08-11T10:00:00.000Z', '2099-08-11T10:00:00.000Z'),
+      ('order_state_refunded', 'AJ-STATE-REFUNDED', NULL, NULL,
+        'refunded@example.com', 'refunded', 'EUR', 0, 0, 0, 0, 'FR',
+        '{}', '{}', 'terms-v1', 'privacy-v1',
+        '2099-08-11T10:01:00.000Z', '2099-08-11T10:00:00.000Z',
+        '2099-08-11T10:01:00.000Z'),
+      ('order_state_preparing', 'AJ-STATE-PREPARING', NULL, NULL,
+        'preparing@example.com', 'preparing', 'EUR', 0, 0, 0, 0, 'FR',
+        '{}', '{}', 'terms-v1', 'privacy-v1',
+        '2099-08-11T10:01:00.000Z', '2099-08-11T10:00:00.000Z',
+        '2099-08-11T10:01:00.000Z'),
+      ('order_state_shipped', 'AJ-STATE-SHIPPED', NULL, NULL,
+        'shipped@example.com', 'shipped', 'EUR', 0, 0, 0, 0, 'FR',
+        '{}', '{}', 'terms-v1', 'privacy-v1',
+        '2099-08-11T10:01:00.000Z', '2099-08-11T10:00:00.000Z',
+        '2099-08-11T10:01:00.000Z'),
+      ('order_state_paid', 'AJ-STATE-PAID', NULL, NULL,
+        'paid-state@example.com', 'paid', 'EUR', 0, 0, 0, 0, 'FR',
+        '{}', '{}', 'terms-v1', 'privacy-v1',
+        '2099-08-11T10:01:00.000Z', '2099-08-11T10:00:00.000Z',
+        '2099-08-11T10:01:00.000Z')`,
     configPath: pre0002ConfigPath,
     environment,
     statePath: pre0002State,
@@ -715,13 +812,29 @@ test("Wrangler applies 0000+0001+0002 on empty and journaled D1 databases, then 
   );
 
   executeD1({
-    command: `INSERT INTO orders (
+    command: `INSERT INTO carts (
+        id, status, currency, expires_at, created_at, updated_at
+      ) VALUES (
+        'cart_pending_snapshot', 'open', 'EUR',
+        '2099-08-11T13:00:00.000Z', '2099-08-11T11:00:00.000Z',
+        '2099-08-11T11:00:00.000Z'
+      );
+      INSERT INTO cart_lines (
+        id, cart_id, variant_id, quantity, unit_price_cents,
+        created_at, updated_at
+      ) VALUES (
+        'cart_line_pending_snapshot', 'cart_pending_snapshot',
+        'variant_snapshot_proof_s', 2, 2999,
+        '2099-08-11T11:00:00.000Z', '2099-08-11T11:00:00.000Z'
+      );
+      INSERT INTO orders (
         id, order_number, cart_id, customer_id, email, status, currency,
         subtotal_cents, shipping_cents, tax_cents, total_cents,
         shipping_country_code, shipping_address_json, billing_address_json,
         terms_version, privacy_version, paid_at, created_at, updated_at
       ) VALUES (
-        'order_pending_snapshot', 'AJ-MIG-PENDING-0002', NULL, NULL,
+        'order_pending_snapshot', 'AJ-MIG-PENDING-0002',
+        'cart_pending_snapshot', NULL,
         'pending-snapshot@example.com', 'pending_payment', 'EUR',
         5998, 0, 0, 5998, 'FR', '{}', '{}', 'terms-v1', 'privacy-v1', NULL,
         '2099-08-11T11:00:00.000Z', '2099-08-11T11:00:00.000Z'
@@ -734,13 +847,7 @@ test("Wrangler applies 0000+0001+0002 on empty and journaled D1 databases, then 
       (
         'order_line_pending_snapshot_1', 'order_pending_snapshot',
         'variant_snapshot_proof_s', 'AJ-SNAPSHOT-PROOF-S',
-        'Snapshot Proof', 'Proof', 'S', 1, 2999, 2999,
-        '2099-08-11T11:00:00.000Z'
-      ),
-      (
-        'order_line_pending_snapshot_2', 'order_pending_snapshot',
-        'variant_snapshot_proof_s', 'AJ-SNAPSHOT-PROOF-S',
-        'Snapshot Proof', 'Proof', 'S', 1, 2999, 2999,
+        'Snapshot Proof', 'Proof', 'S', 2, 2999, 5998,
         '2099-08-11T11:00:00.000Z'
       )`,
     configPath: canonicalConfigPath,
@@ -788,24 +895,35 @@ test("Wrangler applies 0000+0001+0002 on empty and journaled D1 databases, then 
         id: "order_line_pending_snapshot_1",
         product_name: "Snapshot Proof",
         unit_price_cents: 2999,
-        line_total_cents: 2999,
-      },
-      {
-        id: "order_line_pending_snapshot_2",
-        product_name: "Snapshot Proof",
-        unit_price_cents: 2999,
-        line_total_cents: 2999,
+        line_total_cents: 5998,
       },
     ],
   );
 
   executeD1({
-    command: `INSERT INTO inventory (
+    command: `INSERT INTO variants (
+        id, product_id, internal_reference, color_key, color_name, size,
+        swatch, image_url, active, sort_order, created_at, updated_at
+      ) VALUES (
+        'variant_zero_stock_m', 'product_snapshot_proof',
+        'AJ-SNAPSHOT-ZERO-M', 'zero', 'Zero', 'M', '#222222',
+        '/snapshot-zero.webp', 1, 1, '2099-08-11T12:00:00.000Z',
+        '2099-08-11T12:00:00.000Z'
+      );
+      INSERT INTO inventory (
         variant_id, physical_quantity, gift_reserve_quantity,
         safety_reserve_quantity, active_reserved_quantity, sold_quantity,
         reserves_validated, version, updated_at
       ) VALUES (
         'variant_snapshot_proof_s', 20, 0, 0, 0, 0, 1, 0,
+        '2099-08-11T12:00:00.000Z'
+      );
+      INSERT INTO inventory (
+        variant_id, physical_quantity, gift_reserve_quantity,
+        safety_reserve_quantity, active_reserved_quantity, sold_quantity,
+        reserves_validated, version, updated_at
+      ) VALUES (
+        'variant_zero_stock_m', 0, 0, 0, 0, 0, 1, 0,
         '2099-08-11T12:00:00.000Z'
       );
       INSERT INTO carts (
@@ -871,11 +989,15 @@ test("Wrangler applies 0000+0001+0002 on empty and journaled D1 databases, then 
         updated_at
       ) VALUES (
         'reservation_delete_guard', 'cart_delete_reserved',
-        'variant_snapshot_proof_s', 1, 'released',
-        'reservation:delete-guard', 'release:delete-guard',
+        'variant_snapshot_proof_s', 1, 'active',
+        'reservation:delete-guard', NULL,
         '2099-08-11T13:00:00.000Z', NULL,
-        '2099-08-11T12:00:00.000Z', '2099-08-11T12:01:00.000Z'
+        '2099-08-11T12:00:00.000Z', '2099-08-11T12:00:00.000Z'
       );
+      UPDATE stock_reservations
+      SET status = 'released', last_transition_key = 'release:delete-guard',
+        updated_at = '2099-08-11T12:01:00.000Z'
+      WHERE id = 'reservation_delete_guard';
       INSERT INTO orders (
         id, order_number, cart_id, customer_id, email, status, currency,
         subtotal_cents, shipping_cents, tax_cents, total_cents,
@@ -1017,18 +1139,26 @@ test("Wrangler applies 0000+0001+0002 on empty and journaled D1 databases, then 
       ),
       (
         'reservation_parent_released', 'cart_parent_released',
-        'variant_snapshot_proof_s', 1, 'released',
-        'reservation:parent-released', 'release:parent-released',
+        'variant_snapshot_proof_s', 1, 'active',
+        'reservation:parent-released', NULL,
         '2099-08-11T15:00:00.000Z', NULL,
-        '2099-08-11T13:00:00.000Z', '2099-08-11T13:01:00.000Z'
+        '2099-08-11T13:00:00.000Z', '2099-08-11T13:00:00.000Z'
       ),
       (
         'reservation_parent_converted', 'cart_parent_converted',
-        'variant_snapshot_proof_s', 1, 'converted',
-        'reservation:parent-converted', 'sale:parent-converted',
+        'variant_snapshot_proof_s', 1, 'active',
+        'reservation:parent-converted', NULL,
         '2099-08-11T15:00:00.000Z', NULL,
-        '2099-08-11T13:00:00.000Z', '2099-08-11T13:01:00.000Z'
+        '2099-08-11T13:00:00.000Z', '2099-08-11T13:00:00.000Z'
       );
+      UPDATE stock_reservations
+      SET status = 'released', last_transition_key = 'release:parent-released',
+        updated_at = '2099-08-11T13:01:00.000Z'
+      WHERE id = 'reservation_parent_released';
+      UPDATE stock_reservations
+      SET status = 'released', last_transition_key = 'release:parent-converted',
+        updated_at = '2099-08-11T13:02:00.000Z'
+      WHERE id = 'reservation_parent_converted';
       INSERT INTO orders (
         id, order_number, cart_id, customer_id, email, status, currency,
         subtotal_cents, shipping_cents, tax_cents, total_cents,
@@ -1102,7 +1232,59 @@ test("Wrangler applies 0000+0001+0002 on empty and journaled D1 databases, then 
       environment,
       statePath: pre0002State,
     }),
-    [{ active_reserved_quantity: 1, sold_quantity: 0, version: 1 }],
+    [{ active_reserved_quantity: 1, sold_quantity: 0, version: 7 }],
+  );
+  const directConvertedReservationOutput = executeD1({
+    command: `INSERT INTO stock_reservations (
+        id, cart_id, variant_id, quantity, status, idempotency_key,
+        last_transition_key, expires_at, converted_order_id, created_at,
+        updated_at
+      ) VALUES (
+        'reservation_direct_converted_attack', 'cart_parent_active',
+        'variant_snapshot_proof_s', 1, 'converted',
+        'reservation:direct-converted-attack', 'sale:forged',
+        '2099-08-11T15:00:00.000Z', 'order_parent_cart_guard',
+        '2099-08-11T13:00:00.000Z', '2099-08-11T13:01:00.000Z'
+      )`,
+    configPath: canonicalConfigPath,
+    environment,
+    expectFailure: true,
+    statePath: pre0002State,
+  });
+  assert.match(
+    directConvertedReservationOutput,
+    /commerce_reservation_insert_must_be_active/,
+  );
+  const activeReservationDeleteOutput = executeD1({
+    command: `DELETE FROM stock_reservations
+      WHERE id = 'reservation_parent_active'`,
+    configPath: canonicalConfigPath,
+    environment,
+    expectFailure: true,
+    statePath: pre0002State,
+  });
+  assert.match(activeReservationDeleteOutput, /commerce_reservation_is_immutable/);
+  const inventoryDeleteOutput = executeD1({
+    command: `DELETE FROM inventory
+      WHERE variant_id = 'variant_snapshot_proof_s'`,
+    configPath: canonicalConfigPath,
+    environment,
+    expectFailure: true,
+    statePath: pre0002State,
+  });
+  assert.match(inventoryDeleteOutput, /commerce_inventory_is_immutable/);
+  assert.deepEqual(
+    queryD1({
+      command: `SELECT
+          (SELECT COUNT(*) FROM stock_reservations
+            WHERE id = 'reservation_parent_active' AND status = 'active') AS rows,
+          active_reserved_quantity, sold_quantity, version
+        FROM inventory WHERE variant_id = 'variant_snapshot_proof_s'`,
+      configPath: canonicalConfigPath,
+      environment,
+      statePath: pre0002State,
+    }),
+    [{ rows: 1, active_reserved_quantity: 1, sold_quantity: 0, version: 7 }],
   );
   assert.deepEqual(
     queryD1({
@@ -1129,80 +1311,94 @@ test("Wrangler applies 0000+0001+0002 on empty and journaled D1 databases, then 
     ],
   );
 
+  const directPaidInsertOutput = executeD1({
+    command: `INSERT INTO orders (
+        id, order_number, cart_id, customer_id, email, status, currency,
+        subtotal_cents, shipping_cents, tax_cents, total_cents,
+        shipping_country_code, shipping_address_json, billing_address_json,
+        terms_version, privacy_version, paid_at, created_at, updated_at
+      ) VALUES (
+        'order_direct_paid_attack', 'AJ-DIRECT-PAID', NULL, NULL,
+        'direct-paid@example.com', 'paid', 'EUR', 0, 0, 0, 0, 'FR',
+        '{}', '{}', 'terms-v1', 'privacy-v1',
+        '2099-08-11T14:00:00.000Z', '2099-08-11T14:00:00.000Z',
+        '2099-08-11T14:00:00.000Z'
+      )`,
+    configPath: canonicalConfigPath,
+    environment,
+    expectFailure: true,
+    statePath: pre0002State,
+  });
+  assert.deepEqual(
+    queryD1({
+      command: `SELECT stock.physical_quantity,
+          COUNT(movement.id) AS seed_movements
+        FROM inventory AS stock
+        LEFT JOIN inventory_movements AS movement
+          ON movement.variant_id = stock.variant_id AND movement.kind = 'seed'
+        WHERE stock.variant_id = 'variant_zero_stock_m'
+        GROUP BY stock.variant_id, stock.physical_quantity`,
+      configPath: canonicalConfigPath,
+      environment,
+      statePath: pre0002State,
+    }),
+    [{ physical_quantity: 0, seed_movements: 0 }],
+  );
+  assert.match(directPaidInsertOutput, /commerce_order_insert_must_be_pending/);
   executeD1({
     command: `INSERT INTO orders (
         id, order_number, cart_id, customer_id, email, status, currency,
         subtotal_cents, shipping_cents, tax_cents, total_cents,
         shipping_country_code, shipping_address_json, billing_address_json,
         terms_version, privacy_version, paid_at, created_at, updated_at
-      ) VALUES
-      ('order_state_cancelled', 'AJ-STATE-CANCELLED', NULL, NULL,
-        'cancelled@example.com', 'cancelled', 'EUR', 0, 0, 0, 0, 'FR',
-        '{}', '{}', 'terms-v1', 'privacy-v1', NULL,
-        '2099-08-11T14:00:00.000Z', '2099-08-11T14:00:00.000Z'),
-      ('order_state_refunded', 'AJ-STATE-REFUNDED', NULL, NULL,
-        'refunded@example.com', 'refunded', 'EUR', 0, 0, 0, 0, 'FR',
-        '{}', '{}', 'terms-v1', 'privacy-v1',
-        '2099-08-11T14:01:00.000Z', '2099-08-11T14:00:00.000Z',
-        '2099-08-11T14:01:00.000Z'),
-      ('order_state_preparing', 'AJ-STATE-PREPARING', NULL, NULL,
-        'preparing@example.com', 'preparing', 'EUR', 0, 0, 0, 0, 'FR',
-        '{}', '{}', 'terms-v1', 'privacy-v1',
-        '2099-08-11T14:01:00.000Z', '2099-08-11T14:00:00.000Z',
-        '2099-08-11T14:01:00.000Z'),
-      ('order_state_shipped', 'AJ-STATE-SHIPPED', NULL, NULL,
-        'shipped@example.com', 'shipped', 'EUR', 0, 0, 0, 0, 'FR',
-        '{}', '{}', 'terms-v1', 'privacy-v1',
-        '2099-08-11T14:01:00.000Z', '2099-08-11T14:00:00.000Z',
-        '2099-08-11T14:01:00.000Z'),
-      ('order_state_paid', 'AJ-STATE-PAID', NULL, NULL,
-        'paid-state@example.com', 'paid', 'EUR', 0, 0, 0, 0, 'FR',
-        '{}', '{}', 'terms-v1', 'privacy-v1',
-        '2099-08-11T14:01:00.000Z', '2099-08-11T14:00:00.000Z',
-        '2099-08-11T14:01:00.000Z'),
-      ('order_state_pending_legit', 'AJ-STATE-PENDING', NULL, NULL,
+      ) VALUES (
+        'order_state_pending_legit', 'AJ-STATE-PENDING', NULL, NULL,
         'pending-state@example.com', 'pending_payment', 'EUR',
         0, 0, 0, 0, 'FR', '{}', '{}', 'terms-v1', 'privacy-v1', NULL,
-        '2099-08-11T14:00:00.000Z', '2099-08-11T14:00:00.000Z')`,
+        '2099-08-11T14:00:00.000Z', '2099-08-11T14:00:00.000Z'
+      )`,
     configPath: canonicalConfigPath,
     environment,
     statePath: pre0002State,
   });
 
-  const forbiddenPaidSources = [
-    ["order_state_cancelled", "cancelled"],
-    ["order_state_refunded", "refunded"],
-    ["order_state_preparing", "preparing"],
-    ["order_state_shipped", "shipped"],
-    ["order_state_paid", "paid"],
+  const impossibleOrderTransitions = [
+    ["order_state_cancelled", "shipped"],
+    ["order_state_refunded", "preparing"],
+    ["order_state_preparing", "paid"],
+    ["order_state_preparing", "shipped"],
+    ["order_state_shipped", "paid"],
+    ["order_state_paid", "cancelled"],
   ];
-  for (const [orderId] of forbiddenPaidSources) {
-    const paidEntryOutput = executeD1({
-      command: `UPDATE orders SET status = 'paid'
+  for (const [orderId, nextStatus] of impossibleOrderTransitions) {
+    const transitionOutput = executeD1({
+      command: `UPDATE orders SET status = '${nextStatus}',
+          updated_at = '2099-08-11T14:01:00.000Z'
         WHERE id = '${orderId}'`,
       configPath: canonicalConfigPath,
       environment,
       expectFailure: true,
       statePath: pre0002State,
     });
-    assert.match(
-      paidEntryOutput,
-      /commerce_order_payment_state_transition_not_allowed/,
-    );
+    assert.match(transitionOutput, /commerce_invalid_order_transition/);
   }
-  for (const [orderId] of forbiddenPaidSources) {
+  for (const orderId of [
+    "order_state_cancelled",
+    "order_state_refunded",
+    "order_state_preparing",
+    "order_state_shipped",
+    "order_state_paid",
+  ]) {
     const pendingReturnOutput = executeD1({
-      command: `UPDATE orders SET status = 'pending_payment'
+      command: `UPDATE orders SET status = 'pending_payment',
+          updated_at = '2099-08-11T14:01:00.000Z'
         WHERE id = '${orderId}'`,
       configPath: canonicalConfigPath,
       environment,
       expectFailure: true,
       statePath: pre0002State,
     });
-    assert.match(
-      pendingReturnOutput,
-      /commerce_order_payment_state_transition_not_allowed/,
-    );
+    assert.match(pendingReturnOutput, /commerce_invalid_order_transition/);
   }
   executeD1({
     command: `UPDATE orders
@@ -1213,7 +1409,8 @@ test("Wrangler applies 0000+0001+0002 on empty and journaled D1 databases, then 
     statePath: pre0002State,
   });
   const reopenedCancelledOutput = executeD1({
-    command: `UPDATE orders SET status = 'pending_payment'
+    command: `UPDATE orders SET status = 'pending_payment',
+        updated_at = '2099-08-11T14:03:00.000Z'
       WHERE id = 'order_state_pending_legit'`,
     configPath: canonicalConfigPath,
     environment,
@@ -1222,7 +1419,7 @@ test("Wrangler applies 0000+0001+0002 on empty and journaled D1 databases, then 
   });
   assert.match(
     reopenedCancelledOutput,
-    /commerce_order_payment_state_transition_not_allowed/,
+    /commerce_invalid_order_transition/,
   );
   assert.deepEqual(
     queryD1({
@@ -1375,8 +1572,8 @@ test("Wrangler applies 0000+0001+0002 on empty and journaled D1 databases, then 
         'payment:created-attack', NULL, '2099-08-11T15:00:00.000Z',
         '2099-08-11T15:00:00.000Z'),
       ('payment_failed_attack', 'order_payment_failed_attack', 'test',
-        'provider_failed_attack', 'failed', 2999, 'EUR',
-        'payment:failed-attack', 'declined', '2099-08-11T15:00:00.000Z',
+        'provider_failed_attack', 'created', 2999, 'EUR',
+        'payment:failed-attack', NULL, '2099-08-11T15:00:00.000Z',
         '2099-08-11T15:00:00.000Z'),
       ('payment_identity_source', 'order_payment_identity_source', 'test',
         'provider_identity_source', 'created', 2999, 'EUR',
@@ -1415,6 +1612,169 @@ test("Wrangler applies 0000+0001+0002 on empty and journaled D1 databases, then 
       /commerce_payment_requires_verified_event/,
     );
   }
+  for (const [status, failureCode] of [
+    ["requires_action", "NULL"],
+    ["failed", "'declined'"],
+    ["expired", "NULL"],
+    ["refunded", "NULL"],
+  ]) {
+    const directTerminalPaymentOutput = executeD1({
+      command: `INSERT INTO payments (
+          id, order_id, provider, provider_session_id, status, amount_cents,
+          currency, idempotency_key, failure_code, created_at, updated_at
+        ) VALUES (
+          'payment_direct_${status}', 'order_payment_created_attack', 'test',
+          'provider_direct_${status}', '${status}', 2999, 'EUR',
+          'payment:direct-${status}', ${failureCode},
+          '2099-08-11T15:00:00.000Z', '2099-08-11T15:00:00.000Z'
+        )`,
+      configPath: canonicalConfigPath,
+      environment,
+      expectFailure: true,
+      statePath: pre0002State,
+    });
+    assert.match(
+      directTerminalPaymentOutput,
+      /commerce_payment_insert_state_not_allowed/,
+    );
+  }
+  const directSucceededWithoutProofOutput = executeD1({
+    command: `INSERT INTO payments (
+        id, order_id, provider, provider_session_id, status, amount_cents,
+        currency, idempotency_key, failure_code, created_at, updated_at
+      ) VALUES (
+        'payment_direct_succeeded', 'order_payment_created_attack', 'test',
+        'provider_direct_succeeded', 'succeeded', 2999, 'EUR',
+        'payment:direct-succeeded', NULL, '2099-08-11T15:00:00.000Z',
+        '2099-08-11T15:00:00.000Z'
+      )`,
+    configPath: canonicalConfigPath,
+    environment,
+    expectFailure: true,
+    statePath: pre0002State,
+  });
+  assert.match(
+    directSucceededWithoutProofOutput,
+    /commerce_payment_requires_verified_event/,
+  );
+  const createdFailureCodeOutput = executeD1({
+    command: `INSERT INTO payments (
+        id, order_id, provider, provider_session_id, status, amount_cents,
+        currency, idempotency_key, failure_code, created_at, updated_at
+      ) VALUES (
+        'payment_created_failure_code', 'order_payment_created_attack', 'test',
+        'provider_created_failure_code', 'created', 2999, 'EUR',
+        'payment:created-failure-code', 'forged',
+        '2099-08-11T15:00:00.000Z', '2099-08-11T15:00:00.000Z'
+      )`,
+    configPath: canonicalConfigPath,
+    environment,
+    expectFailure: true,
+    statePath: pre0002State,
+  });
+  assert.match(
+    createdFailureCodeOutput,
+    /commerce_payment_insert_state_not_allowed/,
+  );
+  const fakeRefundOutput = executeD1({
+    command: `UPDATE payments
+      SET status = 'refunded', updated_at = '2099-08-11T15:02:00.000Z'
+      WHERE id = 'payment_created_attack'`,
+    configPath: canonicalConfigPath,
+    environment,
+    expectFailure: true,
+    statePath: pre0002State,
+  });
+  assert.match(fakeRefundOutput, /commerce_invalid_payment_transition/);
+  executeD1({
+    command: `INSERT INTO webhook_events (
+        id, provider, provider_event_id, event_type, payload_fingerprint,
+        verification_method, verified_at, order_id, provider_payment_id,
+        amount_cents, currency, status, attempts, received_at
+      ) VALUES (
+        'webhook_wrong_event_type', 'test', 'event_wrong_event_type',
+        'payment.failed', 'fingerprint_wrong_event_type', 'test_adapter',
+        '2099-08-11T15:02:00.000Z', 'order_payment_created_attack',
+        'provider_created_attack', 2999, 'EUR', 'verified', 0,
+        '2099-08-11T15:02:00.000Z'
+      )`,
+    configPath: canonicalConfigPath,
+    environment,
+    statePath: pre0002State,
+  });
+  const wrongEventTypeOutput = executeD1({
+    command: `UPDATE payments
+      SET status = 'succeeded', updated_at = '2099-08-11T15:03:00.000Z'
+      WHERE id = 'payment_created_attack'`,
+    configPath: canonicalConfigPath,
+    environment,
+    expectFailure: true,
+    statePath: pre0002State,
+  });
+  assert.match(wrongEventTypeOutput, /commerce_payment_requires_verified_event/);
+  const deletedProofOutput = executeD1({
+    command: `DELETE FROM webhook_events WHERE id = 'webhook_wrong_event_type'`,
+    configPath: canonicalConfigPath,
+    environment,
+    expectFailure: true,
+    statePath: pre0002State,
+  });
+  assert.match(deletedProofOutput, /commerce_webhook_is_immutable/);
+  const forgedRequiresActionOutput = executeD1({
+    command: `UPDATE payments
+      SET status = 'requires_action', failure_code = 'forged',
+        updated_at = '2099-08-11T15:02:00.000Z'
+      WHERE id = 'payment_failed_attack'`,
+    configPath: canonicalConfigPath,
+    environment,
+    expectFailure: true,
+    statePath: pre0002State,
+  });
+  assert.match(
+    forgedRequiresActionOutput,
+    /commerce_payment_transition_payload_invalid/,
+  );
+  executeD1({
+    command: `UPDATE payments
+        SET status = 'requires_action', updated_at = '2099-08-11T15:02:00.000Z'
+        WHERE id = 'payment_failed_attack';
+      INSERT INTO webhook_events (
+        id, provider, provider_event_id, event_type, payload_fingerprint,
+        verification_method, verified_at, order_id, provider_payment_id,
+        amount_cents, currency, status, attempts, received_at
+      ) VALUES (
+        'webhook_failed_attack', 'test', 'event_failed_attack',
+        'payment.failed', 'fingerprint_failed_attack', 'test_adapter',
+        '2099-08-11T15:03:00.000Z', 'order_payment_failed_attack',
+        'provider_failed_attack', 2999, 'EUR', 'verified', 0,
+        '2099-08-11T15:03:00.000Z'
+      )`,
+    configPath: canonicalConfigPath,
+    environment,
+    statePath: pre0002State,
+  });
+  const missingFailureCodeOutput = executeD1({
+    command: `UPDATE payments
+      SET status = 'failed', updated_at = '2099-08-11T15:04:00.000Z'
+      WHERE id = 'payment_failed_attack'`,
+    configPath: canonicalConfigPath,
+    environment,
+    expectFailure: true,
+    statePath: pre0002State,
+  });
+  assert.match(
+    missingFailureCodeOutput,
+    /commerce_payment_transition_payload_invalid/,
+  );
+  executeD1({
+    command: `UPDATE payments
+      SET status = 'failed', failure_code = 'declined',
+        updated_at = '2099-08-11T15:04:00.000Z'
+      WHERE id = 'payment_failed_attack'`,
+    configPath: canonicalConfigPath,
+    environment,
+    statePath: pre0002State,
+  });
   const paymentIdentityOutput = executeD1({
     command: `UPDATE payments
       SET order_id = 'order_payment_identity_target',
@@ -1505,6 +1865,8 @@ test("Wrangler applies 0000+0001+0002 on empty and journaled D1 databases, then 
         'Snapshot Proof', 'Proof', 'S', 1, 2999, 2999,
         '2099-08-11T16:00:00.000Z'
       );
+      UPDATE products SET name = 'Snapshot Proof Renamed'
+        WHERE id = 'product_snapshot_proof';
       INSERT INTO stock_reservations (
         id, cart_id, variant_id, quantity, status, idempotency_key,
         last_transition_key, expires_at, converted_order_id, created_at,
@@ -1557,6 +1919,8 @@ test("Wrangler applies 0000+0001+0002 on empty and journaled D1 databases, then 
           customer_order.paid_at, cart.status AS cart_status,
           payment.status AS payment_status,
           reservation.status AS reservation_status,
+          order_line.product_name AS order_line_product_name,
+          product.name AS catalog_product_name,
           inventory.active_reserved_quantity, inventory.sold_quantity,
           inventory.version
         FROM orders AS customer_order
@@ -1564,6 +1928,10 @@ test("Wrangler applies 0000+0001+0002 on empty and journaled D1 databases, then 
         INNER JOIN payments AS payment ON payment.order_id = customer_order.id
         INNER JOIN stock_reservations AS reservation
           ON reservation.converted_order_id = customer_order.id
+        INNER JOIN order_lines AS order_line
+          ON order_line.order_id = customer_order.id
+        INNER JOIN variants AS variant ON variant.id = order_line.variant_id
+        INNER JOIN products AS product ON product.id = variant.product_id
         INNER JOIN inventory
           ON inventory.variant_id = reservation.variant_id
         WHERE customer_order.id = 'order_payment_flow'`,
@@ -1578,9 +1946,293 @@ test("Wrangler applies 0000+0001+0002 on empty and journaled D1 databases, then 
         cart_status: "converted",
         payment_status: "succeeded",
         reservation_status: "converted",
+        order_line_product_name: "Snapshot Proof",
+        catalog_product_name: "Snapshot Proof Renamed",
         active_reserved_quantity: 1,
         sold_quantity: 1,
-        version: 3,
+        version: 9,
+      },
+    ],
+  );
+
+  for (const [label, command, expectedError] of [
+    [
+      "order",
+      `INSERT INTO orders (
+        id, order_number, cart_id, customer_id, email, status, currency,
+        subtotal_cents, shipping_cents, tax_cents, total_cents,
+        shipping_country_code, shipping_address_json, billing_address_json,
+        terms_version, privacy_version, paid_at, created_at, updated_at
+      ) VALUES (
+        'order_bad_timestamp', 'AJ-BAD-TIME', NULL, NULL,
+        'bad-time@example.com', 'pending_payment', 'EUR', 0, 0, 0, 0,
+        'FR', '{}', '{}', 'terms-v1', 'privacy-v1', NULL,
+        '2099-08-11 15:00:00', '2099-08-11 15:00:00'
+      )`,
+      /commerce_order_timestamp_invalid/,
+    ],
+    [
+      "payment",
+      `INSERT INTO payments (
+        id, order_id, provider, provider_session_id, status, amount_cents,
+        currency, idempotency_key, failure_code, created_at, updated_at
+      ) VALUES (
+        'payment_bad_timestamp', 'order_payment_created_attack', 'test',
+        'provider_bad_timestamp', 'created', 2999, 'EUR',
+        'payment:bad-timestamp', NULL, '2099-08-11 15:00:00',
+        '2099-08-11 15:00:00'
+      )`,
+      /commerce_payment_timestamp_invalid/,
+    ],
+    [
+      "reservation",
+      `INSERT INTO stock_reservations (
+        id, cart_id, variant_id, quantity, status, idempotency_key,
+        last_transition_key, expires_at, converted_order_id, created_at,
+        updated_at
+      ) VALUES (
+        'reservation_bad_timestamp', 'cart_parent_active',
+        'variant_snapshot_proof_s', 1, 'active',
+        'reservation:bad-timestamp', NULL, '2099-08-11T15:00:00.000Z',
+        NULL, '2099-08-11 13:00:00', '2099-08-11 13:00:00'
+      )`,
+      /commerce_reservation_timestamp_invalid/,
+    ],
+    [
+      "audit",
+      `INSERT INTO audit_log (
+        id, actor_type, actor_id, action, entity_type, entity_id,
+        idempotency_key, metadata_json, created_at
+      ) VALUES (
+        'audit_bad_timestamp', 'system', NULL, 'test', 'order',
+        'order_payment_created_attack', 'audit:bad-timestamp', '{}',
+        '2099-08-11 15:00:00'
+      )`,
+      /commerce_audit_timestamp_invalid/,
+    ],
+    [
+      "movement",
+      `INSERT INTO inventory_movements (
+        id, variant_id, kind, quantity, reference_type, reference_id,
+        actor_type, actor_id, idempotency_key, created_at
+      ) VALUES (
+        'movement_bad_timestamp', 'variant_snapshot_proof_s', 'adjustment', 1,
+        'test', 'timestamp', 'system', NULL, 'movement:bad-timestamp',
+        '2099-08-11 15:00:00'
+      )`,
+      /commerce_inventory_movement_timestamp_invalid/,
+    ],
+  ]) {
+    const invalidTimestampOutput = executeD1({
+      command,
+      configPath: canonicalConfigPath,
+      environment,
+      expectFailure: true,
+      statePath: pre0002State,
+    });
+    assert.match(invalidTimestampOutput, expectedError, label);
+  }
+  for (const [command, expectedError] of [
+    [
+      `UPDATE orders SET updated_at = '2099-08-11T15:05:00.000Z'
+        WHERE id = 'order_payment_created_attack'`,
+      /commerce_order_timestamp_requires_transition/,
+    ],
+    [
+      `UPDATE payments SET updated_at = '2099-08-11T15:05:00.000Z'
+        WHERE id = 'payment_created_attack'`,
+      /commerce_payment_update_requires_transition/,
+    ],
+    [
+      `UPDATE stock_reservations
+        SET updated_at = '2099-08-11T15:05:00.000Z'
+        WHERE id = 'reservation_parent_active'`,
+      /commerce_reservation_update_requires_transition/,
+    ],
+    [
+      `UPDATE webhook_events
+        SET processed_at = '2099-08-11T15:05:00.000Z'
+        WHERE id = 'webhook_wrong_event_type'`,
+      /commerce_webhook_(timestamp_invalid|update_requires_transition)/,
+    ],
+    [
+      `UPDATE inventory SET updated_at = '2099-08-11 15:05:00'
+        WHERE variant_id = 'variant_zero_stock_m'`,
+      /commerce_inventory_timestamp_invalid/,
+    ],
+  ]) {
+    const falsifiedTimestampOutput = executeD1({
+      command,
+      configPath: canonicalConfigPath,
+      environment,
+      expectFailure: true,
+      statePath: pre0002State,
+    });
+    assert.match(falsifiedTimestampOutput, expectedError);
+  }
+  executeD1({
+    command: `INSERT INTO audit_log (
+        id, actor_type, actor_id, action, entity_type, entity_id,
+        idempotency_key, metadata_json, created_at
+      ) VALUES (
+        'audit_append_only_proof', 'system', NULL, 'test', 'order',
+        'order_payment_created_attack', 'audit:append-only-proof', '{}',
+        '2099-08-11T15:05:00.000Z'
+      );
+      INSERT INTO inventory_movements (
+        id, variant_id, kind, quantity, reference_type, reference_id,
+        actor_type, actor_id, idempotency_key, created_at
+      ) VALUES (
+        'movement_append_only_proof', 'variant_snapshot_proof_s',
+        'adjustment', 1, 'test', 'append-only', 'system', NULL,
+        'movement:append-only-proof', '2099-08-11T15:05:00.000Z'
+      )`,
+    configPath: canonicalConfigPath,
+    environment,
+    statePath: pre0002State,
+  });
+  for (const [command, expectedError] of [
+    [
+      `UPDATE audit_log SET metadata_json = '{"forged":true}'
+        WHERE id = 'audit_append_only_proof'`,
+      /commerce_audit_log_is_immutable/,
+    ],
+    [
+      `DELETE FROM audit_log WHERE id = 'audit_append_only_proof'`,
+      /commerce_audit_log_is_immutable/,
+    ],
+    [
+      `UPDATE inventory_movements SET quantity = 2
+        WHERE id = 'movement_append_only_proof'`,
+      /commerce_inventory_movement_is_immutable/,
+    ],
+    [
+      `DELETE FROM inventory_movements WHERE id = 'movement_append_only_proof'`,
+      /commerce_inventory_movement_is_immutable/,
+    ],
+  ]) {
+    const appendOnlyOutput = executeD1({
+      command,
+      configPath: canonicalConfigPath,
+      environment,
+      expectFailure: true,
+      statePath: pre0002State,
+    });
+    assert.match(appendOnlyOutput, expectedError);
+  }
+  const forgedCountersOutput = executeD1({
+    command: `UPDATE inventory
+      SET sold_quantity = 2, version = version + 1,
+        updated_at = '2099-08-11T15:05:00.000Z'
+      WHERE variant_id = 'variant_snapshot_proof_s'`,
+    configPath: canonicalConfigPath,
+    environment,
+    expectFailure: true,
+    statePath: pre0002State,
+  });
+  assert.match(
+    forgedCountersOutput,
+    /commerce_inventory_reservation_counters_mismatch/,
+  );
+
+  executeD1({
+    command: `INSERT INTO carts (
+        id, status, currency, expires_at, created_at, updated_at
+      ) VALUES (
+        'cart_order_line_provenance', 'open', 'EUR',
+        '2099-08-11T13:00:00.000Z', '2099-08-11T11:10:00.000Z',
+        '2099-08-11T11:10:00.000Z'
+      );
+      INSERT INTO cart_lines (
+        id, cart_id, variant_id, quantity, unit_price_cents,
+        created_at, updated_at
+      ) VALUES (
+        'cart_line_order_line_provenance', 'cart_order_line_provenance',
+        'variant_snapshot_proof_s', 1, 2999,
+        '2099-08-11T11:10:00.000Z', '2099-08-11T11:10:00.000Z'
+      );
+      INSERT INTO orders (
+        id, order_number, cart_id, customer_id, email, status, currency,
+        subtotal_cents, shipping_cents, tax_cents, total_cents,
+        shipping_country_code, shipping_address_json, billing_address_json,
+        terms_version, privacy_version, paid_at, created_at, updated_at
+      ) VALUES (
+        'order_line_provenance', 'AJ-LINE-PROVENANCE',
+        'cart_order_line_provenance', NULL, 'line-provenance@example.com',
+        'pending_payment', 'EUR', 2999, 0, 0, 2999, 'FR', '{}', '{}',
+        'terms-v1', 'privacy-v1', NULL, '2099-08-11T11:10:00.000Z',
+        '2099-08-11T11:10:00.000Z'
+      )`,
+    configPath: canonicalConfigPath,
+    environment,
+    statePath: pre0002State,
+  });
+  const forgedOrderLineInsertOutput = executeD1({
+    command: `INSERT INTO order_lines (
+        id, order_id, variant_id, internal_reference, product_name,
+        color_name, size, quantity, unit_price_cents, line_total_cents,
+        created_at
+      ) VALUES (
+        'order_line_forged_provenance', 'order_line_provenance',
+        'variant_snapshot_proof_s', 'AJ-SNAPSHOT-PROOF-S', 'Forged name',
+        'Proof', 'S', 1, 2999, 2999, '2099-08-11T11:10:00.000Z'
+      )`,
+    configPath: canonicalConfigPath,
+    environment,
+    expectFailure: true,
+    statePath: pre0002State,
+  });
+  assert.match(
+    forgedOrderLineInsertOutput,
+    /commerce_order_line_insert_not_allowed/,
+  );
+  executeD1({
+    command: `INSERT INTO order_lines (
+        id, order_id, variant_id, internal_reference, product_name,
+        color_name, size, quantity, unit_price_cents, line_total_cents,
+        created_at
+      ) VALUES (
+        'order_line_valid_provenance', 'order_line_provenance',
+        'variant_snapshot_proof_s', 'AJ-SNAPSHOT-PROOF-S',
+        'Snapshot Proof Renamed',
+        'Proof', 'S', 1, 2999, 2999, '2099-08-11T11:10:00.000Z'
+      )`,
+    configPath: canonicalConfigPath,
+    environment,
+    statePath: pre0002State,
+  });
+  const reservationReassignmentOutput = executeD1({
+    command: `UPDATE stock_reservations
+      SET converted_order_id = 'order_payment_identity_target',
+        updated_at = '2099-08-11T16:03:00.000Z'
+      WHERE id = 'reservation_payment_flow'`,
+    configPath: canonicalConfigPath,
+    environment,
+    expectFailure: true,
+    statePath: pre0002State,
+  });
+  assert.match(
+    reservationReassignmentOutput,
+    /commerce_terminal_reservation_is_immutable/,
+  );
+  assert.deepEqual(
+    queryD1({
+      command: `SELECT reservation.converted_order_id,
+          inventory.active_reserved_quantity, inventory.sold_quantity,
+          inventory.version
+        FROM stock_reservations AS reservation
+        INNER JOIN inventory ON inventory.variant_id = reservation.variant_id
+        WHERE reservation.id = 'reservation_payment_flow'`,
+      configPath: canonicalConfigPath,
+      environment,
+      statePath: pre0002State,
+    }),
+    [
+      {
+        converted_order_id: "order_payment_flow",
+        active_reserved_quantity: 1,
+        sold_quantity: 1,
+        version: 9,
       },
     ],
   );
@@ -1595,7 +2247,7 @@ test("Wrangler applies 0000+0001+0002 on empty and journaled D1 databases, then 
   });
   assert.match(
     succeededPaymentUpdateOutput,
-    /commerce_succeeded_payment_is_immutable/,
+    /commerce_terminal_payment_is_immutable/,
   );
   const succeededPaymentDeleteOutput = executeD1({
     command: `DELETE FROM payments WHERE id = 'payment_flow'`,
@@ -1606,7 +2258,7 @@ test("Wrangler applies 0000+0001+0002 on empty and journaled D1 databases, then 
   });
   assert.match(
     succeededPaymentDeleteOutput,
-    /commerce_succeeded_payment_is_immutable/,
+    /commerce_payment_is_immutable/,
   );
   const paidFlowHeaderOutput = executeD1({
     command: `UPDATE orders SET email = 'forged-flow@example.com',

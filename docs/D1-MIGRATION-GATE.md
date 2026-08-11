@@ -7,10 +7,12 @@ preuve de cible réelle fournie dans le périmètre de ce candidat.
 
 La chaîne canonique est strictement :
 
-1. `0000_flimsy_rhino.sql`, baseline finale dont le SHA-256 normalisé LF est
+1. `0000_flimsy_rhino.sql` — SHA-256 normalisé LF
    `6e6262fa635e9808c00493adb1badbf51a1c3d75b2e1112fe567632c526859b4` ;
-2. `0001_lock_cart_line_price_provenance.sql` ;
-3. `0002_lock_order_line_snapshots.sql`.
+2. `0001_lock_cart_line_price_provenance.sql` — SHA-256 normalisé LF
+   `bef3cc80b9201217050dd5e80362927f3c560bb1c239ac8fd08de2f88aaf08de` ;
+3. `0002_lock_order_line_snapshots.sql` — SHA-256 normalisé LF
+   `dea8ea0d6f6c7acc804130b50a118eb6bbe3480e1a38f445c31a9d32da640103`.
 
 Les seuls points de départ couverts par la preuve Wrangler locale sont une base
 vide, la baseline finale `0000`, et `0000+0001`. Chaque chemin conserve ses
@@ -50,6 +52,27 @@ SELECT COUNT(*) AS orders_from_open_carts
 FROM orders AS customer_order
 INNER JOIN carts AS cart ON cart.id = customer_order.cart_id
 WHERE cart.status = 'open';
+
+SELECT inventory.variant_id,
+  inventory.active_reserved_quantity,
+  COALESCE(active.total, 0) AS expected_active,
+  inventory.sold_quantity,
+  COALESCE(sold.total, 0) AS expected_sold
+FROM inventory
+LEFT JOIN (
+  SELECT variant_id, SUM(quantity) AS total
+  FROM stock_reservations
+  WHERE status = 'active'
+  GROUP BY variant_id
+) AS active ON active.variant_id = inventory.variant_id
+LEFT JOIN (
+  SELECT variant_id, SUM(quantity) AS total
+  FROM stock_reservations
+  WHERE status = 'converted'
+  GROUP BY variant_id
+) AS sold ON sold.variant_id = inventory.variant_id
+WHERE inventory.active_reserved_quantity <> COALESCE(active.total, 0)
+   OR inventory.sold_quantity <> COALESCE(sold.total, 0);
 ```
 
 Si la cible n’a pas encore `0001`, tout panier encore ouvert est un panier
@@ -68,14 +91,23 @@ périmètre observé : seulement des bases locales éphémères de test.
 
 ## Garanties et retour arrière
 
-`0002` rend `order_lines` append-only : insertion seulement pour une commande
-`pending_payment`, aucune mise à jour, aucune suppression directe et aucune
-suppression indirecte par cascade. Après paiement, ajout, modification et retrait
-sont donc tous refusés. Les champs snapshot de l’en-tête de commande sont
-immuables dès sa création. Seuls `status`, `paid_at` et `updated_at` peuvent
-évoluer, sous les règles de transition : entrée dans `paid` uniquement depuis
-`pending_payment`, `paid_at` UTC obligatoire, et aucun retour vers
-`pending_payment`.
+`0002` rend `order_lines` append-only. Une ligne ne peut naître que sur une
+commande `pending_payment` reliée à un panier ouvert, et doit correspondre à la
+`cart_line` ainsi qu’à l’identité catalogue observée à cet instant : variante,
+référence interne, libellé produit, couleur, taille, quantité et prix. Elle ne
+peut ensuite être ni modifiée ni supprimée, directement ou par cascade. Le
+paiement compare les snapshots figés commande/panier et les réservations; il ne
+relit jamais les libellés du catalogue vivant. Un renommage produit légitime
+après création du snapshot ne bloque donc pas le paiement et le reçu conserve le
+libellé historique.
+
+Les champs snapshot de l’en-tête de commande sont immuables dès la création.
+Une commande naît exclusivement en `pending_payment`. Les transitions autorisées
+sont `pending_payment -> paid|cancelled`, `paid -> preparing`, puis
+`preparing -> shipped`; `cancelled` et `refunded` sont terminaux. Chaque entrée
+opérationnelle exige ses prérequis financiers et de réservation, `paid_at` et
+`updated_at` sont des timestamps UTC stricts et croissants, et aucun retour vers
+un état antérieur n’est admis.
 
 Une `cart_line` ne peut être ajoutée ou supprimée que si son panier existe, est
 ouvert, n’est pas expiré et ne possède ni réservation historique ni commande. Les
@@ -85,10 +117,39 @@ possède aucune réservation, quel que soit son statut, et aucune commande. Cett
 règle empêche une cascade d’effacer une réservation active sans corriger les
 compteurs de stock.
 
-Toute entrée d’un paiement dans `succeeded`, par insertion ou mise à jour, exige
-un événement webhook vérifié correspondant. Identité, commande, fournisseur,
-session, montant, devise et clé d’idempotence du paiement sont immuables. Un
-paiement `succeeded` ne peut ensuite être ni modifié ni supprimé.
+Toute réservation naît en `active`, avec identité et timestamps figés. Elle ne
+peut évoluer qu’une fois vers `released`, `expired` ou `converted`, avec une clé
+de transition; une conversion exige une commande du même panier et un paiement
+`succeeded` cohérent. Les réservations sont conservées dans tous les états et ne
+peuvent jamais être supprimées. Les compteurs `active_reserved_quantity` et
+`sold_quantity`, ainsi que leur incrément de version, doivent à chaque mise à
+jour correspondre exactement aux réservations persistées; une ligne d’inventaire
+ne peut pas être supprimée. Une variante à stock
+physique nul reste valide et ne crée simplement aucun mouvement initial de
+quantité nulle.
+
+Un paiement naît en `created`, ou exceptionnellement directement en `succeeded`
+si un webhook `payment.succeeded` vérifié et exactement correspondant existe
+déjà. Les transitions fermées sont `created -> requires_action` puis
+`created|requires_action -> succeeded|failed|expired`. `failure_code` est nul
+pour `created`, `requires_action`, `succeeded` et `expired`, et obligatoire pour
+`failed`. Les états terminaux sont immuables et aucune preuve webhook ne peut
+être modifiée ou supprimée. Les timestamps des commandes, réservations,
+paiements, webhooks, mouvements de stock et entrées d’audit sont UTC stricts;
+le ledger et l’audit sont append-only.
+
+`refunded` reste volontairement inaccessible à tout nouveau paiement dans
+`0002`. D03 devra définir sa preuve fournisseur, sa transition comptable et ses
+effets avant d’étendre les triggers. Les états internes `preparing` et `shipped`
+sont supportés, mais la correspondance entre `shipped` en D1 et `fulfilled` dans
+le contrat public reste elle aussi un gate D03 : aucune équivalence silencieuse
+n’est autorisée.
+
+Pour D02, la pseudonymisation client doit être douce et ciblée. Il ne faut pas
+supprimer une ligne `customers` pour compter sur `ON DELETE SET NULL` :
+l’en-tête de commande est immuable et neutralise cette cascade. D02 doit
+pseudonymiser les champs personnels autorisés sur `customers` tout en conservant
+les snapshots de commande soumis aux obligations de preuve et de conservation.
 
 Les migrations sont forward-only. Le retour arrière d’une future cible réelle
 consiste à restaurer le snapshot D1 pris au gate, puis à vérifier l’historique des
