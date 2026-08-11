@@ -121,6 +121,8 @@ function createFixture(options = {}) {
   const deliveries = [];
   const backgroundTasks = [];
   const rateLimitInputs = [];
+  const externalMfaInputs = [];
+  const identityCallOrder = [];
   let virtualMilliseconds = 0;
   const ports = {
     delivery: {
@@ -137,12 +139,15 @@ function createFixture(options = {}) {
     },
     rateLimit: {
       async take(input) {
+        identityCallOrder.push("rate-limit");
         rateLimitInputs.push(Object.freeze({ ...input }));
         return options.allowRateLimit ?? true;
       },
     },
     externalMfa: {
-      async verify() {
+      async verify(assertion) {
+        identityCallOrder.push("external-mfa");
+        externalMfaInputs.push(assertion);
         return options.mfaEvidence ?? null;
       },
     },
@@ -169,11 +174,13 @@ function createFixture(options = {}) {
     backgroundTasks,
     database,
     deliveries,
+    externalMfaInputs,
     async flushBackground() {
       const pending = backgroundTasks.splice(0);
       await Promise.all(pending);
     },
     ports,
+    identityCallOrder,
     rateLimitInputs,
     store: new D1IdentityAccessStore(new SQLiteD1Database(database), ports),
   };
@@ -1029,10 +1036,16 @@ test("admin authority comes only from a current enabled MFA-backed database role
   database.close();
 });
 
-test("admin rate limiting runs before any session is created", async () => {
+test("admin rate limiting runs before external MFA and any session state", async () => {
   const now = "2026-08-11T12:00:00.000Z";
   const externalSubjectHash = "a".repeat(64);
-  const { database, rateLimitInputs, store } = createFixture({
+  const {
+    database,
+    externalMfaInputs,
+    identityCallOrder,
+    rateLimitInputs,
+    store,
+  } = createFixture({
     allowRateLimit: false,
     mfaEvidence: {
       externalSubjectHash,
@@ -1049,10 +1062,21 @@ test("admin rate limiting runs before any session is created", async () => {
       ) VALUES ('admin_rate_limited', ?, 'owner', 1, 1, ?, ?)`,
     )
     .run(externalSubjectHash, now, now);
+  const auditCountBefore = database
+    .prepare("SELECT COUNT(*) AS count FROM audit_log")
+    .get().count;
+  const expensiveInvalidAssertion = new Proxy(
+    {},
+    {
+      get() {
+        throw new Error("assertion must not be inspected before local limiting");
+      },
+    },
+  );
 
   assert.equal(
     await store.createAdminSession({
-      assertion: { opaque: true },
+      assertion: expensiveInvalidAssertion,
       sessionId: "admin_session_rate_limited",
       now,
     }),
@@ -1062,14 +1086,27 @@ test("admin rate limiting runs before any session is created", async () => {
     {
       scope: "admin_sign_in",
       discriminatorHash: await hashOneTimeAccessToken(
-        externalSubjectHash,
+        "admin-sign-in-pre-mfa",
         accessTokenHashContexts.adminRateLimit,
       ),
       now,
     },
   ]);
+  assert.deepEqual(identityCallOrder, ["rate-limit"]);
+  assert.equal(externalMfaInputs.length, 0);
   assert.equal(
     database.prepare("SELECT COUNT(*) AS count FROM admin_sessions").get().count,
+    0,
+  );
+  assert.equal(
+    database.prepare("SELECT COUNT(*) AS count FROM audit_log").get().count,
+    auditCountBefore,
+  );
+  assert.equal(
+    database.prepare(
+      `SELECT COUNT(*) AS count FROM audit_log
+      WHERE action = 'identity_admin_session_started'`,
+    ).get().count,
     0,
   );
   database.close();

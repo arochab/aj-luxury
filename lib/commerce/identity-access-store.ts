@@ -21,6 +21,7 @@ const durations = Object.freeze({
   admin: Object.freeze({ absoluteMs: 8 * 60 * 60_000, idleMs: 15 * 60_000 }),
 });
 const accessRequestMinimumDurationMs = 120;
+const adminPreMfaRateLimitSeed = "admin-sign-in-pre-mfa";
 
 export class IdentityAccessError extends Error {
   readonly code:
@@ -93,7 +94,13 @@ const closedDeliveryPort: IdentityDeliveryPort = Object.freeze({
 });
 
 const closedRateLimitPort: IdentityRateLimitPort = Object.freeze({
-  async take() {
+  async take(input: Parameters<IdentityRateLimitPort["take"]>[0]) {
+    if (input.scope === "admin_sign_in") {
+      throw new IdentityAccessError(
+        "DEPENDENCY_UNAVAILABLE",
+        "Admin rate limiting is not configured.",
+      );
+    }
     return false;
   },
 });
@@ -615,6 +622,20 @@ export class D1IdentityAccessStore {
     void input.requestedRole;
     assertInternalId(input.sessionId, "Session id");
     assertTimestamp(input.now, "Now");
+    const discriminatorHash = await hashOneTimeAccessToken(
+      adminPreMfaRateLimitSeed,
+      accessTokenHashContexts.adminRateLimit,
+    );
+    if (
+      !(await this.ports.rateLimit.take({
+        scope: "admin_sign_in",
+        discriminatorHash,
+        now: input.now,
+      }))
+    ) {
+      return null;
+    }
+
     const evidence = await this.ports.externalMfa.verify(input.assertion);
     if (
       evidence === null ||
@@ -625,20 +646,6 @@ export class D1IdentityAccessStore {
       !isCanonicalUtcTimestamp(evidence.authenticatedAt) ||
       evidence.authenticatedAt > input.now ||
       Date.parse(input.now) - Date.parse(evidence.authenticatedAt) > 5 * 60_000
-    ) {
-      return null;
-    }
-
-    const discriminatorHash = await hashOneTimeAccessToken(
-      evidence.externalSubjectHash,
-      accessTokenHashContexts.adminRateLimit,
-    );
-    if (
-      !(await this.ports.rateLimit.take({
-        scope: "admin_sign_in",
-        discriminatorHash,
-        now: input.now,
-      }))
     ) {
       return null;
     }
