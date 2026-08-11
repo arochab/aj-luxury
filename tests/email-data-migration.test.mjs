@@ -120,12 +120,15 @@ test("0004 converts only verified post-payment confirmations and invalidates uns
   const now = "2026-08-11T12:00:00.000Z";
   insert.run("legacy_magic", "magic_link", "secret@example.com", null, '{"token":"raw-secret"}', "pending", 0, now, null, "legacy:magic", now, null);
   insert.run("legacy_paid", "order_confirmation", "paid@example.com", "order_paid", '{}', "pending", 0, now, null, "legacy:paid", now, null);
+  insert.run("legacy_paid_duplicate", "order_confirmation", "paid@example.com", "order_paid", '{}', "sent", 1, now, null, "legacy:paid:duplicate", now, now);
   insert.run("legacy_unpaid", "order_confirmation", "unpaid@example.com", "order_unpaid", '{}', "pending", 0, now, null, "legacy:unpaid", now, null);
+  insert.run("legacy_unpaid_sent", "order_confirmation", "unpaid@example.com", "order_unpaid", '{}', "sent", 1, now, null, "legacy:unpaid:sent", now, now);
   insert.run("legacy_sending", "payment_failed", "ambiguous@example.com", "order_unpaid", '{}', "sending", 1, now, "raw-provider-error", "legacy:sending", now, null);
 
   applyTracked(db);
   const rows = db.prepare(`SELECT id, kind, transaction_intent, status,
-    recipient_email, payload_json, access_challenge_id, last_error_code, purged_at
+    recipient_email, payload_json, access_challenge_id, last_error_code,
+    provider_idempotency_key, sent_at, terminal_at, purged_at
     FROM email_outbox ORDER BY id`).all();
   const byId = Object.fromEntries(rows.map((row) => [row.id, row]));
   assert.equal(byId.legacy_paid.kind, "payment_confirmation");
@@ -133,10 +136,42 @@ test("0004 converts only verified post-payment confirmations and invalidates uns
   assert.equal(byId.legacy_paid.status, "pending");
   assert.deepEqual(
     {
+      kind: byId.legacy_paid_duplicate.kind,
+      status: byId.legacy_paid_duplicate.status,
+      error: byId.legacy_paid_duplicate.last_error_code,
+      sentAt: byId.legacy_paid_duplicate.sent_at,
+    },
+    {
+      kind: "order_confirmation",
+      status: "cancelled",
+      error: "legacy_duplicate_intent",
+      sentAt: null,
+    },
+  );
+  assert.deepEqual(
+    {
       status: byId.legacy_unpaid.status,
       error: byId.legacy_unpaid.last_error_code,
     },
     { status: "cancelled", error: "legacy_unverified_payment_intent" },
+  );
+  assert.deepEqual(
+    {
+      kind: byId.legacy_unpaid_sent.kind,
+      status: byId.legacy_unpaid_sent.status,
+      error: byId.legacy_unpaid_sent.last_error_code,
+      sentAt: byId.legacy_unpaid_sent.sent_at,
+      terminal: byId.legacy_unpaid_sent.terminal_at !== null,
+      providerKey: byId.legacy_unpaid_sent.provider_idempotency_key,
+    },
+    {
+      kind: "order_confirmation",
+      status: "cancelled",
+      error: "legacy_unverified_payment_intent",
+      sentAt: null,
+      terminal: true,
+      providerKey: "legacy_email:legacy_unpaid_sent",
+    },
   );
   assert.deepEqual(
     {
@@ -184,22 +219,17 @@ test("retention is inactive by default and terminal outbox rows are append-only"
     transaction_intent: "payment_succeeded",
     source_event_id: "payment:order_paid",
   });
-  db.prepare(`INSERT INTO email_outbox (
-    id, kind, transaction_intent, source_event_id, recipient_email, order_id,
-    locale, template_version, payload_json, status, attempts, max_attempts,
-    next_attempt_at, idempotency_key, created_at, updated_at
-  ) VALUES ('email_paid', 'payment_confirmation', 'payment_succeeded',
-    'payment_paid', 'customer@example.com', 'order_paid', 'fr', 'v1', '{}',
-    'pending', 0, 5, ?, 'email:paid', ?, ?)`)
-    .run("2026-08-11T12:00:00.000Z", "2026-08-11T12:00:00.000Z", "2026-08-11T12:00:00.000Z");
   db.prepare(`UPDATE email_outbox SET status = 'cancelled', next_attempt_at = NULL,
-    terminal_at = ?, updated_at = ? WHERE id = 'email_paid'`)
+    terminal_at = ?, updated_at = ? WHERE id = 'email_compat'`)
     .run("2026-08-11T12:01:00.000Z", "2026-08-11T12:01:00.000Z");
   assert.throws(() => db.prepare(
-    "UPDATE email_outbox SET status = 'pending', next_attempt_at = ? WHERE id = 'email_paid'",
+    "UPDATE email_outbox SET status = 'pending', next_attempt_at = ? WHERE id = 'email_compat'",
   ).run("2026-08-11T12:02:00.000Z"), /email_outbox_(?:transition_not_allowed|terminal_is_append_only)|CHECK constraint/);
   assert.throws(() => db.prepare(
-    "UPDATE email_outbox SET recipient_email = 'other@example.com' WHERE id = 'email_paid'",
+    "UPDATE email_outbox SET recipient_email = 'other@example.com' WHERE id = 'email_compat'",
   ).run(), /email_outbox_(?:identity_is_immutable|transition_not_allowed)/);
+  assert.throws(() => db.prepare(
+    "DELETE FROM email_outbox WHERE id = 'email_compat'",
+  ).run(), /email_outbox_evidence_is_immutable/);
   db.close();
 });

@@ -1,4 +1,7 @@
-import { isCanonicalUtcTimestamp } from "./account-security.ts";
+import {
+  hashOneTimeAccessToken,
+  isCanonicalUtcTimestamp,
+} from "./account-security.ts";
 import type { CommerceD1Database, CommerceD1Result } from "./d1-port.ts";
 
 export const transactionalEmailProviderClosed = Object.freeze({
@@ -27,10 +30,28 @@ export type EmailOutboxClaim = Readonly<{
   attempts: number;
   maxAttempts: number;
   leaseTokenHash: string;
+  providerIdempotencyKey: string;
 }>;
 
+export type TransactionalEmailDelivery = Readonly<{
+  message: EmailOutboxClaim;
+  idempotencyKey: string;
+}>;
+
+export type TransactionalEmailDeliveryReceipt = Readonly<{
+  idempotencyKey: string;
+}>;
+
+/**
+ * An adapter must submit the supplied key to a provider-side idempotency
+ * facility and echo that exact key only after the provider accepts it. The
+ * outbox retries with one stable key, but cannot promise exactly-once delivery
+ * when an eventual provider does not honour its own idempotency contract.
+ */
 export interface TransactionalEmailProviderPort {
-  deliver(message: EmailOutboxClaim): Promise<void>;
+  deliver(
+    delivery: TransactionalEmailDelivery,
+  ): Promise<TransactionalEmailDeliveryReceipt>;
 }
 
 export class EmailOutboxError extends Error {
@@ -58,6 +79,10 @@ const safeId = /^[a-z0-9][a-z0-9_.:-]{0,191}$/i;
 const hash = /^[0-9a-f]{64}$/;
 const mailbox = /^[\x21-\x7e]+@[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$/;
 const retrySeconds = Object.freeze([60, 300, 1_800, 7_200] as const);
+const opaqueTokenRun = /[A-Za-z0-9_-]{43,}/g;
+const opaqueTokenLength = 43;
+const maxOpaqueTokenRunLength = 256;
+const maxOpaqueTokenCandidates = 1_024;
 
 function changed(result: CommerceD1Result<object>): number {
   return Number(result.meta?.changes ?? 0);
@@ -83,6 +108,63 @@ function resultRows<Row extends object>(result: CommerceD1Result<object>): Row[]
   return (result.results ?? []) as Row[];
 }
 
+function providerIdempotencyKey(input: Readonly<{
+  kind: EmailOutboxKind;
+  sourceEventId: string;
+  orderId?: string;
+  accessChallengeId?: string;
+}>): string {
+  if (input.kind === "account_access") {
+    return `account_access:${input.accessChallengeId}`;
+  }
+  if (input.kind === "payment_confirmation") {
+    return `payment_confirmation:${input.orderId}`;
+  }
+  return `${input.kind}:${input.sourceEventId}`;
+}
+
+async function assertAccountAccessFieldsContainNoRawToken(
+  database: CommerceD1Database,
+  accessChallengeId: string,
+  durableFields: readonly string[],
+): Promise<void> {
+  const challenge = await database
+    .prepare("SELECT token_hash FROM access_challenges WHERE id = ?")
+    .bind(accessChallengeId)
+    .first<{ token_hash: string }>();
+  if (!challenge || !hash.test(challenge.token_hash)) {
+    throw new EmailOutboxError("INVALID_INPUT", "Access challenge is invalid.");
+  }
+
+  let candidates = 0;
+  for (const field of durableFields) {
+    for (const run of field.match(opaqueTokenRun) ?? []) {
+      if (run.length > maxOpaqueTokenRunLength) {
+        throw new EmailOutboxError(
+          "INVALID_INPUT",
+          "Account access content contains forbidden token-shaped data.",
+        );
+      }
+      for (let offset = 0; offset <= run.length - opaqueTokenLength; offset += 1) {
+        candidates += 1;
+        if (candidates > maxOpaqueTokenCandidates) {
+          throw new EmailOutboxError(
+            "INVALID_INPUT",
+            "Account access content contains too much token-shaped data.",
+          );
+        }
+        const candidate = run.slice(offset, offset + opaqueTokenLength);
+        if ((await hashOneTimeAccessToken(candidate)) === challenge.token_hash) {
+          throw new EmailOutboxError(
+            "INVALID_INPUT",
+            "Account access tokens must never enter durable email fields.",
+          );
+        }
+      }
+    }
+  }
+}
+
 type ClaimRow = {
   id: string;
   kind: EmailOutboxKind;
@@ -96,6 +178,7 @@ type ClaimRow = {
   attempts: number;
   max_attempts: number;
   lease_token_hash: string;
+  provider_idempotency_key: string;
 };
 
 function freezeClaim(row: ClaimRow): EmailOutboxClaim {
@@ -112,6 +195,7 @@ function freezeClaim(row: ClaimRow): EmailOutboxClaim {
     attempts: row.attempts,
     maxAttempts: row.max_attempts,
     leaseTokenHash: row.lease_token_hash,
+    providerIdempotencyKey: row.provider_idempotency_key,
   });
 }
 
@@ -127,7 +211,7 @@ export class D1EmailOutbox {
     this.provider = provider;
   }
 
-  async enqueue(input: Readonly<{
+  async enqueue(candidate: Readonly<{
     id: string;
     kind: EmailOutboxKind;
     sourceEventId: string;
@@ -141,6 +225,20 @@ export class D1EmailOutbox {
     idempotencyKey: string;
     createdAt: string;
   }>): Promise<{ id: string; created: boolean }> {
+    const input = Object.freeze({
+      id: candidate.id,
+      kind: candidate.kind,
+      sourceEventId: candidate.sourceEventId,
+      recipientEmail: candidate.recipientEmail,
+      orderId: candidate.orderId,
+      accessChallengeId: candidate.accessChallengeId,
+      locale: candidate.locale,
+      templateVersion: candidate.templateVersion,
+      subject: candidate.subject,
+      text: candidate.text,
+      idempotencyKey: candidate.idempotencyKey,
+      createdAt: candidate.createdAt,
+    });
     assertId(input.id, "Outbox id");
     assertId(input.sourceEventId, "Source event id");
     assertId(input.templateVersion, "Template version");
@@ -159,16 +257,22 @@ export class D1EmailOutbox {
     ) {
       throw new EmailOutboxError("INVALID_INPUT", "Email copy is invalid.");
     }
+    let orderId: string | undefined;
+    let accessChallengeId: string | undefined;
     if (input.kind === "account_access") {
-      assertId(input.accessChallengeId, "Access challenge id");
-      if (input.orderId !== undefined || /https?:\/\/|[A-Za-z0-9_-]{43}/.test(input.text)) {
+      const candidate = input.accessChallengeId;
+      assertId(candidate, "Access challenge id");
+      accessChallengeId = candidate;
+      if (input.orderId !== undefined) {
         throw new EmailOutboxError(
           "INVALID_INPUT",
-          "Account access tokens must remain ephemeral and outside the outbox.",
+          "Account access emails cannot reference an order directly.",
         );
       }
     } else {
-      assertId(input.orderId, "Order id");
+      const candidate = input.orderId;
+      assertId(candidate, "Order id");
+      orderId = candidate;
       if (input.accessChallengeId !== undefined) {
         throw new EmailOutboxError("INVALID_INPUT", "Unexpected access challenge.");
       }
@@ -182,6 +286,32 @@ export class D1EmailOutbox {
       account_access: "account_access_challenge",
     };
     const payloadJson = JSON.stringify({ subject: input.subject, text: input.text });
+    const deliveryIdempotencyKey = providerIdempotencyKey({
+      kind: input.kind,
+      sourceEventId: input.sourceEventId,
+      orderId,
+      accessChallengeId,
+    });
+    if (accessChallengeId !== undefined) {
+      await assertAccountAccessFieldsContainNoRawToken(
+        this.database,
+        accessChallengeId,
+        Object.freeze([
+          input.id,
+          input.sourceEventId,
+          input.recipientEmail,
+          accessChallengeId,
+          input.locale,
+          input.templateVersion,
+          input.subject,
+          input.text,
+          input.idempotencyKey,
+          input.createdAt,
+          payloadJson,
+          deliveryIdempotencyKey,
+        ]),
+      );
+    }
     const maxAttempts = input.kind === "account_access" ? 1 : 5;
     const insert = await this.database
       .prepare(
@@ -189,8 +319,8 @@ export class D1EmailOutbox {
           id, kind, transaction_intent, source_event_id, recipient_email,
           order_id, access_challenge_id, locale, template_version, payload_json,
           status, attempts, max_attempts, next_attempt_at, idempotency_key,
-          created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, ?, ?, ?, ?, ?)`,
+          provider_idempotency_key, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         input.id,
@@ -198,37 +328,82 @@ export class D1EmailOutbox {
         intents[input.kind],
         input.sourceEventId,
         input.recipientEmail,
-        input.orderId ?? null,
-        input.accessChallengeId ?? null,
+        orderId ?? null,
+        accessChallengeId ?? null,
         input.locale,
         input.templateVersion,
         payloadJson,
         maxAttempts,
         input.createdAt,
         input.idempotencyKey,
+        deliveryIdempotencyKey,
         input.createdAt,
         input.createdAt,
       )
       .run();
+    let selection: Readonly<{ sql: string; value: string }>;
+    if (accessChallengeId !== undefined) {
+      selection = Object.freeze({
+        sql: `SELECT id, kind, source_event_id, recipient_email, order_id,
+          access_challenge_id, locale, template_version, payload_json,
+          idempotency_key, provider_idempotency_key FROM email_outbox
+          WHERE kind = 'account_access' AND access_challenge_id = ?`,
+        value: accessChallengeId,
+      });
+    } else if (input.kind === "payment_confirmation") {
+      assertId(orderId, "Order id");
+      selection = Object.freeze({
+        sql: `SELECT id, kind, source_event_id, recipient_email, order_id,
+          access_challenge_id, locale, template_version, payload_json,
+          idempotency_key, provider_idempotency_key FROM email_outbox
+          WHERE kind = 'payment_confirmation' AND order_id = ?`,
+        value: orderId,
+      });
+    } else {
+      selection = Object.freeze({
+        sql: `SELECT id, kind, source_event_id, recipient_email, order_id,
+          access_challenge_id, locale, template_version, payload_json,
+          idempotency_key, provider_idempotency_key FROM email_outbox
+          WHERE idempotency_key = ?`,
+        value: input.idempotencyKey,
+      });
+    }
     const persisted = await this.database
-      .prepare(
-        `SELECT id, kind, source_event_id, idempotency_key FROM email_outbox
-        WHERE idempotency_key = ?`,
-      )
-      .bind(input.idempotencyKey)
+      .prepare(selection.sql)
+      .bind(selection.value)
       .first<{
         id: string;
         kind: string;
         source_event_id: string;
+        recipient_email: string | null;
+        order_id: string | null;
+        access_challenge_id: string | null;
+        locale: string;
+        template_version: string;
+        payload_json: string | null;
         idempotency_key: string;
+        provider_idempotency_key: string;
       }>();
+    const hasBusinessDedupe =
+      input.kind === "account_access" || input.kind === "payment_confirmation";
     if (
-      !persisted || persisted.id !== input.id || persisted.kind !== input.kind ||
-      persisted.source_event_id !== input.sourceEventId
+      !persisted || persisted.kind !== input.kind ||
+      persisted.recipient_email !== input.recipientEmail ||
+      persisted.order_id !== (orderId ?? null) ||
+      persisted.access_challenge_id !== (accessChallengeId ?? null) ||
+      persisted.locale !== input.locale ||
+      persisted.template_version !== input.templateVersion ||
+      persisted.payload_json !== payloadJson ||
+      persisted.provider_idempotency_key !== deliveryIdempotencyKey ||
+      (!hasBusinessDedupe && (
+        persisted.id !== input.id ||
+        persisted.source_event_id !== input.sourceEventId ||
+        persisted.idempotency_key !== input.idempotencyKey
+      ))
     ) {
       throw new EmailOutboxError(
         "PERSISTENCE_FAILURE",
-        "Idempotency key was already used for another intent.",
+        "A durable email key was already used for another intent or payload.",
       );
     }
     return Object.freeze({ id: persisted.id, created: changed(insert) === 1 });
@@ -271,7 +446,7 @@ export class D1EmailOutbox {
       .prepare(
         `SELECT id, kind, source_event_id, recipient_email, order_id,
           access_challenge_id, locale, template_version, payload_json,
-          attempts, max_attempts, lease_token_hash
+          attempts, max_attempts, lease_token_hash, provider_idempotency_key
         FROM email_outbox WHERE lease_token_hash = ? AND status = 'sending'`,
       )
       .bind(input.leaseTokenHash);
@@ -394,9 +569,16 @@ export class D1EmailOutbox {
         transactionalEmailProviderClosed.reason,
       );
     }
+    let receipt: TransactionalEmailDeliveryReceipt;
     try {
-      await this.provider.deliver(claim);
+      receipt = await this.provider.deliver(Object.freeze({
+        message: claim,
+        idempotencyKey: claim.providerIdempotencyKey,
+      }));
     } catch {
+      return this.markDeliveryFailure(claim, now, true);
+    }
+    if (!receipt || receipt.idempotencyKey !== claim.providerIdempotencyKey) {
       return this.markDeliveryFailure(claim, now, true);
     }
     await this.markSent(claim, now);
