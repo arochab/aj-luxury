@@ -30,7 +30,7 @@ Dernière mise à jour de la gouvernance des domaines et de la release Hero : 11
 - Code, accès et documentation à remettre selon l’architecture retenue.
 - Validation par étapes.
 - Domaine `ajluxurystore.com` actif et site publié sur l'hébergement AJ Luxury depuis le 8 août 2026 ; `www` est également actif en HTTPS.
-- Domaine `ajluxurystore.fr` déclaré acheté par Jérémy le 10 août 2026 en réservation défensive et confirmé enregistré par l’AFNIC jusqu’au 10 août 2029. Adam décide le 11 août qu’il doit rediriger vers le `.com` pour chaque release, sans second site. Il reste parqué tant que l’accès collaborateur Hostinger n’inclut pas la gestion DNS du `.fr`.
+- Domaine `ajluxurystore.fr` déclaré acheté par Jérémy le 10 août 2026 en réservation défensive et confirmé enregistré par l’AFNIC jusqu’au 10 août 2029. Décision courante d’Adam du 11 août : il reste parqué et reporté, hors chemin critique du lancement `.com`. Toute future activation sera une redirection vers le `.com`, sans second site et avec un handoff séparé.
 - Aucun service d'e-mail professionnel ni compte de paiement n'est encore documenté comme opérationnel.
 - Le candidat vidéo d’accueil v4 est intégré, recetté puis publié sur le `.com` comme
   version Sites 31 liée au SHA exact `c7362d3d04af6fc6070a15112a1fdff7878e09bd` :
@@ -48,7 +48,7 @@ Dernière mise à jour de la gouvernance des domaines et de la release Hero : 11
 - CGV, mentions légales, traductions et textes d’e-mails validés.
 - Comptes, contrats, vérifications d’identité et accès techniques des services tiers.
 - Gouvernance des comptes : tous les actifs structurants restent au nom d’AJ Luxury.
-- Pour le `.fr` défensif : étendre l’accès collaborateur à ce domaine, conserver la preuve de propriété, le renouvellement, la récupération, la double authentification et le verrou de transfert ; la politique e-mail reste une décision séparée.
+- Pour le `.fr` défensif : aucune action n’est requise avant le lancement `.com`. Conserver la preuve de propriété, le renouvellement, la récupération, la double authentification et le verrou de transfert ; l’accès, la redirection et la politique e-mail seront traités ultérieurement.
 - Pour la vidéo v4 : la confirmation écrite directe d’Isabelle, les validations Adam et
   Jérémy, le SHA, la version Sites, le déploiement et les smoke tests sont reliés dans le
   handoff interne. Conserver cette chaîne de preuve et le rollback version 30.

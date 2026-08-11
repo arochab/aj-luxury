@@ -2,7 +2,7 @@
 
 Date : 10 août 2026
 
-Statut : enregistré et parqué — redirection vers le `.com` autorisée le 11 août 2026, non encore exécutée
+Statut : enregistré et parqué — REDIRECTION REPORTÉE, HORS CHEMIN CRITIQUE DU LANCEMENT `.COM`
 Classification : interne AJ Luxury — preuve client non publiable et exclue des assets du site
 
 ## Verdict
@@ -58,14 +58,22 @@ Sources publiques : [RDAP AFNIC](https://rdap.nic.fr/domain/ajluxurystore.fr) et
 - Les zones DNS `.com` et `.fr` restent séparées. Ne jamais recopier en bloc la
   zone de l’une vers l’autre.
 
-## OPEN DECISION — expérience du domaine défensif
+## DECIDED — expérience du domaine défensif reportée
 
-### Mise à jour de décision du 11 août 2026
+### Décision courante du 11 août 2026
 
-Adam confirme que lui-même et Jérémy autorisent l’usage public du domaine `.fr` pour
+Adam décide de concentrer le lancement e-commerce sur `ajluxurystore.com` et de traiter
+le `.fr` ultérieurement. La redirection n’est plus un prérequis, un blocage ni un gate
+de mise en production du `.com`. Le domaine reste parqué et défensif. Toute future
+mutation exige un nouveau handoff borné et une validation explicite ; le mécanisme
+prévu reste une redirection permanente vers le `.com`, jamais un second site.
+
+### Décision antérieure du 11 août 2026 — SUPERSEDED, conservée comme historique
+
+Adam avait confirmé que lui-même et Jérémy autorisaient l’usage public du domaine `.fr` pour
 accéder à AJ Luxury. Cette décision est mise en œuvre sans second site : le `.com` reste
-canonique et le `.fr` doit uniquement rediriger vers lui. La mutation reste séparée de
-la release applicative et n’est pas encore exécutée.
+canonique et le `.fr` devait uniquement rediriger vers lui. Cette décision a été reportée
+par la décision courante ci-dessus ; aucune mutation n’a été exécutée.
 
 Snapshot public immédiatement antérieur à toute mutation, relevé le 11 août 2026 :
 

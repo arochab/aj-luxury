@@ -1,6 +1,6 @@
 # AJ Luxury | Vue dirigeant du Lot 2
 
-**FRONT `.COM` LIVE | LOT 2 EN TEST LOCAL | VENTES RÉELLES DÉSACTIVÉES | `.FR` EN ATTENTE**
+**FRONT `.COM` LIVE | LOT 2 EN TEST LOCAL | VENTES RÉELLES DÉSACTIVÉES | `.FR` REPORTÉ**
 
 Dernière mise à jour : 11 août 2026
 
@@ -34,8 +34,8 @@ mindmap
       Consentement cookies
       Interfaces connectées
       Préproduction privée
-    BLOQUÉ
-      Accès DNS du .fr
+    REPORTÉ
+      Domaine .fr hors chemin critique
       Données produit finales
       Comptes prestataires AJ Luxury
       Points légaux restants
@@ -75,7 +75,7 @@ construire puis connecter.
 | `TEST LOCAL` | Commerce, stock, comptes, admin, e-mails/RGPD | Version intégrée locale, 21 tables, 188/188 tests verts en un seul lancement | Socle accepté ; aucune activation réelle |
 | `À CONSTRUIRE` | Expédition, suivi, retours, remboursements | Périmètre audité et exécution locale lancée ; aucun candidat encore accepté | Candidat figé puis contrôle indépendant |
 | `À CONSTRUIRE` | Cookies, consentement, analytics | Périmètre lean audité ; mesure présente mais inactive, aucune collecte | Après le bloc logistique |
-| `BLOQUÉ` | Redirection `.fr` vers `.com` | Domaine parqué ; aucune duplication du site | Jérémy partage la gestion domaine/DNS dans Hostinger |
+| `REPORTÉ` | Redirection `.fr` vers `.com` | Domaine parqué ; aucune duplication du site | Handoff séparé après le lancement `.com` |
 
 ## Suite
 
@@ -87,7 +87,7 @@ construire puis connecter.
 
 ## Manques et blocages
 
-- **Jérémy / Hostinger** : partager la gestion du `.fr` pour activer sa redirection HTTPS vers le `.com`.
+- **Domaine `.fr`** : aucune action requise pour le lancement ; redirection traitée ultérieurement dans un handoff séparé.
 - **Jérémy** : confirmer réserves cadeaux/SAV et stock réellement vendable par variante.
 - **Jérémy** : fournir poids/dimensions du colis, origine, guide des tailles, entretien, étiquettes et dispositif d’hygiène.
 - **Jérémy / AJ Luxury** : ouvrir les comptes paiement, transport et e-mail avec double authentification et vérification d’identité ; aucun compte personnel Adam ne sera utilisé.

@@ -219,17 +219,17 @@ vertes ensemble. Une vidéo publique ou un écran de compte ne suffit pas.
 | Vente et client | Base SQL, catalogue, panier, réservation, commande, paiement simulé, comptes et administration construits en test | Candidat intégré accepté, interface compte connectée, checkout invité décidé, sauvegarde/restauration et parcours complet prouvés | Adam |
 | Paiement, e-mails et logistique | Contrats techniques et règles d’adresse UE, UK, US, Canada préparés | Comptes AJ Luxury avec MFA/KYC, prestataires choisis, paiement sandbox, e-mails reçus, colis/transporteur/tarifs/délais/suivi, douane et retours recettés | AJ Luxury + Adam |
 | Droit, données et confiance | CGV, confidentialité, cookies, livraison/retours et rétractation structurés | Identité légale complète, téléphone/directeur de publication, médiateur, validation TVA/EORI/droits, sous-traitants, rétractation durable, consentement et analytics | AJ Luxury + conseils + Adam |
-| Mise en ligne et exploitation | Front `.com` actif, Hero V4 version 31 déployée, contrôle indépendant PASS et rollback version 30 conservé | Redirection `.fr`, préproduction privée exacte, tests Lot 2 sans argent réel, alertes/procédures, validation Adam puis Jérémy du backend exact | Adam puis Jérémy |
+| Mise en ligne et exploitation | Front `.com` actif, Hero V4 version 31 déployée, contrôle indépendant PASS et rollback version 30 conservé | Préproduction privée exacte, tests Lot 2 sans argent réel, alertes/procédures, validation Adam puis Jérémy du backend exact | Adam puis Jérémy |
 
-Le `.fr` ne reçoit jamais une seconde application : une fois son accès DNS partagé, il
-redirige en HTTPS vers le `.com`. Chaque future release est donc unique, puis vérifiée
-sur les deux domaines.
+Le `.fr` est reporté et ne bloque plus l’ouverture du `.com`. Il ne reçoit jamais une
+seconde application ; toute future redirection HTTPS vers le `.com` sera traitée dans
+un handoff séparé après une nouvelle validation explicite.
 
 ## Trois priorités actives
 
-1. Rendre le test Wrangler I06 reproductible et obtenir le PASS indépendant complet.
-2. Lancer D03 expédition, suivi, retours et remboursements seulement après ce PASS.
-3. Faire rediriger le `.fr`, puis construire A02 consentement/cookies et les connexions sandbox.
+1. Corriger D03 expédition, suivi, retours et remboursements puis geler un candidat.
+2. Obtenir les PASS indépendants sur ce SHA exact et construire A02 consentement/cookies.
+3. Connecter les prestataires en sandbox et prouver le parcours complet en préproduction privée.
 
 ## File de relais bornés
 
