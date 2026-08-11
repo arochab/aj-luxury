@@ -1,0 +1,852 @@
+import type { AdminRole } from "./access-control.ts";
+import {
+  createOneTimeAccessToken,
+  createOpaqueAccessToken,
+  hashOneTimeAccessToken,
+  isCanonicalUtcTimestamp,
+  isOpaqueAccessToken,
+} from "./account-security.ts";
+import type { CommerceD1Database } from "./d1-port.ts";
+import { accessRequestAcknowledgement } from "./identity-access-policy.ts";
+
+const safeInternalId = /^[a-z0-9][a-z0-9_-]{0,127}$/i;
+const sha256Hex = /^[0-9a-f]{64}$/;
+const genericAccessResponse = accessRequestAcknowledgement;
+
+const durations = Object.freeze({
+  customer: Object.freeze({ absoluteMs: 7 * 24 * 60 * 60_000, idleMs: 30 * 60_000 }),
+  guest: Object.freeze({ absoluteMs: 24 * 60 * 60_000, idleMs: 15 * 60_000 }),
+  admin: Object.freeze({ absoluteMs: 8 * 60 * 60_000, idleMs: 15 * 60_000 }),
+});
+
+export class IdentityAccessError extends Error {
+  readonly code:
+    | "INVALID_INPUT"
+    | "DEPENDENCY_UNAVAILABLE"
+    | "RATE_LIMITED"
+    | "PERSISTENCE_FAILURE";
+
+  constructor(
+    code:
+      | "INVALID_INPUT"
+      | "DEPENDENCY_UNAVAILABLE"
+      | "RATE_LIMITED"
+      | "PERSISTENCE_FAILURE",
+    message: string,
+  ) {
+    super(message);
+    this.name = "IdentityAccessError";
+    this.code = code;
+  }
+}
+
+export type IdentityDelivery = Readonly<{
+  destinationEmail: string;
+  rawToken: string;
+  expiresAt: string;
+  purpose: "customer_sign_in" | "guest_order_access";
+  orderNumber?: string;
+}>;
+
+export interface IdentityDeliveryPort {
+  deliver(input: IdentityDelivery): Promise<void>;
+}
+
+export interface IdentityRateLimitPort {
+  take(input: Readonly<{
+    scope: "customer_sign_in" | "guest_order_access" | "admin_sign_in";
+    discriminatorHash: string;
+    now: string;
+  }>): Promise<boolean>;
+}
+
+export type VerifiedExternalMfa = Readonly<{
+  externalSubjectHash: string;
+  evidenceHash: string;
+  aal: number;
+  authenticatedAt: string;
+}>;
+
+export interface ExternalMfaPort {
+  verify(assertion: unknown): Promise<VerifiedExternalMfa | null>;
+}
+
+const closedDeliveryPort: IdentityDeliveryPort = Object.freeze({
+  async deliver() {
+    throw new IdentityAccessError(
+      "DEPENDENCY_UNAVAILABLE",
+      "Identity delivery is not configured.",
+    );
+  },
+});
+
+const closedRateLimitPort: IdentityRateLimitPort = Object.freeze({
+  async take() {
+    return false;
+  },
+});
+
+const closedMfaPort: ExternalMfaPort = Object.freeze({
+  async verify() {
+    throw new IdentityAccessError(
+      "DEPENDENCY_UNAVAILABLE",
+      "External MFA verification is not configured.",
+    );
+  },
+});
+
+export const closedIdentityAccessPorts = Object.freeze({
+  delivery: closedDeliveryPort,
+  rateLimit: closedRateLimitPort,
+  externalMfa: closedMfaPort,
+  available: false,
+  reason: "external-identity-providers-not-configured",
+} as const);
+
+type SessionResult = Readonly<{
+  token: string;
+  csrfToken: string;
+  expiresAt: string;
+  idleExpiresAt: string;
+}>;
+
+export type OrderAccessActor =
+  | Readonly<{ kind: "customer"; sessionToken: string }>
+  | Readonly<{ kind: "guest-order"; sessionToken: string }>
+  | Readonly<{ kind: "admin"; sessionToken: string }>;
+
+export type AccessibleOrder = Readonly<{
+  id: string;
+  orderNumber: string;
+  status: string;
+}>;
+
+function assertInternalId(value: string, label: string): void {
+  if (!safeInternalId.test(value)) {
+    throw new IdentityAccessError("INVALID_INPUT", `${label} is invalid.`);
+  }
+}
+
+function assertTimestamp(value: string, label: string): void {
+  if (!isCanonicalUtcTimestamp(value)) {
+    throw new IdentityAccessError("INVALID_INPUT", `${label} must be canonical UTC.`);
+  }
+}
+
+function addMilliseconds(timestamp: string, milliseconds: number): string {
+  return new Date(Date.parse(timestamp) + milliseconds).toISOString();
+}
+
+function earlierTimestamp(left: string, right: string): string {
+  return left < right ? left : right;
+}
+
+function normalizeEmail(value: string): string {
+  if (typeof value !== "string") {
+    throw new IdentityAccessError("INVALID_INPUT", "Email is invalid.");
+  }
+  const normalized = value.trim().toLowerCase();
+  if (
+    normalized.length < 3 ||
+    normalized.length > 254 ||
+    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)
+  ) {
+    throw new IdentityAccessError("INVALID_INPUT", "Email is invalid.");
+  }
+  return normalized;
+}
+
+function isExpectedContention(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : "";
+  return /UNIQUE constraint failed|identity_.+_insert_not_allowed/.test(message);
+}
+
+function changed(result: { meta?: { changes?: number } } | undefined): number {
+  return Number(result?.meta?.changes ?? 0);
+}
+
+export class D1IdentityAccessStore {
+  private readonly database: CommerceD1Database;
+  private readonly ports: Readonly<{
+    delivery: IdentityDeliveryPort;
+    rateLimit: IdentityRateLimitPort;
+    externalMfa: ExternalMfaPort;
+  }>;
+
+  constructor(
+    database: CommerceD1Database,
+    ports: Readonly<{
+      delivery: IdentityDeliveryPort;
+      rateLimit: IdentityRateLimitPort;
+      externalMfa: ExternalMfaPort;
+    }> = closedIdentityAccessPorts,
+  ) {
+    this.database = database;
+    this.ports = ports;
+  }
+
+  async requestCustomerSignIn(input: Readonly<{
+    email: string;
+    challengeId: string;
+    now: string;
+  }>): Promise<typeof genericAccessResponse> {
+    const email = normalizeEmail(input.email);
+    assertInternalId(input.challengeId, "Challenge id");
+    assertTimestamp(input.now, "Now");
+
+    const discriminatorHash = await hashOneTimeAccessToken(email);
+    if (
+      !(await this.ports.rateLimit.take({
+        scope: "customer_sign_in",
+        discriminatorHash,
+        now: input.now,
+      }))
+    ) {
+      return genericAccessResponse;
+    }
+
+    const customer = await this.database
+      .prepare(
+        `SELECT id, email FROM customers
+        WHERE lower(email) = ? AND account_enabled_at IS NOT NULL
+          AND deleted_at IS NULL
+        LIMIT 1`,
+      )
+      .bind(email)
+      .first<{ id: string; email: string }>();
+    const challenge = await createOneTimeAccessToken(new Date(input.now));
+
+    await this.database
+      .prepare(
+        `INSERT INTO access_challenges (
+          id, purpose, customer_id, order_id, token_hash, expires_at,
+          dispatched_at, consumed_at, revoked_at, created_at
+        ) VALUES (?, 'customer_sign_in', ?, NULL, ?, ?, NULL, NULL, ?, ?)`,
+      )
+      .bind(
+        input.challengeId,
+        customer?.id ?? null,
+        challenge.tokenHash,
+        challenge.expiresAt,
+        customer === null ? input.now : null,
+        input.now,
+      )
+      .run();
+
+    if (customer === null) return genericAccessResponse;
+
+    try {
+      await this.ports.delivery.deliver({
+        destinationEmail: customer.email,
+        rawToken: challenge.token,
+        expiresAt: challenge.expiresAt,
+        purpose: "customer_sign_in",
+      });
+    } catch {
+      await this.revokeChallenge(input.challengeId, input.now);
+      return genericAccessResponse;
+    }
+
+    const dispatch = await this.database
+      .prepare(
+        `UPDATE access_challenges SET dispatched_at = ?
+        WHERE id = ? AND dispatched_at IS NULL AND consumed_at IS NULL
+          AND revoked_at IS NULL AND expires_at > ?`,
+      )
+      .bind(input.now, input.challengeId, input.now)
+      .run();
+    if (changed(dispatch) !== 1) {
+      throw new IdentityAccessError(
+        "PERSISTENCE_FAILURE",
+        "Delivered customer challenge could not be activated.",
+      );
+    }
+
+    return genericAccessResponse;
+  }
+
+  async requestGuestOrderAccess(input: Readonly<{
+    email: string;
+    orderNumber: string;
+    challengeId: string;
+    now: string;
+  }>): Promise<typeof genericAccessResponse> {
+    const email = normalizeEmail(input.email);
+    if (typeof input.orderNumber !== "string") {
+      throw new IdentityAccessError("INVALID_INPUT", "Order number is invalid.");
+    }
+    const orderNumber = input.orderNumber.trim().toUpperCase();
+    assertInternalId(input.challengeId, "Challenge id");
+    assertTimestamp(input.now, "Now");
+    if (!/^[A-Z0-9][A-Z0-9_-]{2,63}$/.test(orderNumber)) {
+      throw new IdentityAccessError("INVALID_INPUT", "Order number is invalid.");
+    }
+
+    const discriminatorHash = await hashOneTimeAccessToken(`${orderNumber}\n${email}`);
+    if (
+      !(await this.ports.rateLimit.take({
+        scope: "guest_order_access",
+        discriminatorHash,
+        now: input.now,
+      }))
+    ) {
+      return genericAccessResponse;
+    }
+
+    const order = await this.database
+      .prepare(
+        `SELECT id, order_number, email FROM orders
+        WHERE order_number = ? AND lower(email) = ? AND customer_id IS NULL
+        LIMIT 1`,
+      )
+      .bind(orderNumber, email)
+      .first<{ id: string; order_number: string; email: string }>();
+    if (order === null) return genericAccessResponse;
+
+    const challenge = await createOneTimeAccessToken(new Date(input.now));
+    await this.database
+      .prepare(
+        `INSERT INTO access_challenges (
+          id, purpose, customer_id, order_id, token_hash, expires_at,
+          dispatched_at, consumed_at, revoked_at, created_at
+        ) VALUES (?, 'guest_order_access', NULL, ?, ?, ?, NULL, NULL, NULL, ?)`,
+      )
+      .bind(
+        input.challengeId,
+        order.id,
+        challenge.tokenHash,
+        challenge.expiresAt,
+        input.now,
+      )
+      .run();
+
+    try {
+      await this.ports.delivery.deliver({
+        destinationEmail: order.email,
+        rawToken: challenge.token,
+        expiresAt: challenge.expiresAt,
+        purpose: "guest_order_access",
+        orderNumber: order.order_number,
+      });
+    } catch {
+      await this.revokeChallenge(input.challengeId, input.now);
+      return genericAccessResponse;
+    }
+
+    const dispatch = await this.database
+      .prepare(
+        `UPDATE access_challenges SET dispatched_at = ?
+        WHERE id = ? AND dispatched_at IS NULL AND consumed_at IS NULL
+          AND revoked_at IS NULL AND expires_at > ?`,
+      )
+      .bind(input.now, input.challengeId, input.now)
+      .run();
+    if (changed(dispatch) !== 1) {
+      throw new IdentityAccessError(
+        "PERSISTENCE_FAILURE",
+        "Delivered guest challenge could not be activated.",
+      );
+    }
+
+    return genericAccessResponse;
+  }
+
+  async consumeCustomerChallenge(input: Readonly<{
+    rawChallengeToken: string;
+    sessionId: string;
+    now: string;
+  }>): Promise<SessionResult | null> {
+    return this.consumeChallenge(input, "customer");
+  }
+
+  async consumeGuestOrderChallenge(input: Readonly<{
+    rawChallengeToken: string;
+    sessionId: string;
+    now: string;
+  }>): Promise<SessionResult | null> {
+    return this.consumeChallenge(input, "guest");
+  }
+
+  private async consumeChallenge(
+    input: Readonly<{
+      rawChallengeToken: string;
+      sessionId: string;
+      now: string;
+    }>,
+    kind: "customer" | "guest",
+  ): Promise<SessionResult | null> {
+    if (!isOpaqueAccessToken(input.rawChallengeToken)) return null;
+    assertInternalId(input.sessionId, "Session id");
+    assertTimestamp(input.now, "Now");
+    const challengeHash = await hashOneTimeAccessToken(input.rawChallengeToken);
+    const session = await createOpaqueAccessToken();
+    const csrf = await createOpaqueAccessToken();
+    const expiresAt = addMilliseconds(input.now, durations[kind].absoluteMs);
+    const idleExpiresAt = addMilliseconds(input.now, durations[kind].idleMs);
+
+    const consume = this.database
+      .prepare(
+        `UPDATE access_challenges SET consumed_at = ?
+        WHERE token_hash = ? AND purpose = ? AND dispatched_at IS NOT NULL
+          AND consumed_at IS NULL AND revoked_at IS NULL AND expires_at > ?`,
+      )
+      .bind(
+        input.now,
+        challengeHash,
+        kind === "customer" ? "customer_sign_in" : "guest_order_access",
+        input.now,
+      );
+    const create =
+      kind === "customer"
+        ? this.database
+            .prepare(
+              `INSERT INTO customer_sessions (
+                id, customer_id, token_hash, csrf_token_hash, session_family_id,
+                authentication_source, issued_by_challenge_id,
+                rotated_from_session_id, expires_at, idle_expires_at,
+                last_seen_at, revoked_at, created_at
+              )
+              SELECT ?, customer_id, ?, ?, ?, 'challenge', id, NULL, ?, ?, NULL, NULL, ?
+              FROM access_challenges
+              WHERE token_hash = ? AND purpose = 'customer_sign_in'
+                AND customer_id IS NOT NULL AND consumed_at = ? AND revoked_at IS NULL`,
+            )
+            .bind(
+              input.sessionId,
+              session.tokenHash,
+              csrf.tokenHash,
+              input.sessionId,
+              expiresAt,
+              idleExpiresAt,
+              input.now,
+              challengeHash,
+              input.now,
+            )
+        : this.database
+            .prepare(
+              `INSERT INTO guest_order_sessions (
+                id, order_id, token_hash, csrf_token_hash, issued_by_challenge_id,
+                expires_at, idle_expires_at, last_seen_at, revoked_at, created_at
+              )
+              SELECT ?, order_id, ?, ?, id, ?, ?, NULL, NULL, ?
+              FROM access_challenges
+              WHERE token_hash = ? AND purpose = 'guest_order_access'
+                AND consumed_at = ? AND revoked_at IS NULL`,
+            )
+            .bind(
+              input.sessionId,
+              session.tokenHash,
+              csrf.tokenHash,
+              expiresAt,
+              idleExpiresAt,
+              input.now,
+              challengeHash,
+              input.now,
+            );
+
+    try {
+      const results = await this.database.batch([consume, create]);
+      if (changed(results[0]) !== 1 || changed(results[1]) !== 1) return null;
+    } catch (error) {
+      if (isExpectedContention(error)) return null;
+      throw error;
+    }
+
+    return Object.freeze({
+      token: session.token,
+      csrfToken: csrf.token,
+      expiresAt,
+      idleExpiresAt,
+    });
+  }
+
+  async rotateCustomerSession(input: Readonly<{
+    rawSessionToken: string;
+    newSessionId: string;
+    now: string;
+  }>): Promise<SessionResult | null> {
+    if (!isOpaqueAccessToken(input.rawSessionToken)) return null;
+    assertInternalId(input.newSessionId, "Session id");
+    assertTimestamp(input.now, "Now");
+    const oldHash = await hashOneTimeAccessToken(input.rawSessionToken);
+    const current = await this.database
+      .prepare(
+        `SELECT expires_at FROM customer_sessions
+        WHERE token_hash = ? AND revoked_at IS NULL
+          AND expires_at > ? AND idle_expires_at > ?`,
+      )
+      .bind(oldHash, input.now, input.now)
+      .first<{ expires_at: string }>();
+    if (current === null) return null;
+
+    const replacement = await createOpaqueAccessToken();
+    const csrf = await createOpaqueAccessToken();
+    const idleExpiresAt = earlierTimestamp(
+      addMilliseconds(input.now, durations.customer.idleMs),
+      current.expires_at,
+    );
+    const revoke = this.database
+      .prepare(
+        `UPDATE customer_sessions SET revoked_at = ?
+        WHERE token_hash = ? AND revoked_at IS NULL
+          AND expires_at > ? AND idle_expires_at > ?`,
+      )
+      .bind(input.now, oldHash, input.now, input.now);
+    const create = this.database
+      .prepare(
+        `INSERT INTO customer_sessions (
+          id, customer_id, token_hash, csrf_token_hash, session_family_id,
+          authentication_source, issued_by_challenge_id,
+          rotated_from_session_id, expires_at, idle_expires_at,
+          last_seen_at, revoked_at, created_at
+        )
+        SELECT ?, customer_id, ?, ?, session_family_id, 'rotation', NULL, id,
+          expires_at, ?, NULL, NULL, ?
+        FROM customer_sessions
+        WHERE token_hash = ? AND revoked_at = ?`,
+      )
+      .bind(
+        input.newSessionId,
+        replacement.tokenHash,
+        csrf.tokenHash,
+        idleExpiresAt,
+        input.now,
+        oldHash,
+        input.now,
+      );
+
+    try {
+      const results = await this.database.batch([revoke, create]);
+      if (changed(results[0]) !== 1 || changed(results[1]) !== 1) return null;
+    } catch (error) {
+      if (isExpectedContention(error)) return null;
+      throw error;
+    }
+
+    return Object.freeze({
+      token: replacement.token,
+      csrfToken: csrf.token,
+      expiresAt: current.expires_at,
+      idleExpiresAt,
+    });
+  }
+
+  async createAdminSession(input: Readonly<{
+    assertion: unknown;
+    sessionId: string;
+    now: string;
+    requestedRole?: unknown;
+  }>): Promise<(SessionResult & { role: AdminRole }) | null> {
+    void input.requestedRole;
+    assertInternalId(input.sessionId, "Session id");
+    assertTimestamp(input.now, "Now");
+    const evidence = await this.ports.externalMfa.verify(input.assertion);
+    if (
+      evidence === null ||
+      !sha256Hex.test(evidence.externalSubjectHash) ||
+      !sha256Hex.test(evidence.evidenceHash) ||
+      !Number.isInteger(evidence.aal) ||
+      evidence.aal < 2 ||
+      !isCanonicalUtcTimestamp(evidence.authenticatedAt) ||
+      evidence.authenticatedAt > input.now ||
+      Date.parse(input.now) - Date.parse(evidence.authenticatedAt) > 5 * 60_000
+    ) {
+      return null;
+    }
+
+    const administrator = await this.database
+      .prepare(
+        `SELECT id, role, authz_version FROM administrators
+        WHERE external_subject_hash = ? AND enabled = 1
+        LIMIT 1`,
+      )
+      .bind(evidence.externalSubjectHash)
+      .first<{ id: string; role: AdminRole; authz_version: number }>();
+    if (administrator === null) return null;
+
+    const session = await createOpaqueAccessToken();
+    const csrf = await createOpaqueAccessToken();
+    const expiresAt = addMilliseconds(input.now, durations.admin.absoluteMs);
+    const idleExpiresAt = addMilliseconds(input.now, durations.admin.idleMs);
+    const result = await this.database
+      .prepare(
+        `INSERT INTO admin_sessions (
+          id, administrator_id, token_hash, csrf_token_hash, evidence_hash,
+          authz_version, aal,
+          external_authenticated_at, expires_at, idle_expires_at,
+          last_seen_at, revoked_at, created_at
+        )
+        SELECT ?, id, ?, ?, ?, authz_version, ?, ?, ?, ?, NULL, NULL, ?
+        FROM administrators
+        WHERE id = ? AND enabled = 1 AND authz_version = ?`,
+      )
+      .bind(
+        input.sessionId,
+        session.tokenHash,
+        csrf.tokenHash,
+        evidence.evidenceHash,
+        evidence.aal,
+        evidence.authenticatedAt,
+        expiresAt,
+        idleExpiresAt,
+        input.now,
+        administrator.id,
+        administrator.authz_version,
+      )
+      .run()
+      .catch((error: unknown) => {
+        if (isExpectedContention(error)) return null;
+        throw error;
+      });
+    if (result === null || changed(result) !== 1) return null;
+
+    return Object.freeze({
+      token: session.token,
+      csrfToken: csrf.token,
+      expiresAt,
+      idleExpiresAt,
+      role: administrator.role,
+    });
+  }
+
+  async findAccessibleOrder(
+    orderId: string,
+    actor: OrderAccessActor,
+    now: string,
+  ): Promise<AccessibleOrder | null> {
+    if (typeof orderId !== "string" || !safeInternalId.test(orderId)) {
+      return null;
+    }
+    let actorKind: unknown;
+    let sessionToken: unknown;
+    try {
+      if (typeof actor !== "object" || actor === null) return null;
+      actorKind = actor.kind;
+      sessionToken = actor.sessionToken;
+    } catch {
+      return null;
+    }
+    if (
+      typeof actorKind !== "string" ||
+      !["customer", "guest-order", "admin"].includes(actorKind) ||
+      !isOpaqueAccessToken(sessionToken)
+    ) {
+      return null;
+    }
+    assertTimestamp(now, "Now");
+    const tokenHash = await hashOneTimeAccessToken(sessionToken);
+    let query: string;
+    if (actorKind === "customer") {
+      query = `SELECT customer_order.id, customer_order.order_number, customer_order.status
+        FROM orders AS customer_order
+        INNER JOIN customer_sessions AS session
+          ON session.customer_id = customer_order.customer_id
+        INNER JOIN customers AS customer ON customer.id = session.customer_id
+        WHERE customer_order.id = ? AND session.token_hash = ?
+          AND session.revoked_at IS NULL AND session.expires_at > ?
+          AND session.idle_expires_at > ? AND customer.deleted_at IS NULL
+          AND customer.account_enabled_at IS NOT NULL
+        LIMIT 1`;
+    } else if (actorKind === "guest-order") {
+      query = `SELECT customer_order.id, customer_order.order_number, customer_order.status
+        FROM orders AS customer_order
+        INNER JOIN guest_order_sessions AS session
+          ON session.order_id = customer_order.id
+        WHERE customer_order.id = ? AND customer_order.customer_id IS NULL
+          AND session.token_hash = ? AND session.revoked_at IS NULL
+          AND session.expires_at > ? AND session.idle_expires_at > ?
+        LIMIT 1`;
+    } else if (actorKind === "admin") {
+      query = `SELECT customer_order.id, customer_order.order_number, customer_order.status
+        FROM orders AS customer_order
+        INNER JOIN admin_sessions AS session ON session.token_hash = ?
+        INNER JOIN administrators AS administrator
+          ON administrator.id = session.administrator_id
+        WHERE customer_order.id = ? AND administrator.enabled = 1
+          AND administrator.authz_version = session.authz_version
+          AND administrator.role IN ('owner', 'operations')
+          AND session.aal >= 2 AND session.revoked_at IS NULL
+          AND session.expires_at > ? AND session.idle_expires_at > ?
+        LIMIT 1`;
+      const row = await this.database
+        .prepare(query)
+        .bind(tokenHash, orderId, now, now)
+        .first<{ id: string; order_number: string; status: string }>();
+      return row === null
+        ? null
+        : Object.freeze({ id: row.id, orderNumber: row.order_number, status: row.status });
+    } else {
+      return null;
+    }
+
+    const row = await this.database
+      .prepare(query)
+      .bind(orderId, tokenHash, now, now)
+      .first<{ id: string; order_number: string; status: string }>();
+    return row === null
+      ? null
+      : Object.freeze({ id: row.id, orderNumber: row.order_number, status: row.status });
+  }
+
+  async logout(
+    kind: "customer" | "guest-order" | "admin",
+    rawSessionToken: string,
+    now: string,
+  ): Promise<boolean> {
+    if (
+      !["customer", "guest-order", "admin"].includes(kind) ||
+      !isOpaqueAccessToken(rawSessionToken)
+    ) {
+      return false;
+    }
+    assertTimestamp(now, "Now");
+    const tokenHash = await hashOneTimeAccessToken(rawSessionToken);
+    const updateSql =
+      kind === "customer"
+        ? `UPDATE customer_sessions SET revoked_at = ?
+          WHERE token_hash = ? AND revoked_at IS NULL`
+        : kind === "guest-order"
+          ? `UPDATE guest_order_sessions SET revoked_at = ?
+            WHERE token_hash = ? AND revoked_at IS NULL`
+          : `UPDATE admin_sessions SET revoked_at = ?
+            WHERE token_hash = ? AND revoked_at IS NULL`;
+    const result = await this.database
+      .prepare(updateSql)
+      .bind(now, tokenHash)
+      .run();
+    return changed(result) === 1;
+  }
+
+  async authorizeSessionMutation(
+    kind: "customer" | "guest-order" | "admin",
+    rawSessionToken: string,
+    rawCsrfToken: string,
+    now: string,
+  ): Promise<boolean> {
+    if (
+      !["customer", "guest-order", "admin"].includes(kind) ||
+      !isOpaqueAccessToken(rawSessionToken) ||
+      !isOpaqueAccessToken(rawCsrfToken)
+    ) {
+      return false;
+    }
+    assertTimestamp(now, "Now");
+    const [sessionHash, csrfHash] = await Promise.all([
+      hashOneTimeAccessToken(rawSessionToken),
+      hashOneTimeAccessToken(rawCsrfToken),
+    ]);
+    const query =
+      kind === "customer"
+        ? `SELECT 1 AS authorized FROM customer_sessions AS session
+          INNER JOIN customers AS customer ON customer.id = session.customer_id
+          WHERE session.token_hash = ? AND session.csrf_token_hash = ?
+            AND session.revoked_at IS NULL AND session.expires_at > ?
+            AND session.idle_expires_at > ? AND customer.deleted_at IS NULL
+            AND customer.account_enabled_at IS NOT NULL
+          LIMIT 1`
+        : kind === "guest-order"
+          ? `SELECT 1 AS authorized FROM guest_order_sessions
+            WHERE token_hash = ? AND csrf_token_hash = ?
+              AND revoked_at IS NULL AND expires_at > ? AND idle_expires_at > ?
+            LIMIT 1`
+          : `SELECT 1 AS authorized
+            FROM admin_sessions AS session
+            INNER JOIN administrators AS administrator
+              ON administrator.id = session.administrator_id
+            WHERE session.token_hash = ? AND session.csrf_token_hash = ?
+              AND session.revoked_at IS NULL AND session.expires_at > ?
+              AND session.idle_expires_at > ? AND administrator.enabled = 1
+              AND administrator.authz_version = session.authz_version
+            LIMIT 1`;
+    return (
+      (await this.database
+        .prepare(query)
+        .bind(sessionHash, csrfHash, now, now)
+        .first<{ authorized: number }>()) !== null
+    );
+  }
+
+  async touchSession(
+    kind: "customer" | "guest-order" | "admin",
+    rawSessionToken: string,
+    now: string,
+  ): Promise<boolean> {
+    if (
+      !["customer", "guest-order", "admin"].includes(kind) ||
+      !isOpaqueAccessToken(rawSessionToken)
+    ) {
+      return false;
+    }
+    assertTimestamp(now, "Now");
+    const tokenHash = await hashOneTimeAccessToken(rawSessionToken);
+    const duration =
+      kind === "customer"
+        ? durations.customer
+        : kind === "guest-order"
+          ? durations.guest
+          : durations.admin;
+    const selectSql =
+      kind === "customer"
+        ? `SELECT expires_at FROM customer_sessions
+          WHERE token_hash = ? AND revoked_at IS NULL
+            AND expires_at > ? AND idle_expires_at > ?`
+        : kind === "guest-order"
+          ? `SELECT expires_at FROM guest_order_sessions
+            WHERE token_hash = ? AND revoked_at IS NULL
+              AND expires_at > ? AND idle_expires_at > ?`
+          : `SELECT session.expires_at
+            FROM admin_sessions AS session
+            INNER JOIN administrators AS administrator
+              ON administrator.id = session.administrator_id
+            WHERE session.token_hash = ? AND session.revoked_at IS NULL
+              AND session.expires_at > ? AND session.idle_expires_at > ?
+              AND administrator.enabled = 1
+              AND administrator.authz_version = session.authz_version`;
+    const current = await this.database
+      .prepare(selectSql)
+      .bind(tokenHash, now, now)
+      .first<{ expires_at: string }>();
+    if (current === null) return false;
+    const idleExpiresAt = earlierTimestamp(
+      addMilliseconds(now, duration.idleMs),
+      current.expires_at,
+    );
+
+    const updateSql =
+      kind === "customer"
+        ? `UPDATE customer_sessions
+          SET last_seen_at = ?, idle_expires_at = ?
+          WHERE token_hash = ? AND revoked_at IS NULL
+            AND expires_at > ? AND idle_expires_at > ?`
+        : kind === "guest-order"
+          ? `UPDATE guest_order_sessions
+            SET last_seen_at = ?, idle_expires_at = ?
+            WHERE token_hash = ? AND revoked_at IS NULL
+              AND expires_at > ? AND idle_expires_at > ?`
+          : `UPDATE admin_sessions
+            SET last_seen_at = ?, idle_expires_at = ?
+            WHERE token_hash = ? AND revoked_at IS NULL
+              AND expires_at > ? AND idle_expires_at > ?
+              AND EXISTS (
+                SELECT 1 FROM administrators
+                WHERE administrators.id = admin_sessions.administrator_id
+                  AND administrators.enabled = 1
+                  AND administrators.authz_version = admin_sessions.authz_version
+              )`;
+    const result = await this.database
+      .prepare(updateSql)
+      .bind(now, idleExpiresAt, tokenHash, now, now)
+      .run();
+    return changed(result) === 1;
+  }
+
+  private async revokeChallenge(challengeId: string, now: string): Promise<void> {
+    await this.database
+      .prepare(
+        `UPDATE access_challenges SET revoked_at = ?
+        WHERE id = ? AND consumed_at IS NULL AND revoked_at IS NULL`,
+      )
+      .bind(now, challengeId)
+      .run();
+  }
+}

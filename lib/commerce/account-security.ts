@@ -21,6 +21,26 @@ export type OneTimeAccessToken = {
   expiresAt: string;
 };
 
+export type OpaqueAccessToken = Readonly<{
+  token: string;
+  tokenHash: string;
+}>;
+
+export function isOpaqueAccessToken(value: unknown): value is string {
+  return typeof value === "string" && /^[A-Za-z0-9_-]{43}$/.test(value);
+}
+
+export async function createOpaqueAccessToken(): Promise<OpaqueAccessToken> {
+  const tokenBytes = new Uint8Array(TOKEN_BYTES);
+  crypto.getRandomValues(tokenBytes);
+  const token = bytesToBase64Url(tokenBytes);
+
+  return Object.freeze({
+    token,
+    tokenHash: await hashOneTimeAccessToken(token),
+  });
+}
+
 export async function createOneTimeAccessToken(
   now: Date,
   ttlMinutes = 15,
@@ -39,13 +59,11 @@ export async function createOneTimeAccessToken(
     throw new Error("One-time access token creation requires a valid Date.");
   }
 
-  const tokenBytes = new Uint8Array(TOKEN_BYTES);
-  crypto.getRandomValues(tokenBytes);
-  const token = bytesToBase64Url(tokenBytes);
+  const { token, tokenHash } = await createOpaqueAccessToken();
 
   return {
     token,
-    tokenHash: await hashOneTimeAccessToken(token),
+    tokenHash,
     expiresAt: new Date(nowMs + ttlMinutes * 60_000).toISOString(),
   };
 }
@@ -65,7 +83,7 @@ export async function verifyOneTimeAccessToken(
   if (
     typeof providedToken !== "string" ||
     typeof storedTokenHash !== "string" ||
-    !/^[A-Za-z0-9_-]{43}$/.test(providedToken) ||
+    !isOpaqueAccessToken(providedToken) ||
     !/^[0-9a-f]{64}$/i.test(storedTokenHash)
   ) {
     return false;
