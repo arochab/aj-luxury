@@ -3,9 +3,28 @@ import { handleImageOptimization, DEFAULT_DEVICE_SIZES, DEFAULT_IMAGE_SIZES } fr
 import handler from "vinext/server/app-router-entry";
 import { createStaticFileSignal } from "vinext/server/request-pipeline";
 
+interface Fetcher {
+  fetch(request: Request): Promise<Response>;
+}
+
+interface D1Result<T> {
+  results: T[];
+}
+
+interface D1PreparedStatement {
+  bind(...values: unknown[]): D1PreparedStatement;
+  first<T = unknown>(): Promise<T | null>;
+  all<T = unknown>(): Promise<D1Result<T>>;
+}
+
+interface D1Database {
+  prepare(query: string): D1PreparedStatement;
+}
+
 interface Env {
   ASSETS?: Fetcher;
   DB: D1Database;
+  APP_ENV?: string;
   IMAGES: {
     input(stream: ReadableStream): {
       transform(options: Record<string, unknown>): {
@@ -46,6 +65,113 @@ const CACHEABLE_HTML_ROUTES = new Set([
 // Bump this namespace whenever cacheable server-rendered content changes so a
 // deployment never inherits HTML written by an older Worker version.
 const HTML_CACHE_VERSION = "2026-08-10-hero-v4";
+const PREPROD_API_PREFIX = "/api/preprod/";
+
+function jsonResponse(
+  value: unknown,
+  init: ResponseInit = {},
+): Response {
+  const headers = new Headers(init.headers);
+  headers.set("Cache-Control", "no-store");
+  headers.set("Content-Type", "application/json; charset=utf-8");
+  return Response.json(value, { ...init, headers });
+}
+
+export function preprodApiResponse(request: Request, env: RuntimeEnv): Promise<Response> | Response | null {
+  const url = new URL(request.url);
+  if (!url.pathname.startsWith(PREPROD_API_PREFIX)) return null;
+
+  if (env?.APP_ENV !== "preproduction") {
+    return jsonResponse({ error: "not-found" }, { status: 404 });
+  }
+
+  if (!env?.DB) {
+    return jsonResponse(
+      { status: "unavailable", reason: "preproduction-database-not-bound" },
+      { status: 503 },
+    );
+  }
+
+  if (request.method !== "GET") {
+    return jsonResponse({ error: "method-not-allowed" }, { status: 405 });
+  }
+
+  if (url.pathname === `${PREPROD_API_PREFIX}health`) {
+    return (async () => {
+      const database = env.DB;
+      const migration = await database
+        .prepare(
+          "SELECT name FROM d1_migrations ORDER BY name DESC LIMIT 1",
+        )
+        .first<{ name: string }>();
+      const stock = await database
+        .prepare(
+          `SELECT variant.id AS variant_id,
+            stock.physical_quantity - stock.gift_reserve_quantity
+              - stock.safety_reserve_quantity - stock.active_reserved_quantity
+              - stock.sold_quantity AS available_to_sell
+          FROM variants AS variant
+          INNER JOIN inventory AS stock ON stock.variant_id = variant.id
+          WHERE variant.color_key = ?
+          ORDER BY variant.sort_order`,
+        )
+        .bind("rose")
+        .all<{ variant_id: string; available_to_sell: number }>();
+
+      const latestMigration = migration?.name ?? null;
+      const migrationReady = latestMigration === "0005_fulfillment_returns_refunds.sql";
+      return jsonResponse(
+        {
+          status: migrationReady ? "ready" : "unavailable",
+          environment: "preproduction",
+          payment: "test-only-not-connected",
+          email: "captured-not-sent",
+          carrier: "not-connected",
+          latestMigration,
+          stockProjection: stock.results.map((position: {
+            variant_id: string;
+            available_to_sell: number;
+          }) => ({
+            variantId: position.variant_id,
+            state: position.available_to_sell <= 0
+                ? "sold-out"
+                : position.available_to_sell <= 5
+                  ? "low-stock"
+                  : "available",
+          })),
+        },
+        { status: migrationReady ? 200 : 503 },
+      );
+    })();
+  }
+
+  return jsonResponse({ error: "not-found" }, { status: 404 });
+}
+
+function withSecurityHeaders(
+  response: Response,
+  pathname: string,
+  environment: string | undefined,
+): Response {
+  const headers = new Headers(response.headers);
+  headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  headers.set("X-Content-Type-Options", "nosniff");
+  headers.set("X-Frame-Options", "DENY");
+  headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()");
+  headers.set("Cross-Origin-Opener-Policy", "same-origin");
+  if (environment === "preproduction") {
+    headers.set("X-Robots-Tag", "noindex, nofollow");
+  }
+  if (environment === "preproduction" && pathname.startsWith(PREPROD_API_PREFIX)) {
+    headers.set("Cache-Control", "no-store");
+  }
+
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
 
 type ByteRange = {
   start: number;
@@ -203,16 +329,18 @@ async function serveMp4Range(
   let fullBytes: ArrayBuffer | null = null;
 
   if (request.method === "GET") {
-    fullBytes = await fullResponse.arrayBuffer();
-    totalLength = fullBytes.byteLength;
+    const fetchedBytes = await fullResponse.arrayBuffer();
+    fullBytes = fetchedBytes;
+    totalLength = fetchedBytes.byteLength;
   } else if (totalLength === null) {
     const getResponse = await assets.fetch(
       new Request(assetRequest.url, { method: "GET", headers: fullHeaders }),
     );
     if (!getResponse.ok) return fullResponse;
 
-    fullBytes = await getResponse.arrayBuffer();
-    totalLength = fullBytes.byteLength;
+    const fetchedBytes = await getResponse.arrayBuffer();
+    fullBytes = fetchedBytes;
+    totalLength = fetchedBytes.byteLength;
     fullResponse = new Response(null, {
       status: fullResponse.status,
       statusText: fullResponse.statusText,
@@ -345,6 +473,11 @@ const worker = {
   ): Promise<Response> {
     const url = new URL(request.url);
 
+    const preprodResponse = preprodApiResponse(request, env);
+    if (preprodResponse) {
+      return withSecurityHeaders(await preprodResponse, url.pathname, env?.APP_ENV);
+    }
+
     if (isStaticAsset(url.pathname)) {
       if (env?.ASSETS) return serveStaticAsset(request, env.ASSETS);
 
@@ -380,7 +513,11 @@ const worker = {
       }, allowedWidths);
     }
 
-    return serveApplication(request, env, ctx);
+    return withSecurityHeaders(
+      await serveApplication(request, env, ctx),
+      url.pathname,
+      env?.APP_ENV,
+    );
   },
 };
 

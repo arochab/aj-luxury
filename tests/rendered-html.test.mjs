@@ -3,7 +3,7 @@ import test from "node:test";
 
 async function invokeWorker(
   pathname = "/",
-  { method = "GET", headers = {}, assets } = {},
+  { method = "GET", headers = {}, assets, environment } = {},
 ) {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
   workerUrl.searchParams.set(
@@ -18,6 +18,7 @@ async function invokeWorker(
       headers,
     }),
     {
+      APP_ENV: environment,
       ASSETS:
         assets ??
         ({
@@ -30,6 +31,117 @@ async function invokeWorker(
     },
   );
 }
+
+test("preproduction APIs are invisible without the exact isolated environment", async () => {
+  const missing = await invokeWorker("/api/preprod/health");
+  assert.equal(missing.status, 404);
+  assert.deepEqual(await missing.json(), { error: "not-found" });
+
+  const production = await invokeWorker("/api/preprod/health", {
+    environment: "production",
+  });
+  assert.equal(production.status, 404);
+  assert.deepEqual(await production.json(), { error: "not-found" });
+
+  const isolatedWithoutDatabase = await invokeWorker("/api/preprod/health", {
+    environment: "preproduction",
+  });
+  assert.equal(isolatedWithoutDatabase.status, 503);
+  assert.deepEqual(await isolatedWithoutDatabase.json(), {
+    status: "unavailable",
+    reason: "preproduction-database-not-bound",
+  });
+});
+
+test("production pages remain indexable while preproduction is explicitly noindex", async () => {
+  const production = await render("/");
+  assert.equal(production.headers.get("x-robots-tag"), null);
+
+  const preproduction = await invokeWorker("/", {
+    headers: { accept: "text/html" },
+    environment: "preproduction",
+  });
+  assert.equal(preproduction.headers.get("x-robots-tag"), "noindex, nofollow");
+});
+
+test("preproduction health is ready only on migration 0005 and exposes stock states, not quantities", async () => {
+  const statements = [];
+  const database = {
+    prepare(query) {
+      const statement = {
+        bind() {
+          return statement;
+        },
+        async first() {
+          return query.includes("d1_migrations")
+            ? { name: "0005_fulfillment_returns_refunds.sql" }
+            : null;
+        },
+        async all() {
+          return {
+            results: [
+              { variant_id: "variant_available", available_to_sell: 18 },
+              { variant_id: "variant_low", available_to_sell: 4 },
+              { variant_id: "variant_sold", available_to_sell: 0 },
+            ],
+          };
+        },
+      };
+      statements.push(query);
+      return statement;
+    },
+  };
+  const workerUrl = new URL("../dist/server/index.js", import.meta.url);
+  workerUrl.searchParams.set("health", `${process.pid}-${Date.now()}-${Math.random()}`);
+  const { default: worker } = await import(workerUrl.href);
+  const response = await worker.fetch(
+    new Request("http://localhost/api/preprod/health"),
+    { APP_ENV: "preproduction", DB: database },
+    { waitUntil() {}, passThroughOnException() {} },
+  );
+  assert.equal(response.status, 200);
+  const payload = await response.json();
+  assert.equal(payload.status, "ready");
+  assert.equal(payload.latestMigration, "0005_fulfillment_returns_refunds.sql");
+  assert.deepEqual(payload.stockProjection, [
+    { variantId: "variant_available", state: "available" },
+    { variantId: "variant_low", state: "low-stock" },
+    { variantId: "variant_sold", state: "sold-out" },
+  ]);
+  assert.equal(JSON.stringify(payload).includes("available_to_sell"), false);
+  assert.equal(statements.length, 2);
+});
+
+test("preproduction health stays unavailable on an incomplete migration chain", async () => {
+  const database = {
+    prepare(query) {
+      const statement = {
+        bind() {
+          return statement;
+        },
+        async first() {
+          return query.includes("d1_migrations")
+            ? { name: "0004_email_outbox_data_rights.sql" }
+            : null;
+        },
+        async all() {
+          return { results: [] };
+        },
+      };
+      return statement;
+    },
+  };
+  const workerUrl = new URL("../dist/server/index.js", import.meta.url);
+  workerUrl.searchParams.set("health-old", `${process.pid}-${Date.now()}-${Math.random()}`);
+  const { default: worker } = await import(workerUrl.href);
+  const response = await worker.fetch(
+    new Request("http://localhost/api/preprod/health"),
+    { APP_ENV: "preproduction", DB: database },
+    { waitUntil() {}, passThroughOnException() {} },
+  );
+  assert.equal(response.status, 503);
+  assert.equal((await response.json()).status, "unavailable");
+});
 
 async function render(pathname = "/", headers = {}) {
   return invokeWorker(pathname, {
