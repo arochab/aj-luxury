@@ -118,6 +118,37 @@ function run(root, args, expectFailure = false) {
   return output;
 }
 
+function parseFirstJsonArray(output) {
+  for (let start = output.indexOf("["); start !== -1; start = output.indexOf("[", start + 1)) {
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+    for (let index = start; index < output.length; index += 1) {
+      const character = output[index];
+      if (inString) {
+        if (escaped) escaped = false;
+        else if (character === "\\") escaped = true;
+        else if (character === '"') inString = false;
+        continue;
+      }
+      if (character === '"') inString = true;
+      else if (character === "[") depth += 1;
+      else if (character === "]") {
+        depth -= 1;
+        if (depth === 0) {
+          try {
+            const parsed = JSON.parse(output.slice(start, index + 1));
+            if (Array.isArray(parsed)) return parsed;
+          } catch {
+            break;
+          }
+        }
+      }
+    }
+  }
+  throw new SyntaxError("Wrangler output did not contain a valid JSON array.");
+}
+
 function apply(root, configPath, state) {
   return run(root, [
     "d1",
@@ -151,7 +182,7 @@ function query(root, configPath, state, sql, expectFailure = false) {
     expectFailure,
   );
   if (expectFailure) return output;
-  return JSON.parse(output)[0].results;
+  return parseFirstJsonArray(output)[0].results;
 }
 
 test("0005 is additive, journaled and leaves 0000 through 0004 byte-identical", () => {
