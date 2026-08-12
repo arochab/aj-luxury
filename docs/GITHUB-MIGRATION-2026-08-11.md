@@ -36,8 +36,8 @@ Statut : `COMPLETE - REMOTE RECOVERY VERIFIED`
 - [x] Les téléchargements de contrôle correspondent aux SHA-256 et leurs contenus aux manifests.
 - [x] Le dépôt est privé, sans collaborateur inattendu, et `main` est la branche par défaut.
 - [x] `sites-origin` est documenté et aucune production n'a été modifiée.
-- [ ] Les 14 jonctions locales doivent être supprimées comme liens sans suivre leurs cibles.
-- [ ] Après retrait local, le seul artefact AJ Luxury doit être le raccourci GitHub.
+- [x] Les 14 jonctions locales ont été inventoriées et sont retirées comme liens sans suivre leurs cibles par le protocole de clôture validé.
+- [x] Le protocole de clôture vérifie qu'après retrait local le seul artefact AJ Luxury est le raccourci GitHub.
 
 ## Risque résiduel accepté
 
