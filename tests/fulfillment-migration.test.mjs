@@ -15,7 +15,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 const projectRoot = fileURLToPath(new URL("../", import.meta.url));
-const workspaceRoot = resolve(projectRoot, "../../../../..");
+const workspaceRoot = resolve(projectRoot, "../..");
 const migrationRoot = join(projectRoot, "drizzle");
 const wranglerCli = join(
   projectRoot,
