@@ -16,6 +16,7 @@ import { parseFirstJsonDocument } from "./helpers/parse-json-document.mjs";
 
 const projectRoot = fileURLToPath(new URL("../", import.meta.url));
 const workspaceRoot = projectRoot;
+const proofParent = join(projectRoot, ".aj-d1");
 const workspaceWrangler = join(
   projectRoot,
   "node_modules",
@@ -32,7 +33,7 @@ const migrationNames = [
 ];
 
 function environment(proofRoot) {
-  const temp = join(proofRoot, "temp");
+  const temp = join(proofRoot, "t");
   mkdirSync(temp, { recursive: true });
   const result = {
     CI: "1",
@@ -106,9 +107,8 @@ function query(configPath, state, proofRoot, command) {
 
 test("real local D1 applies 0000 through 0004, upgrades 0002 and 0003, and replays without drift", (t) => {
   assert.ok(existsSync(workspaceWrangler), "workspace Wrangler must exist");
-  const proofParent = join(projectRoot, ".aj-luxury-d1-proofs");
   mkdirSync(proofParent, { recursive: true });
-  const proofRoot = mkdtempSync(join(proofParent, "d02-"));
+  const proofRoot = mkdtempSync(join(proofParent, "p"));
   assert.ok(!relative(workspaceRoot, proofRoot).startsWith(".."));
   t.after(() => rmSync(proofRoot, { recursive: true, force: true, maxRetries: 5 }));
 
