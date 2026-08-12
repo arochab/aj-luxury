@@ -12,6 +12,8 @@ import { join, relative } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
+import { parseFirstJsonDocument } from "./helpers/parse-json-document.mjs";
+
 const projectRoot = fileURLToPath(new URL("../", import.meta.url));
 const workspaceRoot = projectRoot;
 const workspaceWrangler = join(
@@ -99,7 +101,7 @@ function query(configPath, state, proofRoot, command) {
     "d1", "execute", "DB", "--local", "--config", configPath,
     "--persist-to", state, "--command", command, "--json",
   ], proofRoot);
-  return JSON.parse(output)[0].results;
+  return parseFirstJsonDocument(output)[0].results;
 }
 
 test("real local D1 applies 0000 through 0004, upgrades 0002 and 0003, and replays without drift", (t) => {

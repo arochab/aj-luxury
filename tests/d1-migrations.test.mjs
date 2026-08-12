@@ -13,6 +13,8 @@ import {
 } from "node:fs";
 import { isAbsolute, join, relative } from "node:path";
 import test from "node:test";
+
+import { parseFirstJsonDocument } from "./helpers/parse-json-document.mjs";
 import { fileURLToPath } from "node:url";
 
 const projectRoot = fileURLToPath(new URL("../", import.meta.url));
@@ -327,7 +329,7 @@ function executeD1({
 
 function queryD1(input) {
   const output = executeD1({ ...input, json: true });
-  const payload = JSON.parse(output);
+  const payload = parseFirstJsonDocument(output);
   assert.equal(payload.length, 1);
   assert.equal(payload[0].success, true);
   return payload[0].results;
