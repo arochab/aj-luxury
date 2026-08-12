@@ -11,8 +11,8 @@ Statut : `COMPLETE - REMOTE RECOVERY VERIFIED`
 ## Baseline vérifiée
 
 - Branche par défaut : `main`.
-- SHA final : `742e337f420620121d5899c460d0da7720538058`.
-- CI GitHub : succès sur le SHA final.
+- Baseline code testée : `742e337f420620121d5899c460d0da7720538058` ; le commit documentaire final est porté par `main`.
+- CI GitHub : succès sur la baseline code ; le commit documentaire ne modifie aucun code exécutable.
 - Clone indépendant : `npm ci`, lint, build, 188 tests et audit production réussis.
 - Coffre : 10 actifs distants, manifests et SHA-256 concordants.
 - Restauration : 336 fichiers client/source/preuve sur 336 vérifiés ; bundle Git valide ; archive Git finale lisible avec 1 950 entrées.
@@ -42,6 +42,8 @@ Statut : `COMPLETE - REMOTE RECOVERY VERIFIED`
 ## Risque résiduel accepté
 
 La protection de branche GitHub n'est pas disponible pour ce dépôt privé avec l'offre actuelle. La CI reste obligatoire par gouvernance avant toute évolution. Les propositions Dependabot incompatibles ont été fermées sans fusion.
+
+L'audit des dépendances de production est à zéro vulnérabilité. GitHub signale encore des avis sur des dépendances de développement/outillage ; ils ne sont pas fusionnés automatiquement et doivent être traités dans une évolution de compatibilité séparée.
 
 ## Restauration
 
