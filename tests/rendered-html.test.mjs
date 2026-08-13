@@ -13,12 +13,15 @@ async function invokeWorker(
   const { default: worker } = await import(workerUrl.href);
 
   return worker.fetch(
-    new Request(`http://localhost${pathname}`, {
+    new Request(`https://preprod.example${pathname}`, {
       method,
       headers,
     }),
     {
       APP_ENV: environment,
+      ...(environment === "preproduction"
+        ? { PREPROD_ORIGIN: "https://preprod.example" }
+        : {}),
       ASSETS:
         assets ??
         ({
@@ -64,7 +67,7 @@ test("production pages remain indexable while preproduction is explicitly noinde
   assert.equal(preproduction.headers.get("x-robots-tag"), "noindex, nofollow");
 });
 
-test("preproduction health is ready only on migration 0005 and exposes stock states, not quantities", async () => {
+test("preproduction health is ready only on migration 0006 and exposes stock states, not quantities", async () => {
   const statements = [];
   const database = {
     prepare(query) {
@@ -74,7 +77,7 @@ test("preproduction health is ready only on migration 0005 and exposes stock sta
         },
         async first() {
           return query.includes("d1_migrations")
-            ? { name: "0005_fulfillment_returns_refunds.sql" }
+            ? { name: "0006_allow_bounded_expired_cart_purge.sql" }
             : null;
         },
         async all() {
@@ -95,14 +98,21 @@ test("preproduction health is ready only on migration 0005 and exposes stock sta
   workerUrl.searchParams.set("health", `${process.pid}-${Date.now()}-${Math.random()}`);
   const { default: worker } = await import(workerUrl.href);
   const response = await worker.fetch(
-    new Request("http://localhost/api/preprod/health"),
-    { APP_ENV: "preproduction", DB: database },
+    new Request("https://preprod.example/api/preprod/health"),
+    {
+      APP_ENV: "preproduction",
+      PREPROD_ORIGIN: "https://preprod.example",
+      DB: database,
+    },
     { waitUntil() {}, passThroughOnException() {} },
   );
   assert.equal(response.status, 200);
   const payload = await response.json();
   assert.equal(payload.status, "ready");
-  assert.equal(payload.latestMigration, "0005_fulfillment_returns_refunds.sql");
+  assert.equal(
+    payload.latestMigration,
+    "0006_allow_bounded_expired_cart_purge.sql",
+  );
   assert.deepEqual(payload.stockProjection, [
     { variantId: "variant_available", state: "available" },
     { variantId: "variant_low", state: "low-stock" },
@@ -135,8 +145,12 @@ test("preproduction health stays unavailable on an incomplete migration chain", 
   workerUrl.searchParams.set("health-old", `${process.pid}-${Date.now()}-${Math.random()}`);
   const { default: worker } = await import(workerUrl.href);
   const response = await worker.fetch(
-    new Request("http://localhost/api/preprod/health"),
-    { APP_ENV: "preproduction", DB: database },
+    new Request("https://preprod.example/api/preprod/health"),
+    {
+      APP_ENV: "preproduction",
+      PREPROD_ORIGIN: "https://preprod.example",
+      DB: database,
+    },
     { waitUntil() {}, passThroughOnException() {} },
   );
   assert.equal(response.status, 503);

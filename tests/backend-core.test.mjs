@@ -156,6 +156,10 @@ class SQLiteD1Statement {
   }
 
   async run() {
+    if (/^\s*(?:SELECT|WITH)\b/i.test(this.query)) {
+      const results = this.database.prepare(this.query).all(...this.values);
+      return { success: true, results, meta: { changes: 0 } };
+    }
     const result = this.database.prepare(this.query).run(...this.values);
     return {
       success: true,
@@ -2105,5 +2109,220 @@ test("expired reservations and order-cart mismatches cannot be converted", async
   );
   assert.equal((await store.getInventoryPosition(variantId)).activeReservedQuantity, 1);
   assert.equal((await store.getInventoryPosition(variantId)).soldQuantity, 0);
+  database.close();
+});
+
+test("D1 cart lines persist an idempotent server-priced public snapshot without reserving stock", async () => {
+  const { database, store } = createFixture();
+  const createdAt = "2099-08-10T12:00:00.000Z";
+  const cartId = "cart_public_snapshot";
+  const variantId = "variant_boxer_pourpre_m";
+  await store.seedLaunchCatalog(createdAt);
+  await store.createCart({
+    id: cartId,
+    expiresAt: "2099-08-17T12:00:00.000Z",
+    now: createdAt,
+  });
+
+  const first = await store.setCartLineQuantity({
+    cartId,
+    variantId,
+    quantity: 2,
+    now: "2099-08-10T12:01:00.000Z",
+  });
+  const replay = await store.setCartLineQuantity({
+    cartId,
+    variantId,
+    quantity: 2,
+    now: "2099-08-10T12:02:00.000Z",
+  });
+  assert.deepEqual(replay, first);
+  assert.deepEqual(first, {
+    status: "open",
+    currency: "EUR",
+    expiresAt: "2099-08-17T12:00:00.000Z",
+    itemCount: 2,
+    subtotalCents: 5_998,
+    lines: [
+      {
+        variantId,
+        productId: "product_apollon",
+        productSlug: "pourpre",
+        colorKey: "pourpre",
+        colorName: "Pourpre Impérial",
+        size: "M",
+        imageUrl: "/images/client/raw/product-card-pourpre.webp",
+        quantity: 2,
+        unitPriceCents: 2_999,
+        lineTotalCents: 5_998,
+        stockState: "available",
+      },
+    ],
+  });
+  assert.equal(
+    database.prepare("SELECT COUNT(*) AS count FROM cart_lines").get().count,
+    1,
+  );
+  assert.deepEqual(
+    {
+      ...database
+        .prepare(
+          `SELECT active_reserved_quantity, sold_quantity
+          FROM inventory WHERE variant_id = ?`,
+        )
+        .get(variantId),
+    },
+    { active_reserved_quantity: 0, sold_quantity: 0 },
+  );
+  assert.doesNotMatch(
+    JSON.stringify(first),
+    /physical|reserve|available_to_sell|internal_reference|sku|email/i,
+  );
+
+  const changed = await store.setCartLineQuantity({
+    cartId,
+    variantId,
+    quantity: 3,
+    now: "2099-08-10T12:03:00.000Z",
+  });
+  assert.equal(changed.itemCount, 3);
+  assert.equal(changed.subtotalCents, 8_997);
+  const removed = await store.removeCartLine({
+    cartId,
+    variantId,
+    now: "2099-08-10T12:04:00.000Z",
+  });
+  const removedReplay = await store.removeCartLine({
+    cartId,
+    variantId,
+    now: "2099-08-10T12:05:00.000Z",
+  });
+  assert.deepEqual(removedReplay, removed);
+  assert.deepEqual(removed, {
+    status: "open",
+    currency: "EUR",
+    expiresAt: "2099-08-17T12:00:00.000Z",
+    itemCount: 0,
+    subtotalCents: 0,
+    lines: [],
+  });
+  database.close();
+});
+
+test("D1 cart mutations fail closed for unknown stock, expired carts and converted carts", async () => {
+  const { database, store } = createFixture();
+  const now = "2099-08-10T12:00:00.000Z";
+  const variantId = "variant_boxer_rose-pale_s";
+  await store.seedLaunchCatalog(now);
+  await store.createCart({
+    id: "cart_stock_guard",
+    expiresAt: "2099-08-17T12:00:00.000Z",
+    now,
+  });
+  await assert.rejects(
+    () =>
+      store.setCartLineQuantity({
+        cartId: "cart_stock_guard",
+        variantId,
+        quantity: 27,
+        now: "2099-08-10T12:01:00.000Z",
+      }),
+    (error) => error instanceof CommerceError && error.code === "STOCK_UNAVAILABLE",
+  );
+  await assert.rejects(
+    () =>
+      store.setCartLineQuantity({
+        cartId: "cart_stock_guard",
+        variantId: "variant_unknown",
+        quantity: 1,
+        now: "2099-08-10T12:01:00.000Z",
+      }),
+    (error) => error instanceof CommerceError && error.code === "VARIANT_NOT_FOUND",
+  );
+
+  await store.createCart({
+    id: "cart_expired_public",
+    expiresAt: "2099-08-10T12:01:00.000Z",
+    now,
+  });
+  await assert.rejects(
+    () =>
+      store.getPublicCartSnapshot(
+        "cart_expired_public",
+        "2099-08-10T12:01:00.000Z",
+      ),
+    (error) => error instanceof CommerceError && error.code === "CART_EXPIRED",
+  );
+
+  database
+    .prepare("UPDATE carts SET status = 'converted' WHERE id = ?")
+    .run("cart_stock_guard");
+  await assert.rejects(
+    () =>
+      store.removeCartLine({
+        cartId: "cart_stock_guard",
+        variantId,
+        now: "2099-08-10T12:02:00.000Z",
+      }),
+    (error) => error instanceof CommerceError && error.code === "CART_CLOSED",
+  );
+  assert.equal(
+    database.prepare("SELECT COUNT(*) AS count FROM cart_lines").get().count,
+    0,
+  );
+  database.close();
+});
+
+test("D1 cart mutations stay locked once checkout has reserved stock", async () => {
+  const { database, store } = createFixture();
+  const now = "2099-08-10T12:00:00.000Z";
+  const cartId = "cart_checkout_lock";
+  const variantId = "variant_boxer_pourpre_s";
+  await store.seedLaunchCatalog(now);
+  validateReserves(database, [variantId]);
+  await store.createCart({
+    id: cartId,
+    expiresAt: "2099-08-10T14:00:00.000Z",
+    now,
+  });
+  await store.setCartLineQuantity({ cartId, variantId, quantity: 1, now });
+  await store.reserveStock({
+    reservationId: "reservation_checkout_lock",
+    cartId,
+    variantId,
+    quantity: 1,
+    idempotencyKey: "reserve_checkout_lock",
+    expiresAt: "2099-08-10T13:00:00.000Z",
+    now,
+  });
+
+  for (const mutate of [
+    () =>
+      store.setCartLineQuantity({
+        cartId,
+        variantId,
+        quantity: 2,
+        now: "2099-08-10T12:01:00.000Z",
+      }),
+    () =>
+      store.removeCartLine({
+        cartId,
+        variantId,
+        now: "2099-08-10T12:01:00.000Z",
+      }),
+  ]) {
+    await assert.rejects(
+      mutate,
+      (error) => error instanceof CommerceError && error.code === "CART_CLOSED",
+    );
+  }
+  assert.equal(
+    database
+      .prepare(
+        "SELECT quantity FROM cart_lines WHERE cart_id = ? AND variant_id = ?",
+      )
+      .get(cartId, variantId).quantity,
+    1,
+  );
   database.close();
 });

@@ -113,6 +113,10 @@ const expectedMigrationSha256 = {
     "97497dbef41179a669b2ff58286ae9e0986cd8fcb2c76e97ae696f7fd7b1fc5a",
   "0004_email_outbox_data_rights.sql":
     "fdf9c27b57d24c931d234bf8651e83599d10c0e8adfc28b188d165f01c9b59ef",
+  "0005_fulfillment_returns_refunds.sql":
+    "2eff61c2caa307e094f9cf64885816beff5f476dbbfe52a9988560a57faa1008",
+  "0006_allow_bounded_expired_cart_purge.sql":
+    "3cbd7390bb8834305b11f6d791583a86f3c6fe7ba9be23fc91e1e1ea98203a52",
 };
 const ansiPattern = /\u001B\[[0-?]*[ -/]*[@-~]/g;
 
@@ -354,7 +358,10 @@ test("Wrangler applies the canonical D1 chain on empty and journaled databases, 
   );
   assert.deepEqual(
     migrationNames.filter((name) => !expectedMigrationNames.includes(name)),
-    ["0005_fulfillment_returns_refunds.sql"],
+    [
+      "0005_fulfillment_returns_refunds.sql",
+      "0006_allow_bounded_expired_cart_purge.sql",
+    ],
   );
 
   const canonicalConfig = JSON.parse(readFileSync(builtConfigPath, "utf8"));
@@ -375,6 +382,24 @@ test("Wrangler applies the canonical D1 chain on empty and journaled databases, 
       `${migrationName} differs from its reviewed LF-normalized bytes`,
     );
   }
+  const normalizedFulfillmentMigration = readFileSync(
+    join(migrationDirectory, "0005_fulfillment_returns_refunds.sql"),
+    "utf8",
+  ).replaceAll("\r\n", "\n");
+  assert.equal(
+    createHash("sha256").update(normalizedFulfillmentMigration).digest("hex"),
+    expectedMigrationSha256["0005_fulfillment_returns_refunds.sql"],
+    "Hosted bootstrap v1 froze 0005; every later migration must be additive",
+  );
+  const normalizedRetentionMigration = readFileSync(
+    join(migrationDirectory, "0006_allow_bounded_expired_cart_purge.sql"),
+    "utf8",
+  ).replaceAll("\r\n", "\n");
+  assert.equal(
+    createHash("sha256").update(normalizedRetentionMigration).digest("hex"),
+    expectedMigrationSha256["0006_allow_bounded_expired_cart_purge.sql"],
+    "0006 differs from its reviewed LF-normalized bytes",
+  );
   assert.doesNotMatch(baseline, /trg_cart_lines_validate_catalog_insert/);
 
   const proofParent = join(projectRoot, ".wrangler");

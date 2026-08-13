@@ -2,29 +2,33 @@
 import { handleImageOptimization, DEFAULT_DEVICE_SIZES, DEFAULT_IMAGE_SIZES } from "vinext/server/image-optimization";
 import handler from "vinext/server/app-router-entry";
 import { createStaticFileSignal } from "vinext/server/request-pipeline";
+import {
+  accessTokenHashContexts,
+  createOpaqueAccessToken,
+  hashOneTimeAccessToken,
+  isOpaqueAccessToken,
+} from "../lib/commerce/account-security.ts";
+import { CommerceError } from "../lib/commerce/backend-domain.ts";
+import { D1CommerceStore } from "../lib/commerce/d1-commerce-store.ts";
+import type { CommerceD1Database } from "../lib/commerce/d1-port.ts";
+import {
+  authorizeBrowserMutation,
+  buildCsrfCookie,
+  buildSessionCookie,
+  clearCsrfCookie,
+  clearSessionCookie,
+  isTrustedMutationOrigin,
+} from "../lib/commerce/identity-access-policy.ts";
 
 interface Fetcher {
   fetch(request: Request): Promise<Response>;
 }
 
-interface D1Result<T> {
-  results: T[];
-}
-
-interface D1PreparedStatement {
-  bind(...values: unknown[]): D1PreparedStatement;
-  first<T = unknown>(): Promise<T | null>;
-  all<T = unknown>(): Promise<D1Result<T>>;
-}
-
-interface D1Database {
-  prepare(query: string): D1PreparedStatement;
-}
-
 interface Env {
   ASSETS?: Fetcher;
-  DB: D1Database;
+  DB: CommerceD1Database;
   APP_ENV?: string;
+  PREPROD_ORIGIN?: string;
   IMAGES: {
     input(stream: ReadableStream): {
       transform(options: Record<string, unknown>): {
@@ -66,6 +70,19 @@ const CACHEABLE_HTML_ROUTES = new Set([
 // deployment never inherits HTML written by an older Worker version.
 const HTML_CACHE_VERSION = "2026-08-10-hero-v4";
 const PREPROD_API_PREFIX = "/api/preprod/";
+const PREPROD_CART_PATH = `${PREPROD_API_PREFIX}cart`;
+const PREPROD_CART_LINE_PATTERN = /^\/api\/preprod\/cart\/lines\/([^/]+)$/;
+const CART_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
+const CART_MAX_QUANTITY = 5;
+const CART_MAX_ACTIVE_SESSIONS = 250;
+const CART_MAX_CREATIONS_PER_MINUTE = 30;
+const CART_RETENTION_DAYS = 30;
+
+// These limits are a private-preproduction circuit breaker, not a public
+// anti-bot control. A public launch still requires a separately approved edge
+// rate-limit/Turnstile gate and production-sized capacity settings.
+
+type CartSession = Readonly<{ cartId: string }>;
 
 function jsonResponse(
   value: unknown,
@@ -77,11 +94,554 @@ function jsonResponse(
   return Response.json(value, { ...init, headers });
 }
 
-export function preprodApiResponse(request: Request, env: RuntimeEnv): Promise<Response> | Response | null {
+function cartErrorResponse(
+  code: string,
+  message: string,
+  status: number,
+  headers?: HeadersInit,
+): Response {
+  return jsonResponse(
+    {
+      error: {
+        code,
+        message,
+        requestId: `req_${crypto.randomUUID()}`,
+      },
+    },
+    { status, headers },
+  );
+}
+
+function emptyCartResponse(): Response {
+  return jsonResponse({
+    data: {
+      status: "empty",
+      currency: "EUR",
+      expiresAt: null,
+      itemCount: 0,
+      subtotalCents: 0,
+      lines: [],
+    },
+  });
+}
+
+function cookieValues(request: Request, name: string): string[] {
+  const header = request.headers.get("Cookie");
+  if (!header) return [];
+  return header.split(";").flatMap((part) => {
+    const separator = part.indexOf("=");
+    if (separator < 0 || part.slice(0, separator).trim() !== name) return [];
+    return [part.slice(separator + 1).trim()];
+  });
+}
+
+async function readCartSession(request: Request): Promise<CartSession | null> {
+  const values = cookieValues(request, "__Host-aj_cart");
+  if (values.length === 0) return null;
+  const csrfValues = cookieValues(request, "__Host-aj_cart_csrf");
+  if (
+    values.length !== 1 ||
+    csrfValues.length !== 1 ||
+    !isOpaqueAccessToken(values[0]) ||
+    !isOpaqueAccessToken(csrfValues[0])
+  ) {
+    throw new CommerceError("INVALID_INPUT", "The cart session is invalid.");
+  }
+  const tokenHash = await hashOneTimeAccessToken(
+    `${values[0]}:${csrfValues[0]}`,
+    accessTokenHashContexts.cartSession,
+  );
+  return Object.freeze({ cartId: `cart_${tokenHash}` });
+}
+
+function clearCartCookieHeaders(): Headers {
+  const headers = new Headers();
+  headers.append("Set-Cookie", clearSessionCookie("cart"));
+  headers.append("Set-Cookie", clearCsrfCookie("cart"));
+  return headers;
+}
+
+function mutationOriginIsTrusted(request: Request, env: Env): boolean {
+  return (
+    typeof env.PREPROD_ORIGIN === "string" &&
+    request.headers.get("Sec-Fetch-Site") === "same-origin" &&
+    isTrustedMutationOrigin(request.headers.get("Origin"), [env.PREPROD_ORIGIN])
+  );
+}
+
+function mutationIsAuthorized(request: Request, env: Env): boolean {
+  const csrfValues = cookieValues(request, "__Host-aj_cart_csrf");
+  return (
+    csrfValues.length === 1 &&
+    authorizeBrowserMutation({
+      method: request.method,
+      origin: request.headers.get("Origin"),
+      secFetchSite: request.headers.get("Sec-Fetch-Site"),
+      allowedOrigins: [env.PREPROD_ORIGIN ?? ""],
+      csrfCookieToken: csrfValues[0],
+      csrfHeaderToken: request.headers.get("X-CSRF-Token"),
+    })
+  );
+}
+
+async function readBoundedBody(
+  request: Request,
+  maxBytes: number,
+): Promise<Uint8Array | null> {
+  const contentEncoding = request.headers.get("Content-Encoding");
+  const declaredLength = request.headers.get("Content-Length");
+  if (
+    (contentEncoding !== null && contentEncoding.toLowerCase() !== "identity") ||
+    (declaredLength !== null &&
+      (!/^\d+$/.test(declaredLength) || Number(declaredLength) > maxBytes))
+  ) {
+    try {
+      await request.body?.cancel();
+    } catch {
+      // The request is rejected regardless of transport cancellation support.
+    }
+    return null;
+  }
+
+  if (!request.body) return new Uint8Array();
+  const body = new Uint8Array(maxBytes);
+  const reader = request.body.getReader();
+  let length = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (length + value.byteLength > maxBytes) {
+        try {
+          await reader.cancel();
+        } catch {
+          // The size gate already rejected the request.
+        }
+        return null;
+      }
+      body.set(value, length);
+      length += value.byteLength;
+    }
+  } catch {
+    try {
+      await reader.cancel();
+    } catch {
+      // A broken request body is invalid whether cancellation succeeds or not.
+    }
+    return null;
+  } finally {
+    reader.releaseLock();
+  }
+  return body.slice(0, length);
+}
+
+async function requireEmptyBody(request: Request): Promise<boolean> {
+  const body = await readBoundedBody(request, 0);
+  return body !== null && body.byteLength === 0;
+}
+
+async function parseCartQuantity(request: Request): Promise<number | null> {
+  const contentType = request.headers.get("Content-Type")?.split(";", 1)[0].trim();
+  if (contentType !== "application/json") return null;
+
+  let body: unknown;
+  try {
+    const bytes = await readBoundedBody(request, 1024);
+    if (bytes === null) return null;
+    body = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+  } catch {
+    return null;
+  }
+  if (
+    typeof body !== "object" ||
+    body === null ||
+    Array.isArray(body) ||
+    Object.getPrototypeOf(body) !== Object.prototype ||
+    Object.keys(body).length !== 1 ||
+    !("quantity" in body)
+  ) {
+    return null;
+  }
+  const quantity = (body as { quantity?: unknown }).quantity;
+  return Number.isSafeInteger(quantity) &&
+    (quantity as number) >= 1 &&
+    (quantity as number) <= CART_MAX_QUANTITY
+    ? (quantity as number)
+    : null;
+}
+
+function mapCartError(error: unknown): Response {
+  if (!(error instanceof CommerceError)) {
+    return cartErrorResponse(
+      "DATABASE_UNAVAILABLE",
+      "Le panier est momentanément indisponible.",
+      503,
+    );
+  }
+  switch (error.code) {
+    case "CART_NOT_FOUND":
+      return cartErrorResponse(
+        "CART_SESSION_INVALID",
+        "Le panier n’est plus disponible.",
+        401,
+        clearCartCookieHeaders(),
+      );
+    case "CART_CLOSED":
+      return cartErrorResponse(
+        "CART_CLOSED",
+        "Le panier est fermé.",
+        409,
+        clearCartCookieHeaders(),
+      );
+    case "CART_EXPIRED":
+      return cartErrorResponse(
+        "CART_EXPIRED",
+        "Le panier a expiré.",
+        409,
+        clearCartCookieHeaders(),
+      );
+    case "VARIANT_NOT_FOUND":
+      return cartErrorResponse(
+        "VARIANT_NOT_FOUND",
+        "Cette variante n’est pas disponible.",
+        404,
+      );
+    case "STOCK_UNAVAILABLE":
+      return cartErrorResponse(
+        "OUT_OF_STOCK",
+        "La quantité demandée n’est pas disponible.",
+        409,
+      );
+    case "INVALID_INPUT":
+      return cartErrorResponse(
+        "CART_SESSION_INVALID",
+        "La session panier est invalide.",
+        401,
+        clearCartCookieHeaders(),
+      );
+    default:
+      return cartErrorResponse(
+        "CART_CONFLICT",
+        "Le panier ne peut pas être modifié.",
+        409,
+      );
+  }
+}
+
+async function handleCartApi(
+  request: Request,
+  env: Env,
+  url: URL,
+): Promise<Response | null> {
+  const isCartPath = url.pathname === PREPROD_CART_PATH;
+  const lineMatch = PREPROD_CART_LINE_PATTERN.exec(url.pathname);
+  if (!isCartPath && !lineMatch) return null;
+
+  const allowedMethods = isCartPath ? "GET, POST" : "PUT, DELETE";
+  if (!allowedMethods.split(", ").includes(request.method)) {
+    const headers = new Headers({ Allow: allowedMethods });
+    return cartErrorResponse(
+      "METHOD_NOT_ALLOWED",
+      "Méthode non autorisée.",
+      405,
+      headers,
+    );
+  }
+
+  const store = new D1CommerceStore(env.DB);
+  let session: CartSession | null;
+  try {
+    session = await readCartSession(request);
+  } catch (error) {
+    return mapCartError(error);
+  }
+
+  if (isCartPath && request.method === "GET") {
+    if (!session) return emptyCartResponse();
+    try {
+      return jsonResponse({
+        data: await store.getPublicCartSnapshot(
+          session.cartId,
+          new Date().toISOString(),
+        ),
+      });
+    } catch (error) {
+      return mapCartError(error);
+    }
+  }
+
+  if (
+    typeof env.PREPROD_ORIGIN !== "string" ||
+    env.PREPROD_ORIGIN.length === 0
+  ) {
+    return cartErrorResponse(
+      "ORIGIN_NOT_CONFIGURED",
+      "L’origine de préproduction n’est pas configurée.",
+      503,
+    );
+  }
+  if (!mutationOriginIsTrusted(request, env)) {
+    return cartErrorResponse(
+      "ORIGIN_REJECTED",
+      "La requête n’est pas autorisée.",
+      403,
+    );
+  }
+
+  if (isCartPath && request.method === "POST") {
+    if (!(await requireEmptyBody(request))) {
+      return cartErrorResponse("INVALID_BODY", "Le corps doit être vide.", 400);
+    }
+    if (session) {
+      if (!mutationIsAuthorized(request, env)) {
+        return cartErrorResponse(
+          "CSRF_REJECTED",
+          "La requête n’est pas autorisée.",
+          403,
+        );
+      }
+      try {
+        return jsonResponse({
+          data: await store.getPublicCartSnapshot(
+            session.cartId,
+            new Date().toISOString(),
+          ),
+        });
+      } catch (error) {
+        return mapCartError(error);
+      }
+    }
+
+    try {
+      const now = new Date();
+      const expiresAt = new Date(
+        now.getTime() + CART_MAX_AGE_SECONDS * 1000,
+      ).toISOString();
+      const [cartToken, csrfToken] = await Promise.all([
+        createOpaqueAccessToken(accessTokenHashContexts.cartSession),
+        createOpaqueAccessToken(accessTokenHashContexts.cartCsrf),
+      ]);
+      const cartId = `cart_${await hashOneTimeAccessToken(
+        `${cartToken.token}:${csrfToken.token}`,
+        accessTokenHashContexts.cartSession,
+      )}`;
+      const nowIso = now.toISOString();
+      const minuteAgo = new Date(now.getTime() - 60_000).toISOString();
+      const retentionCutoff = new Date(
+        now.getTime() - CART_RETENTION_DAYS * 24 * 60 * 60 * 1000,
+      ).toISOString();
+      const [, , , , created] = await env.DB.batch<[
+        Record<string, never>,
+        Record<string, never>,
+        Record<string, never>,
+        Record<string, never>,
+        { id: string },
+      ]>([
+        env.DB
+          .prepare(
+            `DELETE FROM cart_lines WHERE cart_id IN (
+              SELECT cart.id FROM carts AS cart
+              WHERE length(cart.id) = 69
+                AND substr(cart.id, 1, 5) = 'cart_'
+                AND substr(cart.id, 6) = lower(substr(cart.id, 6))
+                AND substr(cart.id, 6) NOT GLOB '*[^0-9a-f]*'
+                AND cart.customer_id IS NULL AND cart.email IS NULL
+                AND cart.status = 'expired' AND cart.expires_at <= ?
+                AND NOT EXISTS (SELECT 1 FROM orders WHERE orders.cart_id = cart.id)
+                AND NOT EXISTS (
+                  SELECT 1 FROM stock_reservations
+                  WHERE stock_reservations.cart_id = cart.id
+                )
+                AND NOT EXISTS (
+                  SELECT 1 FROM shipping_quotes
+                  WHERE shipping_quotes.cart_id = cart.id
+                )
+              ORDER BY cart.expires_at LIMIT 100
+            )`,
+          )
+          .bind(retentionCutoff),
+        env.DB
+          .prepare(
+            `DELETE FROM carts WHERE id IN (
+              SELECT cart.id FROM carts AS cart
+              WHERE length(cart.id) = 69
+                AND substr(cart.id, 1, 5) = 'cart_'
+                AND substr(cart.id, 6) = lower(substr(cart.id, 6))
+                AND substr(cart.id, 6) NOT GLOB '*[^0-9a-f]*'
+                AND cart.customer_id IS NULL AND cart.email IS NULL
+                AND cart.status = 'expired' AND cart.expires_at <= ?
+                AND NOT EXISTS (
+                  SELECT 1 FROM cart_lines WHERE cart_lines.cart_id = cart.id
+                )
+                AND NOT EXISTS (SELECT 1 FROM orders WHERE orders.cart_id = cart.id)
+                AND NOT EXISTS (
+                  SELECT 1 FROM stock_reservations
+                  WHERE stock_reservations.cart_id = cart.id
+                )
+                AND NOT EXISTS (
+                  SELECT 1 FROM shipping_quotes
+                  WHERE shipping_quotes.cart_id = cart.id
+                )
+              ORDER BY cart.expires_at LIMIT 100
+            )`,
+          )
+          .bind(retentionCutoff),
+        env.DB
+          .prepare(
+            `UPDATE carts SET status = 'expired', updated_at = ?
+            WHERE length(id) = 69
+              AND substr(id, 1, 5) = 'cart_'
+              AND substr(id, 6) = lower(substr(id, 6))
+              AND substr(id, 6) NOT GLOB '*[^0-9a-f]*'
+              AND status = 'open' AND expires_at <= ?`,
+          )
+          .bind(nowIso, nowIso),
+        env.DB
+          .prepare(
+            `INSERT INTO carts (
+              id, customer_id, email, status, currency, expires_at,
+              created_at, updated_at
+            )
+            SELECT ?, NULL, NULL, 'open', 'EUR', ?, ?, ?
+            WHERE (
+              SELECT COUNT(*) FROM carts
+              WHERE length(id) = 69
+                AND substr(id, 1, 5) = 'cart_'
+                AND substr(id, 6) = lower(substr(id, 6))
+                AND substr(id, 6) NOT GLOB '*[^0-9a-f]*'
+                AND status = 'open' AND expires_at > ?
+            ) < ? AND (
+              SELECT COUNT(*) FROM carts
+              WHERE length(id) = 69
+                AND substr(id, 1, 5) = 'cart_'
+                AND substr(id, 6) = lower(substr(id, 6))
+                AND substr(id, 6) NOT GLOB '*[^0-9a-f]*'
+                AND created_at >= ?
+            ) < ?`,
+          )
+          .bind(
+            cartId,
+            expiresAt,
+            nowIso,
+            nowIso,
+            nowIso,
+            CART_MAX_ACTIVE_SESSIONS,
+            minuteAgo,
+            CART_MAX_CREATIONS_PER_MINUTE,
+          ),
+        env.DB.prepare("SELECT id FROM carts WHERE id = ?").bind(cartId),
+      ]);
+      if (!created.results[0]) {
+        return cartErrorResponse(
+          "CART_CAPACITY_REACHED",
+          "Le panier est momentanément indisponible.",
+          503,
+          { "Retry-After": "60" },
+        );
+      }
+      const headers = new Headers();
+      headers.append(
+        "Set-Cookie",
+        buildSessionCookie("cart", cartToken.token, CART_MAX_AGE_SECONDS),
+      );
+      headers.append(
+        "Set-Cookie",
+        buildCsrfCookie("cart", csrfToken.token, CART_MAX_AGE_SECONDS),
+      );
+      return jsonResponse(
+        { data: await store.getPublicCartSnapshot(cartId, nowIso) },
+        { status: 201, headers },
+      );
+    } catch (error) {
+      return mapCartError(error);
+    }
+  }
+
+  if (lineMatch && (request.method === "PUT" || request.method === "DELETE")) {
+    if (!session) {
+      return cartErrorResponse(
+        "CART_SESSION_INVALID",
+        "Le panier doit être initialisé.",
+        401,
+      );
+    }
+    if (!mutationIsAuthorized(request, env)) {
+      return cartErrorResponse(
+        "CSRF_REJECTED",
+        "La requête n’est pas autorisée.",
+        403,
+      );
+    }
+    let variantId: string;
+    try {
+      variantId = decodeURIComponent(lineMatch[1]);
+    } catch {
+      return cartErrorResponse("INVALID_BODY", "La variante est invalide.", 400);
+    }
+
+    try {
+      const now = new Date().toISOString();
+      let snapshot;
+      if (request.method === "PUT") {
+        const quantity = await parseCartQuantity(request);
+        if (quantity === null) {
+          return cartErrorResponse(
+            "INVALID_BODY",
+            "La quantité doit être un entier compris entre 1 et 5.",
+            400,
+          );
+        }
+        snapshot = await store.setCartLineQuantity({
+          cartId: session.cartId,
+          variantId,
+          quantity,
+          now,
+        });
+      } else {
+        if (!(await requireEmptyBody(request))) {
+          return cartErrorResponse(
+            "INVALID_BODY",
+            "Le corps doit être vide.",
+            400,
+          );
+        }
+        snapshot = await store.removeCartLine({
+          cartId: session.cartId,
+          variantId,
+          now,
+        });
+      }
+      return jsonResponse({ data: snapshot });
+    } catch (error) {
+      if (error instanceof CommerceError && error.code === "INVALID_INPUT") {
+        return cartErrorResponse(
+          "INVALID_BODY",
+          "La quantité doit être un entier compris entre 1 et 5.",
+          400,
+        );
+      }
+      return mapCartError(error);
+    }
+  }
+
+  return null;
+}
+
+export async function preprodApiResponse(
+  request: Request,
+  env: RuntimeEnv,
+): Promise<Response | null> {
   const url = new URL(request.url);
   if (!url.pathname.startsWith(PREPROD_API_PREFIX)) return null;
 
   if (env?.APP_ENV !== "preproduction") {
+    return jsonResponse({ error: "not-found" }, { status: 404 });
+  }
+
+  if (
+    typeof env.PREPROD_ORIGIN !== "string" ||
+    !isTrustedMutationOrigin(url.origin, [env.PREPROD_ORIGIN])
+  ) {
     return jsonResponse({ error: "not-found" }, { status: 404 });
   }
 
@@ -92,11 +652,10 @@ export function preprodApiResponse(request: Request, env: RuntimeEnv): Promise<R
     );
   }
 
-  if (request.method !== "GET") {
-    return jsonResponse({ error: "method-not-allowed" }, { status: 405 });
-  }
-
   if (url.pathname === `${PREPROD_API_PREFIX}health`) {
+    if (request.method !== "GET") {
+      return jsonResponse({ error: "method-not-allowed" }, { status: 405 });
+    }
     return (async () => {
       const database = env.DB;
       const migration = await database
@@ -119,7 +678,7 @@ export function preprodApiResponse(request: Request, env: RuntimeEnv): Promise<R
         .all<{ variant_id: string; available_to_sell: number }>();
 
       const latestMigration = migration?.name ?? null;
-      const migrationReady = latestMigration === "0005_fulfillment_returns_refunds.sql";
+      const migrationReady = latestMigration === "0006_allow_bounded_expired_cart_purge.sql";
       return jsonResponse(
         {
           status: migrationReady ? "ready" : "unavailable",
@@ -144,6 +703,9 @@ export function preprodApiResponse(request: Request, env: RuntimeEnv): Promise<R
       );
     })();
   }
+
+  const cartResponse = await handleCartApi(request, env, url);
+  if (cartResponse) return cartResponse;
 
   return jsonResponse({ error: "not-found" }, { status: 404 });
 }
@@ -473,7 +1035,7 @@ const worker = {
   ): Promise<Response> {
     const url = new URL(request.url);
 
-    const preprodResponse = preprodApiResponse(request, env);
+    const preprodResponse = await preprodApiResponse(request, env);
     if (preprodResponse) {
       return withSecurityHeaders(await preprodResponse, url.pathname, env?.APP_ENV);
     }

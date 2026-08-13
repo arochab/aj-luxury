@@ -32,10 +32,11 @@ const migrationNames = [
   "0003_identity_access.sql",
   "0004_email_outbox_data_rights.sql",
   "0005_fulfillment_returns_refunds.sql",
+  "0006_allow_bounded_expired_cart_purge.sql",
 ];
-// These hashes freeze the one allowed pre-launch compatibility rewrite made
-// before the first successful hosted D1 bootstrap. Once that bootstrap is
-// green, every schema change must be additive in a new migration.
+// Hosted D1 bootstrap version 1 succeeded with exactly these LF-normalized
+// bytes. From this point onward, every schema change must be additive in a new
+// migration; rewriting 0000 through 0005 is forbidden.
 const bootstrapHashes = Object.freeze({
   "0000_flimsy_rhino.sql":
     "64ec5b38a5c5e33b235f65ba6f5524fa26961a50af33a01c219af4080807435b",
@@ -47,14 +48,18 @@ const bootstrapHashes = Object.freeze({
     "97497dbef41179a669b2ff58286ae9e0986cd8fcb2c76e97ae696f7fd7b1fc5a",
   "0004_email_outbox_data_rights.sql":
     "fdf9c27b57d24c931d234bf8651e83599d10c0e8adfc28b188d165f01c9b59ef",
+  "0005_fulfillment_returns_refunds.sql":
+    "2eff61c2caa307e094f9cf64885816beff5f476dbbfe52a9988560a57faa1008",
 });
+const retentionMigrationSha256 =
+  "3cbd7390bb8834305b11f6d791583a86f3c6fe7ba9be23fc91e1e1ea98203a52";
 
 test("the exact Drizzle D1 splitter emits no blank statements", () => {
   const migrations = readMigrationFiles({ migrationsFolder: migrationRoot });
   assert.equal(migrations.length, migrationNames.length);
   assert.equal(
     migrations.reduce((total, migration) => total + migration.sql.length, 0),
-    359,
+    361,
   );
   for (const [migrationIndex, migration] of migrations.entries()) {
     for (const [statementIndex, statement] of migration.sql.entries()) {
@@ -70,7 +75,7 @@ test("the exact Drizzle D1 splitter emits no blank statements", () => {
     "utf8",
   );
   assert.doesNotMatch(fulfillmentMigration, /--> statement-breakpoint\s*$/);
-  assert.match(migrations.at(-1).sql.at(-1), /trg_email_outbox_audit_terminal/);
+  assert.match(migrations.at(-1).sql.at(-1), /trg_cart_lines_validate_delete/);
   assert.match(migrations.at(-1).sql.at(-1), /END;\s*$/);
 });
 
@@ -236,7 +241,7 @@ function query(root, configPath, state, sql, expectFailure = false) {
   return parseFirstJsonArray(output)[0].results;
 }
 
-test("0005 is additive, journaled and leaves the frozen bootstrap byte-identical", () => {
+test("0005 stays frozen and 0006 adds only the bounded retention exception", () => {
   for (const [name, expected] of Object.entries(bootstrapHashes)) {
     const normalized = readFileSync(join(migrationRoot, name), "utf8").replaceAll(
       "\r\n",
@@ -262,7 +267,29 @@ test("0005 is additive, journaled and leaves the frozen bootstrap byte-identical
   const journal = JSON.parse(
     readFileSync(join(migrationRoot, "meta", "_journal.json"), "utf8"),
   );
-  assert.equal(journal.entries.at(-1).tag, "0005_fulfillment_returns_refunds");
+  assert.equal(journal.entries.at(-2).tag, "0005_fulfillment_returns_refunds");
+  assert.equal(
+    journal.entries.at(-1).tag,
+    "0006_allow_bounded_expired_cart_purge",
+  );
+  const retentionMigration = readFileSync(
+    join(migrationRoot, "0006_allow_bounded_expired_cart_purge.sql"),
+    "utf8",
+  );
+  assert.equal(
+    createHash("sha256")
+      .update(retentionMigration.replaceAll("\r\n", "\n"))
+      .digest("hex"),
+    retentionMigrationSha256,
+  );
+  assert.doesNotMatch(retentionMigration, /ALTER TABLE|DROP TABLE|DELETE FROM/i);
+  assert.match(retentionMigration, /length\(cart\.`id`\) = 69/);
+  assert.match(retentionMigration, /datetime\('now', '-30 days'\)/);
+  assert.match(retentionMigration, /cart\.`customer_id` IS NULL/);
+  assert.match(retentionMigration, /cart\.`email` IS NULL/);
+  assert.match(retentionMigration, /stock_reservations/);
+  assert.match(retentionMigration, /orders/);
+  assert.match(retentionMigration, /shipping_quotes/);
   const snapshotPath = join(migrationRoot, "meta", "0005_snapshot.json");
   assert.ok(existsSync(snapshotPath));
   const snapshot = JSON.parse(readFileSync(snapshotPath, "utf8"));
@@ -273,7 +300,7 @@ test("0005 is additive, journaled and leaves the frozen bootstrap byte-identical
   assert.ok(snapshot.tables.shipment_tracking_events.indexes.ux_tracking_events_carrier_receipt);
 });
 
-test("real local D1 applies 0000 to 0005, upgrades populated 0004 and replays", (t) => {
+test("real local D1 applies 0000 to 0006, upgrades populated 0004 and replays", (t) => {
   assert.ok(existsSync(wranglerCli), "local Wrangler must be installed");
   // Keep the local Wrangler state inside the governed workspace but outside
   // this deeply nested worktree so Windows does not exceed SQLite path limits.
@@ -356,10 +383,12 @@ test("real local D1 applies 0000 to 0005, upgrades populated 0004 and replays", 
       '2026-08-11T12:00:00.000Z',
       '2026-08-11T12:00:00.000Z')`,
   );
-  copyFileSync(
-    join(migrationRoot, migrationNames.at(-1)),
-    join(upgradeRoot, "migrations", migrationNames.at(-1)),
-  );
+  for (const migrationName of migrationNames.slice(5)) {
+    copyFileSync(
+      join(migrationRoot, migrationName),
+      join(upgradeRoot, "migrations", migrationName),
+    );
+  }
   apply(upgradeRoot, upgradeConfig, upgradeState);
   apply(upgradeRoot, upgradeConfig, upgradeState);
   assert.deepEqual(
@@ -541,6 +570,114 @@ test("real local D1 applies 0000 to 0005, upgrades populated 0004 and replays", 
   assert.match(failure, /fulfillment_quote_mismatch/);
   assert.deepEqual(
     query(upgradeRoot, upgradeConfig, upgradeState, "PRAGMA foreign_key_check"),
+    [],
+  );
+
+  const retentionRoot = join(proofRoot, "retention");
+  mkdirSync(retentionRoot);
+  const retentionConfig = createConfig(retentionRoot, migrationNames.slice(0, 6));
+  const retentionState = join(retentionRoot, "state");
+  mkdirSync(retentionState, { recursive: true });
+  apply(retentionRoot, retentionConfig, retentionState);
+  const retainedCartId = `cart_${"a".repeat(64)}`;
+  query(
+    retentionRoot,
+    retentionConfig,
+    retentionState,
+    `INSERT INTO products (
+      id, slug, name, status, price_cents, currency, created_at, updated_at
+    ) VALUES (
+      'product_retention', 'retention', 'Retention', 'active', 2999, 'EUR',
+      '2026-08-13T00:00:00.000Z', '2026-08-13T00:00:00.000Z'
+    )`,
+  );
+  query(
+    retentionRoot,
+    retentionConfig,
+    retentionState,
+    `INSERT INTO variants (
+      id, product_id, internal_reference, color_key, color_name, size,
+      swatch, image_url, active, sort_order, created_at, updated_at
+    ) VALUES (
+      'variant_retention_s', 'product_retention', 'AJ-RETENTION-S',
+      'retention', 'Retention', 'S', '#000000', '/retention.webp', 1, 0,
+      '2026-08-13T00:00:00.000Z', '2026-08-13T00:00:00.000Z'
+    )`,
+  );
+  query(
+    retentionRoot,
+    retentionConfig,
+    retentionState,
+    `INSERT INTO inventory (
+      variant_id, physical_quantity, gift_reserve_quantity,
+      safety_reserve_quantity, active_reserved_quantity, sold_quantity,
+      reserves_validated, version, updated_at
+    ) VALUES (
+      'variant_retention_s', 10, 0, 0, 0, 0, 1, 0,
+      '2026-08-13T00:00:00.000Z'
+    )`,
+  );
+  query(
+    retentionRoot,
+    retentionConfig,
+    retentionState,
+    `INSERT INTO carts (
+      id, status, currency, expires_at, created_at, updated_at
+    ) VALUES (
+      '${retainedCartId}', 'open', 'EUR', '2099-08-13T01:00:00.000Z',
+      '2026-08-13T00:00:00.000Z', '2026-08-13T00:00:00.000Z'
+    )`,
+  );
+  query(
+    retentionRoot,
+    retentionConfig,
+    retentionState,
+    `INSERT INTO cart_lines (
+      id, cart_id, variant_id, quantity, unit_price_cents, created_at, updated_at
+    ) VALUES (
+      'line_retention', '${retainedCartId}', 'variant_retention_s', 1, 2999,
+      '2026-08-13T00:00:00.000Z', '2026-08-13T00:00:00.000Z'
+    )`,
+  );
+  query(
+    retentionRoot,
+    retentionConfig,
+    retentionState,
+    `UPDATE carts SET status='expired', expires_at='2000-01-01T00:00:00.000Z'
+      WHERE id='${retainedCartId}'`,
+  );
+  copyFileSync(
+    join(migrationRoot, migrationNames.at(-1)),
+    join(retentionRoot, "migrations", migrationNames.at(-1)),
+  );
+  apply(retentionRoot, retentionConfig, retentionState);
+  apply(retentionRoot, retentionConfig, retentionState);
+  assert.deepEqual(
+    query(
+      retentionRoot,
+      retentionConfig,
+      retentionState,
+      "SELECT name FROM d1_migrations ORDER BY id",
+    ).map((row) => row.name),
+    migrationNames,
+  );
+  query(
+    retentionRoot,
+    retentionConfig,
+    retentionState,
+    "DELETE FROM cart_lines WHERE id='line_retention'",
+  );
+  assert.equal(
+    query(
+      retentionRoot,
+      retentionConfig,
+      retentionState,
+      "SELECT COUNT(*) AS count FROM cart_lines WHERE id='line_retention'",
+    )[0].count,
+    0,
+  );
+  assert.deepEqual(
+    query(retentionRoot, retentionConfig, retentionState, "PRAGMA foreign_key_check"),
     [],
   );
 });

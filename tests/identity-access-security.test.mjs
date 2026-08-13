@@ -1473,6 +1473,7 @@ test("session and CSRF cookies are host-only, secure and exact-origin mutations 
   const second = await createOpaqueAccessToken();
   const customerCookie = buildSessionCookie("customer", first.token, 3600);
   const adminCookie = buildSessionCookie("admin", first.token, 900);
+  const cartCookie = buildSessionCookie("cart", first.token, 604800);
   const csrfCookie = buildCsrfCookie("customer", second.token, 900);
 
   assert.deepEqual(identityCookieContract, {
@@ -1491,6 +1492,11 @@ test("session and CSRF cookies are host-only, secure and exact-origin mutations 
       csrfName: "__Host-aj_admin_csrf",
       sameSite: "Strict",
     },
+    cart: {
+      sessionName: "__Host-aj_cart",
+      csrfName: "__Host-aj_cart_csrf",
+      sameSite: "Lax",
+    },
   });
 
   assert.equal(
@@ -1498,8 +1504,12 @@ test("session and CSRF cookies are host-only, secure and exact-origin mutations 
     `__Host-aj_customer=${first.token}; Path=/; Max-Age=3600; Secure; HttpOnly; SameSite=Lax`,
   );
   assert.match(adminCookie, /Secure; HttpOnly; SameSite=Strict$/);
+  assert.equal(
+    cartCookie,
+    `__Host-aj_cart=${first.token}; Path=/; Max-Age=604800; Secure; HttpOnly; SameSite=Lax`,
+  );
   assert.match(csrfCookie, /Secure; SameSite=Strict$/);
-  for (const cookie of [customerCookie, adminCookie, csrfCookie]) {
+  for (const cookie of [customerCookie, adminCookie, cartCookie, csrfCookie]) {
     assert.doesNotMatch(cookie, /Domain=/i);
   }
   assert.equal(

@@ -29,7 +29,7 @@ export interface CommerceD1PreparedStatement {
  */
 export interface CommerceD1Database {
   prepare(query: string): CommerceD1PreparedStatement;
-  batch(
+  batch<Rows extends readonly object[] = readonly object[]>(
     statements: CommerceD1PreparedStatement[],
-  ): Promise<CommerceD1Result<object>[]>;
+  ): Promise<{ [Index in keyof Rows]: CommerceD1Result<Rows[Index]> }>;
 }
