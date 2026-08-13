@@ -18,6 +18,7 @@ import {
   type ReserveStockInput,
   type StockReservation,
   assertIsoTimestamp,
+  assertPositiveInteger,
   assertSafeIdentifier,
   validateConvertStockToSaleInput,
   validateExpireStockInput,
@@ -63,6 +64,33 @@ type CartRow = {
   expires_at: string;
 };
 
+type CartLineSnapshotRow = {
+  variant_id: string;
+  product_id: string;
+  color_key: string;
+  color_name: string;
+  size: string;
+  image_url: string;
+  quantity: number;
+  unit_price_cents: number;
+  available_to_sell: number;
+};
+
+type SellableVariantRow = {
+  variant_id: string;
+  unit_price_cents: number;
+  available_to_sell: number;
+};
+
+type CartMutationLockRow = {
+  reservation_count: number;
+  order_count: number;
+};
+
+const launchProductSlugByVariantId = new Map(
+  launchVariantSeed.map((variant) => [variant.id, variant.sourceSlug] as const),
+);
+
 type SeedIntegrityRow = {
   inventory_count: number;
   physical_quantity: number;
@@ -83,6 +111,42 @@ export type CreateCartInput = {
   expiresAt: string;
   now: string;
 };
+
+export type PublicCartLine = Readonly<{
+  variantId: string;
+  productId: string;
+  productSlug: string;
+  colorKey: string;
+  colorName: string;
+  size: string;
+  imageUrl: string;
+  quantity: number;
+  unitPriceCents: number;
+  lineTotalCents: number;
+  stockState: "available" | "low-stock" | "sold-out";
+}>;
+
+export type PublicCartSnapshot = Readonly<{
+  status: "open";
+  currency: "EUR";
+  expiresAt: string;
+  itemCount: number;
+  subtotalCents: number;
+  lines: readonly PublicCartLine[];
+}>;
+
+export type SetCartLineQuantityInput = Readonly<{
+  cartId: string;
+  variantId: string;
+  quantity: number;
+  now: string;
+}>;
+
+export type RemoveCartLineInput = Readonly<{
+  cartId: string;
+  variantId: string;
+  now: string;
+}>;
 
 function toInventoryPosition(row: InventoryRow): InventoryPosition {
   return {
@@ -181,6 +245,27 @@ function mapCommerceDatabaseError(error: unknown): never {
     throw new CommerceError(
       "INSUFFICIENT_STOCK_OR_CART_CLOSED",
       "Stock reservations must match the current cart lines and quantities.",
+      { cause: error },
+    );
+  }
+
+  if (message.includes("commerce_cart_line_catalog_mismatch")) {
+    throw new CommerceError(
+      "VARIANT_NOT_FOUND",
+      "The variant is unavailable.",
+      { cause: error },
+    );
+  }
+
+  if (
+    message.includes("commerce_cart_line_quantity_update_not_allowed") ||
+    message.includes("commerce_cart_line_snapshot_is_immutable") ||
+    message.includes("commerce_cart_line_delete_not_allowed") ||
+    message.includes("fulfillment_quote_mismatch")
+  ) {
+    throw new CommerceError(
+      "CART_CLOSED",
+      "The cart can no longer be modified.",
       { cause: error },
     );
   }
@@ -438,6 +523,267 @@ export class D1CommerceStore {
         "The cart id already belongs to different cart input.",
       );
     }
+  }
+
+  async getPublicCartSnapshot(
+    cartId: string,
+    now: string,
+  ): Promise<PublicCartSnapshot> {
+    assertSafeIdentifier(cartId, "cartId");
+    assertIsoTimestamp(now, "now");
+    const [cartResult, lineResult] = await this.#database.batch<
+      [CartRow, CartLineSnapshotRow]
+    >([
+      this.#cartSnapshotStatement(cartId),
+      this.#cartLineSnapshotStatement(cartId),
+    ]);
+    return this.#toPublicCartSnapshot(cartResult.results[0], lineResult.results, now);
+  }
+
+  #toPublicCartSnapshot(
+    cart: CartRow | undefined,
+    rows: readonly CartLineSnapshotRow[],
+    now: string,
+  ): PublicCartSnapshot {
+    this.#assertOpenCart(cart, now);
+    const lines = rows.map((row) => {
+      const productSlug = launchProductSlugByVariantId.get(row.variant_id);
+      if (!productSlug) {
+        throw new CommerceError("VARIANT_NOT_FOUND", "The variant is unavailable.");
+      }
+      return (
+      Object.freeze({
+        variantId: row.variant_id,
+        productId: row.product_id,
+        productSlug,
+        colorKey: row.color_key,
+        colorName: row.color_name,
+        size: row.size,
+        imageUrl: row.image_url,
+        quantity: row.quantity,
+        unitPriceCents: row.unit_price_cents,
+        lineTotalCents: row.unit_price_cents * row.quantity,
+        stockState:
+          row.available_to_sell <= 0
+            ? "sold-out"
+            : row.available_to_sell <= 5
+              ? "low-stock"
+              : "available",
+      } satisfies PublicCartLine)
+      );
+    });
+
+    return Object.freeze({
+      status: "open",
+      currency: cart!.currency,
+      expiresAt: cart!.expires_at,
+      itemCount: lines.reduce((total, line) => total + line.quantity, 0),
+      subtotalCents: lines.reduce(
+        (total, line) => total + line.lineTotalCents,
+        0,
+      ),
+      lines: Object.freeze(lines),
+    });
+  }
+
+  async setCartLineQuantity(
+    input: SetCartLineQuantityInput,
+  ): Promise<PublicCartSnapshot> {
+    assertSafeIdentifier(input.cartId, "cartId");
+    assertSafeIdentifier(input.variantId, "variantId");
+    assertPositiveInteger(input.quantity, "quantity");
+    assertIsoTimestamp(input.now, "now");
+
+    try {
+      const [cartResult, locksResult, variantResult, , lineResult] =
+        await this.#database.batch<
+          [
+            CartRow,
+            CartMutationLockRow,
+            SellableVariantRow,
+            Record<string, never>,
+            CartLineSnapshotRow,
+          ]
+        >([
+          this.#cartSnapshotStatement(input.cartId),
+          this.#cartMutationLockStatement(input.cartId),
+          this.#sellableVariantStatement(input.variantId),
+          this.#database
+            .prepare(
+          `INSERT INTO cart_lines (
+            id, cart_id, variant_id, quantity, unit_price_cents, created_at,
+            updated_at
+          )
+          SELECT ?, cart.id, variant.id, ?, product.price_cents, ?, ?
+          FROM carts AS cart
+          INNER JOIN variants AS variant ON variant.id = ?
+          INNER JOIN products AS product ON product.id = variant.product_id
+          INNER JOIN inventory AS stock ON stock.variant_id = variant.id
+          WHERE cart.id = ? AND cart.status = 'open' AND cart.expires_at > ?
+            AND variant.active = 1 AND product.status = 'active'
+            AND product.currency = 'EUR'
+            AND stock.physical_quantity - stock.gift_reserve_quantity
+              - stock.safety_reserve_quantity - stock.active_reserved_quantity
+              - stock.sold_quantity >= ?
+            AND NOT EXISTS (
+              SELECT 1 FROM stock_reservations WHERE cart_id = cart.id
+            )
+            AND NOT EXISTS (SELECT 1 FROM orders WHERE cart_id = cart.id)
+          ON CONFLICT(cart_id, variant_id) DO UPDATE SET
+            quantity = excluded.quantity,
+            updated_at = excluded.updated_at
+          WHERE cart_lines.quantity <> excluded.quantity`,
+        )
+        .bind(
+          `line:${input.cartId}:${input.variantId}`,
+          input.quantity,
+          input.now,
+          input.now,
+          input.variantId,
+          input.cartId,
+          input.now,
+          input.quantity,
+        ),
+          this.#cartLineSnapshotStatement(input.cartId),
+        ]);
+      const cart = cartResult.results[0];
+      this.#assertOpenCart(cart, input.now);
+      this.#assertCartIsMutable(locksResult.results[0]);
+      const variant = variantResult.results[0];
+      if (!variant) {
+        throw new CommerceError("VARIANT_NOT_FOUND", "The variant is unavailable.");
+      }
+      if (variant.available_to_sell < input.quantity) {
+        throw new CommerceError(
+          "STOCK_UNAVAILABLE",
+          "The requested quantity is unavailable.",
+        );
+      }
+      return this.#toPublicCartSnapshot(cart, lineResult.results, input.now);
+    } catch (error) {
+      mapCommerceDatabaseError(error);
+    }
+  }
+
+  async removeCartLine(
+    input: RemoveCartLineInput,
+  ): Promise<PublicCartSnapshot> {
+    assertSafeIdentifier(input.cartId, "cartId");
+    assertSafeIdentifier(input.variantId, "variantId");
+    assertIsoTimestamp(input.now, "now");
+
+    try {
+      const [cartResult, locksResult, , lineResult] =
+        await this.#database.batch<
+          [CartRow, CartMutationLockRow, Record<string, never>, CartLineSnapshotRow]
+        >([
+          this.#cartSnapshotStatement(input.cartId),
+          this.#cartMutationLockStatement(input.cartId),
+          this.#database
+            .prepare(
+              `DELETE FROM cart_lines
+              WHERE cart_id = ? AND variant_id = ?
+                AND EXISTS (
+                  SELECT 1 FROM carts
+                  WHERE id = ? AND status = 'open' AND expires_at > ?
+                )
+                AND NOT EXISTS (
+                  SELECT 1 FROM stock_reservations WHERE cart_id = ?
+                )
+                AND NOT EXISTS (SELECT 1 FROM orders WHERE cart_id = ?)`,
+            )
+            .bind(
+              input.cartId,
+              input.variantId,
+              input.cartId,
+              input.now,
+              input.cartId,
+              input.cartId,
+            ),
+          this.#cartLineSnapshotStatement(input.cartId),
+        ]);
+      const cart = cartResult.results[0];
+      this.#assertOpenCart(cart, input.now);
+      this.#assertCartIsMutable(locksResult.results[0]);
+      return this.#toPublicCartSnapshot(cart, lineResult.results, input.now);
+    } catch (error) {
+      mapCommerceDatabaseError(error);
+    }
+  }
+
+  #cartSnapshotStatement(cartId: string): CommerceD1PreparedStatement {
+    return this.#database
+      .prepare(
+        `SELECT id, customer_id, email, status, currency, expires_at
+        FROM carts WHERE id = ?`,
+      )
+      .bind(cartId);
+  }
+
+  #cartLineSnapshotStatement(cartId: string): CommerceD1PreparedStatement {
+    return this.#database
+      .prepare(
+        `SELECT line.variant_id, product.id AS product_id,
+          variant.color_key, variant.color_name, variant.size, variant.image_url,
+          line.quantity, line.unit_price_cents,
+          stock.physical_quantity - stock.gift_reserve_quantity
+            - stock.safety_reserve_quantity - stock.active_reserved_quantity
+            - stock.sold_quantity AS available_to_sell
+        FROM cart_lines AS line
+        INNER JOIN variants AS variant ON variant.id = line.variant_id
+        INNER JOIN products AS product ON product.id = variant.product_id
+        INNER JOIN inventory AS stock ON stock.variant_id = variant.id
+        WHERE line.cart_id = ?
+        ORDER BY variant.sort_order, line.id`,
+      )
+      .bind(cartId);
+  }
+
+  #cartMutationLockStatement(cartId: string): CommerceD1PreparedStatement {
+    return this.#database
+      .prepare(
+        `SELECT
+          (SELECT COUNT(*) FROM stock_reservations WHERE cart_id = ?) AS reservation_count,
+          (SELECT COUNT(*) FROM orders WHERE cart_id = ?) AS order_count`,
+      )
+      .bind(cartId, cartId);
+  }
+
+  #assertOpenCart(cart: CartRow | undefined, now: string): asserts cart is CartRow {
+    if (!cart) {
+      throw new CommerceError("CART_NOT_FOUND", "The cart does not exist.");
+    }
+    if (cart.status !== "open") {
+      throw new CommerceError("CART_CLOSED", "The cart is closed.");
+    }
+    if (Date.parse(cart.expires_at) <= Date.parse(now)) {
+      throw new CommerceError("CART_EXPIRED", "The cart has expired.");
+    }
+  }
+
+  #assertCartIsMutable(locks: CartMutationLockRow | undefined): void {
+    if (!locks || locks.reservation_count > 0 || locks.order_count > 0) {
+      throw new CommerceError(
+        "CART_CLOSED",
+        "The cart can no longer be modified.",
+      );
+    }
+  }
+
+  #sellableVariantStatement(variantId: string): CommerceD1PreparedStatement {
+    return this.#database
+      .prepare(
+        `SELECT variant.id AS variant_id, product.price_cents AS unit_price_cents,
+          stock.physical_quantity - stock.gift_reserve_quantity
+            - stock.safety_reserve_quantity - stock.active_reserved_quantity
+            - stock.sold_quantity AS available_to_sell
+        FROM variants AS variant
+        INNER JOIN products AS product ON product.id = variant.product_id
+        INNER JOIN inventory AS stock ON stock.variant_id = variant.id
+        WHERE variant.id = ? AND variant.active = 1 AND product.status = 'active'
+          AND product.currency = 'EUR'`,
+      )
+      .bind(variantId);
   }
 
   async getInventoryPosition(

@@ -5,7 +5,7 @@ export const accessRequestAcknowledgement = Object.freeze({
   message: "If the supplied details are eligible, an access link will be sent.",
 } as const);
 
-export type SessionCookieKind = "customer" | "guest-order" | "admin";
+export type SessionCookieKind = "customer" | "guest-order" | "admin" | "cart";
 
 export const identityCookieContract = Object.freeze({
   customer: Object.freeze({
@@ -22,6 +22,11 @@ export const identityCookieContract = Object.freeze({
     sessionName: "__Host-aj_admin",
     csrfName: "__Host-aj_admin_csrf",
     sameSite: "Strict",
+  }),
+  cart: Object.freeze({
+    sessionName: "__Host-aj_cart",
+    csrfName: "__Host-aj_cart_csrf",
+    sameSite: "Lax",
   }),
 } as const);
 
