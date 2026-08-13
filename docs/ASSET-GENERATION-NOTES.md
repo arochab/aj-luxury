@@ -1,3 +1,5 @@
+SUPERSEDED — retained as history — replaced by `docs/internal/AJ-LUXURY-VISUAL-WORKFLOW-2026-08-13.md` on 2026-08-13.
+
 # AJ Luxury - registre des actifs de maquette
 
 ## Actifs client

@@ -21,6 +21,8 @@ import {
   shouldAttachHeroVideoSource,
   shouldPlayHeroVideo,
 } from "../../lib/motion-policy";
+import HeroIdentityOverlay from "./HeroIdentityOverlay";
+import DeferredMetallicField from "./DeferredMetallicField";
 
 type HeroBackgroundVideoProps = {
   playing: boolean;
@@ -144,7 +146,6 @@ const HeroBackgroundVideo = forwardRef<
     reducedMotion,
     saveData,
   });
-
   const rejectPlaybackIntent = useCallback(
     (error: unknown, attempt: number, readyState: number) => {
       if (attempt !== playbackAttemptRef.current) return;
@@ -378,12 +379,17 @@ const HeroBackgroundVideo = forwardRef<
           controlsList="nodownload noplaybackrate noremoteplayback"
           onCanPlay={() => void syncPlayback()}
           onPlaying={() => setStartedAssetSrc(asset?.src ?? null)}
-          onEnded={() => onPlaybackIntentChange(false)}
           onError={() => {
             setStartedAssetSrc(null);
             onPlaybackIntentChange(false);
           }}
         />
+        <DeferredMetallicField
+          className="aj-film__hero-reflection"
+          motion={playing ? "slow" : "still"}
+          variant="reference"
+        />
+        <HeroIdentityOverlay />
       </div>
     </div>
   );

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFile, readdir, stat } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -26,6 +27,15 @@ const V3_POSTER_BYTE_CEILINGS = {
   tablet: 224_974,
   desktop: 346_814,
   xl: 548_472,
+};
+
+const IDENTITY_ASSET_HASHES = {
+  "campaign-duo-lilas-seated.webp":
+    "a1a6e0a1a72e287195f4da5569c8b0268047968f1fdff11e8d434079ab6c3fee",
+  "hero-identity-overlay-landscape-v1.png":
+    "c28c36077b6d6e0e91f8d60a6c1f55a727468e487edfb96f85adff28245e7d73",
+  "hero-identity-overlay-portrait-v1.png":
+    "c69dccf17dc44c2885e58774c2b5b0b90ffa7532ebb2c1e7b821c20cf8a54073",
 };
 
 const V3_AVIF_POSTER_BYTE_CEILINGS = {
@@ -178,10 +188,28 @@ test("product blur-up placeholders preserve continuity at a negligible byte cost
   }
 });
 
+test("hero identity overlays are frozen derivatives of the approved client photo", async () => {
+  for (const [filename, expectedHash] of Object.entries(IDENTITY_ASSET_HASHES)) {
+    const bytes = await readFile(
+      projectFile(`public/images/client/${filename}`),
+    );
+    assert.equal(createHash("sha256").update(bytes).digest("hex"), expectedHash);
+  }
+
+  const builder = await readFile(
+    projectFile("scripts/build_hero_identity_overlays.py"),
+    "utf8",
+  );
+  assert.match(builder, /No pixels are generated/);
+  assert.match(builder, /campaign-duo-lilas-seated\.webp/);
+  assert.doesNotMatch(builder, /imagegen|generative|face[_ -]?swap/i);
+});
+
 test("hero playback is accessible, resource-aware and subject-safe", async () => {
-  const [videoComponent, heroComponent, stylesheet] = await Promise.all([
+  const [videoComponent, heroComponent, identityComponent, stylesheet] = await Promise.all([
     readFile(projectFile("app/components/HeroBackgroundVideo.tsx"), "utf8"),
     readFile(projectFile("app/components/HeroComposition.tsx"), "utf8"),
+    readFile(projectFile("app/components/HeroIdentityOverlay.tsx"), "utf8"),
     readFile(projectFile("app/globals.css"), "utf8"),
   ]);
 
@@ -190,10 +218,9 @@ test("hero playback is accessible, resource-aware and subject-safe", async () =>
   assert.match(videoComponent, /playsInline/);
   assert.match(videoComponent, /saveData/);
   assert.match(videoComponent, /shouldAttachHeroVideoSource/);
-  assert.match(
-    videoComponent,
-    /onEnded=\{\(\) => onPlaybackIntentChange\(false\)\}/,
-  );
+  assert.doesNotMatch(videoComponent, /onEnded=/);
+  assert.match(videoComponent, /className="aj-film__hero-reflection"/);
+  assert.match(videoComponent, /motion=\{playing \? "slow" : "still"\}/);
   assert.match(videoComponent, /prefers-reduced-motion: reduce/);
   assert.match(videoComponent, /IntersectionObserver/);
   assert.match(videoComponent, /visibilitychange/);
@@ -230,6 +257,7 @@ test("hero playback is accessible, resource-aware and subject-safe", async () =>
   assert.match(heroComponent, /backgroundVideoRef\.current\?\.requestPlayback\(\)/);
   assert.doesNotMatch(heroComponent, /hero-duo-(?:static|cutout)/);
   assert.match(heroComponent, /<figcaption>/);
+  assert.match(videoComponent, /<HeroIdentityOverlay \/>/);
   assert.match(stylesheet, /\.aj-film__hero-video[\s\S]*object-fit: cover/);
   assert.match(
     stylesheet,
@@ -248,6 +276,10 @@ test("hero playback is accessible, resource-aware and subject-safe", async () =>
   assert.match(stylesheet, /aspect-ratio: 720 \/ 934/);
   assert.match(stylesheet, /width: min\(100%, calc\(70svh \* 720 \/ 934\)\)/);
   assert.match(stylesheet, /filter: blur\(18px\) brightness\(0\.44\)/);
+  assert.match(stylesheet, /object-position: center top/);
+  assert.match(identityComponent, /hero-identity-overlay-landscape-v1\.png/);
+  assert.match(identityComponent, /hero-identity-overlay-portrait-v1\.png/);
+  assert.match(stylesheet, /\.aj-film__hero-reflection[\s\S]*mix-blend-mode: soft-light/);
 });
 
 test("critical fonts and static assets keep an explicit cache contract", async () => {
