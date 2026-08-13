@@ -189,7 +189,7 @@ export default function CartClient() {
                     ? t("product.soldOut")
                     : line.stockState === "low-stock"
                       ? t("cart.lowStock")
-                      : t("cart.stockVerified")}
+                      : t("cart.stockSimulated")}
                 </p>
                 <div
                   className={styles.quantityControl}
@@ -234,7 +234,8 @@ export default function CartClient() {
                 </div>
               </div>
               <strong>
-                <LocalizedPrice amountCents={line.lineTotalCents} />
+                <LocalizedPrice amountCents={line.lineTotalCents} />{" "}
+                <small>({t("cart.syntheticQualifier")})</small>
               </strong>
             </article>
           );
@@ -248,13 +249,15 @@ export default function CartClient() {
           <div className={styles.row}>
             <span>{t("cart.subtotal")}</span>
             <span>
-              <LocalizedPrice amountCents={cart.subtotalCents} />
+              <LocalizedPrice amountCents={cart.subtotalCents} />{" "}
+              <small>({t("cart.syntheticQualifier")})</small>
             </span>
           </div>
           <div className={`${styles.row} ${styles.total}`}>
             <span>{t("cart.provisionalTotal")}</span>
             <span>
-              <LocalizedPrice amountCents={cart.subtotalCents} />
+              <LocalizedPrice amountCents={cart.subtotalCents} />{" "}
+              <small>({t("cart.syntheticQualifier")})</small>
             </span>
           </div>
           <Link className={styles.button} href="/checkout">

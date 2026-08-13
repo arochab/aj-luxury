@@ -50,11 +50,10 @@ test("preproduction APIs are invisible without the exact isolated environment", 
     environment: "preproduction",
   });
   assert.equal(isolatedWithoutDatabase.status, 503);
-  const unavailable = await isolatedWithoutDatabase.json();
-  assert.equal(unavailable.status, "unavailable");
-  assert.equal(unavailable.reason, "preproduction-database-not-bound");
-  assert.equal(unavailable.runtimeMode, "post-0008-rollback");
-  assert.equal(unavailable.launchReadiness, false);
+  assert.deepEqual(await isolatedWithoutDatabase.json(), {
+    status: "unavailable",
+    reason: "preproduction-database-not-bound",
+  });
 });
 
 test("production pages remain indexable while preproduction is explicitly noindex", async () => {
@@ -68,7 +67,7 @@ test("production pages remain indexable while preproduction is explicitly noinde
   assert.equal(preproduction.headers.get("x-robots-tag"), "noindex, nofollow");
 });
 
-test("Rollback R8 health reports the exact 0008 sentinel without exposing commerce capability", async () => {
+test("synthetic candidate stays unavailable on migration 0007 without its sentinel", async () => {
   const statements = [];
   const database = {
     prepare(query) {
@@ -78,11 +77,10 @@ test("Rollback R8 health reports the exact 0008 sentinel without exposing commer
         },
         async first() {
           if (query.includes("preprod_demo_dataset")) {
-            return {
-              dataset_kind: "synthetic-demo",
-              fixture_version: "aj-demo-v1",
-              expires_at: "2026-09-30T23:59:59.999Z",
-            };
+            return null;
+          }
+          if (query.includes("d1_migrations")) {
+            return { name: "0007_transactional_preprod_order_payment.sql" };
           }
           if (query.includes("reserves_validated")) {
             return { total: 3, validated: 3 };
@@ -90,19 +88,6 @@ test("Rollback R8 health reports the exact 0008 sentinel without exposing commer
           return null;
         },
         async all() {
-          if (query.includes("d1_migrations")) {
-            return { results: [
-              "0000_flimsy_rhino.sql",
-              "0001_lock_cart_line_price_provenance.sql",
-              "0002_lock_order_line_snapshots.sql",
-              "0003_identity_access.sql",
-              "0004_email_outbox_data_rights.sql",
-              "0005_fulfillment_returns_refunds.sql",
-              "0006_allow_bounded_expired_cart_purge.sql",
-              "0007_transactional_preprod_order_payment.sql",
-              "0008_preprod_synthetic_demo_dataset.sql",
-            ].map((name) => ({ name })) };
-          }
           if (query.includes("shipping_zone_configurations")) {
             return { results: [{ zone: "EU" }] };
           }
@@ -127,20 +112,18 @@ test("Rollback R8 health reports the exact 0008 sentinel without exposing commer
     {
       APP_ENV: "preproduction",
       PREPROD_ORIGIN: "https://preprod.example",
+      PREPROD_DEMO_DATASET: "aj-demo-v1",
       DB: database,
     },
     { waitUntil() {}, passThroughOnException() {} },
   );
-  assert.equal(response.status, 200);
+  assert.equal(response.status, 503);
   const payload = await response.json();
-  assert.equal(payload.status, "rollback");
-  assert.equal(payload.runtimeMode, "post-0008-rollback");
-  assert.equal(payload.launchReadiness, false);
+  assert.equal(payload.status, "unavailable");
   assert.equal(
     payload.latestMigration,
-    "0008_preprod_synthetic_demo_dataset.sql",
+    "0007_transactional_preprod_order_payment.sql",
   );
-  assert.deepEqual(payload.stockProjection, []);
   assert.deepEqual(payload.capabilities, {
     catalog: false,
     cart: false,
@@ -161,8 +144,15 @@ test("Rollback R8 health reports the exact 0008 sentinel without exposing commer
     shippingSimulation: false,
     launchReadiness: false,
   });
+  assert.deepEqual(payload.stockProjection, []);
   assert.equal(JSON.stringify(payload).includes("available_to_sell"), false);
   assert.equal(statements.length, 2);
+  assert.match(statements[0], /preprod_demo_dataset/);
+  assert.match(statements[1], /d1_migrations/);
+  assert.equal(
+    statements.some((query) => /inventory|shipping_zone_configurations/.test(query)),
+    false,
+  );
 });
 
 test("preproduction health stays fail-closed without querying tables from a missing migration", async () => {
@@ -175,12 +165,15 @@ test("preproduction health stays fail-closed without querying tables from a miss
           return statement;
         },
         async first() {
+          if (query.includes("preprod_demo_dataset")) {
+            throw new Error("no such table: preprod_demo_dataset");
+          }
           return query.includes("d1_migrations")
             ? { name: "0004_email_outbox_data_rights.sql" }
             : null;
         },
         async all() {
-          return { results: [{ name: "0004_email_outbox_data_rights.sql" }] };
+          throw new Error("shipping tables must not be queried");
         },
       };
       return statement;
@@ -205,14 +198,20 @@ test("preproduction health stays fail-closed without querying tables from a miss
   assert.deepEqual(payload.capabilities.shippingQuoteZones, {
     EU: false, UK: false, US: false, CA: false,
   });
-  assert.equal(statements.length, 1);
+  assert.equal(statements.length, 2);
+  assert.match(statements[0], /preprod_demo_dataset/);
+  assert.match(statements[1], /d1_migrations/);
+  assert.equal(
+    statements.some((query) => /inventory|shipping_zone_configurations/.test(query)),
+    false,
+  );
 });
 
 test("preproduction health stays fail-closed when the migration ledger is absent", async () => {
   const database = {
     prepare() {
       return {
-        async all() {
+        async first() {
           throw new Error("no such table: d1_migrations");
         },
       };
@@ -234,7 +233,7 @@ test("preproduction health stays fail-closed when the migration ledger is absent
   assert.equal((await response.json()).status, "unavailable");
 });
 
-test("Rollback R8 health never reopens commerce even when synthetic rows are active", async () => {
+test("synthetic health exposes simulations, never live capabilities, when all four zones are ready", async () => {
   const database = {
     prepare(query) {
       const statement = {
@@ -242,30 +241,20 @@ test("Rollback R8 health never reopens commerce even when synthetic rows are act
           return statement;
         },
         async first() {
-          return query.includes("preprod_demo_dataset")
-            ? {
-                dataset_kind: "synthetic-demo",
-                fixture_version: "aj-demo-v1",
-                expires_at: "2026-09-30T23:59:59.999Z",
-              }
+          if (query.includes("preprod_demo_dataset")) {
+            return {
+              dataset_kind: "synthetic-demo",
+              fixture_version: "aj-demo-v1",
+              expires_at: "2026-09-30T23:59:59.999Z",
+            };
+          }
+          return query.includes("d1_migrations")
+            ? { name: "0008_preprod_synthetic_demo_dataset.sql" }
             : query.includes("reserves_validated")
               ? { total: 12, validated: 12 }
               : null;
         },
         async all() {
-          if (query.includes("d1_migrations")) {
-            return { results: [
-              "0000_flimsy_rhino.sql",
-              "0001_lock_cart_line_price_provenance.sql",
-              "0002_lock_order_line_snapshots.sql",
-              "0003_identity_access.sql",
-              "0004_email_outbox_data_rights.sql",
-              "0005_fulfillment_returns_refunds.sql",
-              "0006_allow_bounded_expired_cart_purge.sql",
-              "0007_transactional_preprod_order_payment.sql",
-              "0008_preprod_synthetic_demo_dataset.sql",
-            ].map((name) => ({ name })) };
-          }
           return query.includes("shipping_zone_configurations")
             ? { results: [{ zone: "EU" }, { zone: "UK" }, { zone: "US" }, { zone: "CA" }] }
             : { results: [{ variant_id: "variant_available", available_to_sell: 1 }] };
@@ -282,24 +271,34 @@ test("Rollback R8 health never reopens commerce even when synthetic rows are act
     {
       APP_ENV: "preproduction",
       PREPROD_ORIGIN: "https://preprod.example",
+      PREPROD_DEMO_DATASET: "aj-demo-v1",
       DB: database,
     },
     { waitUntil() {}, passThroughOnException() {} },
   );
   assert.equal(response.status, 200);
   const payload = await response.json();
-  assert.equal(payload.status, "rollback");
-  assert.equal(payload.runtimeMode, "post-0008-rollback");
+  assert.equal(payload.status, "partial");
   assert.equal(payload.capabilities.shippingQuotes, false);
   assert.deepEqual(payload.capabilities.shippingQuoteZones, {
     EU: false, UK: false, US: false, CA: false,
   });
+  assert.equal(payload.capabilities.shippingQuoteSimulation, true);
+  assert.deepEqual(payload.capabilities.shippingQuoteSimulationZones, {
+    EU: true, UK: true, US: true, CA: true,
+  });
   assert.equal(payload.capabilities.payment, false);
+  assert.equal(payload.capabilities.reservesValidated, false);
+  assert.equal(payload.capabilities.syntheticReservesReady, true);
   assert.equal(payload.capabilities.orderCreation, false);
-  assert.equal(payload.capabilities.paymentTestSimulation, false);
-  assert.equal(payload.capabilities.emailCaptureSimulation, false);
+  assert.equal(payload.capabilities.orderSimulation, true);
+  assert.equal(payload.capabilities.paymentTestSimulation, true);
+  assert.equal(payload.capabilities.emailCaptureSimulation, true);
   assert.equal(payload.capabilities.carrier, false);
-  assert.equal(payload.launchReadiness, false);
+  assert.equal(payload.capabilities.stockSimulation, true);
+  assert.equal(payload.capabilities.shippingSimulation, true);
+  assert.equal(payload.capabilities.launchReadiness, false);
+  assert.equal(payload.syntheticDataset.active, true);
 });
 
 async function render(pathname = "/", headers = {}) {
@@ -571,6 +570,7 @@ for (const [pathname, colorName] of productCases) {
     const html = await response.text();
     assert.match(html, /Apollon/);
     assert.match(html, new RegExp(colorName));
+    assert.match(html, /Prix fictif, non commercial/);
     assert.match(html, /29,99(?:\s|&nbsp;|&#xA0;)*€/);
     assert.match(html, /Sélectionnez une taille/);
     assert.match(
@@ -591,7 +591,7 @@ for (const [pathname, colorName] of productCases) {
       (html.match(/data-gallery-media="placeholder"/g) ?? []).length >= 4,
       "every gallery frame keeps a lightweight visual placeholder",
     );
-    assert.match(html, /Disponible/);
+    assert.match(html, /Disponibilité simulée/);
     assert.match(html, />Accueil</);
     assert.match(
       html,
@@ -765,7 +765,7 @@ test("cart renders a secure loading state and ignores legacy URL variants", asyn
   );
   assert.equal(response.status, 200);
   const html = await response.text();
-  assert.match(html, /Panier connecté au stock de préproduction/i);
+  assert.match(html, /prix et stocks simulés, non commerciaux/i);
   assert.match(html, /Chargement du panier/i);
   assert.match(html, /aria-busy="true"/);
   assert.doesNotMatch(html, /Rose Velours|Taille[\s\S]*XL|29,99/);
@@ -784,7 +784,7 @@ test("checkout uses the cookie-backed cart and ignores legacy URL variants", asy
 });
 
 const commerceCases = [
-  ["/cart", /paiement et livraison non activés/i],
+  ["/cart", /prix et stocks simulés, non commerciaux/i],
   ["/checkout", /aucun débit, e-mail ou transporteur réel/i],
   ["/account", /authentification non activée/i],
 ];

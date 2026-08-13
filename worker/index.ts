@@ -33,6 +33,13 @@ import {
   isTrustedMutationOrigin,
 } from "../lib/commerce/identity-access-policy.ts";
 import { LEGAL_VERSION } from "../lib/legal.ts";
+import {
+  isExactSyntheticDemoAddress,
+  SYNTHETIC_DEMO_DATASET_KIND,
+  SYNTHETIC_DEMO_EMAIL,
+  SYNTHETIC_DEMO_FIXTURE_VERSION,
+  SYNTHETIC_DEMO_MIGRATION,
+} from "../lib/preprod/synthetic-demo.ts";
 
 interface Fetcher {
   fetch(request: Request): Promise<Response>;
@@ -43,6 +50,7 @@ interface Env {
   DB: CommerceD1Database;
   APP_ENV?: string;
   PREPROD_ORIGIN?: string;
+  PREPROD_DEMO_DATASET?: string;
   IMAGES: {
     input(stream: ReadableStream): {
       transform(options: Record<string, unknown>): {
@@ -101,6 +109,66 @@ const ORDER_BODY_MAX_BYTES = 8 * 1024;
 const SHIPPING_QUOTE_TTL_MS = 15 * 60 * 1_000;
 const SHIPPING_QUOTE_IDEMPOTENCY_PATTERN =
   /^[A-Za-z0-9][A-Za-z0-9_.:-]{7,127}$/;
+
+type SyntheticDemoGate = Readonly<{
+  required: boolean;
+  ready: boolean;
+  reason:
+    | "ready"
+    | "flag-disabled"
+    | "migration-missing"
+    | "sentinel-missing"
+    | "sentinel-invalid"
+    | "dataset-expired"
+    | "database-unavailable";
+  latestMigration: string | null;
+  expiresAt: string | null;
+}>;
+
+async function readSyntheticDemoGate(
+  env: Env,
+  now: string,
+): Promise<SyntheticDemoGate> {
+  const flagEnabled = env.PREPROD_DEMO_DATASET === SYNTHETIC_DEMO_FIXTURE_VERSION;
+  let sentinel: { dataset_kind: string; fixture_version: string; expires_at: string } | null;
+  try {
+    sentinel = await env.DB.prepare(
+      `SELECT dataset_kind, fixture_version, expires_at
+      FROM preprod_demo_dataset WHERE singleton = 1`,
+    ).first<{ dataset_kind: string; fixture_version: string; expires_at: string }>();
+  } catch {
+    return flagEnabled
+      ? Object.freeze({ required: true, ready: false, reason: "sentinel-missing", latestMigration: null, expiresAt: null })
+      : Object.freeze({ required: false, ready: false, reason: "flag-disabled", latestMigration: null, expiresAt: null });
+  }
+  if (!flagEnabled) {
+    return Object.freeze({ required: true, ready: false, reason: "flag-disabled", latestMigration: null, expiresAt: sentinel?.expires_at ?? null });
+  }
+  try {
+    const migration = await env.DB.prepare(
+      "SELECT name FROM d1_migrations ORDER BY name DESC LIMIT 1",
+    ).first<{ name: string }>();
+    const latestMigration = migration?.name ?? null;
+    if (latestMigration !== SYNTHETIC_DEMO_MIGRATION) {
+      return Object.freeze({ required: true, ready: false, reason: "migration-missing", latestMigration, expiresAt: sentinel?.expires_at ?? null });
+    }
+    if (!sentinel) {
+      return Object.freeze({ required: true, ready: false, reason: "sentinel-missing", latestMigration, expiresAt: null });
+    }
+    if (
+      sentinel.dataset_kind !== SYNTHETIC_DEMO_DATASET_KIND ||
+      sentinel.fixture_version !== SYNTHETIC_DEMO_FIXTURE_VERSION
+    ) {
+      return Object.freeze({ required: true, ready: false, reason: "sentinel-invalid", latestMigration, expiresAt: sentinel.expires_at });
+    }
+    if (sentinel.expires_at <= now) {
+      return Object.freeze({ required: true, ready: false, reason: "dataset-expired", latestMigration, expiresAt: sentinel.expires_at });
+    }
+    return Object.freeze({ required: true, ready: true, reason: "ready", latestMigration, expiresAt: sentinel.expires_at });
+  } catch {
+    return Object.freeze({ required: true, ready: false, reason: "database-unavailable", latestMigration: null, expiresAt: sentinel?.expires_at ?? null });
+  }
+}
 
 // These limits are a private-preproduction circuit breaker, not a public
 // anti-bot control. A public launch still requires a separately approved edge
@@ -723,6 +791,14 @@ async function handleShippingQuoteApi(
       commerce.getPublicCartSnapshot(session.cartId, now),
       normalizeShippingAddress(parsedBody.value.address),
     ]);
+    if (env.PREPROD_DEMO_DATASET === SYNTHETIC_DEMO_FIXTURE_VERSION &&
+      !isExactSyntheticDemoAddress(normalizedAddress.zone, normalizedAddress.canonicalJson)) {
+      return shippingQuoteErrorResponse(
+        "INVALID_ADDRESS",
+        "Seules les quatre adresses fictives verrouillées sont acceptées.",
+        400,
+      );
+    }
     if (cart.lines.length === 0) {
       return shippingQuoteErrorResponse(
         "CART_EMPTY",
@@ -954,6 +1030,24 @@ async function handleOrderPaymentApi(
       const body = await parseCreateOrderBody(request);
       if (!body) return cartErrorResponse("INVALID_BODY", "Le formulaire est invalide ou trop volumineux.", 400);
       const normalizedAddress = await normalizeShippingAddress(body.address);
+      if (env.PREPROD_DEMO_DATASET === SYNTHETIC_DEMO_FIXTURE_VERSION &&
+        !isExactSyntheticDemoAddress(normalizedAddress.zone, normalizedAddress.canonicalJson)) {
+        return cartErrorResponse(
+          "INVALID_ADDRESS",
+          "Seules les quatre adresses fictives verrouillées sont acceptées.",
+          400,
+        );
+      }
+      if (
+        env.PREPROD_DEMO_DATASET === SYNTHETIC_DEMO_FIXTURE_VERSION &&
+        body.email.trim().toLowerCase() !== SYNTHETIC_DEMO_EMAIL
+      ) {
+        return cartErrorResponse(
+          "INVALID_BODY",
+          "Seule l’adresse e-mail fictive verrouillée est acceptée.",
+          400,
+        );
+      }
       const addressFingerprint = await hmacSha256Hex(
         authorized.addressProofKey,
         normalizedAddress.canonicalJson,
@@ -1289,173 +1383,6 @@ async function handleCartApi(
   return null;
 }
 
-const ROLLBACK_R8_EXPECTED_MIGRATION =
-  "0008_preprod_synthetic_demo_dataset.sql";
-const ROLLBACK_R8_EXPECTED_MIGRATIONS = Object.freeze([
-  "0000_flimsy_rhino.sql",
-  "0001_lock_cart_line_price_provenance.sql",
-  "0002_lock_order_line_snapshots.sql",
-  "0003_identity_access.sql",
-  "0004_email_outbox_data_rights.sql",
-  "0005_fulfillment_returns_refunds.sql",
-  "0006_allow_bounded_expired_cart_purge.sql",
-  "0007_transactional_preprod_order_payment.sql",
-  ROLLBACK_R8_EXPECTED_MIGRATION,
-]);
-const ROLLBACK_R8_DATASET_KIND = "synthetic-demo";
-const ROLLBACK_R8_FIXTURE_VERSION = "aj-demo-v1";
-const ROLLBACK_R8_EXPIRES_AT = "2026-09-30T23:59:59.999Z";
-
-function isRollbackR8CommerceRoute(url: URL): boolean {
-  return (
-    url.pathname === PREPROD_CART_PATH ||
-    PREPROD_CART_LINE_PATTERN.test(url.pathname) ||
-    url.pathname === PREPROD_SHIPPING_QUOTE_PATH ||
-    url.pathname === PREPROD_ORDER_PATH ||
-    url.pathname === PREPROD_TEST_PAYMENT_PATH ||
-    url.pathname === PREPROD_CURRENT_ORDER_PATH
-  );
-}
-
-function rollbackR8Capabilities() {
-  return Object.freeze({
-    catalog: false,
-    cart: false,
-    shippingQuotes: false,
-    shippingQuoteZones: Object.freeze({
-      EU: false,
-      UK: false,
-      US: false,
-      CA: false,
-    }),
-    shippingQuoteSimulation: false,
-    shippingQuoteSimulationZones: Object.freeze({
-      EU: false,
-      UK: false,
-      US: false,
-      CA: false,
-    }),
-    payment: false,
-    orderCreation: false,
-    reservesValidated: false,
-    syntheticReservesReady: false,
-    orderSimulation: false,
-    paymentTestSimulation: false,
-    emailCaptureSimulation: false,
-    emailDelivery: false,
-    carrier: false,
-    stockSimulation: false,
-    shippingSimulation: false,
-    launchReadiness: false,
-  });
-}
-
-async function rollbackR8HealthResponse(
-  request: Request,
-  env: RuntimeEnv,
-): Promise<Response> {
-  if (request.method !== "GET") {
-    return jsonResponse({ error: "method-not-allowed" }, { status: 405 });
-  }
-
-  const unavailable = (reason: string, latestMigration: string | null) =>
-    jsonResponse(
-      {
-        status: "unavailable",
-        environment: "preproduction",
-        runtimeMode: "post-0008-rollback",
-        reason,
-        latestMigration,
-        launchReadiness: false,
-        capabilities: rollbackR8Capabilities(),
-        stockProjection: [],
-        syntheticDataset: {
-          active: false,
-          valid: false,
-          fixtureVersion: ROLLBACK_R8_FIXTURE_VERSION,
-          expiresAt: ROLLBACK_R8_EXPIRES_AT,
-        },
-      },
-      { status: 503 },
-    );
-
-  if (!env?.DB) {
-    return unavailable("preproduction-database-not-bound", null);
-  }
-
-  let migrationNames: string[] = [];
-  try {
-    const migrations = await env.DB
-      .prepare("SELECT name FROM d1_migrations ORDER BY name ASC")
-      .all<{ name: string }>();
-    migrationNames = migrations.results.map(({ name }) => name);
-  } catch {
-    return unavailable("migration-ledger-unavailable", null);
-  }
-
-  const latestMigration = migrationNames.at(-1) ?? null;
-  if (
-    migrationNames.length !== ROLLBACK_R8_EXPECTED_MIGRATIONS.length ||
-    migrationNames.some(
-      (name, index) => name !== ROLLBACK_R8_EXPECTED_MIGRATIONS[index],
-    )
-  ) {
-    return unavailable("unexpected-migration", latestMigration);
-  }
-
-  let sentinel: {
-    dataset_kind: string;
-    fixture_version: string;
-    expires_at: string;
-  } | null = null;
-  try {
-    sentinel = await env.DB
-      .prepare(
-        `SELECT dataset_kind, fixture_version, expires_at
-        FROM preprod_demo_dataset WHERE singleton = 1`,
-      )
-      .first<{
-        dataset_kind: string;
-        fixture_version: string;
-        expires_at: string;
-      }>();
-  } catch {
-    return unavailable("synthetic-sentinel-unavailable", latestMigration);
-  }
-
-  if (
-    !sentinel ||
-    sentinel.dataset_kind !== ROLLBACK_R8_DATASET_KIND ||
-    sentinel.fixture_version !== ROLLBACK_R8_FIXTURE_VERSION ||
-    sentinel.expires_at !== ROLLBACK_R8_EXPIRES_AT
-  ) {
-    return unavailable("synthetic-sentinel-invalid", latestMigration);
-  }
-
-  if (sentinel.expires_at <= new Date().toISOString()) {
-    return unavailable("synthetic-dataset-expired", latestMigration);
-  }
-
-  return jsonResponse(
-    {
-      status: "rollback",
-      environment: "preproduction",
-      runtimeMode: "post-0008-rollback",
-      latestMigration,
-      launchReadiness: false,
-      capabilities: rollbackR8Capabilities(),
-      stockProjection: [],
-      syntheticDataset: {
-        active: false,
-        valid: true,
-        fixtureVersion: ROLLBACK_R8_FIXTURE_VERSION,
-        expiresAt: sentinel.expires_at,
-      },
-    },
-    { status: 200 },
-  );
-}
-
 export async function preprodApiResponse(
   request: Request,
   env: RuntimeEnv,
@@ -1474,20 +1401,197 @@ export async function preprodApiResponse(
     return jsonResponse({ error: "not-found" }, { status: 404 });
   }
 
-  if (url.pathname === `${PREPROD_API_PREFIX}health`) {
-    return rollbackR8HealthResponse(request, env);
-  }
-
-  if (isRollbackR8CommerceRoute(url)) {
+  if (!env?.DB) {
     return jsonResponse(
-      {
-        status: "unavailable",
-        reason: "post-0008-rollback",
-        launchReadiness: false,
-      },
+      { status: "unavailable", reason: "preproduction-database-not-bound" },
       { status: 503 },
     );
   }
+
+  const now = new Date().toISOString();
+  const syntheticGate = await readSyntheticDemoGate(env, now);
+
+  if (url.pathname === `${PREPROD_API_PREFIX}health`) {
+    if (request.method !== "GET") {
+      return jsonResponse({ error: "method-not-allowed" }, { status: 405 });
+    }
+    return (async () => {
+      const database = env.DB;
+      const unavailable = (latestMigration: string | null) => jsonResponse(
+        {
+          status: "unavailable",
+          environment: "preproduction",
+          capabilities: {
+            catalog: false,
+            cart: false,
+            shippingQuotes: false,
+            shippingQuoteZones: { EU: false, UK: false, US: false, CA: false },
+            shippingQuoteSimulation: false,
+            shippingQuoteSimulationZones: { EU: false, UK: false, US: false, CA: false },
+            payment: false,
+            orderCreation: false,
+            reservesValidated: false,
+            syntheticReservesReady: false,
+            orderSimulation: false,
+            paymentTestSimulation: false,
+            emailCaptureSimulation: false,
+            emailDelivery: false,
+            carrier: false,
+            stockSimulation: false,
+            shippingSimulation: false,
+            launchReadiness: false,
+          },
+          latestMigration,
+          stockProjection: [],
+          syntheticDataset: {
+            active: false,
+            reason: syntheticGate.reason,
+            fixtureVersion: SYNTHETIC_DEMO_FIXTURE_VERSION,
+            expiresAt: syntheticGate.expiresAt,
+          },
+        },
+        { status: 503 },
+      );
+      let latestMigration: string | null = syntheticGate.latestMigration;
+      if (syntheticGate.required && !syntheticGate.ready) return unavailable(latestMigration);
+      try {
+        const migration = await database
+          .prepare(
+            "SELECT name FROM d1_migrations ORDER BY name DESC LIMIT 1",
+          )
+          .first<{ name: string }>();
+        latestMigration = migration?.name ?? null;
+      } catch {
+        return unavailable(null);
+      }
+      const expectedMigration = syntheticGate.required
+        ? SYNTHETIC_DEMO_MIGRATION
+        : "0007_transactional_preprod_order_payment.sql";
+      if (latestMigration !== expectedMigration) {
+        return unavailable(latestMigration);
+      }
+      try {
+        const [stock, shippingConfigurations, reserveValidation] = await Promise.all([
+          database
+            .prepare(
+              `SELECT variant.id AS variant_id,
+                stock.physical_quantity - stock.gift_reserve_quantity
+                  - stock.safety_reserve_quantity - stock.active_reserved_quantity
+                  - stock.sold_quantity AS available_to_sell
+              FROM variants AS variant
+              INNER JOIN inventory AS stock ON stock.variant_id = variant.id
+              WHERE variant.color_key = ?
+              ORDER BY variant.sort_order`,
+            )
+            .bind("rose")
+            .all<{ variant_id: string; available_to_sell: number }>(),
+          database
+            .prepare(
+              `SELECT zone FROM shipping_zone_configurations
+              WHERE status = 'active'
+              GROUP BY zone`,
+            )
+            .all<{ zone: string }>(),
+          database
+            .prepare(
+              `SELECT COUNT(*) AS total,
+                SUM(CASE WHEN reserves_validated = 1 THEN 1 ELSE 0 END) AS validated
+              FROM inventory`,
+            )
+            .first<{ total: number; validated: number }>(),
+        ]);
+        const configuredZones = new Set(
+          shippingConfigurations.results.map((row) => row.zone),
+        );
+        const shippingQuoteZones = Object.freeze({
+          EU: configuredZones.has("EU"),
+          UK: configuredZones.has("UK"),
+          US: configuredZones.has("US"),
+          CA: configuredZones.has("CA"),
+        });
+        const shippingQuotesReady = Object.values(shippingQuoteZones)
+          .every(Boolean);
+        const reservesReady = Boolean(
+          reserveValidation && reserveValidation.total > 0 &&
+          reserveValidation.total === reserveValidation.validated,
+        );
+        const sellableStockReady = stock.results.some(
+          (position: { available_to_sell: number }) => position.available_to_sell > 0,
+        );
+        const testCheckoutReady = shippingQuotesReady && reservesReady &&
+          sellableStockReady;
+        return jsonResponse(
+          {
+            status: "partial",
+            environment: "preproduction",
+            capabilities: {
+              catalog: true,
+              cart: true,
+              shippingQuotes: syntheticGate.required ? false : shippingQuotesReady,
+              shippingQuoteZones: syntheticGate.required
+                ? { EU: false, UK: false, US: false, CA: false }
+                : shippingQuoteZones,
+              shippingQuoteSimulation: syntheticGate.required && shippingQuotesReady,
+              shippingQuoteSimulationZones: syntheticGate.required
+                ? shippingQuoteZones
+                : { EU: false, UK: false, US: false, CA: false },
+              payment: false,
+              reservesValidated: syntheticGate.required ? false : reservesReady,
+              syntheticReservesReady: syntheticGate.required && reservesReady,
+              orderCreation: syntheticGate.required ? false : testCheckoutReady,
+              orderSimulation: syntheticGate.required && testCheckoutReady,
+              paymentTestSimulation: testCheckoutReady,
+              emailCaptureSimulation: testCheckoutReady,
+              emailDelivery: false,
+              carrier: false,
+              stockSimulation: syntheticGate.required,
+              shippingSimulation: syntheticGate.required,
+              launchReadiness: false,
+            },
+            latestMigration,
+            stockProjection: stock.results.map((position: {
+              variant_id: string;
+              available_to_sell: number;
+            }) => ({
+              variantId: position.variant_id,
+              state: position.available_to_sell <= 0
+                  ? "sold-out"
+                  : position.available_to_sell <= 5
+                    ? "low-stock"
+                    : "available",
+            })),
+            syntheticDataset: {
+              active: true,
+              reason: "ready",
+              fixtureVersion: SYNTHETIC_DEMO_FIXTURE_VERSION,
+              expiresAt: syntheticGate.expiresAt,
+            },
+          },
+          { status: 200 },
+        );
+      } catch {
+        return unavailable(latestMigration);
+      }
+    })();
+  }
+
+  if (syntheticGate.required && !syntheticGate.ready) {
+    return cartErrorResponse(
+      "SYNTHETIC_DEMO_UNAVAILABLE",
+      "La démonstration privée est fermée.",
+      503,
+      { "Retry-After": "60" },
+    );
+  }
+
+  const orderPaymentResponse = await handleOrderPaymentApi(request, env, url);
+  if (orderPaymentResponse) return orderPaymentResponse;
+
+  const shippingQuoteResponse = await handleShippingQuoteApi(request, env, url);
+  if (shippingQuoteResponse) return shippingQuoteResponse;
+
+  const cartResponse = await handleCartApi(request, env, url);
+  if (cartResponse) return cartResponse;
 
   return jsonResponse({ error: "not-found" }, { status: 404 });
 }

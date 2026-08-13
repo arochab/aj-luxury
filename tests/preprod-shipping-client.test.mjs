@@ -7,6 +7,10 @@ import {
   shippingQuoteAttemptCanReplay,
   ShippingQuoteApiError,
 } from "../lib/commerce/preprod-shipping-client.ts";
+import {
+  SYNTHETIC_DEMO_ADDRESS_FIXTURES,
+  SYNTHETIC_DEMO_EMAIL,
+} from "../lib/preprod/synthetic-demo.ts";
 
 const csrf = "A".repeat(43);
 
@@ -143,10 +147,16 @@ test("checkout UI remains real-cart, test-only payment and carrier-neutral", asy
   assert.match(client, /createPreprodOrder/);
   assert.match(client, /payPreprodOrder/);
   assert.match(client, /getCurrentPreprodOrder/);
-  assert.match(client, /@demo\.invalid/);
+  assert.equal(SYNTHETIC_DEMO_EMAIL, "client@demo.invalid");
+  assert.match(client, /value=\{SYNTHETIC_DEMO_EMAIL\}/);
+  assert.match(client, /email: SYNTHETIC_DEMO_EMAIL/);
+  assert.match(client, /disabled=\{submitting\}/);
   assert.match(client, /checkout\.simulationAck/);
   assert.match(client, /checkout\.noDebitNoEmail/);
-  assert.match(client, /countryCode === "US"/);
+  assert.deepEqual(
+    SYNTHETIC_DEMO_ADDRESS_FIXTURES.map(({ zone }) => zone),
+    ["EU", "UK", "US", "CA"],
+  );
   assert.match(cart, /href="\/checkout"/);
   assert.match(styles, /\.form select[\s\S]*min-height: 48px/);
   assert.match(styles, /@media \(max-width: 800px\)/);

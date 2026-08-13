@@ -3,6 +3,5 @@
   "dataset_kind": "synthetic-demo",
   "fixture_version": "aj-demo-v1",
   "expires_at": "2026-09-30T23:59:59.999Z",
-  "runtime_mode": "post-0008-rollback",
   "production_promotion": "forbidden"
 }
