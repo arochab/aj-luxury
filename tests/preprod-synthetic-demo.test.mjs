@@ -7,6 +7,9 @@ import { fileURLToPath } from "node:url";
 
 import { D1CommerceStore } from "../lib/commerce/d1-commerce-store.ts";
 import {
+  CLIENT_VALIDATED_PARCEL_MIGRATION,
+} from "../lib/commerce/parcel-profiles.ts";
+import {
   SYNTHETIC_DEMO_ADDRESS_FIXTURES,
   SYNTHETIC_DEMO_EMAIL,
   SYNTHETIC_DEMO_FIXTURE_VERSION,
@@ -88,9 +91,9 @@ function recordMigration(sqlite) {
   sqlite.prepare("INSERT INTO d1_migrations(name) VALUES (?)").run(SYNTHETIC_DEMO_MIGRATION);
 }
 
-async function runtime() {
+async function runtime(lastMigration = CLIENT_VALIDATED_PARCEL_MIGRATION) {
   const sqlite = database();
-  for (const name of migrations) applySql(sqlite, name);
+  applyThrough(sqlite, lastMigration);
   recordMigration(sqlite);
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
   workerUrl.searchParams.set("synthetic-demo", `${process.pid}-${Date.now()}-${crypto.randomUUID()}`);
@@ -218,6 +221,7 @@ test("synthetic health is honest and missing flag or expiration fails closed wit
   assert.equal(payload.capabilities.syntheticReservesReady, true);
   assert.equal(payload.capabilities.stockSimulation, true);
   assert.equal(payload.syntheticDataset.active, true);
+  assert.equal(payload.latestMigration, CLIENT_VALIDATED_PARCEL_MIGRATION);
   assert.equal(context.d1.queries.some((query) => /d1_migrations/.test(query)), false);
 
   const before = context.sqlite.prepare("SELECT COUNT(*) count FROM carts").get().count;
@@ -239,6 +243,69 @@ test("synthetic health is honest and missing flag or expiration fails closed wit
     globalThis.Date = RealDate;
   }
   context.sqlite.close();
+});
+
+test("health stays closed on 0008 and becomes ready only with the exact 0009 schema", async () => {
+  const migration0008 = await runtime(SYNTHETIC_DEMO_MIGRATION);
+  const before = migration0008.sqlite.prepare("SELECT COUNT(*) count FROM carts").get().count;
+  const unavailable = await invoke(migration0008, "/api/preprod/health");
+  assert.equal(unavailable.status, 503);
+  const unavailablePayload = await unavailable.json();
+  assert.equal(unavailablePayload.status, "unavailable");
+  assert.equal(unavailablePayload.syntheticDataset.reason, "installation-proof-invalid");
+  assert.equal(unavailablePayload.latestMigration, SYNTHETIC_DEMO_MIGRATION);
+  assert.equal(unavailablePayload.capabilities.shippingQuotes, false);
+  const closedCart = await invoke(migration0008, "/api/preprod/cart", {
+    method: "POST",
+    headers: headers(),
+  });
+  assert.equal(closedCart.status, 503);
+  assert.equal(
+    migration0008.sqlite.prepare("SELECT COUNT(*) count FROM carts").get().count,
+    before,
+  );
+  migration0008.sqlite.close();
+
+  const migration0009 = await runtime();
+  const ready = await invoke(migration0009, "/api/preprod/health");
+  assert.equal(ready.status, 200);
+  const readyPayload = await ready.json();
+  assert.equal(readyPayload.syntheticDataset.reason, "ready");
+  assert.equal(readyPayload.latestMigration, CLIENT_VALIDATED_PARCEL_MIGRATION);
+  assert.equal(readyPayload.capabilities.shippingQuoteSimulation, true);
+  migration0009.sqlite.close();
+});
+
+test("missing, extra or renamed 0009 schema objects fail closed without writes", async () => {
+  const mutations = [
+    "DROP TABLE shipping_quote_parcel_snapshots",
+    `CREATE TRIGGER trg_shipping_quote_parcel_snapshot_unexpected
+      BEFORE INSERT ON shipping_quote_parcel_snapshots BEGIN SELECT 1; END`,
+    `DROP TRIGGER trg_shipping_quote_parcel_snapshot_matches_cart;
+      CREATE TRIGGER trg_shipping_quote_parcel_snapshot_cart_guard_renamed
+      BEFORE INSERT ON shipping_quote_parcel_snapshots BEGIN SELECT 1; END`,
+  ];
+  for (const mutation of mutations) {
+    const context = await runtime();
+    context.sqlite.exec(mutation);
+    const before = context.sqlite.prepare("SELECT COUNT(*) count FROM carts").get().count;
+    const health = await invoke(context, "/api/preprod/health");
+    assert.equal(health.status, 503);
+    const payload = await health.json();
+    assert.equal(payload.syntheticDataset.reason, "installation-proof-invalid");
+    assert.equal(payload.latestMigration, SYNTHETIC_DEMO_MIGRATION);
+    assert.equal(payload.capabilities.shippingQuotes, false);
+    const cart = await invoke(context, "/api/preprod/cart", {
+      method: "POST",
+      headers: headers(),
+    });
+    assert.equal(cart.status, 503);
+    assert.equal(
+      context.sqlite.prepare("SELECT COUNT(*) count FROM carts").get().count,
+      before,
+    );
+    context.sqlite.close();
+  }
 });
 
 test("missing, extra or renamed synthetic guards invalidate proof with zero writes", async () => {

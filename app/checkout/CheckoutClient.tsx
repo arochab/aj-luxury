@@ -188,6 +188,8 @@ export default function CheckoutClient() {
 
   const errorMessage = errorCode === "CONFIGURATION_UNAVAILABLE"
     ? t("checkout.configurationUnavailable")
+    : errorCode === "PARCEL_CONFIGURATION_UNAVAILABLE"
+      ? t("checkout.parcelUnavailable")
     : errorCode === "DESTINATION_UNAVAILABLE"
       ? t("checkout.destinationUnavailable")
       : errorCode === "INVALID_ADDRESS" || errorCode === "INVALID_JSON"
@@ -305,6 +307,9 @@ export default function CheckoutClient() {
               <strong>{t("checkout.simulationResult")}</strong>
               <p>
                 {t("checkout.estimatedDelivery")} {quote.estimatedDaysMin}–{quote.estimatedDaysMax} {t("checkout.days")} ({syntheticQualifier})
+              </p>
+              <p>
+                {t("checkout.parcelProfile")} {quote.parcel.weightGrams} g · {quote.parcel.lengthCm} × {quote.parcel.widthCm} × {quote.parcel.heightCm} cm
               </p>
               <p>
                 {quote.dutiesTerms === "EU_INCLUDED"

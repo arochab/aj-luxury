@@ -1263,6 +1263,51 @@ export const shippingQuotes = sqliteTable(
   ],
 );
 
+export const shippingQuoteParcelSnapshots = sqliteTable(
+  "shipping_quote_parcel_snapshots",
+  {
+    quoteId: text("quote_id")
+      .primaryKey()
+      .references(() => shippingQuotes.id, { onDelete: "cascade" }),
+    profileCode: text("profile_code", {
+      enum: [
+        "AJL_ENVELOPE_1_ITEM_V1",
+        "AJL_ENVELOPE_2_ITEMS_V1",
+        "AJL_ENVELOPE_3_ITEMS_V1",
+      ],
+    }).notNull(),
+    sourceVersion: text("source_version", {
+      enum: ["client-validated-2026-08-13"],
+    }).notNull(),
+    itemCount: integer("item_count").notNull(),
+    weightGrams: integer("weight_grams").notNull(),
+    lengthMm: integer("length_mm").notNull(),
+    widthMm: integer("width_mm").notNull(),
+    heightMm: integer("height_mm").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    check(
+      "ck_shipping_quote_parcel_snapshots_exact_profile",
+      sql`${table.sourceVersion} = 'client-validated-2026-08-13'
+        AND ${table.lengthMm} = 400
+        AND ${table.widthMm} = 320
+        AND ${table.heightMm} = 40
+        AND (
+          (${table.itemCount} = 1
+            AND ${table.profileCode} = 'AJL_ENVELOPE_1_ITEM_V1'
+            AND ${table.weightGrams} = 150)
+          OR (${table.itemCount} = 2
+            AND ${table.profileCode} = 'AJL_ENVELOPE_2_ITEMS_V1'
+            AND ${table.weightGrams} = 250)
+          OR (${table.itemCount} = 3
+            AND ${table.profileCode} = 'AJL_ENVELOPE_3_ITEMS_V1'
+            AND ${table.weightGrams} = 350)
+        )`,
+    ),
+  ],
+);
+
 export const shipments = sqliteTable(
   "shipments",
   {

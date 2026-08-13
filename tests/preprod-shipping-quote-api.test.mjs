@@ -9,7 +9,7 @@ import { normalizeShippingAddress } from "../lib/commerce/fulfillment-domain.ts"
 const ORIGIN = "https://aj-luxury-preprod.example";
 const drizzleDirectory = fileURLToPath(new URL("../drizzle/", import.meta.url));
 const migrationPaths = readdirSync(drizzleDirectory)
-  .filter((name) => /^000[0-7]_.+\.sql$/.test(name))
+  .filter((name) => /^000(?:[0-7]|9)_.+\.sql$/.test(name))
   .sort()
   .map((name) => `${drizzleDirectory}${name}`);
 
@@ -353,13 +353,42 @@ test("shipping quote is D1-persistent, deterministic and exposes only the public
   assert.match(payload.data.quoteId, /^quote_[0-9a-f]{64}$/);
   assert.deepEqual(Object.keys(payload.data).sort(), [
     "amountCents", "carrierConnected", "cart", "currency", "dutiesTerms",
-    "estimatedDaysMax", "estimatedDaysMin", "expiresAt", "quoteId", "simulation", "zone",
+    "estimatedDaysMax", "estimatedDaysMin", "expiresAt", "parcel", "quoteId",
+    "simulation", "zone",
   ].sort());
   assert.equal(payload.data.amountCents, 1375);
   assert.equal(payload.data.simulation, true);
   assert.equal(payload.data.carrierConnected, false);
   assert.equal(payload.data.cart.itemCount, 2);
+  assert.deepEqual(payload.data.parcel, {
+    profileCode: "AJL_ENVELOPE_2_ITEMS_V1",
+    itemCount: 2,
+    weightGrams: 250,
+    lengthCm: 40,
+    widthCm: 32,
+    heightCm: 4,
+  });
   assert.equal(context.sqlite.prepare("SELECT COUNT(*) AS count FROM shipping_quotes").get().count, 1);
+  assert.deepEqual(
+    context.sqlite.prepare(`SELECT profile_code, source_version, item_count,
+      weight_grams, length_mm, width_mm, height_mm
+      FROM shipping_quote_parcel_snapshots`).get(),
+    Object.assign(Object.create(null), {
+      profile_code: "AJL_ENVELOPE_2_ITEMS_V1",
+      source_version: "client-validated-2026-08-13",
+      item_count: 2,
+      weight_grams: 250,
+      length_mm: 400,
+      width_mm: 320,
+      height_mm: 40,
+    }),
+  );
+  assert.throws(
+    () => context.sqlite.exec(
+      "UPDATE shipping_quote_parcel_snapshots SET weight_grams=350",
+    ),
+    /immutable/,
+  );
   assert.equal("stockState" in payload.data.cart.lines[0], false);
   const durableRoute = context.sqlite.prepare(
     "SELECT shipping_address_json FROM shipping_quotes",
@@ -381,6 +410,67 @@ test("shipping quote is D1-persistent, deterministic and exposes only the public
     /Ada|rue du Test|shipping_address|fingerprint|configuration|service_code|610711|physical|reserve|available_to_sell/i,
   );
   context.sqlite.close();
+});
+
+test("parcel selection sums multiple lines and unmeasured carts fail closed", async () => {
+  const multi = await fixture();
+  activate(multi, "EU", 1375);
+  const multiSession = await cartWithLine(multi, "variant_boxer_pourpre_m", 1);
+  const secondLine = await invoke(
+    multi,
+    "/api/preprod/cart/lines/variant_boxer_rose-pale_l",
+    {
+      method: "PUT",
+      headers: headers(multiSession, { "Content-Type": "application/json" }),
+      body: JSON.stringify({ quantity: 1 }),
+    },
+  );
+  assert.equal(secondLine.status, 200);
+  const multiQuote = await invoke(
+    multi,
+    "/api/preprod/checkout/shipping-quote",
+    quoteRequest(multiSession, france, "quote-attempt-multi-line"),
+  );
+  assert.equal(multiQuote.status, 200);
+  assert.deepEqual((await multiQuote.json()).data.parcel, {
+    profileCode: "AJL_ENVELOPE_2_ITEMS_V1",
+    itemCount: 2,
+    weightGrams: 250,
+    lengthCm: 40,
+    widthCm: 32,
+    heightCm: 4,
+  });
+  multi.sqlite.close();
+
+  const overLimit = await fixture();
+  activate(overLimit, "EU", 1375);
+  const overLimitSession = await cartWithLine(
+    overLimit,
+    "variant_boxer_pourpre_m",
+    4,
+  );
+  const rejected = await invoke(
+    overLimit,
+    "/api/preprod/checkout/shipping-quote",
+    quoteRequest(overLimitSession, france, "quote-attempt-over-profile-limit"),
+  );
+  assert.equal(rejected.status, 422);
+  assert.equal(
+    (await rejected.json()).error.code,
+    "PARCEL_CONFIGURATION_UNAVAILABLE",
+  );
+  assert.equal(
+    overLimit.sqlite.prepare("SELECT COUNT(*) count FROM shipping_quotes").get()
+      .count,
+    0,
+  );
+  assert.equal(
+    overLimit.sqlite.prepare(
+      "SELECT COUNT(*) count FROM shipping_quote_parcel_snapshots",
+    ).get().count,
+    0,
+  );
+  overLimit.sqlite.close();
 });
 
 test("shipping quote replay stays byte-stable when sufficient stock crosses the low-stock threshold", async () => {

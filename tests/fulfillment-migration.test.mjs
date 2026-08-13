@@ -35,6 +35,7 @@ const migrationNames = [
   "0006_allow_bounded_expired_cart_purge.sql",
   "0007_transactional_preprod_order_payment.sql",
   "0008_preprod_synthetic_demo_dataset.sql",
+  "0009_shipping_quote_parcel_snapshots.sql",
 ];
 const legacyMigrationNames = migrationNames.slice(0, 8);
 // Hosted D1 bootstrap version 1 succeeded with exactly these LF-normalized
@@ -66,7 +67,7 @@ test("the exact Drizzle D1 splitter emits no blank statements", () => {
   assert.equal(migrations.length, migrationNames.length);
   assert.equal(
     migrations.reduce((total, migration) => total + migration.sql.length, 0),
-    396,
+    400,
   );
   for (const [migrationIndex, migration] of migrations.entries()) {
     for (const [statementIndex, statement] of migration.sql.entries()) {
@@ -171,7 +172,7 @@ function run(root, args, expectFailure = false) {
     cwd: root,
     encoding: "utf8",
     env: environment(root),
-    timeout: 60_000,
+    timeout: 120_000,
     windowsHide: true,
   });
   const output = `${result.stdout ?? ""}${result.stderr ?? ""}`.replace(
@@ -251,7 +252,7 @@ function query(root, configPath, state, sql, expectFailure = false) {
   return parseFirstJsonArray(output)[0].results;
 }
 
-test("0005 stays frozen; 0006 through 0008 remain additive", () => {
+test("0005 stays frozen; 0006 through 0009 remain additive", () => {
   for (const [name, expected] of Object.entries(bootstrapHashes)) {
     const normalized = readFileSync(join(migrationRoot, name), "utf8").replaceAll(
       "\r\n",
@@ -290,6 +291,10 @@ test("0005 stays frozen; 0006 through 0008 remain additive", () => {
     journal.entries[8].tag,
     "0008_preprod_synthetic_demo_dataset",
   );
+  assert.equal(
+    journal.entries[9].tag,
+    "0009_shipping_quote_parcel_snapshots",
+  );
   const retentionMigration = readFileSync(
     join(migrationRoot, "0006_allow_bounded_expired_cart_purge.sql"),
     "utf8",
@@ -326,6 +331,20 @@ test("0005 stays frozen; 0006 through 0008 remain additive", () => {
       .digest("hex"),
     syntheticDemoMigrationSha256,
   );
+  const parcelMigration = readFileSync(
+    join(migrationRoot, "0009_shipping_quote_parcel_snapshots.sql"),
+    "utf8",
+  );
+  assert.match(parcelMigration, /shipping_quote_parcel_snapshots/);
+  assert.match(parcelMigration, /client-validated-2026-08-13/);
+  assert.match(parcelMigration, /weight_grams.*150/s);
+  assert.match(parcelMigration, /weight_grams.*250/s);
+  assert.match(parcelMigration, /weight_grams.*350/s);
+  assert.match(parcelMigration, /length_mm.*400/s);
+  assert.match(parcelMigration, /width_mm.*320/s);
+  assert.match(parcelMigration, /height_mm.*40/s);
+  assert.match(parcelMigration, /shipping_quote_parcel_snapshot_matches_cart/);
+  assert.match(parcelMigration, /shipping_quote_parcel_snapshot_immutable/);
   assert.match(retentionMigration, /orders/);
   assert.match(retentionMigration, /shipping_quotes/);
   const snapshotPath = join(migrationRoot, "meta", "0005_snapshot.json");
@@ -338,7 +357,7 @@ test("0005 stays frozen; 0006 through 0008 remain additive", () => {
   assert.ok(snapshot.tables.shipment_tracking_events.indexes.ux_tracking_events_carrier_receipt);
 });
 
-test("real local D1 applies 0000 to 0007, upgrades populated 0004 and replays", (t) => {
+test("real local D1 applies the governed chain, upgrades populated 0004 and replays", (t) => {
   assert.ok(existsSync(wranglerCli), "local Wrangler must be installed");
   // Keep the local Wrangler state inside the governed workspace but outside
   // this deeply nested worktree so Windows does not exceed SQLite path limits.

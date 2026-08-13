@@ -9,6 +9,14 @@ const marker = JSON.parse(await readFile(
   new URL(".openai/preprod-demo-only.json", project),
   "utf8",
 ));
+const localBranch = spawnSync("git", ["branch", "--show-current"], {
+  cwd: fileURLToPath(project),
+  encoding: "utf8",
+});
+assert.equal(localBranch.status, 0);
+const currentSourceBranch = process.env.GITHUB_ACTIONS === "true"
+  ? process.env.GITHUB_HEAD_REF || process.env.GITHUB_REF_NAME
+  : localBranch.stdout.trim();
 
 function check(overrides = {}) {
   return spawnSync(
@@ -41,4 +49,18 @@ test("synthetic demo build boundary requires the exact preproduction target", ()
   assert.notEqual(check({ GITHUB_REF_NAME: "main" }).status, 0);
   assert.notEqual(check({ GITHUB_BASE_REF: "main" }).status, 0);
   assert.notEqual(check({ GITHUB_REF_NAME: "candidate/another-branch" }).status, 0);
+});
+
+test("the real current source branch is governed while main and foreign branches stay closed", () => {
+  assert.ok(currentSourceBranch);
+  assert.equal(marker.allowed_source_branches.includes(currentSourceBranch), true);
+  assert.equal(check({
+    GITHUB_HEAD_REF: "",
+    GITHUB_REF_NAME: currentSourceBranch,
+  }).status, 0);
+  assert.notEqual(check({ GITHUB_HEAD_REF: "", GITHUB_REF_NAME: "main" }).status, 0);
+  assert.notEqual(check({
+    GITHUB_HEAD_REF: "",
+    GITHUB_REF_NAME: "codex/foreign-unreviewed-branch",
+  }).status, 0);
 });

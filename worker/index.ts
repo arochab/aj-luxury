@@ -11,7 +11,10 @@ import {
 import { CommerceError } from "../lib/commerce/backend-domain.ts";
 import { D1CommerceStore } from "../lib/commerce/d1-commerce-store.ts";
 import type { PublicCartSnapshot } from "../lib/commerce/d1-commerce-store.ts";
-import { D1FulfillmentStore } from "../lib/commerce/d1-fulfillment-store.ts";
+import {
+  D1FulfillmentStore,
+  type ShippingQuoteParcelSnapshotRow,
+} from "../lib/commerce/d1-fulfillment-store.ts";
 import {
   D1PreprodCheckoutStore,
   PreprodCheckoutError,
@@ -32,6 +35,11 @@ import {
   sha256Hex,
   type ShippingAddressInput,
 } from "../lib/commerce/fulfillment-domain.ts";
+import {
+  CLIENT_VALIDATED_PARCEL_MIGRATION,
+  parcelSnapshotMatchesProfile,
+  resolveClientValidatedParcelProfile,
+} from "../lib/commerce/parcel-profiles.ts";
 import {
   authorizeBrowserMutation,
   buildCsrfCookie,
@@ -156,6 +164,16 @@ const SYNTHETIC_DEMO_TRIGGER_INVENTORY = Object.freeze([
   "trg_preprod_demo_shipping_quote_active_insert",
   "trg_preprod_demo_shipping_quote_active_update",
   "trg_preprod_demo_webhook_active_insert",
+] as const);
+
+const SHIPPING_PARCEL_TRIGGER_INVENTORY = Object.freeze([
+  "trg_shipping_quote_parcel_snapshot_immutable_update",
+  "trg_shipping_quote_parcel_snapshot_matches_cart",
+  "trg_shipping_quote_parcel_snapshot_retain_delete",
+] as const);
+
+const SHIPPING_PARCEL_TABLE_INVENTORY = Object.freeze([
+  "shipping_quote_parcel_snapshots",
 ] as const);
 
 function constantTimeTextEqual(left: string, right: string): boolean {
@@ -285,17 +303,26 @@ async function readSyntheticDemoGate(
   }
   try {
     // Sites does not expose its internal migration ledger to the Worker.
-    // Prove 0008 from its immutable sentinel plus the exhaustive guard
-    // inventory that 0008 installs in the application database itself.
+    // Prove 0008 from its immutable sentinel plus its exhaustive guard
+    // inventory, then prove 0009 from its exact table and trigger inventory.
+    // Any missing, renamed or prefix-colliding object keeps the runtime closed.
     const installed = await env.DB.prepare(
-      `SELECT name FROM sqlite_master
-      WHERE type = 'trigger' AND name LIKE 'trg_preprod_demo_%'
-      ORDER BY name`,
-    ).all<{ name: string }>();
-    const names = installed.results.map((row) => row.name);
+      `SELECT type, name FROM sqlite_master
+      WHERE (type = 'trigger' AND (
+          name LIKE 'trg_preprod_demo_%'
+          OR name LIKE 'trg_shipping_quote_parcel_snapshot_%'
+        ))
+        OR (type = 'table' AND name LIKE 'shipping_quote_parcel_snapshot%')
+      ORDER BY type, name`,
+    ).all<{ type: string; name: string }>();
+    const syntheticTriggerNames = installed.results
+      .filter((row) => row.type === "trigger" && row.name.startsWith("trg_preprod_demo_"))
+      .map((row) => row.name);
     if (
-      names.length !== SYNTHETIC_DEMO_TRIGGER_INVENTORY.length ||
-      names.some((name, index) => name !== SYNTHETIC_DEMO_TRIGGER_INVENTORY[index])
+      syntheticTriggerNames.length !== SYNTHETIC_DEMO_TRIGGER_INVENTORY.length ||
+      syntheticTriggerNames.some(
+        (name, index) => name !== SYNTHETIC_DEMO_TRIGGER_INVENTORY[index],
+      )
     ) {
       return Object.freeze({
         required: true,
@@ -305,7 +332,37 @@ async function readSyntheticDemoGate(
         expiresAt: sentinel.expires_at,
       });
     }
-    return Object.freeze({ required: true, ready: true, reason: "ready", latestMigration: SYNTHETIC_DEMO_MIGRATION, expiresAt: sentinel.expires_at });
+    const parcelTableNames = installed.results
+      .filter((row) => row.type === "table" && row.name.startsWith("shipping_quote_parcel_snapshot"))
+      .map((row) => row.name);
+    const parcelTriggerNames = installed.results
+      .filter((row) => row.type === "trigger" && row.name.startsWith("trg_shipping_quote_parcel_snapshot_"))
+      .map((row) => row.name);
+    if (
+      parcelTableNames.length !== SHIPPING_PARCEL_TABLE_INVENTORY.length ||
+      parcelTableNames.some(
+        (name, index) => name !== SHIPPING_PARCEL_TABLE_INVENTORY[index],
+      ) ||
+      parcelTriggerNames.length !== SHIPPING_PARCEL_TRIGGER_INVENTORY.length ||
+      parcelTriggerNames.some(
+        (name, index) => name !== SHIPPING_PARCEL_TRIGGER_INVENTORY[index],
+      )
+    ) {
+      return Object.freeze({
+        required: true,
+        ready: false,
+        reason: "installation-proof-invalid",
+        latestMigration: SYNTHETIC_DEMO_MIGRATION,
+        expiresAt: sentinel.expires_at,
+      });
+    }
+    return Object.freeze({
+      required: true,
+      ready: true,
+      reason: "ready",
+      latestMigration: CLIENT_VALIDATED_PARCEL_MIGRATION,
+      expiresAt: sentinel.expires_at,
+    });
   } catch {
     return Object.freeze({ required: true, ready: false, reason: "database-unavailable", latestMigration: null, expiresAt: sentinel?.expires_at ?? null });
   }
@@ -601,6 +658,7 @@ type CartQuoteReadiness = Readonly<{
   revision: number;
   insufficientCount: number;
   lineCount: number;
+  itemCount: number;
 }>;
 
 function shippingQuoteErrorResponse(
@@ -697,6 +755,7 @@ async function getCartQuoteReadiness(
     .prepare(
       `SELECT cart.fulfillment_revision AS revision,
         COUNT(line.id) AS line_count,
+        COALESCE(SUM(line.quantity), 0) AS item_count,
         COALESCE(SUM(CASE
           WHEN stock.physical_quantity - stock.gift_reserve_quantity
             - stock.safety_reserve_quantity - stock.active_reserved_quantity
@@ -712,12 +771,14 @@ async function getCartQuoteReadiness(
     .first<{
       revision: number;
       line_count: number;
+      item_count: number;
       insufficient_count: number;
     }>();
   if (!row) return null;
   return Object.freeze({
     revision: Number(row.revision),
     lineCount: Number(row.line_count),
+    itemCount: Number(row.item_count),
     insufficientCount: Number(row.insufficient_count),
   });
 }
@@ -819,6 +880,7 @@ function publicShippingQuoteResponse(
   }>,
   zone: "EU" | "UK" | "US" | "CA",
   cart: PublicCartSnapshot,
+  parcel: ShippingQuoteParcelSnapshotRow,
 ): Response {
   const stableCart: PublicShippingCartSnapshot = Object.freeze({
     status: cart.status,
@@ -851,6 +913,14 @@ function publicShippingQuoteResponse(
       estimatedDaysMax: quote.estimated_days_max,
       dutiesTerms: quote.duties_terms,
       expiresAt: quote.expires_at,
+      parcel: {
+        profileCode: parcel.profile_code,
+        itemCount: parcel.item_count,
+        weightGrams: parcel.weight_grams,
+        lengthCm: parcel.length_mm / 10,
+        widthCm: parcel.width_mm / 10,
+        heightCm: parcel.height_mm / 10,
+      },
       cart: stableCart,
     },
   });
@@ -962,6 +1032,24 @@ async function handleShippingQuoteApi(
         409,
       );
     }
+    const parcelProfile = resolveClientValidatedParcelProfile(cart.lines);
+    if (!parcelProfile) {
+      return shippingQuoteErrorResponse(
+        "PARCEL_CONFIGURATION_UNAVAILABLE",
+        "Ce panier dépasse les profils colis validés. Limitez-le à trois articles.",
+        422,
+      );
+    }
+    if (
+      readiness.itemCount !== cart.itemCount ||
+      readiness.itemCount !== parcelProfile.itemCount
+    ) {
+      return shippingQuoteErrorResponse(
+        "CART_CHANGED",
+        "Le panier a changé. Actualisez avant de continuer.",
+        409,
+      );
+    }
 
     const quoteId = `quote_${await sha256Hex(
       `${session.cartId}\u0000${idempotencyKey}`,
@@ -1011,18 +1099,28 @@ async function handleShippingQuoteApi(
         cartId: session.cartId,
         address: parsedBody.value.address,
         addressFingerprint: addressProofFingerprint,
+        parcelProfile,
         expiresAt,
         now,
       });
-    const [verifiedCart, verifiedReadiness] = await Promise.all([
+    const [verifiedCart, verifiedReadiness, parcelSnapshot] = await Promise.all([
       commerce.getPublicCartSnapshot(session.cartId, now),
       getCartQuoteReadiness(env.DB, session.cartId),
+      fulfillment.getShippingQuoteParcelSnapshot(quote.id),
     ]);
+    const verifiedParcelProfile = resolveClientValidatedParcelProfile(
+      verifiedCart.lines,
+    );
     if (
       !verifiedReadiness ||
+      !verifiedParcelProfile ||
       verifiedReadiness.revision !== quote.cart_revision ||
       verifiedReadiness.insufficientCount > 0 ||
-      verifiedReadiness.lineCount !== verifiedCart.lines.length
+      verifiedReadiness.lineCount !== verifiedCart.lines.length ||
+      verifiedReadiness.itemCount !== verifiedCart.itemCount ||
+      verifiedParcelProfile.profileCode !== parcelProfile.profileCode ||
+      !parcelSnapshot ||
+      !parcelSnapshotMatchesProfile(parcelSnapshot, verifiedParcelProfile)
     ) {
       return shippingQuoteErrorResponse(
         verifiedReadiness?.insufficientCount
@@ -1038,6 +1136,7 @@ async function handleShippingQuoteApi(
       quote,
       normalizedAddress.zone,
       verifiedCart,
+      parcelSnapshot,
     );
   } catch (error) {
     return mapShippingQuoteError(error);
@@ -1791,7 +1890,10 @@ export async function preprodApiResponse(
       if (syntheticGate.required && !syntheticGate.ready) {
         return unavailable(latestMigration, syntheticGate.reason);
       }
-      if (!syntheticGate.ready || latestMigration !== SYNTHETIC_DEMO_MIGRATION) {
+      if (
+        !syntheticGate.ready ||
+        latestMigration !== CLIENT_VALIDATED_PARCEL_MIGRATION
+      ) {
         return unavailable(latestMigration, "installation-proof-invalid");
       }
       try {

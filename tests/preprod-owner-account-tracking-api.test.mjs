@@ -13,7 +13,7 @@ const ORIGIN = "https://aj-luxury-preprod.example";
 const OWNER_EMAIL = "adam.chabbi94@gmail.com";
 const drizzleDirectory = fileURLToPath(new URL("../drizzle/", import.meta.url));
 const migrations = readdirSync(drizzleDirectory)
-  .filter((name) => /^000[0-8]_.+\.sql$/.test(name))
+  .filter((name) => /^000[0-9]_.+\.sql$/.test(name))
   .sort()
   .map((name) => `${drizzleDirectory}${name}`);
 

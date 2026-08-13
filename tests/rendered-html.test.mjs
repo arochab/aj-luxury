@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-const syntheticTriggerRows = [
+const governedSchemaRows = [
   "trg_preprod_demo_cart_active_delete",
   "trg_preprod_demo_cart_active_insert",
   "trg_preprod_demo_cart_active_update",
@@ -18,7 +18,21 @@ const syntheticTriggerRows = [
   "trg_preprod_demo_shipping_quote_active_insert",
   "trg_preprod_demo_shipping_quote_active_update",
   "trg_preprod_demo_webhook_active_insert",
-].map((name) => ({ name }));
+].map((name) => ({ type: "trigger", name })).concat([
+  { type: "table", name: "shipping_quote_parcel_snapshots" },
+  {
+    type: "trigger",
+    name: "trg_shipping_quote_parcel_snapshot_immutable_update",
+  },
+  {
+    type: "trigger",
+    name: "trg_shipping_quote_parcel_snapshot_matches_cart",
+  },
+  {
+    type: "trigger",
+    name: "trg_shipping_quote_parcel_snapshot_retain_delete",
+  },
+]);
 
 async function invokeWorker(
   pathname = "/",
@@ -269,7 +283,7 @@ test("synthetic health exposes simulations, never live capabilities, when all fo
         },
         async all() {
           return query.includes("sqlite_master")
-            ? { results: syntheticTriggerRows }
+            ? { results: governedSchemaRows }
             : query.includes("shipping_zone_configurations")
             ? { results: [{ zone: "EU" }, { zone: "UK" }, { zone: "US" }, { zone: "CA" }] }
             : { results: [{ variant_id: "variant_available", available_to_sell: 1 }] };
