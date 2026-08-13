@@ -271,8 +271,8 @@ BEGIN
     AND `consumed_at` IS NULL
     AND `revoked_at` IS NULL
     AND `expires_at` > NEW.`created_at`;
-  SELECT CASE WHEN changes() = 1 THEN 1
-    ELSE RAISE(ABORT, 'identity_customer_challenge_consume_failed') END;
+  SELECT RAISE(ABORT, 'identity_customer_challenge_consume_failed')
+  WHERE changes() <> 1;
 END;--> statement-breakpoint
 CREATE TRIGGER `trg_customer_sessions_immutable_identity`
 BEFORE UPDATE ON `customer_sessions`
@@ -377,8 +377,8 @@ BEGIN
     AND `consumed_at` IS NULL
     AND `revoked_at` IS NULL
     AND `expires_at` > NEW.`created_at`;
-  SELECT CASE WHEN changes() = 1 THEN 1
-    ELSE RAISE(ABORT, 'identity_guest_challenge_consume_failed') END;
+  SELECT RAISE(ABORT, 'identity_guest_challenge_consume_failed')
+  WHERE changes() <> 1;
 END;--> statement-breakpoint
 CREATE TRIGGER `trg_guest_order_sessions_immutable_identity`
 BEFORE UPDATE ON `guest_order_sessions`

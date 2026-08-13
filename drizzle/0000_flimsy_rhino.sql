@@ -351,7 +351,7 @@ WHEN NEW.`status` = 'active'
     WHERE `variant_id` = NEW.`variant_id` AND `reserves_validated` = 0
   )
 BEGIN
-  SELECT CASE WHEN NOT EXISTS (
+  SELECT RAISE(ABORT, 'commerce_insufficient_stock_or_cart_closed') WHERE NOT EXISTS (
     SELECT 1
     FROM `carts` AS cart
     INNER JOIN `inventory` AS stock
@@ -373,7 +373,7 @@ BEGIN
         - stock.`safety_reserve_quantity`
         - stock.`active_reserved_quantity`
         - stock.`sold_quantity` >= NEW.`quantity`
-  ) THEN RAISE(ABORT, 'commerce_insufficient_stock_or_cart_closed') END;
+  );
 END;--> statement-breakpoint
 CREATE TRIGGER `trg_stock_reservations_apply_insert`
 AFTER INSERT ON `stock_reservations`
@@ -423,7 +423,8 @@ CREATE TRIGGER `trg_stock_reservations_validate_sale_order`
 BEFORE UPDATE OF `status` ON `stock_reservations`
 WHEN OLD.`status` = 'active' AND NEW.`status` = 'converted'
 BEGIN
-  SELECT CASE WHEN NEW.`converted_order_id` IS NULL OR NOT EXISTS (
+  SELECT RAISE(ABORT, 'commerce_sale_order_payment_mismatch')
+  WHERE NEW.`converted_order_id` IS NULL OR NOT EXISTS (
     SELECT 1
     FROM `orders` AS customer_order
     INNER JOIN `payments` AS payment
@@ -434,7 +435,7 @@ BEGIN
       AND payment.`status` = 'succeeded'
       AND payment.`amount_cents` = customer_order.`total_cents`
       AND payment.`currency` = customer_order.`currency`
-  ) THEN RAISE(ABORT, 'commerce_sale_order_payment_mismatch') END;
+  );
 END;--> statement-breakpoint
 CREATE TRIGGER `trg_stock_reservations_apply_release`
 AFTER UPDATE OF `status` ON `stock_reservations`
@@ -490,7 +491,7 @@ CREATE TRIGGER `trg_payments_require_verified_event_insert`
 BEFORE INSERT ON `payments`
 WHEN NEW.`status` = 'succeeded'
 BEGIN
-  SELECT CASE WHEN NOT EXISTS (
+  SELECT RAISE(ABORT, 'commerce_payment_requires_verified_event') WHERE NOT EXISTS (
     SELECT 1 FROM `webhook_events`
     WHERE `provider` = NEW.`provider`
       AND `provider_payment_id` = NEW.`provider_session_id`
@@ -498,13 +499,14 @@ BEGIN
       AND `amount_cents` = NEW.`amount_cents`
       AND `currency` = NEW.`currency`
       AND `status` IN ('verified', 'processed')
-  ) THEN RAISE(ABORT, 'commerce_payment_requires_verified_event') END;
+  );
 END;--> statement-breakpoint
 CREATE TRIGGER `trg_orders_validate_paid_transition`
 BEFORE UPDATE OF `status` ON `orders`
 WHEN OLD.`status` = 'pending_payment' AND NEW.`status` = 'paid'
 BEGIN
-  SELECT CASE WHEN NEW.`paid_at` IS NULL OR NOT EXISTS (
+  SELECT RAISE(ABORT, 'commerce_order_payment_mismatch')
+  WHERE NEW.`paid_at` IS NULL OR NOT EXISTS (
     SELECT 1 FROM `carts`
     WHERE `id` = NEW.`cart_id` AND `status` = 'open'
   ) OR NOT EXISTS (
@@ -523,9 +525,9 @@ BEGIN
     SELECT SUM(`line_total_cents`) FROM `order_lines`
     WHERE `order_id` = NEW.`id`
   ), -1) <> NEW.`subtotal_cents`
-  THEN RAISE(ABORT, 'commerce_order_payment_mismatch') END;
+  ;
 
-  SELECT CASE WHEN EXISTS (
+  SELECT RAISE(ABORT, 'commerce_order_payment_mismatch') WHERE EXISTS (
     SELECT `variant_id`, SUM(`quantity`) AS quantity
     FROM `stock_reservations`
     WHERE `converted_order_id` = NEW.`id` AND `status` = 'converted'
@@ -545,13 +547,13 @@ BEGIN
     FROM `stock_reservations`
     WHERE `converted_order_id` = NEW.`id` AND `status` = 'converted'
     GROUP BY `variant_id`
-  ) THEN RAISE(ABORT, 'commerce_order_payment_mismatch') END;
+  );
 END;--> statement-breakpoint
 CREATE TRIGGER `trg_webhook_events_validate_processed`
 BEFORE UPDATE OF `status` ON `webhook_events`
 WHEN NEW.`status` = 'processed'
 BEGIN
-  SELECT CASE WHEN NOT EXISTS (
+  SELECT RAISE(ABORT, 'commerce_webhook_processing_incomplete') WHERE NOT EXISTS (
     SELECT 1
     FROM `orders` AS customer_order
     INNER JOIN `carts` AS cart ON cart.`id` = customer_order.`cart_id`
@@ -572,6 +574,6 @@ BEGIN
     WHERE `entity_type` = 'order'
       AND `entity_id` = NEW.`order_id`
       AND `action` = 'payment_succeeded'
-  ) THEN RAISE(ABORT, 'commerce_webhook_processing_incomplete') END;
+  );
 END;--> statement-breakpoint
 PRAGMA optimize;

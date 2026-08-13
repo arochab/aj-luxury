@@ -2,7 +2,7 @@ DROP TRIGGER IF EXISTS `trg_cart_lines_validate_catalog_insert`;--> statement-br
 CREATE TRIGGER `trg_cart_lines_validate_catalog_insert`
 BEFORE INSERT ON `cart_lines`
 BEGIN
-  SELECT CASE WHEN NOT EXISTS (
+  SELECT RAISE(ABORT, 'commerce_cart_line_catalog_mismatch') WHERE NOT EXISTS (
     SELECT 1
     FROM `carts` AS cart
     INNER JOIN `variants` AS variant ON variant.`id` = NEW.`variant_id`
@@ -15,7 +15,7 @@ BEGIN
       AND product.`status` = 'active'
       AND product.`currency` = cart.`currency`
       AND product.`price_cents` = NEW.`unit_price_cents`
-  ) THEN RAISE(ABORT, 'commerce_cart_line_catalog_mismatch') END;
+  );
 END;--> statement-breakpoint
 CREATE TRIGGER `trg_cart_lines_immutable_snapshot`
 BEFORE UPDATE ON `cart_lines`
@@ -35,7 +35,7 @@ CREATE TRIGGER `trg_cart_lines_validate_quantity_update`
 BEFORE UPDATE OF `quantity` ON `cart_lines`
 WHEN OLD.`quantity` IS NOT NEW.`quantity`
 BEGIN
-  SELECT CASE WHEN NOT EXISTS (
+  SELECT RAISE(ABORT, 'commerce_cart_line_quantity_update_not_allowed') WHERE NOT EXISTS (
     SELECT 1
     FROM `carts` AS cart
     WHERE cart.`id` = OLD.`cart_id`
@@ -50,7 +50,7 @@ BEGIN
         SELECT 1 FROM `orders`
         WHERE `cart_id` = OLD.`cart_id`
       )
-  ) THEN RAISE(ABORT, 'commerce_cart_line_quantity_update_not_allowed') END;
+  );
 END;--> statement-breakpoint
 CREATE TRIGGER `trg_carts_lock_currency_with_lines`
 BEFORE UPDATE OF `currency` ON `carts`
@@ -66,7 +66,8 @@ CREATE TRIGGER `trg_orders_validate_paid_transition`
 BEFORE UPDATE OF `status` ON `orders`
 WHEN OLD.`status` = 'pending_payment' AND NEW.`status` = 'paid'
 BEGIN
-  SELECT CASE WHEN NEW.`paid_at` IS NULL OR NOT EXISTS (
+  SELECT RAISE(ABORT, 'commerce_order_payment_mismatch')
+  WHERE NEW.`paid_at` IS NULL OR NOT EXISTS (
     SELECT 1 FROM `carts`
     WHERE `id` = NEW.`cart_id` AND `status` = 'open'
   ) OR NOT EXISTS (
@@ -100,9 +101,9 @@ BEGIN
         OR line.`size` <> variant.`size`
       )
   )
-  THEN RAISE(ABORT, 'commerce_order_payment_mismatch') END;
+  ;
 
-  SELECT CASE WHEN EXISTS (
+  SELECT RAISE(ABORT, 'commerce_order_payment_mismatch') WHERE EXISTS (
     SELECT `variant_id`, SUM(`quantity`) AS quantity
     FROM `stock_reservations`
     WHERE `converted_order_id` = NEW.`id` AND `status` = 'converted'
@@ -122,9 +123,9 @@ BEGIN
     FROM `stock_reservations`
     WHERE `converted_order_id` = NEW.`id` AND `status` = 'converted'
     GROUP BY `variant_id`
-  ) THEN RAISE(ABORT, 'commerce_order_payment_mismatch') END;
+  );
 
-  SELECT CASE WHEN EXISTS (
+  SELECT RAISE(ABORT, 'commerce_order_payment_mismatch') WHERE EXISTS (
     SELECT `variant_id`, `unit_price_cents`, SUM(`quantity`) AS quantity,
       SUM(`line_total_cents`) AS line_total_cents
     FROM `order_lines`
@@ -148,5 +149,5 @@ BEGIN
     FROM `order_lines`
     WHERE `order_id` = NEW.`id`
     GROUP BY `variant_id`, `unit_price_cents`
-  ) THEN RAISE(ABORT, 'commerce_order_payment_mismatch') END;
+  );
 END;

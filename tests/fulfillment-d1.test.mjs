@@ -435,6 +435,22 @@ test("D1 configurations and quotes fail closed, freeze selected carts and replay
     "2026-08-11T12:00:01.000Z",
     "2026-08-11T12:00:01.000Z",
   ), /fulfillment_configuration_incomplete/);
+  context.database.prepare(`INSERT INTO shipping_zone_configurations (
+    id, zone, version, status, created_at, updated_at
+  ) VALUES ('config_ddp', 'US', 10, 'draft', ?, ?)`).run(
+    "2026-08-11T12:00:00.000Z",
+    "2026-08-11T12:00:00.000Z",
+  );
+  assert.throws(() => context.database.prepare(`UPDATE shipping_zone_configurations SET
+    status='active', service_code='service_ddp', price_cents=1200,
+    estimated_days_min=2, estimated_days_max=5, duties_terms='DDP',
+    parcel_code='boxer_standard', parcel_weight_grams=250,
+    parcel_length_mm=240, parcel_width_mm=180, parcel_height_mm=40,
+    origin_country_code='FR', customs_hs_code='610711', activated_at=?, updated_at=?
+    WHERE id='config_ddp'`).run(
+    "2026-08-11T12:00:01.000Z",
+    "2026-08-11T12:00:01.000Z",
+  ), /fulfillment_configuration_ddp_unavailable/);
   activateConfiguration(context, "EU", "quote");
   const cartRevision = context.database.prepare(
     "SELECT fulfillment_revision FROM carts WHERE id=?",

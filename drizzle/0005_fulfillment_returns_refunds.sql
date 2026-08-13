@@ -363,11 +363,10 @@ WHEN OLD.`status` = 'draft' AND NEW.`status` = 'active' AND (
   OR NEW.`retired_at` IS NOT NULL
 )
 BEGIN
-  SELECT CASE
-    WHEN NEW.`duties_terms` = 'DDP'
-      THEN RAISE(ABORT, 'fulfillment_configuration_ddp_unavailable')
-    ELSE RAISE(ABORT, 'fulfillment_configuration_incomplete')
-  END;
+  SELECT RAISE(ABORT, 'fulfillment_configuration_ddp_unavailable')
+  WHERE NEW.`duties_terms` = 'DDP';
+  SELECT RAISE(ABORT, 'fulfillment_configuration_incomplete')
+  WHERE (NEW.`duties_terms` = 'DDP') IS NOT TRUE;
 END;--> statement-breakpoint
 
 CREATE TRIGGER `trg_shipping_zone_configuration_transition`
@@ -526,14 +525,18 @@ WHEN NEW.`selected_at` IS NOT NULL
       )
   )
 BEGIN
-  SELECT CASE
-    WHEN NEW.`cart_revision` < 0 OR NOT EXISTS (
+  SELECT RAISE(ABORT, 'fulfillment_quote_mismatch')
+  WHERE NEW.`cart_revision` < 0 OR NOT EXISTS (
       SELECT 1 FROM `carts` AS cart
       WHERE cart.`id` = NEW.`cart_id`
         AND cart.`fulfillment_revision` = NEW.`cart_revision`
-    ) THEN RAISE(ABORT, 'fulfillment_quote_mismatch')
-    ELSE RAISE(ABORT, 'fulfillment_destination_unavailable')
-  END;
+    );
+  SELECT RAISE(ABORT, 'fulfillment_destination_unavailable')
+  WHERE (NEW.`cart_revision` < 0 OR NOT EXISTS (
+    SELECT 1 FROM `carts` AS cart
+    WHERE cart.`id` = NEW.`cart_id`
+      AND cart.`fulfillment_revision` = NEW.`cart_revision`
+  )) IS NOT TRUE;
 END;--> statement-breakpoint
 
 CREATE TRIGGER `trg_shipping_quote_select_once`
@@ -566,12 +569,12 @@ WHEN NOT (
   )
 )
 BEGIN
-  SELECT CASE
-    WHEN NEW.`selected_at` >= OLD.`expires_at`
-      OR strftime('%Y-%m-%dT%H:%M:%fZ', 'now') >= OLD.`expires_at`
-      THEN RAISE(ABORT, 'fulfillment_quote_expired')
-    ELSE RAISE(ABORT, 'fulfillment_quote_mismatch')
-  END;
+  SELECT RAISE(ABORT, 'fulfillment_quote_expired')
+  WHERE NEW.`selected_at` >= OLD.`expires_at`
+    OR strftime('%Y-%m-%dT%H:%M:%fZ', 'now') >= OLD.`expires_at`;
+  SELECT RAISE(ABORT, 'fulfillment_quote_mismatch')
+  WHERE (NEW.`selected_at` >= OLD.`expires_at`
+    OR strftime('%Y-%m-%dT%H:%M:%fZ', 'now') >= OLD.`expires_at`) IS NOT TRUE;
 END;--> statement-breakpoint
 
 CREATE TRIGGER `trg_shipping_quote_retain`
@@ -803,11 +806,10 @@ WHEN NOT (
   )
 )
 BEGIN
-  SELECT CASE
-    WHEN OLD.`status` = 'label_ready' AND NEW.`status` = 'handed_over'
-      THEN RAISE(ABORT, 'fulfillment_customs_not_ready')
-    ELSE RAISE(ABORT, 'fulfillment_invalid_transition')
-  END;
+  SELECT RAISE(ABORT, 'fulfillment_customs_not_ready')
+  WHERE OLD.`status` = 'label_ready' AND NEW.`status` = 'handed_over';
+  SELECT RAISE(ABORT, 'fulfillment_invalid_transition')
+  WHERE (OLD.`status` = 'label_ready' AND NEW.`status` = 'handed_over') IS NOT TRUE;
 END;--> statement-breakpoint
 
 CREATE TRIGGER `trg_shipments_lock_identity`
@@ -1082,7 +1084,7 @@ BEGIN
   UPDATE `carrier_event_receipts`
   SET `status` = 'consumed', `consumed_at` = NEW.`received_at`
   WHERE `id` = NEW.`carrier_receipt_id` AND `status` = 'verified';
-  SELECT CASE WHEN NOT EXISTS (
+  SELECT RAISE(ABORT, 'fulfillment_tracking_event_conflict') WHERE NOT EXISTS (
     SELECT 1 FROM `carrier_event_receipts` AS receipt
     WHERE receipt.`id` = NEW.`carrier_receipt_id`
       AND receipt.`status` = 'consumed'
@@ -1095,7 +1097,7 @@ BEGIN
       AND receipt.`event_fingerprint` = NEW.`event_fingerprint`
       AND receipt.`occurred_at` = NEW.`occurred_at`
       AND receipt.`received_at` = NEW.`received_at`
-  ) THEN RAISE(ABORT, 'fulfillment_tracking_event_conflict') END;
+  );
 END;--> statement-breakpoint
 
 CREATE TRIGGER `trg_tracking_events_immutable_update`
@@ -1828,7 +1830,7 @@ CREATE TRIGGER `trg_webhook_events_validate_processed`
 BEFORE UPDATE OF `status` ON `webhook_events`
 WHEN NEW.`status` = 'processed'
 BEGIN
-  SELECT CASE WHEN NOT EXISTS (
+  SELECT RAISE(ABORT, 'commerce_webhook_processing_incomplete') WHERE NOT EXISTS (
     SELECT 1 FROM `orders` AS customer_order
     INNER JOIN `carts` AS cart ON cart.`id` = customer_order.`cart_id`
     INNER JOIN `payments` AS payment ON payment.`order_id` = customer_order.`id`
@@ -1845,7 +1847,7 @@ BEGIN
     SELECT 1 FROM `audit_log`
     WHERE `entity_type` = 'order' AND `entity_id` = NEW.`order_id`
       AND `action` = 'payment_succeeded'
-  ) THEN RAISE(ABORT, 'commerce_webhook_processing_incomplete') END;
+  );
 END;--> statement-breakpoint
 
 CREATE TRIGGER `trg_email_outbox_audit_terminal`

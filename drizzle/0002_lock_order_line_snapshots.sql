@@ -2,7 +2,7 @@ DROP TRIGGER IF EXISTS `trg_cart_lines_validate_catalog_insert`;--> statement-br
 CREATE TRIGGER `trg_cart_lines_validate_catalog_insert`
 BEFORE INSERT ON `cart_lines`
 BEGIN
-  SELECT CASE WHEN NOT EXISTS (
+  SELECT RAISE(ABORT, 'commerce_cart_line_catalog_mismatch') WHERE NOT EXISTS (
     SELECT 1
     FROM `carts` AS cart
     INNER JOIN `variants` AS variant ON variant.`id` = NEW.`variant_id`
@@ -27,14 +27,14 @@ BEGIN
         FROM `orders` AS customer_order
         WHERE customer_order.`cart_id` = cart.`id`
       )
-  ) THEN RAISE(ABORT, 'commerce_cart_line_catalog_mismatch') END;
+  );
 END;--> statement-breakpoint
 DROP TRIGGER IF EXISTS `trg_cart_lines_validate_quantity_update`;--> statement-breakpoint
 CREATE TRIGGER `trg_cart_lines_validate_quantity_update`
 BEFORE UPDATE OF `quantity` ON `cart_lines`
 WHEN OLD.`quantity` IS NOT NEW.`quantity`
 BEGIN
-  SELECT CASE WHEN NOT EXISTS (
+  SELECT RAISE(ABORT, 'commerce_cart_line_quantity_update_not_allowed') WHERE NOT EXISTS (
     SELECT 1
     FROM `carts` AS cart
     WHERE cart.`id` = OLD.`cart_id`
@@ -50,12 +50,12 @@ BEGIN
         SELECT 1 FROM `orders`
         WHERE `cart_id` = OLD.`cart_id`
       )
-  ) THEN RAISE(ABORT, 'commerce_cart_line_quantity_update_not_allowed') END;
+  );
 END;--> statement-breakpoint
 CREATE TRIGGER `trg_order_lines_validate_pending_insert`
 BEFORE INSERT ON `order_lines`
 BEGIN
-  SELECT CASE WHEN NOT EXISTS (
+  SELECT RAISE(ABORT, 'commerce_order_line_insert_not_allowed') WHERE NOT EXISTS (
     SELECT 1
     FROM `orders` AS customer_order
     INNER JOIN `carts` AS cart ON cart.`id` = customer_order.`cart_id`
@@ -85,7 +85,7 @@ BEGIN
       )
   )
   OR strftime('%Y-%m-%dT%H:%M:%fZ', NEW.`created_at`) IS NOT NEW.`created_at`
-  THEN RAISE(ABORT, 'commerce_order_line_insert_not_allowed') END;
+  ;
 END;--> statement-breakpoint
 CREATE TRIGGER `trg_order_lines_immutable_update`
 BEFORE UPDATE ON `order_lines`
@@ -102,7 +102,8 @@ CREATE TRIGGER `trg_orders_validate_paid_transition`
 BEFORE UPDATE OF `status` ON `orders`
 WHEN OLD.`status` = 'pending_payment' AND NEW.`status` = 'paid'
 BEGIN
-  SELECT CASE WHEN NEW.`paid_at` IS NULL OR NOT EXISTS (
+  SELECT RAISE(ABORT, 'commerce_order_payment_mismatch')
+  WHERE NEW.`paid_at` IS NULL OR NOT EXISTS (
     SELECT 1 FROM `carts`
     WHERE `id` = NEW.`cart_id` AND `status` = 'open'
   ) OR NOT EXISTS (
@@ -121,9 +122,9 @@ BEGIN
     SELECT SUM(`line_total_cents`) FROM `order_lines`
     WHERE `order_id` = NEW.`id`
   ), -1) <> NEW.`subtotal_cents`
-  THEN RAISE(ABORT, 'commerce_order_payment_mismatch') END;
+  ;
 
-  SELECT CASE WHEN EXISTS (
+  SELECT RAISE(ABORT, 'commerce_order_payment_mismatch') WHERE EXISTS (
     SELECT `variant_id`, SUM(`quantity`) AS quantity
     FROM `stock_reservations`
     WHERE `converted_order_id` = NEW.`id` AND `status` = 'converted'
@@ -143,9 +144,9 @@ BEGIN
     FROM `stock_reservations`
     WHERE `converted_order_id` = NEW.`id` AND `status` = 'converted'
     GROUP BY `variant_id`
-  ) THEN RAISE(ABORT, 'commerce_order_payment_mismatch') END;
+  );
 
-  SELECT CASE WHEN EXISTS (
+  SELECT RAISE(ABORT, 'commerce_order_payment_mismatch') WHERE EXISTS (
     SELECT `variant_id`, `unit_price_cents`, SUM(`quantity`) AS quantity,
       SUM(`line_total_cents`) AS line_total_cents
     FROM `order_lines`
@@ -169,7 +170,7 @@ BEGIN
     FROM `order_lines`
     WHERE `order_id` = NEW.`id`
     GROUP BY `variant_id`, `unit_price_cents`
-  ) THEN RAISE(ABORT, 'commerce_order_payment_mismatch') END;
+  );
 END;--> statement-breakpoint
 CREATE TRIGGER `trg_cart_lines_validate_delete`
 BEFORE DELETE ON `cart_lines`
@@ -177,7 +178,7 @@ WHEN EXISTS (
   SELECT 1 FROM `carts` WHERE `id` = OLD.`cart_id`
 )
 BEGIN
-  SELECT CASE WHEN NOT EXISTS (
+  SELECT RAISE(ABORT, 'commerce_cart_line_delete_not_allowed') WHERE NOT EXISTS (
     SELECT 1
     FROM `carts` AS cart
     WHERE cart.`id` = OLD.`cart_id`
@@ -193,7 +194,7 @@ BEGIN
         FROM `orders` AS customer_order
         WHERE customer_order.`cart_id` = cart.`id`
       )
-  ) THEN RAISE(ABORT, 'commerce_cart_line_delete_not_allowed') END;
+  );
 END;--> statement-breakpoint
 CREATE TRIGGER `trg_carts_require_empty_delete`
 BEFORE DELETE ON `carts`
@@ -289,7 +290,7 @@ WHEN OLD.`physical_quantity` IS NOT NEW.`physical_quantity`
   OR OLD.`gift_reserve_quantity` IS NOT NEW.`gift_reserve_quantity`
   OR OLD.`safety_reserve_quantity` IS NOT NEW.`safety_reserve_quantity`
 BEGIN
-  SELECT CASE WHEN (
+  SELECT RAISE(ABORT, 'commerce_inventory_stock_movement_required') WHERE (
     (OLD.`physical_quantity` IS NOT NEW.`physical_quantity`)
     + (OLD.`gift_reserve_quantity` IS NOT NEW.`gift_reserve_quantity`)
     + (OLD.`safety_reserve_quantity` IS NOT NEW.`safety_reserve_quantity`)
@@ -340,7 +341,7 @@ BEGIN
           )
         )
       )
-  ) THEN RAISE(ABORT, 'commerce_inventory_stock_movement_required') END;
+  );
 END;--> statement-breakpoint
 
 CREATE TRIGGER `trg_stock_reservations_validate_insert_timestamp`
@@ -561,7 +562,7 @@ CREATE TRIGGER `trg_payments_require_verified_event_insert`
 BEFORE INSERT ON `payments`
 WHEN NEW.`status` = 'succeeded'
 BEGIN
-  SELECT CASE WHEN NOT EXISTS (
+  SELECT RAISE(ABORT, 'commerce_payment_requires_verified_event') WHERE NOT EXISTS (
     SELECT 1 FROM `webhook_events`
     WHERE `provider` = NEW.`provider`
       AND `provider_payment_id` = NEW.`provider_session_id`
@@ -570,7 +571,7 @@ BEGIN
       AND `currency` = NEW.`currency`
       AND `event_type` = 'payment.succeeded'
       AND `status` IN ('verified', 'processed')
-  ) THEN RAISE(ABORT, 'commerce_payment_requires_verified_event') END;
+  );
 END;--> statement-breakpoint
 CREATE TRIGGER `trg_payments_lock_identity_update`
 BEFORE UPDATE ON `payments`
@@ -611,7 +612,7 @@ BEFORE UPDATE OF `status` ON `payments`
 WHEN OLD.`status` <> NEW.`status`
   AND NEW.`status` IN ('succeeded', 'failed', 'expired')
 BEGIN
-  SELECT CASE WHEN NOT EXISTS (
+  SELECT RAISE(ABORT, 'commerce_payment_requires_verified_event') WHERE NOT EXISTS (
     SELECT 1 FROM `webhook_events`
     WHERE `provider` = NEW.`provider`
       AND `provider_payment_id` = NEW.`provider_session_id`
@@ -624,7 +625,7 @@ BEGIN
         WHEN 'expired' THEN 'payment.expired'
       END
       AND `status` IN ('verified', 'processed')
-  ) THEN RAISE(ABORT, 'commerce_payment_requires_verified_event') END;
+  );
 
 END;--> statement-breakpoint
 CREATE TRIGGER `trg_payments_validate_transition_timestamp`

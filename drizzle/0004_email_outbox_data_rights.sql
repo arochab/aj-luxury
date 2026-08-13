@@ -391,7 +391,7 @@ CREATE TRIGGER `trg_webhook_events_validate_processed`
 BEFORE UPDATE OF `status` ON `webhook_events`
 WHEN NEW.`status` = 'processed'
 BEGIN
-  SELECT CASE WHEN NOT EXISTS (
+  SELECT RAISE(ABORT, 'commerce_webhook_processing_incomplete') WHERE NOT EXISTS (
     SELECT 1
     FROM `orders` AS customer_order
     INNER JOIN `carts` AS cart ON cart.`id` = customer_order.`cart_id`
@@ -412,7 +412,7 @@ BEGIN
     WHERE `entity_type` = 'order'
       AND `entity_id` = NEW.`order_id`
       AND `action` = 'payment_succeeded'
-  ) THEN RAISE(ABORT, 'commerce_webhook_processing_incomplete') END;
+  );
 END;--> statement-breakpoint
 
 CREATE TRIGGER `trg_email_outbox_audit_terminal`
