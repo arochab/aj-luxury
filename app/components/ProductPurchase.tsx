@@ -58,10 +58,7 @@ export default function ProductPurchase({
     }
 
     if (stock.state === "low-stock") {
-      return t("product.onlyLeft").replace(
-        "{count}",
-        String(stock.remaining),
-      );
+      return t("product.lowStockSimulated");
     }
 
     return t("product.available");

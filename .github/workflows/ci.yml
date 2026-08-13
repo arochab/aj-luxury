@@ -19,6 +19,9 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    env:
+      APP_ENV: preproduction
+      PREPROD_TARGET_PROJECT_ID: appgprj_6a7d223ffdec8191b360551446150216
     steps:
       - name: Checkout
         uses: actions/checkout@v4

@@ -364,6 +364,7 @@ test("Wrangler applies the canonical D1 chain 0000 to 0007 on empty and journale
       "0005_fulfillment_returns_refunds.sql",
       "0006_allow_bounded_expired_cart_purge.sql",
       "0007_transactional_preprod_order_payment.sql",
+      "0008_preprod_synthetic_demo_dataset.sql",
     ],
   );
 

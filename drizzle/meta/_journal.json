@@ -57,6 +57,13 @@
       "when": 1786608000000,
       "tag": "0007_transactional_preprod_order_payment",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1786651200000,
+      "tag": "0008_preprod_synthetic_demo_dataset",
+      "breakpoints": true
     }
   ]
 }

@@ -4,10 +4,8 @@ import Link from "next/link";
 import {
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
-  type ChangeEvent,
   type FormEvent,
 } from "react";
 import { getCart, type PublicCartSnapshot } from "../../lib/commerce/preprod-cart-client";
@@ -27,56 +25,26 @@ import {
 } from "../../lib/commerce/preprod-order-client";
 import { useI18n } from "../../lib/i18n/I18nProvider";
 import LocalizedPrice from "../components/LocalizedPrice";
+import {
+  SYNTHETIC_DEMO_ADDRESS_FIXTURES,
+  SYNTHETIC_DEMO_EMAIL,
+  type SyntheticDemoZone,
+} from "../../lib/preprod/synthetic-demo";
 import styles from "../cart/CommerceShell.module.css";
 
-const launchCountryCodes = Object.freeze([
-  "AT", "BE", "BG", "HR", "CY", "CZ", "DE", "DK", "EE", "ES", "FI",
-  "FR", "GR", "HU", "IE", "IT", "LT", "LU", "LV", "MT", "NL", "PL",
-  "PT", "RO", "SE", "SI", "SK", "GB", "US", "CA",
-] as const);
-
-type AddressState = {
-  recipient: string;
-  company: string;
-  line1: string;
-  line2: string;
-  postalCode: string;
-  city: string;
-  regionCode: string;
-  countryCode: string;
-};
-
-const initialAddress: AddressState = {
-  recipient: "",
-  company: "",
-  line1: "",
-  line2: "",
-  postalCode: "",
-  city: "",
-  regionCode: "",
-  countryCode: "FR",
-};
-
-function shippingAddress(state: AddressState): ShippingAddress {
-  return Object.freeze({
-    recipient: state.recipient,
-    ...(state.company ? { company: state.company } : {}),
-    line1: state.line1,
-    ...(state.line2 ? { line2: state.line2 } : {}),
-    postalCode: state.postalCode,
-    city: state.city,
-    ...(state.regionCode ? { regionCode: state.regionCode } : {}),
-    countryCode: state.countryCode,
-  });
-}
+const fixtureLabelKey = {
+  EU: "checkout.fixtureEU",
+  UK: "checkout.fixtureUK",
+  US: "checkout.fixtureUS",
+  CA: "checkout.fixtureCA",
+} as const satisfies Record<SyntheticDemoZone, string>;
 
 export default function CheckoutClient() {
-  const { locale, t } = useI18n();
+  const { t } = useI18n();
   const [cart, setCart] = useState<PublicCartSnapshot | null>(null);
-  const [address, setAddress] = useState<AddressState>(initialAddress);
+  const [fixtureZone, setFixtureZone] = useState<SyntheticDemoZone>("EU");
   const [quote, setQuote] = useState<PublicShippingQuote | null>(null);
   const [order, setOrder] = useState<PublicPreprodOrder | null>(null);
-  const [email, setEmail] = useState("");
   const [legalAccepted, setLegalAccepted] = useState(false);
   const [simulationAccepted, setSimulationAccepted] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -87,6 +55,11 @@ export default function CheckoutClient() {
   const attemptRef = useRef<{ fingerprint: string; key: string } | null>(null);
   const orderAttemptRef = useRef<string | null>(null);
   const paymentAttemptRef = useRef<string | null>(null);
+  const selectedFixture = SYNTHETIC_DEMO_ADDRESS_FIXTURES.find(
+    (fixture) => fixture.zone === fixtureZone,
+  ) ?? SYNTHETIC_DEMO_ADDRESS_FIXTURES[0];
+  const address: ShippingAddress = selectedFixture.address;
+  const syntheticQualifier = t("checkout.syntheticQualifier");
 
   const loadCart = useCallback(async () => {
     // An explicit cart refresh starts a new semantic attempt. Network retries
@@ -138,22 +111,9 @@ export default function CheckoutClient() {
     if (order) orderRef.current?.focus({ preventScroll: true });
   }, [order]);
 
-  const countries = useMemo(() => {
-    const names = new Intl.DisplayNames([locale], { type: "region" });
-    return launchCountryCodes
-      .map((code) => ({ code, label: names.of(code) ?? code }))
-      .sort((left, right) => left.label.localeCompare(right.label, locale));
-  }, [locale]);
-
-  function updateAddress(
-    event: ChangeEvent<HTMLInputElement | HTMLSelectElement>,
-  ) {
-    const { name, value } = event.currentTarget;
-    setAddress((current) => ({
-      ...current,
-      [name]: value,
-      ...(name === "countryCode" && value !== "US" ? { regionCode: "" } : {}),
-    }));
+  function chooseFixture(value: string) {
+    if (!(["EU", "UK", "US", "CA"] as const).includes(value as SyntheticDemoZone)) return;
+    setFixtureZone(value as SyntheticDemoZone);
     setQuote(null);
     setOrder(null);
     orderAttemptRef.current = null;
@@ -170,8 +130,8 @@ export default function CheckoutClient() {
       orderAttemptRef.current = idempotencyKey;
       setOrder(await createPreprodOrder({
         quoteId: quote.quoteId,
-        address: shippingAddress(address),
-        email,
+        address,
+        email: SYNTHETIC_DEMO_EMAIL,
         idempotencyKey,
       }));
     } catch (error) {
@@ -199,7 +159,7 @@ export default function CheckoutClient() {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (submitting || !cart || cart.lines.length === 0) return;
-    const candidate = shippingAddress(address);
+    const candidate = address;
     const fingerprint = JSON.stringify(candidate);
     const previous = attemptRef.current;
     const key = previous?.fingerprint === fingerprint
@@ -282,102 +242,25 @@ export default function CheckoutClient() {
         {!loading && !order && cart && cart.lines.length > 0 && (
           <form className={styles.form} onSubmit={(event) => void submit(event)}>
             <label>
-              {t("checkout.recipient")}
-              <input
-                name="recipient"
-                autoComplete="name"
-                value={address.recipient}
-                onChange={updateAddress}
-                required
-                maxLength={120}
-              />
+              {t("checkout.country")} ({syntheticQualifier})
+              <select
+                value={fixtureZone}
+                disabled={submitting}
+                onChange={(event) => chooseFixture(event.currentTarget.value)}
+              >
+                {SYNTHETIC_DEMO_ADDRESS_FIXTURES.map((fixture) => (
+                  <option key={fixture.zone} value={fixture.zone}>
+                    {t(fixtureLabelKey[fixture.zone])}
+                  </option>
+                ))}
+              </select>
             </label>
-            <label>
-              {t("checkout.companyOptional")}
-              <input
-                name="company"
-                autoComplete="organization"
-                value={address.company}
-                onChange={updateAddress}
-                maxLength={120}
-              />
-            </label>
-            <label>
-              {t("checkout.address")}
-              <input
-                name="line1"
-                autoComplete="address-line1"
-                value={address.line1}
-                onChange={updateAddress}
-                required
-                maxLength={160}
-              />
-            </label>
-            <label>
-              {t("checkout.addressLine2Optional")}
-              <input
-                name="line2"
-                autoComplete="address-line2"
-                value={address.line2}
-                onChange={updateAddress}
-                maxLength={160}
-              />
-            </label>
-            <div className={styles.formGrid}>
-              <label>
-                {t("checkout.postalCode")}
-                <input
-                  name="postalCode"
-                  autoComplete="postal-code"
-                  value={address.postalCode}
-                  onChange={updateAddress}
-                  required
-                  maxLength={16}
-                />
-              </label>
-              <label>
-                {t("checkout.city")}
-                <input
-                  name="city"
-                  autoComplete="address-level2"
-                  value={address.city}
-                  onChange={updateAddress}
-                  required
-                  maxLength={120}
-                />
-              </label>
-            </div>
-            <div className={styles.formGrid}>
-              <label>
-                {t("checkout.country")}
-                <select
-                  name="countryCode"
-                  autoComplete="country"
-                  value={address.countryCode}
-                  onChange={updateAddress}
-                  required
-                >
-                  {countries.map(({ code, label }) => (
-                    <option key={code} value={code}>{label}</option>
-                  ))}
-                </select>
-              </label>
-              {address.countryCode === "US" && (
-                <label>
-                  {t("checkout.usState")}
-                  <input
-                    name="regionCode"
-                    autoComplete="address-level1"
-                    value={address.regionCode}
-                    onChange={updateAddress}
-                    required
-                    minLength={2}
-                    maxLength={2}
-                    placeholder="NY"
-                  />
-                </label>
-              )}
-            </div>
+            <address className={styles.addressFixture}>
+              <strong>{address.recipient}</strong><br />
+              {address.line1}<br />
+              {address.postalCode} {address.city}<br />
+              {address.regionCode ? `${address.regionCode} · ` : ""}{address.countryCode}
+            </address>
             <button className={styles.button} type="submit" disabled={submitting}>
               {submitting
                 ? t("checkout.calculatingShipping")
@@ -396,32 +279,32 @@ export default function CheckoutClient() {
                 {line.colorName}<br />
                 Apollon · {t("product.size")} {line.size} × {line.quantity}
               </span>
-              <span><LocalizedPrice amountCents={line.lineTotalCents} /></span>
+              <span><LocalizedPrice amountCents={line.lineTotalCents} /> <small>({syntheticQualifier})</small></span>
             </div>
           ))}
           <div className={styles.row}>
             <span>{t("cart.subtotal")}</span>
-            <span><LocalizedPrice amountCents={subtotal} /></span>
+            <span><LocalizedPrice amountCents={subtotal} /> <small>({syntheticQualifier})</small></span>
           </div>
           <div className={styles.row}>
             <span>{t("cart.shipping")}</span>
             <span>
               {quote
-                ? <LocalizedPrice amountCents={shipping} />
+                ? <><LocalizedPrice amountCents={shipping} /> <small>({syntheticQualifier})</small></>
                 : order
-                  ? <LocalizedPrice amountCents={shipping} />
+                  ? <><LocalizedPrice amountCents={shipping} /> <small>({syntheticQualifier})</small></>
                 : t("cart.toDefine")}
             </span>
           </div>
           <div className={`${styles.row} ${styles.total}`}>
             <span>{t("checkout.provisionalTotal")}</span>
-            <span><LocalizedPrice amountCents={total} /></span>
+            <span><LocalizedPrice amountCents={total} /> <small>({syntheticQualifier})</small></span>
           </div>
           {quote && (
             <div className={styles.quote} aria-live="polite">
               <strong>{t("checkout.simulationResult")}</strong>
               <p>
-                {t("checkout.estimatedDelivery")} {quote.estimatedDaysMin}–{quote.estimatedDaysMax} {t("checkout.days")}
+                {t("checkout.estimatedDelivery")} {quote.estimatedDaysMin}–{quote.estimatedDaysMax} {t("checkout.days")} ({syntheticQualifier})
               </p>
               <p>
                 {quote.dutiesTerms === "EU_INCLUDED"
@@ -438,9 +321,8 @@ export default function CheckoutClient() {
                   type="email"
                   inputMode="email"
                   autoComplete="off"
-                  value={email}
-                  onChange={(event) => setEmail(event.currentTarget.value)}
-                  placeholder="client@demo.invalid"
+                  value={SYNTHETIC_DEMO_EMAIL}
+                  readOnly
                   required
                 />
               </label>
@@ -455,7 +337,7 @@ export default function CheckoutClient() {
                 <input type="checkbox" checked={simulationAccepted} onChange={(event) => setSimulationAccepted(event.currentTarget.checked)} />
                 <span>{t("checkout.simulationAck")}</span>
               </label>
-              <button className={styles.button} type="button" disabled={submitting || !legalAccepted || !simulationAccepted || !email.endsWith("@demo.invalid")} onClick={() => void createOrder()}>
+              <button className={styles.button} type="button" disabled={submitting || !legalAccepted || !simulationAccepted} onClick={() => void createOrder()}>
                 {t("checkout.createTestOrder")}
               </button>
             </div>

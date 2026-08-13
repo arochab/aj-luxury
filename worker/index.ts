@@ -33,6 +33,13 @@ import {
   isTrustedMutationOrigin,
 } from "../lib/commerce/identity-access-policy.ts";
 import { LEGAL_VERSION } from "../lib/legal.ts";
+import {
+  isExactSyntheticDemoAddress,
+  SYNTHETIC_DEMO_DATASET_KIND,
+  SYNTHETIC_DEMO_EMAIL,
+  SYNTHETIC_DEMO_FIXTURE_VERSION,
+  SYNTHETIC_DEMO_MIGRATION,
+} from "../lib/preprod/synthetic-demo.ts";
 
 interface Fetcher {
   fetch(request: Request): Promise<Response>;
@@ -43,6 +50,7 @@ interface Env {
   DB: CommerceD1Database;
   APP_ENV?: string;
   PREPROD_ORIGIN?: string;
+  PREPROD_DEMO_DATASET?: string;
   IMAGES: {
     input(stream: ReadableStream): {
       transform(options: Record<string, unknown>): {
@@ -101,6 +109,66 @@ const ORDER_BODY_MAX_BYTES = 8 * 1024;
 const SHIPPING_QUOTE_TTL_MS = 15 * 60 * 1_000;
 const SHIPPING_QUOTE_IDEMPOTENCY_PATTERN =
   /^[A-Za-z0-9][A-Za-z0-9_.:-]{7,127}$/;
+
+type SyntheticDemoGate = Readonly<{
+  required: boolean;
+  ready: boolean;
+  reason:
+    | "ready"
+    | "flag-disabled"
+    | "migration-missing"
+    | "sentinel-missing"
+    | "sentinel-invalid"
+    | "dataset-expired"
+    | "database-unavailable";
+  latestMigration: string | null;
+  expiresAt: string | null;
+}>;
+
+async function readSyntheticDemoGate(
+  env: Env,
+  now: string,
+): Promise<SyntheticDemoGate> {
+  const flagEnabled = env.PREPROD_DEMO_DATASET === SYNTHETIC_DEMO_FIXTURE_VERSION;
+  let sentinel: { dataset_kind: string; fixture_version: string; expires_at: string } | null;
+  try {
+    sentinel = await env.DB.prepare(
+      `SELECT dataset_kind, fixture_version, expires_at
+      FROM preprod_demo_dataset WHERE singleton = 1`,
+    ).first<{ dataset_kind: string; fixture_version: string; expires_at: string }>();
+  } catch {
+    return flagEnabled
+      ? Object.freeze({ required: true, ready: false, reason: "sentinel-missing", latestMigration: null, expiresAt: null })
+      : Object.freeze({ required: false, ready: false, reason: "flag-disabled", latestMigration: null, expiresAt: null });
+  }
+  if (!flagEnabled) {
+    return Object.freeze({ required: true, ready: false, reason: "flag-disabled", latestMigration: null, expiresAt: sentinel?.expires_at ?? null });
+  }
+  try {
+    const migration = await env.DB.prepare(
+      "SELECT name FROM d1_migrations ORDER BY name DESC LIMIT 1",
+    ).first<{ name: string }>();
+    const latestMigration = migration?.name ?? null;
+    if (latestMigration !== SYNTHETIC_DEMO_MIGRATION) {
+      return Object.freeze({ required: true, ready: false, reason: "migration-missing", latestMigration, expiresAt: sentinel?.expires_at ?? null });
+    }
+    if (!sentinel) {
+      return Object.freeze({ required: true, ready: false, reason: "sentinel-missing", latestMigration, expiresAt: null });
+    }
+    if (
+      sentinel.dataset_kind !== SYNTHETIC_DEMO_DATASET_KIND ||
+      sentinel.fixture_version !== SYNTHETIC_DEMO_FIXTURE_VERSION
+    ) {
+      return Object.freeze({ required: true, ready: false, reason: "sentinel-invalid", latestMigration, expiresAt: sentinel.expires_at });
+    }
+    if (sentinel.expires_at <= now) {
+      return Object.freeze({ required: true, ready: false, reason: "dataset-expired", latestMigration, expiresAt: sentinel.expires_at });
+    }
+    return Object.freeze({ required: true, ready: true, reason: "ready", latestMigration, expiresAt: sentinel.expires_at });
+  } catch {
+    return Object.freeze({ required: true, ready: false, reason: "database-unavailable", latestMigration: null, expiresAt: sentinel?.expires_at ?? null });
+  }
+}
 
 // These limits are a private-preproduction circuit breaker, not a public
 // anti-bot control. A public launch still requires a separately approved edge
@@ -723,6 +791,14 @@ async function handleShippingQuoteApi(
       commerce.getPublicCartSnapshot(session.cartId, now),
       normalizeShippingAddress(parsedBody.value.address),
     ]);
+    if (env.PREPROD_DEMO_DATASET === SYNTHETIC_DEMO_FIXTURE_VERSION &&
+      !isExactSyntheticDemoAddress(normalizedAddress.zone, normalizedAddress.canonicalJson)) {
+      return shippingQuoteErrorResponse(
+        "INVALID_ADDRESS",
+        "Seules les quatre adresses fictives verrouillées sont acceptées.",
+        400,
+      );
+    }
     if (cart.lines.length === 0) {
       return shippingQuoteErrorResponse(
         "CART_EMPTY",
@@ -954,6 +1030,24 @@ async function handleOrderPaymentApi(
       const body = await parseCreateOrderBody(request);
       if (!body) return cartErrorResponse("INVALID_BODY", "Le formulaire est invalide ou trop volumineux.", 400);
       const normalizedAddress = await normalizeShippingAddress(body.address);
+      if (env.PREPROD_DEMO_DATASET === SYNTHETIC_DEMO_FIXTURE_VERSION &&
+        !isExactSyntheticDemoAddress(normalizedAddress.zone, normalizedAddress.canonicalJson)) {
+        return cartErrorResponse(
+          "INVALID_ADDRESS",
+          "Seules les quatre adresses fictives verrouillées sont acceptées.",
+          400,
+        );
+      }
+      if (
+        env.PREPROD_DEMO_DATASET === SYNTHETIC_DEMO_FIXTURE_VERSION &&
+        body.email.trim().toLowerCase() !== SYNTHETIC_DEMO_EMAIL
+      ) {
+        return cartErrorResponse(
+          "INVALID_BODY",
+          "Seule l’adresse e-mail fictive verrouillée est acceptée.",
+          400,
+        );
+      }
       const addressFingerprint = await hmacSha256Hex(
         authorized.addressProofKey,
         normalizedAddress.canonicalJson,
@@ -1314,6 +1408,9 @@ export async function preprodApiResponse(
     );
   }
 
+  const now = new Date().toISOString();
+  const syntheticGate = await readSyntheticDemoGate(env, now);
+
   if (url.pathname === `${PREPROD_API_PREFIX}health`) {
     if (request.method !== "GET") {
       return jsonResponse({ error: "method-not-allowed" }, { status: 405 });
@@ -1329,20 +1426,34 @@ export async function preprodApiResponse(
             cart: false,
             shippingQuotes: false,
             shippingQuoteZones: { EU: false, UK: false, US: false, CA: false },
+            shippingQuoteSimulation: false,
+            shippingQuoteSimulationZones: { EU: false, UK: false, US: false, CA: false },
             payment: false,
             orderCreation: false,
             reservesValidated: false,
+            syntheticReservesReady: false,
+            orderSimulation: false,
             paymentTestSimulation: false,
             emailCaptureSimulation: false,
             emailDelivery: false,
             carrier: false,
+            stockSimulation: false,
+            shippingSimulation: false,
+            launchReadiness: false,
           },
           latestMigration,
           stockProjection: [],
+          syntheticDataset: {
+            active: false,
+            reason: syntheticGate.reason,
+            fixtureVersion: SYNTHETIC_DEMO_FIXTURE_VERSION,
+            expiresAt: syntheticGate.expiresAt,
+          },
         },
         { status: 503 },
       );
-      let latestMigration: string | null = null;
+      let latestMigration: string | null = syntheticGate.latestMigration;
+      if (syntheticGate.required && !syntheticGate.ready) return unavailable(latestMigration);
       try {
         const migration = await database
           .prepare(
@@ -1353,7 +1464,10 @@ export async function preprodApiResponse(
       } catch {
         return unavailable(null);
       }
-      if (latestMigration !== "0007_transactional_preprod_order_payment.sql") {
+      const expectedMigration = syntheticGate.required
+        ? SYNTHETIC_DEMO_MIGRATION
+        : "0007_transactional_preprod_order_payment.sql";
+      if (latestMigration !== expectedMigration) {
         return unavailable(latestMigration);
       }
       try {
@@ -1413,15 +1527,26 @@ export async function preprodApiResponse(
             capabilities: {
               catalog: true,
               cart: true,
-              shippingQuotes: shippingQuotesReady,
-              shippingQuoteZones,
+              shippingQuotes: syntheticGate.required ? false : shippingQuotesReady,
+              shippingQuoteZones: syntheticGate.required
+                ? { EU: false, UK: false, US: false, CA: false }
+                : shippingQuoteZones,
+              shippingQuoteSimulation: syntheticGate.required && shippingQuotesReady,
+              shippingQuoteSimulationZones: syntheticGate.required
+                ? shippingQuoteZones
+                : { EU: false, UK: false, US: false, CA: false },
               payment: false,
-              reservesValidated: reservesReady,
-              orderCreation: testCheckoutReady,
+              reservesValidated: syntheticGate.required ? false : reservesReady,
+              syntheticReservesReady: syntheticGate.required && reservesReady,
+              orderCreation: syntheticGate.required ? false : testCheckoutReady,
+              orderSimulation: syntheticGate.required && testCheckoutReady,
               paymentTestSimulation: testCheckoutReady,
               emailCaptureSimulation: testCheckoutReady,
               emailDelivery: false,
               carrier: false,
+              stockSimulation: syntheticGate.required,
+              shippingSimulation: syntheticGate.required,
+              launchReadiness: false,
             },
             latestMigration,
             stockProjection: stock.results.map((position: {
@@ -1435,6 +1560,12 @@ export async function preprodApiResponse(
                     ? "low-stock"
                     : "available",
             })),
+            syntheticDataset: {
+              active: true,
+              reason: "ready",
+              fixtureVersion: SYNTHETIC_DEMO_FIXTURE_VERSION,
+              expiresAt: syntheticGate.expiresAt,
+            },
           },
           { status: 200 },
         );
@@ -1442,6 +1573,15 @@ export async function preprodApiResponse(
         return unavailable(latestMigration);
       }
     })();
+  }
+
+  if (syntheticGate.required && !syntheticGate.ready) {
+    return cartErrorResponse(
+      "SYNTHETIC_DEMO_UNAVAILABLE",
+      "La démonstration privée est fermée.",
+      503,
+      { "Retry-After": "60" },
+    );
   }
 
   const orderPaymentResponse = await handleOrderPaymentApi(request, env, url);

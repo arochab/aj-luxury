@@ -9,7 +9,7 @@ import { normalizeShippingAddress } from "../lib/commerce/fulfillment-domain.ts"
 const ORIGIN = "https://aj-luxury-preprod.example";
 const drizzleDirectory = fileURLToPath(new URL("../drizzle/", import.meta.url));
 const migrationPaths = readdirSync(drizzleDirectory)
-  .filter((name) => /^000\d_.+\.sql$/.test(name))
+  .filter((name) => /^000[0-7]_.+\.sql$/.test(name))
   .sort()
   .map((name) => `${drizzleDirectory}${name}`);
 
