@@ -67,7 +67,7 @@ test("production pages remain indexable while preproduction is explicitly noinde
   assert.equal(preproduction.headers.get("x-robots-tag"), "noindex, nofollow");
 });
 
-test("preproduction health is partial on migration 0007 and exposes all launch-zone gates, not quantities", async () => {
+test("synthetic candidate stays unavailable on migration 0007 without its sentinel", async () => {
   const statements = [];
   const database = {
     prepare(query) {
@@ -76,6 +76,9 @@ test("preproduction health is partial on migration 0007 and exposes all launch-z
           return statement;
         },
         async first() {
+          if (query.includes("preprod_demo_dataset")) {
+            return null;
+          }
           if (query.includes("d1_migrations")) {
             return { name: "0007_transactional_preprod_order_payment.sql" };
           }
@@ -109,37 +112,47 @@ test("preproduction health is partial on migration 0007 and exposes all launch-z
     {
       APP_ENV: "preproduction",
       PREPROD_ORIGIN: "https://preprod.example",
+      PREPROD_DEMO_DATASET: "aj-demo-v1",
       DB: database,
     },
     { waitUntil() {}, passThroughOnException() {} },
   );
-  assert.equal(response.status, 200);
+  assert.equal(response.status, 503);
   const payload = await response.json();
-  assert.equal(payload.status, "partial");
+  assert.equal(payload.status, "unavailable");
   assert.equal(
     payload.latestMigration,
     "0007_transactional_preprod_order_payment.sql",
   );
-  assert.deepEqual(payload.stockProjection, [
-    { variantId: "variant_available", state: "available" },
-    { variantId: "variant_low", state: "low-stock" },
-    { variantId: "variant_sold", state: "sold-out" },
-  ]);
   assert.deepEqual(payload.capabilities, {
-    catalog: true,
-    cart: true,
+    catalog: false,
+    cart: false,
     shippingQuotes: false,
-    shippingQuoteZones: { EU: true, UK: false, US: false, CA: false },
+    shippingQuoteZones: { EU: false, UK: false, US: false, CA: false },
+    shippingQuoteSimulation: false,
+    shippingQuoteSimulationZones: { EU: false, UK: false, US: false, CA: false },
     payment: false,
     orderCreation: false,
-    reservesValidated: true,
+    reservesValidated: false,
+    syntheticReservesReady: false,
+    orderSimulation: false,
     paymentTestSimulation: false,
     emailCaptureSimulation: false,
     emailDelivery: false,
     carrier: false,
+    stockSimulation: false,
+    shippingSimulation: false,
+    launchReadiness: false,
   });
+  assert.deepEqual(payload.stockProjection, []);
   assert.equal(JSON.stringify(payload).includes("available_to_sell"), false);
-  assert.equal(statements.length, 4);
+  assert.equal(statements.length, 2);
+  assert.match(statements[0], /preprod_demo_dataset/);
+  assert.match(statements[1], /d1_migrations/);
+  assert.equal(
+    statements.some((query) => /inventory|shipping_zone_configurations/.test(query)),
+    false,
+  );
 });
 
 test("preproduction health stays fail-closed without querying tables from a missing migration", async () => {
@@ -152,6 +165,9 @@ test("preproduction health stays fail-closed without querying tables from a miss
           return statement;
         },
         async first() {
+          if (query.includes("preprod_demo_dataset")) {
+            throw new Error("no such table: preprod_demo_dataset");
+          }
           return query.includes("d1_migrations")
             ? { name: "0004_email_outbox_data_rights.sql" }
             : null;
@@ -182,7 +198,13 @@ test("preproduction health stays fail-closed without querying tables from a miss
   assert.deepEqual(payload.capabilities.shippingQuoteZones, {
     EU: false, UK: false, US: false, CA: false,
   });
-  assert.equal(statements.length, 1);
+  assert.equal(statements.length, 2);
+  assert.match(statements[0], /preprod_demo_dataset/);
+  assert.match(statements[1], /d1_migrations/);
+  assert.equal(
+    statements.some((query) => /inventory|shipping_zone_configurations/.test(query)),
+    false,
+  );
 });
 
 test("preproduction health stays fail-closed when the migration ledger is absent", async () => {
@@ -211,7 +233,7 @@ test("preproduction health stays fail-closed when the migration ledger is absent
   assert.equal((await response.json()).status, "unavailable");
 });
 
-test("preproduction health enables shipping quotes only when all four launch zones are active", async () => {
+test("synthetic health exposes simulations, never live capabilities, when all four zones are ready", async () => {
   const database = {
     prepare(query) {
       const statement = {
@@ -219,8 +241,15 @@ test("preproduction health enables shipping quotes only when all four launch zon
           return statement;
         },
         async first() {
+          if (query.includes("preprod_demo_dataset")) {
+            return {
+              dataset_kind: "synthetic-demo",
+              fixture_version: "aj-demo-v1",
+              expires_at: "2026-09-30T23:59:59.999Z",
+            };
+          }
           return query.includes("d1_migrations")
-            ? { name: "0007_transactional_preprod_order_payment.sql" }
+            ? { name: "0008_preprod_synthetic_demo_dataset.sql" }
             : query.includes("reserves_validated")
               ? { total: 12, validated: 12 }
               : null;
@@ -242,6 +271,7 @@ test("preproduction health enables shipping quotes only when all four launch zon
     {
       APP_ENV: "preproduction",
       PREPROD_ORIGIN: "https://preprod.example",
+      PREPROD_DEMO_DATASET: "aj-demo-v1",
       DB: database,
     },
     { waitUntil() {}, passThroughOnException() {} },
@@ -249,15 +279,26 @@ test("preproduction health enables shipping quotes only when all four launch zon
   assert.equal(response.status, 200);
   const payload = await response.json();
   assert.equal(payload.status, "partial");
-  assert.equal(payload.capabilities.shippingQuotes, true);
+  assert.equal(payload.capabilities.shippingQuotes, false);
   assert.deepEqual(payload.capabilities.shippingQuoteZones, {
+    EU: false, UK: false, US: false, CA: false,
+  });
+  assert.equal(payload.capabilities.shippingQuoteSimulation, true);
+  assert.deepEqual(payload.capabilities.shippingQuoteSimulationZones, {
     EU: true, UK: true, US: true, CA: true,
   });
   assert.equal(payload.capabilities.payment, false);
-  assert.equal(payload.capabilities.orderCreation, true);
+  assert.equal(payload.capabilities.reservesValidated, false);
+  assert.equal(payload.capabilities.syntheticReservesReady, true);
+  assert.equal(payload.capabilities.orderCreation, false);
+  assert.equal(payload.capabilities.orderSimulation, true);
   assert.equal(payload.capabilities.paymentTestSimulation, true);
   assert.equal(payload.capabilities.emailCaptureSimulation, true);
   assert.equal(payload.capabilities.carrier, false);
+  assert.equal(payload.capabilities.stockSimulation, true);
+  assert.equal(payload.capabilities.shippingSimulation, true);
+  assert.equal(payload.capabilities.launchReadiness, false);
+  assert.equal(payload.syntheticDataset.active, true);
 });
 
 async function render(pathname = "/", headers = {}) {
@@ -529,6 +570,7 @@ for (const [pathname, colorName] of productCases) {
     const html = await response.text();
     assert.match(html, /Apollon/);
     assert.match(html, new RegExp(colorName));
+    assert.match(html, /Prix fictif, non commercial/);
     assert.match(html, /29,99(?:\s|&nbsp;|&#xA0;)*€/);
     assert.match(html, /Sélectionnez une taille/);
     assert.match(
@@ -549,7 +591,7 @@ for (const [pathname, colorName] of productCases) {
       (html.match(/data-gallery-media="placeholder"/g) ?? []).length >= 4,
       "every gallery frame keeps a lightweight visual placeholder",
     );
-    assert.match(html, /Disponible/);
+    assert.match(html, /Disponibilité simulée/);
     assert.match(html, />Accueil</);
     assert.match(
       html,
@@ -723,7 +765,7 @@ test("cart renders a secure loading state and ignores legacy URL variants", asyn
   );
   assert.equal(response.status, 200);
   const html = await response.text();
-  assert.match(html, /Panier connecté au stock de préproduction/i);
+  assert.match(html, /prix et stocks simulés, non commerciaux/i);
   assert.match(html, /Chargement du panier/i);
   assert.match(html, /aria-busy="true"/);
   assert.doesNotMatch(html, /Rose Velours|Taille[\s\S]*XL|29,99/);
@@ -742,7 +784,7 @@ test("checkout uses the cookie-backed cart and ignores legacy URL variants", asy
 });
 
 const commerceCases = [
-  ["/cart", /paiement et livraison non activés/i],
+  ["/cart", /prix et stocks simulés, non commerciaux/i],
   ["/checkout", /aucun débit, e-mail ou transporteur réel/i],
   ["/account", /authentification non activée/i],
 ];
