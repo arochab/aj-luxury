@@ -1855,4 +1855,4 @@ BEGIN
 	INSERT INTO `audit_log` (`id`, `actor_type`, `actor_id`, `action`, `entity_type`, `entity_id`, `idempotency_key`, `metadata_json`, `created_at`)
 	VALUES ('audit_email_terminal_' || NEW.`id`, 'system', NULL, 'email_' || NEW.`status`, 'email_outbox', NEW.`id`,
 		'email:' || NEW.`id` || ':terminal', '{}', NEW.`terminal_at`);
-END;--> statement-breakpoint
+END;

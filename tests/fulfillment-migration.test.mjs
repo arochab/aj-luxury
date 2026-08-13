@@ -13,6 +13,7 @@ import {
 import { join, relative, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { readMigrationFiles } from "drizzle-orm/migrator";
 
 const projectRoot = fileURLToPath(new URL("../", import.meta.url));
 const workspaceRoot = resolve(projectRoot, "../..");
@@ -43,6 +44,31 @@ const legacyHashes = Object.freeze({
     "21c163102b0bdbdcdf871177667d92338ed4cad9e8ec1a0322025478f0efff09",
   "0004_email_outbox_data_rights.sql":
     "e36dfa8d25f863ab82f2ab3ba784574dd48e5d6d819be50226890a7a867cc91d",
+});
+
+test("the exact Drizzle D1 splitter emits no blank statements", () => {
+  const migrations = readMigrationFiles({ migrationsFolder: migrationRoot });
+  assert.equal(migrations.length, migrationNames.length);
+  assert.equal(
+    migrations.reduce((total, migration) => total + migration.sql.length, 0),
+    359,
+  );
+  for (const [migrationIndex, migration] of migrations.entries()) {
+    for (const [statementIndex, statement] of migration.sql.entries()) {
+      assert.ok(
+        statement.trim().length > 0,
+        `${migrationNames[migrationIndex]} emitted blank statement ${statementIndex + 1}`,
+      );
+    }
+  }
+
+  const fulfillmentMigration = readFileSync(
+    join(migrationRoot, migrationNames.at(-1)),
+    "utf8",
+  );
+  assert.doesNotMatch(fulfillmentMigration, /--> statement-breakpoint\s*$/);
+  assert.match(migrations.at(-1).sql.at(-1), /trg_email_outbox_audit_terminal/);
+  assert.match(migrations.at(-1).sql.at(-1), /END;\s*$/);
 });
 
 function environment(root) {
