@@ -28,7 +28,7 @@ async function loadDictionary(
   if (cached) return cached;
 
   try {
-    const response = await fetch(`/media/i18n/${locale}.json?v=v3`, {
+    const response = await fetch(`/media/i18n/${locale}.json?v=v4`, {
       cache: "force-cache",
     });
     if (!response.ok) return null;

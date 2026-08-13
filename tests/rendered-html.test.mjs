@@ -614,16 +614,20 @@ test("withdrawal route is visible but cannot fake a live order workflow", async 
   assert.match(html, /contact@ajluxurystore\.com/);
 });
 
-test("cart keeps the selected color and size", async () => {
+test("cart renders a secure loading state and ignores legacy URL variants", async () => {
   const response = await render(
     "/cart?variant=variant_boxer_rose-pale_xl",
   );
   assert.equal(response.status, 200);
   const html = await response.text();
-  assert.match(html, /Rose Velours/);
-  assert.match(html, /Taille[\s\S]*XL/);
-  assert.match(html, /29,99(?:\s|&nbsp;|&#xA0;)*€/);
+  assert.match(html, /Panier connecté au stock de préproduction/i);
+  assert.match(html, /Chargement du panier/i);
+  assert.match(html, /aria-busy="true"/);
+  assert.doesNotMatch(html, /Rose Velours|Taille[\s\S]*XL|29,99/);
+  assert.doesNotMatch(html, /href="\/checkout|cart\?variant/);
+});
 
+test("the untouched checkout simulation keeps its selected color and size", async () => {
   const checkout = await render(
     "/checkout?variant=variant_boxer_rose-pale_xl",
   );
@@ -637,7 +641,7 @@ test("cart keeps the selected color and size", async () => {
 });
 
 const commerceCases = [
-  ["/cart", /aucune commande ne sera enregistrée/i],
+  ["/cart", /paiement et livraison non activés/i],
   ["/checkout", /aucune commande n’est enregistrée/i],
   ["/account", /authentification non activée/i],
 ];

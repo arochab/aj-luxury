@@ -74,6 +74,7 @@
 
 .lineImage {
   position: relative;
+  display: block;
   aspect-ratio: 4 / 5;
   overflow: hidden;
   background: #deded9;
@@ -87,6 +88,10 @@
   margin: 0 0 8px;
   font-size: 17px;
   font-weight: 500;
+}
+
+.lineDetails {
+  min-width: 0;
 }
 
 .line p,
@@ -144,7 +149,10 @@
 }
 
 .secondary {
-  display: block;
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
   margin-top: 18px;
   padding-bottom: 4px;
   border-bottom: 1px solid;
@@ -184,7 +192,9 @@
 }
 
 .lockedButton {
+  width: 100%;
   min-height: 56px;
+  margin-top: 28px;
   border: 1px solid #c5c5c0;
   background: #d7d7d2;
   color: #59595c;
@@ -193,6 +203,109 @@
   font-weight: 600;
   letter-spacing: 0.13em;
   text-transform: uppercase;
+}
+
+.cartStatus {
+  min-height: 1.5rem;
+  color: #686868;
+  font-size: 11px;
+}
+
+.empty {
+  max-width: 36rem;
+  padding: 2rem 0;
+  border-top: 1px solid rgba(9, 9, 9, 0.14);
+}
+
+.empty h2 {
+  margin: 0 0 0.75rem;
+  font-size: clamp(1.75rem, 4vw, 2.6rem);
+  font-weight: 450;
+  letter-spacing: -0.04em;
+}
+
+.empty p,
+.error p {
+  margin: 0;
+  color: #626262;
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+.empty .button {
+  width: min(100%, 21rem);
+}
+
+.error {
+  display: grid;
+  max-width: 36rem;
+  gap: 1rem;
+  padding: 1.25rem;
+  border: 1px solid #8b3f43;
+  background: #f5e9e8;
+}
+
+.error button {
+  justify-self: start;
+  min-height: 44px;
+  padding: 0 1rem;
+  border: 1px solid #090909;
+  background: #090909;
+  color: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.quantityControl {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.75rem;
+}
+
+.quantityControl button,
+.quantityControl output {
+  display: grid;
+  min-width: 44px;
+  min-height: 44px;
+  place-items: center;
+}
+
+.quantityControl button {
+  border: 1px solid rgba(9, 9, 9, 0.22);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+
+.quantityControl button:disabled {
+  color: #999;
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.quantityControl .removeButton {
+  min-width: 44px;
+  padding: 0 0.75rem;
+  border-color: transparent;
+  text-decoration: underline;
+  text-underline-offset: 0.25rem;
+}
+
+.button:focus-visible,
+.secondary:focus-visible,
+.lineImage:focus-visible,
+.error:focus-visible,
+.error button:focus-visible,
+.quantityControl button:focus-visible {
+  outline: 2px solid #62646a;
+  outline-offset: 3px;
 }
 
 .cards {
@@ -254,5 +367,22 @@
 
   .formGrid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 360px) {
+  .main {
+    padding-inline: 16px;
+  }
+
+  .line {
+    grid-template-columns: 88px minmax(0, 1fr);
+    gap: 14px;
+  }
+
+  .quantityControl .removeButton {
+    flex-basis: 100%;
+    justify-content: start;
+    padding-inline: 0;
   }
 }

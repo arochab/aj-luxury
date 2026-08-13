@@ -4,6 +4,12 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { getLocalizedProductCopy } from "@/lib/i18n/product-copy";
+import {
+  CartApiError,
+  ensureOpenCart,
+  setCartLineQuantity,
+} from "../../lib/commerce/preprod-cart-client";
+import { createLaunchVariantId } from "../../lib/commerce/product-identifiers";
 import type { PublicStockBySize } from "../../lib/commerce/public-stock";
 import type { Product, ProductSize } from "../../lib/products";
 import { formatPrice, sizes } from "../../lib/products";
@@ -21,11 +27,18 @@ export default function ProductPurchase({
   availability,
 }: ProductPurchaseProps) {
   const [selectedSize, setSelectedSize] = useState<ProductSize | null>(null);
-  const [added, setAdded] = useState(false);
+  const [feedback, setFeedback] = useState<
+    | { kind: "success"; quantity: number; size: ProductSize }
+    | { kind: "error"; code: string }
+    | null
+  >(null);
+  const [cartBusy, setCartBusy] = useState(false);
   const [sizeGuideOpen, setSizeGuideOpen] = useState(false);
   const sizeGuideDialog = useRef<HTMLDivElement>(null);
   const sizeGuideClose = useRef<HTMLButtonElement>(null);
   const sizeGuideTrigger = useRef<HTMLButtonElement>(null);
+  const cartError = useRef<HTMLParagraphElement>(null);
+  const cartRequestInFlight = useRef(false);
   const restoreSizeGuideFocus = useRef(false);
   const { locale, t } = useI18n();
   const localizedProduct = getLocalizedProductCopy(t, product.slug);
@@ -34,7 +47,7 @@ export default function ProductPurchase({
     if (availability[size].state === "sold-out") return;
 
     setSelectedSize(size);
-    setAdded(false);
+    setFeedback(null);
   }
 
   function stockLabel(size: ProductSize) {
@@ -108,6 +121,11 @@ export default function ProductPurchase({
     return () => window.cancelAnimationFrame(frame);
   }, [sizeGuideOpen]);
 
+  useEffect(() => {
+    if (feedback?.kind !== "error") return;
+    cartError.current?.focus({ preventScroll: true });
+  }, [feedback]);
+
   function openSizeGuide() {
     restoreSizeGuideFocus.current = false;
     setSizeGuideOpen(true);
@@ -118,10 +136,69 @@ export default function ProductPurchase({
     setSizeGuideOpen(false);
   }
 
+  async function addToCart() {
+    if (!selectedSize || cartRequestInFlight.current) return;
+
+    cartRequestInFlight.current = true;
+    setCartBusy(true);
+    setFeedback(null);
+    try {
+      const variantId = createLaunchVariantId(product.slug, selectedSize);
+      const currentCart = await ensureOpenCart();
+      const currentQuantity =
+        currentCart.lines.find((line) => line.variantId === variantId)
+          ?.quantity ?? 0;
+      if (currentQuantity >= 5) {
+        throw new CartApiError("MAX_QUANTITY");
+      }
+
+      const updatedCart = await setCartLineQuantity(
+        variantId,
+        currentQuantity + 1,
+      );
+      const updatedLine = updatedCart.lines.find(
+        (line) => line.variantId === variantId,
+      );
+      if (!updatedLine) throw new CartApiError("MALFORMED_RESPONSE");
+      setFeedback({
+        kind: "success",
+        quantity: updatedLine.quantity,
+        size: selectedSize,
+      });
+    } catch (error) {
+      setFeedback({
+        kind: "error",
+        code: error instanceof CartApiError ? error.code : "CART_UNAVAILABLE",
+      });
+    } finally {
+      cartRequestInFlight.current = false;
+      setCartBusy(false);
+    }
+  }
+
+  function cartFeedbackText() {
+    if (feedback?.kind === "success") {
+      return t("product.cartAdded")
+        .replace("{size}", feedback.size)
+        .replace("{count}", String(feedback.quantity));
+    }
+    if (feedback?.kind === "error") {
+      if (feedback.code === "OUT_OF_STOCK") {
+        return t("product.cartOutOfStock");
+      }
+      if (feedback.code === "MAX_QUANTITY") {
+        return t("product.cartMaxQuantity");
+      }
+      return t("product.cartUnavailable");
+    }
+    return t("product.cartSecureNotice");
+  }
+
   return (
     <aside
       className={styles.purchasePanel}
       aria-label={t("product.purchaseInfoLabel")}
+      aria-busy={cartBusy}
     >
       <p className={styles.eyebrow}>{t("product.status")}</p>
       <h1>{product.model}</h1>
@@ -256,26 +333,35 @@ export default function ProductPurchase({
       <button
         className={styles.purchaseButton}
         type="button"
-        disabled={!selectedSize}
-        onClick={() => setAdded(true)}
+        disabled={!selectedSize || cartBusy}
+        onClick={() => void addToCart()}
+        aria-busy={cartBusy}
       >
-        {added
-          ? `${t("product.added")} · ${t("product.size")} ${selectedSize}`
+        {cartBusy
+          ? t("product.adding")
           : selectedSize
             ? t("product.addDemo")
             : t("product.selectSizePrompt")}
       </button>
 
-      <p className={styles.notice} role="status" aria-live="polite">
-        {added
-          ? t("product.demoAdded")
-          : t("product.paymentDisabled")}
+      <p
+        className={
+          feedback?.kind === "error"
+            ? `${styles.notice} ${styles.purchaseError}`
+            : styles.notice
+        }
+        ref={feedback?.kind === "error" ? cartError : undefined}
+        role={feedback?.kind === "error" ? "alert" : "status"}
+        aria-live={feedback?.kind === "error" ? "assertive" : "polite"}
+        tabIndex={feedback?.kind === "error" ? -1 : undefined}
+      >
+        {cartFeedbackText()}
       </p>
 
-      {added && (
+      {feedback?.kind === "success" && (
         <Link
           className={styles.cartLink}
-          href={`/cart?variant=variant_boxer_${product.slug}_${selectedSize?.toLowerCase()}`}
+          href="/cart"
         >
           {t("product.viewCart")}
         </Link>

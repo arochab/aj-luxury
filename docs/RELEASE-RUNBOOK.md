@@ -26,7 +26,7 @@ After deployment, verify the public domain:
 - every hero URL uses `/media/`; posters respond successfully and an MP4
   request with `Range: bytes=0-1023` returns `206`, `Content-Range`,
   `Accept-Ranges: bytes` and exactly 1,024 bytes;
-- `/media/i18n/en.json?v=v3` is immutable JSON with `nosniff`;
+- `/media/i18n/en.json?v=v4` is immutable JSON with `nosniff`;
 - `/images/review/*` and `/media/images/review/*` do not expose review proofs;
 - `docs/internal/**` and client evidence are not bundled, routed or publicly served;
 - no console error, broken image, horizontal overflow or language regression;
