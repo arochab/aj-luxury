@@ -12,7 +12,10 @@ import { D1CommerceStore } from "../lib/commerce/d1-commerce-store.ts";
 import { D1DataRightsStore } from "../lib/commerce/data-rights.ts";
 import { D1FulfillmentStore } from "../lib/commerce/d1-fulfillment-store.ts";
 import { D1IdentityAccessStore } from "../lib/commerce/identity-access-store.ts";
-import { FulfillmentProviderError } from "../lib/commerce/fulfillment-domain.ts";
+import {
+  FulfillmentProviderError,
+  normalizeShippingAddress,
+} from "../lib/commerce/fulfillment-domain.ts";
 import { assertVerifiedCarrierEvent } from "../lib/commerce/verified-carrier-event.ts";
 import { verifyTestCarrierEvent } from "./support/test-carrier-event.ts";
 import { verifyTestPaymentEvent } from "./support/test-payment-event.ts";
@@ -161,6 +164,10 @@ async function rejectsCode(operation, code) {
   await assert.rejects(operation, (error) => error?.code === code);
 }
 
+async function addressFingerprint(value) {
+  return (await normalizeShippingAddress(value)).fingerprint;
+}
+
 function activateConfiguration(context, zone, suffix, priceCents = 1200) {
   const createdAt = "2026-08-11T12:00:00.000Z";
   const activatedAt = "2026-08-11T12:00:01.000Z";
@@ -273,6 +280,7 @@ async function createPaidOrder(context, {
     quoteId: quote.id,
     cartId,
     address: shippingAddress,
+    addressFingerprint: await addressFingerprint(shippingAddress),
     now: quoteSelectedAt,
   });
   const subtotal = lines.reduce((sum, line) => sum + line.quantity * 2999, 0);
@@ -554,10 +562,12 @@ test("D1 configurations and quotes fail closed, freeze selected carts and replay
   const casResults = await Promise.all([
     context.fulfillment.selectShippingQuote({
       quoteId: casQuote.id, cartId: casCart, address: address("EU"),
+      addressFingerprint: await addressFingerprint(address("EU")),
       now: quoteSelectedAt,
     }),
     context.fulfillment.selectShippingQuote({
       quoteId: casQuote.id, cartId: casCart, address: address("EU"),
+      addressFingerprint: await addressFingerprint(address("EU")),
       now: quoteSelectedAt,
     }),
   ]);
@@ -582,6 +592,7 @@ test("D1 configurations and quotes fail closed, freeze selected carts and replay
     quoteId: changedBeforeSelectionQuote.id,
     cartId: changedBeforeSelectionCart,
     address: address("EU"),
+    addressFingerprint: changedBeforeSelectionQuote.shipping_address_fingerprint,
     now: quoteSelectedAt,
   }), "QUOTE_MISMATCH");
   assert.equal((await context.fulfillment.getShippingQuote(
@@ -605,12 +616,18 @@ test("D1 configurations and quotes fail closed, freeze selected carts and replay
     quoteId: crossedQuote.id,
     cartId: otherCart,
     address: address("EU"),
+    addressFingerprint: crossedQuote.shipping_address_fingerprint,
     now: quoteSelectedAt,
   }), "QUOTE_MISMATCH");
+  const changedAddressFingerprint = await addressFingerprint({
+    ...address("EU"),
+    line1: "2 rue du Test",
+  });
   await rejectsCode(() => context.fulfillment.selectShippingQuote({
     quoteId: crossedQuote.id,
     cartId: crossedCart,
     address: { ...address("EU"), line1: "2 rue du Test" },
+    addressFingerprint: changedAddressFingerprint,
     now: quoteSelectedAt,
   }), "QUOTE_MISMATCH");
   assert.equal((await context.fulfillment.getShippingQuote(crossedQuote.id)).selected_at, null);
@@ -631,6 +648,7 @@ test("D1 configurations and quotes fail closed, freeze selected carts and replay
       quoteId: candidate.id,
       cartId: competingCart,
       address: address("EU"),
+      addressFingerprint: candidate.shipping_address_fingerprint,
       now: quoteSelectedAt,
     })));
   assert.equal(competingSelections.filter((result) => result.status === "fulfilled").length, 1);
@@ -665,6 +683,7 @@ test("D1 configurations and quotes fail closed, freeze selected carts and replay
     quoteId: interleavedQuote.id,
     cartId: interleavedCart,
     address: address("EU"),
+    addressFingerprint: interleavedQuote.shipping_address_fingerprint,
     now: quoteSelectedAt,
   }), "QUOTE_MISMATCH");
   assert.equal(interleavedMutations, 1);
@@ -705,18 +724,19 @@ test("D1 configurations and quotes fail closed, freeze selected carts and replay
     quoteId: quote.id,
     cartId,
     address: address("EU"),
+    addressFingerprint: quote.shipping_address_fingerprint,
     now: quoteSelectedAt,
   });
   assert.throws(() => context.database.prepare(
     "UPDATE cart_lines SET quantity=2 WHERE cart_id=?",
   ).run(cartId), /fulfillment_quote_mismatch/);
-  const replay = await context.fulfillment.selectShippingQuote({
+  await rejectsCode(() => context.fulfillment.selectShippingQuote({
     quoteId: quote.id,
     cartId,
     address: address("EU"),
+    addressFingerprint: quote.shipping_address_fingerprint,
     now: liveIso(30 * 60_000),
-  });
-  assert.equal(replay.selected_at, quoteSelectedAt);
+  }), "QUOTE_EXPIRED");
 
   const oldCart = await createCartWithLines(context, "oldquote", [
     { variantId: "variant_boxer_rose-pale_s", quantity: 1 },
@@ -1354,12 +1374,13 @@ test("full fulfillment flow is leased, append-only, mixed-unit safe and keeps pa
       { variantId: "variant_boxer_rose-pale_m", quantity: 2 },
     ],
   });
-  assert.equal((await context.fulfillment.selectShippingQuote({
+  await rejectsCode(() => context.fulfillment.selectShippingQuote({
     quoteId: order.quote.id,
     cartId: order.cartId,
     address: address("US"),
+    addressFingerprint: order.quote.shipping_address_fingerprint,
     now: "2026-08-11T12:10:02.000Z",
-  })).selected_at, order.quote.selected_at);
+  }), "QUOTE_MISMATCH");
   await rejectsCode(() => context.fulfillment.createShipmentLabel({
     shipmentId: "shipment_flow",
     orderId: order.orderId,

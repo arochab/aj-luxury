@@ -125,7 +125,7 @@ test("cart semantic changes rotate the quote key while ambiguous retries preserv
   }
 });
 
-test("checkout UI remains real-cart, closed-payment and carrier-neutral", async () => {
+test("checkout UI remains real-cart, test-only payment and carrier-neutral", async () => {
   const project = new URL("../", import.meta.url);
   const [page, client, cart, styles] = await Promise.all([
     readFile(new URL("app/checkout/page.tsx", project), "utf8"),
@@ -140,7 +140,12 @@ test("checkout UI remains real-cart, closed-payment and carrier-neutral", async 
   assert.match(client, /crypto\.randomUUID\(\)/);
   assert.match(client, /attemptRef\.current = null/);
   assert.match(client, /shippingQuoteAttemptCanReplay/);
-  assert.match(client, /disabled>[\s\S]*checkout\.paymentClosed/);
+  assert.match(client, /createPreprodOrder/);
+  assert.match(client, /payPreprodOrder/);
+  assert.match(client, /getCurrentPreprodOrder/);
+  assert.match(client, /@demo\.invalid/);
+  assert.match(client, /checkout\.simulationAck/);
+  assert.match(client, /checkout\.noDebitNoEmail/);
   assert.match(client, /countryCode === "US"/);
   assert.match(cart, /href="\/checkout"/);
   assert.match(styles, /\.form select[\s\S]*min-height: 48px/);

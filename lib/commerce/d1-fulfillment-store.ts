@@ -466,13 +466,12 @@ export class D1FulfillmentStore {
     quoteId: string;
     cartId: string;
     address: ShippingAddressInput;
+    addressFingerprint: string;
     now: string;
   }>): Promise<QuoteRow> {
-    // This legacy store method accepts an unkeyed address proof and is not
-    // exposed by Gate B. Any future order API must pass and verify the same
-    // request-local HMAC proof as the quote endpoint before enabling select.
     assertFulfillmentIdentifier(input.quoteId, "quoteId");
     assertFulfillmentIdentifier(input.cartId, "cartId");
+    assertFulfillmentFingerprint(input.addressFingerprint, "addressFingerprint");
     assertFulfillmentTimestamp(input.now, "now");
     const [quote, address] = await Promise.all([
       this.getShippingQuote(input.quoteId),
@@ -490,12 +489,29 @@ export class D1FulfillmentStore {
     if (
       !quote ||
       quote.cart_id !== input.cartId ||
-      quote.shipping_address_fingerprint !== address.fingerprint ||
+      quote.shipping_address_fingerprint !== input.addressFingerprint ||
       quote.shipping_address_json !== routingProofJson
     ) {
       throw new FulfillmentError("QUOTE_MISMATCH", "The quote no longer matches the cart.");
     }
-    if (quote.selected_at !== null) return quote;
+    const activeConfiguration = await this.#database.prepare(
+      `SELECT configuration.id
+      FROM shipping_zone_configurations AS configuration
+      WHERE configuration.id = ? AND configuration.status = 'active'
+        AND configuration.price_cents = ? AND configuration.currency = ?
+        AND configuration.duties_terms = ?`,
+    ).bind(
+      quote.configuration_id,
+      quote.amount_cents,
+      quote.currency,
+      quote.duties_terms,
+    ).first<{ id: string }>();
+    if (!activeConfiguration) {
+      throw new FulfillmentError(
+        "CONFIGURATION_UNAVAILABLE",
+        "The quote configuration is no longer active.",
+      );
+    }
     const cart = await this.#openCartSnapshot(input.cartId, input.now);
     if (
       quote.cart_fingerprint !== cart.fingerprint ||
@@ -505,6 +521,9 @@ export class D1FulfillmentStore {
     }
     if (quote.expires_at <= input.now) {
       throw new FulfillmentError("QUOTE_EXPIRED", "The quote has expired.");
+    }
+    if (quote.selected_at !== null) {
+      return quote;
     }
     try {
       const update = await this.#database

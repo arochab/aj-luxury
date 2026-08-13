@@ -873,6 +873,9 @@ test("payment authority is non-forgeable and the local verifier stays outside pr
     internalRegistrationConsumers.map((path) => path.replaceAll("\\", "/")),
     [
       fileURLToPath(
+        new URL("../lib/commerce/preprod-test-payment-adapter.internal.ts", import.meta.url),
+      ).replaceAll("\\", "/"),
+      fileURLToPath(
         new URL("../lib/commerce/verified-payment-event.ts", import.meta.url),
       ).replaceAll("\\", "/"),
     ],

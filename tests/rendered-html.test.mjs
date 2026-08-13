@@ -67,7 +67,7 @@ test("production pages remain indexable while preproduction is explicitly noinde
   assert.equal(preproduction.headers.get("x-robots-tag"), "noindex, nofollow");
 });
 
-test("preproduction health is partial on migration 0006 and exposes all launch-zone gates, not quantities", async () => {
+test("preproduction health is partial on migration 0007 and exposes all launch-zone gates, not quantities", async () => {
   const statements = [];
   const database = {
     prepare(query) {
@@ -77,7 +77,10 @@ test("preproduction health is partial on migration 0006 and exposes all launch-z
         },
         async first() {
           if (query.includes("d1_migrations")) {
-            return { name: "0006_allow_bounded_expired_cart_purge.sql" };
+            return { name: "0007_transactional_preprod_order_payment.sql" };
+          }
+          if (query.includes("reserves_validated")) {
+            return { total: 3, validated: 3 };
           }
           return null;
         },
@@ -115,7 +118,7 @@ test("preproduction health is partial on migration 0006 and exposes all launch-z
   assert.equal(payload.status, "partial");
   assert.equal(
     payload.latestMigration,
-    "0006_allow_bounded_expired_cart_purge.sql",
+    "0007_transactional_preprod_order_payment.sql",
   );
   assert.deepEqual(payload.stockProjection, [
     { variantId: "variant_available", state: "available" },
@@ -129,11 +132,14 @@ test("preproduction health is partial on migration 0006 and exposes all launch-z
     shippingQuoteZones: { EU: true, UK: false, US: false, CA: false },
     payment: false,
     orderCreation: false,
+    reservesValidated: true,
+    paymentTestSimulation: false,
+    emailCaptureSimulation: false,
     emailDelivery: false,
     carrier: false,
   });
   assert.equal(JSON.stringify(payload).includes("available_to_sell"), false);
-  assert.equal(statements.length, 3);
+  assert.equal(statements.length, 4);
 });
 
 test("preproduction health stays fail-closed without querying tables from a missing migration", async () => {
@@ -214,13 +220,15 @@ test("preproduction health enables shipping quotes only when all four launch zon
         },
         async first() {
           return query.includes("d1_migrations")
-            ? { name: "0006_allow_bounded_expired_cart_purge.sql" }
-            : null;
+            ? { name: "0007_transactional_preprod_order_payment.sql" }
+            : query.includes("reserves_validated")
+              ? { total: 12, validated: 12 }
+              : null;
         },
         async all() {
           return query.includes("shipping_zone_configurations")
             ? { results: [{ zone: "EU" }, { zone: "UK" }, { zone: "US" }, { zone: "CA" }] }
-            : { results: [] };
+            : { results: [{ variant_id: "variant_available", available_to_sell: 1 }] };
         },
       };
       return statement;
@@ -246,6 +254,9 @@ test("preproduction health enables shipping quotes only when all four launch zon
     EU: true, UK: true, US: true, CA: true,
   });
   assert.equal(payload.capabilities.payment, false);
+  assert.equal(payload.capabilities.orderCreation, true);
+  assert.equal(payload.capabilities.paymentTestSimulation, true);
+  assert.equal(payload.capabilities.emailCaptureSimulation, true);
   assert.equal(payload.capabilities.carrier, false);
 });
 
@@ -724,7 +735,7 @@ test("checkout uses the cookie-backed cart and ignores legacy URL variants", asy
     "/checkout?variant=variant_boxer_rose-pale_xl",
   );
   const checkoutHtml = await checkout.text();
-  assert.match(checkoutHtml, /Simulation de livraison sur le stock de préproduction/i);
+  assert.match(checkoutHtml, /Préproduction privée/i);
   assert.match(checkoutHtml, /Chargement du panier/i);
   assert.match(checkoutHtml, /aria-busy="true"/);
   assert.doesNotMatch(checkoutHtml, /Rose Velours|29,99|cart\?variant/);
@@ -732,7 +743,7 @@ test("checkout uses the cookie-backed cart and ignores legacy URL variants", asy
 
 const commerceCases = [
   ["/cart", /paiement et livraison non activés/i],
-  ["/checkout", /aucun transporteur, paiement ou commande n’est activé/i],
+  ["/checkout", /aucun débit, e-mail ou transporteur réel/i],
   ["/account", /authentification non activée/i],
 ];
 

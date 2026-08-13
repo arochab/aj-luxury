@@ -18,6 +18,13 @@ import {
   type PublicShippingQuote,
   type ShippingAddress,
 } from "../../lib/commerce/preprod-shipping-client";
+import {
+  createPreprodOrder,
+  getCurrentPreprodOrder,
+  payPreprodOrder,
+  PreprodOrderApiError,
+  type PublicPreprodOrder,
+} from "../../lib/commerce/preprod-order-client";
 import { useI18n } from "../../lib/i18n/I18nProvider";
 import LocalizedPrice from "../components/LocalizedPrice";
 import styles from "../cart/CommerceShell.module.css";
@@ -68,11 +75,18 @@ export default function CheckoutClient() {
   const [cart, setCart] = useState<PublicCartSnapshot | null>(null);
   const [address, setAddress] = useState<AddressState>(initialAddress);
   const [quote, setQuote] = useState<PublicShippingQuote | null>(null);
+  const [order, setOrder] = useState<PublicPreprodOrder | null>(null);
+  const [email, setEmail] = useState("");
+  const [legalAccepted, setLegalAccepted] = useState(false);
+  const [simulationAccepted, setSimulationAccepted] = useState(false);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [errorCode, setErrorCode] = useState<string | null>(null);
   const errorRef = useRef<HTMLDivElement>(null);
+  const orderRef = useRef<HTMLDivElement>(null);
   const attemptRef = useRef<{ fingerprint: string; key: string } | null>(null);
+  const orderAttemptRef = useRef<string | null>(null);
+  const paymentAttemptRef = useRef<string | null>(null);
 
   const loadCart = useCallback(async () => {
     // An explicit cart refresh starts a new semantic attempt. Network retries
@@ -93,8 +107,12 @@ export default function CheckoutClient() {
 
   useEffect(() => {
     let active = true;
-    void getCart()
-      .then((snapshot) => {
+    void getCurrentPreprodOrder()
+      .then(async (currentOrder) => {
+        if (!active) return;
+        setOrder(currentOrder);
+        if (currentOrder) return;
+        const snapshot = await getCart();
         if (!active) return;
         setCart(snapshot);
         setErrorCode(null);
@@ -116,6 +134,10 @@ export default function CheckoutClient() {
     if (errorCode) errorRef.current?.focus({ preventScroll: true });
   }, [errorCode]);
 
+  useEffect(() => {
+    if (order) orderRef.current?.focus({ preventScroll: true });
+  }, [order]);
+
   const countries = useMemo(() => {
     const names = new Intl.DisplayNames([locale], { type: "region" });
     return launchCountryCodes
@@ -133,7 +155,45 @@ export default function CheckoutClient() {
       ...(name === "countryCode" && value !== "US" ? { regionCode: "" } : {}),
     }));
     setQuote(null);
+    setOrder(null);
+    orderAttemptRef.current = null;
+    paymentAttemptRef.current = null;
     setErrorCode(null);
+  }
+
+  async function createOrder() {
+    if (!quote || !legalAccepted || !simulationAccepted || submitting) return;
+    setSubmitting(true);
+    setErrorCode(null);
+    try {
+      const idempotencyKey = orderAttemptRef.current ?? crypto.randomUUID();
+      orderAttemptRef.current = idempotencyKey;
+      setOrder(await createPreprodOrder({
+        quoteId: quote.quoteId,
+        address: shippingAddress(address),
+        email,
+        idempotencyKey,
+      }));
+    } catch (error) {
+      setErrorCode(error instanceof PreprodOrderApiError ? error.code : "CHECKOUT_UNAVAILABLE");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function payOrder() {
+    if (!order || order.status === "paid" || submitting) return;
+    setSubmitting(true);
+    setErrorCode(null);
+    try {
+      const idempotencyKey = paymentAttemptRef.current ?? crypto.randomUUID();
+      paymentAttemptRef.current = idempotencyKey;
+      setOrder(await payPreprodOrder(idempotencyKey));
+    } catch (error) {
+      setErrorCode(error instanceof PreprodOrderApiError ? error.code : "CHECKOUT_UNAVAILABLE");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -149,6 +209,9 @@ export default function CheckoutClient() {
     setSubmitting(true);
     setErrorCode(null);
     setQuote(null);
+    setOrder(null);
+    orderAttemptRef.current = null;
+    paymentAttemptRef.current = null;
     try {
       const nextQuote = await requestShippingQuote(candidate, key);
       setQuote(nextQuote);
@@ -174,8 +237,9 @@ export default function CheckoutClient() {
           : errorCode === "CART_CHANGED" || errorCode === "CART_EXPIRED"
             ? t("checkout.cartChanged")
             : t("checkout.unavailable");
-  const subtotal = cart?.subtotalCents ?? 0;
-  const total = subtotal + (quote?.amountCents ?? 0);
+  const subtotal = order?.subtotalCents ?? cart?.subtotalCents ?? 0;
+  const shipping = order?.shippingCents ?? quote?.amountCents ?? 0;
+  const total = order?.totalCents ?? subtotal + shipping;
 
   if (!loading && cart && cart.lines.length === 0) {
     return (
@@ -215,7 +279,7 @@ export default function CheckoutClient() {
           </div>
         )}
 
-        {!loading && cart && cart.lines.length > 0 && (
+        {!loading && !order && cart && cart.lines.length > 0 && (
           <form className={styles.form} onSubmit={(event) => void submit(event)}>
             <label>
               {t("checkout.recipient")}
@@ -323,11 +387,11 @@ export default function CheckoutClient() {
         )}
       </section>
 
-      {cart && cart.lines.length > 0 && (
+      {((order && order.lines.length > 0) || (cart && cart.lines.length > 0)) && (
         <aside className={styles.summary} aria-label={t("checkout.selection")}>
           <p className={styles.eyebrow}>{t("checkout.selection")}</p>
-          {cart.lines.map((line) => (
-            <div className={styles.row} key={line.variantId}>
+          {(order?.lines ?? cart?.lines ?? []).map((line, index) => (
+            <div className={styles.row} key={"variantId" in line ? line.variantId : `${line.colorName}-${line.size}-${index}`}>
               <span>
                 {line.colorName}<br />
                 Apollon · {t("product.size")} {line.size} × {line.quantity}
@@ -343,7 +407,9 @@ export default function CheckoutClient() {
             <span>{t("cart.shipping")}</span>
             <span>
               {quote
-                ? <LocalizedPrice amountCents={quote.amountCents} />
+                ? <LocalizedPrice amountCents={shipping} />
+                : order
+                  ? <LocalizedPrice amountCents={shipping} />
                 : t("cart.toDefine")}
             </span>
           </div>
@@ -364,10 +430,55 @@ export default function CheckoutClient() {
               </p>
             </div>
           )}
+          {quote && !order && (
+            <div className={styles.testCheckout}>
+              <label>
+                {t("checkout.demoEmail")}
+                <input
+                  type="email"
+                  inputMode="email"
+                  autoComplete="off"
+                  value={email}
+                  onChange={(event) => setEmail(event.currentTarget.value)}
+                  placeholder="client@demo.invalid"
+                  required
+                />
+              </label>
+              <label className={styles.checkbox}>
+                <input type="checkbox" checked={legalAccepted} onChange={(event) => setLegalAccepted(event.currentTarget.checked)} />
+                <span>
+                  {t("checkout.legalAck")} <Link href="/terms">{t("footer.terms")}</Link>{" "}
+                  <Link href="/privacy">{t("footer.privacy")}</Link>
+                </span>
+              </label>
+              <label className={styles.checkbox}>
+                <input type="checkbox" checked={simulationAccepted} onChange={(event) => setSimulationAccepted(event.currentTarget.checked)} />
+                <span>{t("checkout.simulationAck")}</span>
+              </label>
+              <button className={styles.button} type="button" disabled={submitting || !legalAccepted || !simulationAccepted || !email.endsWith("@demo.invalid")} onClick={() => void createOrder()}>
+                {t("checkout.createTestOrder")}
+              </button>
+            </div>
+          )}
+          {order && (
+            <div
+              className={styles.quote}
+              aria-live="polite"
+              role="status"
+              tabIndex={-1}
+              ref={orderRef}
+            >
+              <strong>{order.status === "paid" ? t("checkout.testPaid") : t("checkout.testOrderCreated")}</strong>
+              <p>{order.orderNumber}</p>
+              <p>{t("checkout.noDebitNoEmail")}</p>
+              {order.status === "pending_payment" && (
+                <button className={styles.button} type="button" disabled={submitting} onClick={() => void payOrder()}>
+                  {t("checkout.simulatePayment")}
+                </button>
+              )}
+            </div>
+          )}
           <p className={styles.muted}>{t("checkout.taxesPending")}</p>
-          <button className={styles.lockedButton} type="button" disabled>
-            {t("checkout.paymentClosed")}
-          </button>
           <p className={styles.muted}>{t("checkout.securityNote")}</p>
         </aside>
       )}
