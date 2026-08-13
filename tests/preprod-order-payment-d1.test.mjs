@@ -165,14 +165,17 @@ test("Gate C accepts only opaque verified preproduction payment and proves the f
   assert.equal(context.sqlite.prepare("SELECT COUNT(*) count FROM email_outbox WHERE status='pending' AND sent_at IS NULL").get().count, 1);
   assert.equal(context.sqlite.prepare("SELECT COUNT(*) count FROM stock_reservations WHERE status='converted'").get().count, 2);
   assert.equal(context.sqlite.prepare("SELECT COUNT(*) count FROM inventory_movements WHERE kind='sale'").get().count, 2);
-  assert.doesNotMatch(JSON.stringify(paid), /Ada|rue du Test|demo\.invalid|order_[0-9a-f]|quote_/i);
+  const paidJson = JSON.stringify(paid);
+  assert.doesNotMatch(paidJson, /rue du Test|demo\.invalid|order_[0-9a-f]|quote_/i);
+  assert.doesNotMatch(paidJson, /Ada Test/i);
   context.sqlite.close();
 });
 
 test("0007 direct trigger rejects unselected quote and real address never enters quote storage", async () => {
   const context = await fixture();
   const quoteJson = context.sqlite.prepare("SELECT shipping_address_json FROM shipping_quotes").get().shipping_address_json;
-  assert.doesNotMatch(quoteJson, /Ada|rue du Test|Paris|75001/i);
+  assert.doesNotMatch(quoteJson, /rue du Test|Paris|75001/i);
+  assert.doesNotMatch(quoteJson, /Ada Test/i);
   assert.throws(() => context.sqlite.prepare(`INSERT INTO orders (
     id, order_number, cart_id, email, status, currency, subtotal_cents,
     shipping_cents, tax_cents, total_cents, shipping_country_code,

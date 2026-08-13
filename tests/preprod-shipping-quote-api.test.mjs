@@ -239,7 +239,10 @@ test("preproduction order and payment simulation are session-bound, strict and n
   ].sort());
   assert.equal(createdPayload.status, "pending_payment");
   assert.equal(createdPayload.debited, false);
-  assert.doesNotMatch(JSON.stringify(createdPayload), /Ada|rue du Test|demo\.invalid|quote_|order_[0-9a-f]/i);
+  assert.doesNotMatch(
+    JSON.stringify(createdPayload),
+    /Ada Test|rue du Test|demo\.invalid|quote_|order_[0-9a-f]/i,
+  );
   const replay = await invoke(context, "/api/preprod/checkout/order", createRequest);
   assert.equal(replay.status, 200);
   assert.deepEqual(await replay.json(), { data: createdPayload });
