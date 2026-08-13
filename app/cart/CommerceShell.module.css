@@ -241,6 +241,45 @@ button.button {
   line-height: 1.6;
 }
 
+.testCheckout {
+  display: grid;
+  gap: 14px;
+  margin-top: 20px;
+}
+
+.testCheckout > label:not(.checkbox) {
+  display: grid;
+  gap: 8px;
+  color: #555;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.testCheckout input[type="email"] {
+  min-height: 48px;
+  padding: 0 14px;
+  border: 1px solid rgba(9, 9, 9, 0.18);
+  background: #fff;
+  font: inherit;
+}
+
+.checkbox {
+  display: grid;
+  grid-template-columns: 44px 1fr;
+  align-items: start;
+  color: #555;
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.checkbox input {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+}
+
 .cartStatus {
   min-height: 1.5rem;
   color: #686868;

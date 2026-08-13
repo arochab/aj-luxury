@@ -33,6 +33,7 @@ const migrationNames = [
   "0004_email_outbox_data_rights.sql",
   "0005_fulfillment_returns_refunds.sql",
   "0006_allow_bounded_expired_cart_purge.sql",
+  "0007_transactional_preprod_order_payment.sql",
 ];
 // Hosted D1 bootstrap version 1 succeeded with exactly these LF-normalized
 // bytes. From this point onward, every schema change must be additive in a new
@@ -53,13 +54,15 @@ const bootstrapHashes = Object.freeze({
 });
 const retentionMigrationSha256 =
   "3cbd7390bb8834305b11f6d791583a86f3c6fe7ba9be23fc91e1e1ea98203a52";
+const transactionalCheckoutMigrationSha256 =
+  "3b58d9e49e5154c855c2620fea80e733c8953ec713e75a2e8c5b31432840d838";
 
 test("the exact Drizzle D1 splitter emits no blank statements", () => {
   const migrations = readMigrationFiles({ migrationsFolder: migrationRoot });
   assert.equal(migrations.length, migrationNames.length);
   assert.equal(
     migrations.reduce((total, migration) => total + migration.sql.length, 0),
-    361,
+    365,
   );
   for (const [migrationIndex, migration] of migrations.entries()) {
     for (const [statementIndex, statement] of migration.sql.entries()) {
@@ -75,7 +78,7 @@ test("the exact Drizzle D1 splitter emits no blank statements", () => {
     "utf8",
   );
   assert.doesNotMatch(fulfillmentMigration, /--> statement-breakpoint\s*$/);
-  assert.match(migrations.at(-1).sql.at(-1), /trg_cart_lines_validate_delete/);
+  assert.match(migrations.at(-1).sql.at(-1), /trg_orders_lock_shipping_snapshot/);
   assert.match(migrations.at(-1).sql.at(-1), /END;\s*$/);
 });
 
@@ -241,7 +244,7 @@ function query(root, configPath, state, sql, expectFailure = false) {
   return parseFirstJsonArray(output)[0].results;
 }
 
-test("0005 stays frozen and 0006 adds only the bounded retention exception", () => {
+test("0005 stays frozen; 0006 retention and 0007 transactional checkout remain additive", () => {
   for (const [name, expected] of Object.entries(bootstrapHashes)) {
     const normalized = readFileSync(join(migrationRoot, name), "utf8").replaceAll(
       "\r\n",
@@ -267,10 +270,14 @@ test("0005 stays frozen and 0006 adds only the bounded retention exception", () 
   const journal = JSON.parse(
     readFileSync(join(migrationRoot, "meta", "_journal.json"), "utf8"),
   );
-  assert.equal(journal.entries.at(-2).tag, "0005_fulfillment_returns_refunds");
+  assert.equal(journal.entries.at(-3).tag, "0005_fulfillment_returns_refunds");
+  assert.equal(
+    journal.entries.at(-2).tag,
+    "0006_allow_bounded_expired_cart_purge",
+  );
   assert.equal(
     journal.entries.at(-1).tag,
-    "0006_allow_bounded_expired_cart_purge",
+    "0007_transactional_preprod_order_payment",
   );
   const retentionMigration = readFileSync(
     join(migrationRoot, "0006_allow_bounded_expired_cart_purge.sql"),
@@ -288,6 +295,16 @@ test("0005 stays frozen and 0006 adds only the bounded retention exception", () 
   assert.match(retentionMigration, /cart\.`customer_id` IS NULL/);
   assert.match(retentionMigration, /cart\.`email` IS NULL/);
   assert.match(retentionMigration, /stock_reservations/);
+  const transactionalCheckoutMigration = readFileSync(
+    join(migrationRoot, "0007_transactional_preprod_order_payment.sql"),
+    "utf8",
+  );
+  assert.equal(
+    createHash("sha256")
+      .update(transactionalCheckoutMigration.replaceAll("\r\n", "\n"))
+      .digest("hex"),
+    transactionalCheckoutMigrationSha256,
+  );
   assert.match(retentionMigration, /orders/);
   assert.match(retentionMigration, /shipping_quotes/);
   const snapshotPath = join(migrationRoot, "meta", "0005_snapshot.json");
@@ -300,7 +317,7 @@ test("0005 stays frozen and 0006 adds only the bounded retention exception", () 
   assert.ok(snapshot.tables.shipment_tracking_events.indexes.ux_tracking_events_carrier_receipt);
 });
 
-test("real local D1 applies 0000 to 0006, upgrades populated 0004 and replays", (t) => {
+test("real local D1 applies 0000 to 0007, upgrades populated 0004 and replays", (t) => {
   assert.ok(existsSync(wranglerCli), "local Wrangler must be installed");
   // Keep the local Wrangler state inside the governed workspace but outside
   // this deeply nested worktree so Windows does not exceed SQLite path limits.
@@ -646,10 +663,12 @@ test("real local D1 applies 0000 to 0006, upgrades populated 0004 and replays", 
     `UPDATE carts SET status='expired', expires_at='2000-01-01T00:00:00.000Z'
       WHERE id='${retainedCartId}'`,
   );
-  copyFileSync(
-    join(migrationRoot, migrationNames.at(-1)),
-    join(retentionRoot, "migrations", migrationNames.at(-1)),
-  );
+  for (const migrationName of migrationNames.slice(6)) {
+    copyFileSync(
+      join(migrationRoot, migrationName),
+      join(retentionRoot, "migrations", migrationName),
+    );
+  }
   apply(retentionRoot, retentionConfig, retentionState);
   apply(retentionRoot, retentionConfig, retentionState);
   assert.deepEqual(
