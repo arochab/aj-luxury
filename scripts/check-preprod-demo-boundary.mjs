@@ -23,6 +23,7 @@ const expectedSourceBranches = [
   "codex/lot2-preprod-synthetic-demo-20260813",
   "codex/lot2-preprod-owner-account-tracking-20260813",
   "codex/ajl-ship-profiles-20260813",
+  "codex/ajl-private-preview-final-20260813",
 ];
 const releaseBuildEpoch = 1786622400000;
 const frozenMigrationHash =
