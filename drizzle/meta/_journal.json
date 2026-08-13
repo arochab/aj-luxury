@@ -64,6 +64,13 @@
       "when": 1786622400000,
       "tag": "0008_preprod_synthetic_demo_dataset",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1786648052538,
+      "tag": "0009_shipping_quote_parcel_snapshots",
+      "breakpoints": true
     }
   ]
 }

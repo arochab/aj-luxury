@@ -26,13 +26,32 @@ function quote(overrides = {}) {
     estimatedDaysMax: 5,
     dutiesTerms: "EU_INCLUDED",
     expiresAt: "2099-08-20T12:00:00.000Z",
+    parcel: {
+      profileCode: "AJL_ENVELOPE_1_ITEM_V1",
+      itemCount: 1,
+      weightGrams: 150,
+      lengthCm: 40,
+      widthCm: 32,
+      heightCm: 4,
+    },
     cart: {
       status: "open",
       currency: "EUR",
       expiresAt: "2099-08-20T12:00:00.000Z",
-      itemCount: 0,
-      subtotalCents: 0,
-      lines: [],
+      itemCount: 1,
+      subtotalCents: 5900,
+      lines: [{
+        variantId: "variant_boxer_pourpre_m",
+        productId: "product_apollon",
+        productSlug: "pourpre",
+        colorKey: "pourpre",
+        colorName: "Pourpre Impérial",
+        size: "M",
+        imageUrl: "/images/client/raw/product-card-pourpre.webp",
+        quantity: 1,
+        unitPriceCents: 5900,
+        lineTotalCents: 5900,
+      }],
     },
     ...overrides,
   };
@@ -98,6 +117,14 @@ test("shipping client rejects widened or contradictory server responses", () => 
     quote({ amountCents: -1 }),
     quote({ zone: "WORLD" }),
     quote({ expiresAt: "invalid" }),
+    quote({ parcel: {
+      profileCode: "AJL_ENVELOPE_1_ITEM_V1", itemCount: 1, weightGrams: 130,
+      lengthCm: 40, widthCm: 32, heightCm: 4,
+    } }),
+    quote({ parcel: {
+      profileCode: "AJL_ENVELOPE_2_ITEMS_V1", itemCount: 2, weightGrams: 250,
+      lengthCm: 40, widthCm: 32, heightCm: 4,
+    } }),
     quote({ configurationId: "secret" }),
     quote({ estimatedDaysMin: 5, estimatedDaysMax: 2 }),
     quote({ cart: {
@@ -118,7 +145,10 @@ test("shipping client rejects widened or contradictory server responses", () => 
 });
 
 test("cart semantic changes rotate the quote key while ambiguous retries preserve it", () => {
-  for (const code of ["CART_CHANGED", "CART_EMPTY", "CART_EXPIRED", "CART_NOT_FOUND"]) {
+  for (const code of [
+    "CART_CHANGED", "CART_EMPTY", "CART_EXPIRED", "CART_NOT_FOUND",
+    "PARCEL_CONFIGURATION_UNAVAILABLE",
+  ]) {
     assert.equal(shippingQuoteAttemptCanReplay(code), false, code);
   }
   for (const code of [
@@ -144,6 +174,8 @@ test("checkout UI remains real-cart, test-only payment and carrier-neutral", asy
   assert.match(client, /crypto\.randomUUID\(\)/);
   assert.match(client, /attemptRef\.current = null/);
   assert.match(client, /shippingQuoteAttemptCanReplay/);
+  assert.match(client, /quote\.parcel\.weightGrams/);
+  assert.match(client, /checkout\.parcelProfile/);
   assert.match(client, /createPreprodOrder/);
   assert.match(client, /payPreprodOrder/);
   assert.match(client, /getCurrentPreprodOrder/);

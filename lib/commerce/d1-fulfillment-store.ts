@@ -27,6 +27,11 @@ import {
   type TrackingProviderPort,
 } from "./fulfillment-domain.ts";
 import {
+  isClientValidatedParcelProfile,
+  parcelSnapshotMatchesProfile,
+  type ClientValidatedParcelProfile,
+} from "./parcel-profiles.ts";
+import {
   assertVerifiedCarrierEvent,
   type VerifiedCarrierEvent,
 } from "./verified-carrier-event.ts";
@@ -56,6 +61,18 @@ type QuoteRow = {
   duties_terms: "EU_INCLUDED" | "DAP" | "DDP";
   expires_at: string;
   selected_at: string | null;
+  created_at: string;
+};
+
+export type ShippingQuoteParcelSnapshotRow = {
+  quote_id: string;
+  profile_code: ClientValidatedParcelProfile["profileCode"];
+  source_version: ClientValidatedParcelProfile["sourceVersion"];
+  item_count: ClientValidatedParcelProfile["itemCount"];
+  weight_grams: ClientValidatedParcelProfile["weightGrams"];
+  length_mm: ClientValidatedParcelProfile["lengthMm"];
+  width_mm: ClientValidatedParcelProfile["widthMm"];
+  height_mm: ClientValidatedParcelProfile["heightMm"];
   created_at: string;
 };
 
@@ -301,7 +318,12 @@ export class D1FulfillmentStore {
   async #openCartSnapshot(
     cartId: string,
     now: string,
-  ): Promise<Readonly<{ fingerprint: string; expiresAt: string; revision: number }>> {
+  ): Promise<Readonly<{
+    fingerprint: string;
+    expiresAt: string;
+    revision: number;
+    itemCount: number;
+  }>> {
     const cart = await this.#database
       .prepare(
         `SELECT id, status, expires_at, fulfillment_revision FROM carts
@@ -340,6 +362,7 @@ export class D1FulfillmentStore {
       fingerprint,
       expiresAt: cart.expires_at,
       revision: cart.fulfillment_revision,
+      itemCount: result.results.reduce((total, line) => total + line.quantity, 0),
     });
   }
 
@@ -348,6 +371,7 @@ export class D1FulfillmentStore {
     cartId: string;
     address: ShippingAddressInput;
     addressFingerprint?: string;
+    parcelProfile: ClientValidatedParcelProfile;
     expiresAt: string;
     now: string;
   }>): Promise<QuoteRow> {
@@ -355,6 +379,9 @@ export class D1FulfillmentStore {
     assertFulfillmentIdentifier(input.cartId, "cartId");
     assertFulfillmentTimestamp(input.now, "now");
     assertFulfillmentTimestamp(input.expiresAt, "expiresAt");
+    if (!isClientValidatedParcelProfile(input.parcelProfile)) {
+      throw new FulfillmentError("INVALID_INPUT", "The parcel profile is invalid.");
+    }
     const lifetime = Date.parse(input.expiresAt) - Date.parse(input.now);
     if (lifetime <= 0 || lifetime > 24 * 60 * 60 * 1_000) {
       throw new FulfillmentError("INVALID_INPUT", "The quote lifetime is invalid.");
@@ -385,6 +412,12 @@ export class D1FulfillmentStore {
         "The quote cannot outlive its cart.",
       );
     }
+    if (cart.itemCount !== input.parcelProfile.itemCount) {
+      throw new FulfillmentError(
+        "QUOTE_MISMATCH",
+        "The parcel profile does not match the cart item count.",
+      );
+    }
     const configuration = await this.#database
       .prepare(
         `SELECT id, zone, service_code, price_cents, estimated_days_min,
@@ -401,8 +434,8 @@ export class D1FulfillmentStore {
       );
     }
     try {
-      await this.#database
-        .prepare(
+      await this.#database.batch([
+        this.#database.prepare(
           `INSERT OR IGNORE INTO shipping_quotes (
             id, cart_id, cart_fingerprint, cart_revision, configuration_id,
             shipping_address_json, shipping_address_fingerprint,
@@ -410,8 +443,7 @@ export class D1FulfillmentStore {
             amount_cents, currency, estimated_days_min, estimated_days_max,
             duties_terms, expires_at, selected_at, created_at
           ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, 'EUR', ?, ?, ?, ?, NULL, ?)`,
-        )
-        .bind(
+        ).bind(
           input.id,
           input.cartId,
           cart.fingerprint,
@@ -425,12 +457,31 @@ export class D1FulfillmentStore {
           configuration.duties_terms,
           input.expiresAt,
           input.now,
-        )
-        .run();
+        ),
+        this.#database.prepare(
+          `INSERT OR IGNORE INTO shipping_quote_parcel_snapshots (
+            quote_id, profile_code, source_version, item_count, weight_grams,
+            length_mm, width_mm, height_mm, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ).bind(
+          input.id,
+          input.parcelProfile.profileCode,
+          input.parcelProfile.sourceVersion,
+          input.parcelProfile.itemCount,
+          input.parcelProfile.weightGrams,
+          input.parcelProfile.lengthMm,
+          input.parcelProfile.widthMm,
+          input.parcelProfile.heightMm,
+          input.now,
+        ),
+      ]);
     } catch (error) {
       mapDatabaseError(error);
     }
-    const quote = await this.getShippingQuote(input.id);
+    const [quote, parcelSnapshot] = await Promise.all([
+      this.getShippingQuote(input.id),
+      this.getShippingQuoteParcelSnapshot(input.id),
+    ]);
     if (
       !quote ||
       quote.cart_id !== input.cartId ||
@@ -438,7 +489,8 @@ export class D1FulfillmentStore {
       quote.cart_revision !== cart.revision ||
       quote.configuration_id !== configuration.id ||
       quote.shipping_address_fingerprint !== addressFingerprint ||
-      quote.shipping_address_json !== routingProofJson
+      quote.shipping_address_json !== routingProofJson ||
+      !parcelSnapshotMatchesProfile(parcelSnapshot, input.parcelProfile)
     ) {
       throw new FulfillmentError(
         "QUOTE_MISMATCH",
@@ -462,6 +514,20 @@ export class D1FulfillmentStore {
       .first<QuoteRow>();
   }
 
+  async getShippingQuoteParcelSnapshot(
+    quoteId: string,
+  ): Promise<ShippingQuoteParcelSnapshotRow | null> {
+    assertFulfillmentIdentifier(quoteId, "quoteId");
+    return this.#database
+      .prepare(
+        `SELECT quote_id, profile_code, source_version, item_count, weight_grams,
+          length_mm, width_mm, height_mm, created_at
+        FROM shipping_quote_parcel_snapshots WHERE quote_id = ?`,
+      )
+      .bind(quoteId)
+      .first<ShippingQuoteParcelSnapshotRow>();
+  }
+
   async selectShippingQuote(input: Readonly<{
     quoteId: string;
     cartId: string;
@@ -473,9 +539,10 @@ export class D1FulfillmentStore {
     assertFulfillmentIdentifier(input.cartId, "cartId");
     assertFulfillmentFingerprint(input.addressFingerprint, "addressFingerprint");
     assertFulfillmentTimestamp(input.now, "now");
-    const [quote, address] = await Promise.all([
+    const [quote, address, parcelSnapshot] = await Promise.all([
       this.getShippingQuote(input.quoteId),
       normalizeShippingAddress(input.address),
+      this.getShippingQuoteParcelSnapshot(input.quoteId),
     ]);
     const routingProofJson = JSON.stringify(
       address.zone === "EU"
@@ -488,6 +555,7 @@ export class D1FulfillmentStore {
     );
     if (
       !quote ||
+      !parcelSnapshot ||
       quote.cart_id !== input.cartId ||
       quote.shipping_address_fingerprint !== input.addressFingerprint ||
       quote.shipping_address_json !== routingProofJson
@@ -515,7 +583,8 @@ export class D1FulfillmentStore {
     const cart = await this.#openCartSnapshot(input.cartId, input.now);
     if (
       quote.cart_fingerprint !== cart.fingerprint ||
-      quote.cart_revision !== cart.revision
+      quote.cart_revision !== cart.revision ||
+      parcelSnapshot.item_count !== cart.itemCount
     ) {
       throw new FulfillmentError("QUOTE_MISMATCH", "The quote no longer matches the cart.");
     }

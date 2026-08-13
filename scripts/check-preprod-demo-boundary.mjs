@@ -22,6 +22,7 @@ const journal = JSON.parse(readFileSync(`${root}drizzle/meta/_journal.json`, "ut
 const expectedSourceBranches = [
   "codex/lot2-preprod-synthetic-demo-20260813",
   "codex/lot2-preprod-owner-account-tracking-20260813",
+  "codex/ajl-ship-profiles-20260813",
 ];
 const releaseBuildEpoch = 1786622400000;
 const frozenMigrationHash =
@@ -50,12 +51,16 @@ assert.ok(
   ),
   "D1 migration journal timestamps must be strictly monotone",
 );
+const syntheticMigration = journal.entries.find(
+  (entry) => entry.tag === "0008_preprod_synthetic_demo_dataset",
+);
+assert.ok(syntheticMigration);
+assert.equal(syntheticMigration.when, releaseBuildEpoch);
 const terminalMigration = journal.entries.at(-1);
-assert.equal(terminalMigration.tag, "0008_preprod_synthetic_demo_dataset");
-assert.equal(terminalMigration.when, releaseBuildEpoch);
+assert.equal(terminalMigration.tag, "0009_shipping_quote_parcel_snapshots");
 assert.ok(
-  terminalMigration.when <= releaseBuildEpoch,
-  "terminal D1 migration cannot be future-dated relative to this release",
+  terminalMigration.when > releaseBuildEpoch,
+  "the additive parcel migration must follow the frozen synthetic release",
 );
 
 if (

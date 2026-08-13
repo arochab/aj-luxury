@@ -9,10 +9,13 @@ import { D1CommerceStore } from "../lib/commerce/d1-commerce-store.ts";
 import { D1FulfillmentStore } from "../lib/commerce/d1-fulfillment-store.ts";
 import { D1PreprodCheckoutStore } from "../lib/commerce/d1-preprod-checkout-store.ts";
 import { normalizeShippingAddress } from "../lib/commerce/fulfillment-domain.ts";
+import { resolveClientValidatedParcelProfile } from "../lib/commerce/parcel-profiles.ts";
 import { verifyPreprodTestPaymentEvent } from "../lib/commerce/preprod-test-payment-adapter.internal.ts";
 
 const drizzle = fileURLToPath(new URL("../drizzle/", import.meta.url));
-const migrationPaths = readdirSync(drizzle).filter((name) => /^000[0-7]_.+\.sql$/.test(name)).sort();
+const migrationPaths = readdirSync(drizzle)
+  .filter((name) => /^000(?:[0-7]|9)_.+\.sql$/.test(name))
+  .sort();
 
 class Statement {
   constructor(database, query, values = []) { this.database = database; this.query = query; this.values = values; }
@@ -112,6 +115,7 @@ async function fixture() {
   const quote = await new D1FulfillmentStore(d1).createShippingQuote({
     id: "quote_gate_c", cartId: "cart_gate_c", address,
     addressFingerprint: proof, expiresAt: "2099-01-01T00:20:00.000Z",
+    parcelProfile: resolveClientValidatedParcelProfile([{ quantity: 2 }]),
     now: "2099-01-01T00:00:03.000Z",
   });
   return { sqlite, d1, store: new D1PreprodCheckoutStore(d1), address, normalized, proof, quote };
@@ -318,6 +322,7 @@ test("two carts racing for the last sellable unit produce one complete order", a
   const quote = await new D1FulfillmentStore(context.d1).createShippingQuote({
     id: "quote_gate_competing", cartId: "cart_gate_competing",
     address: context.address, addressFingerprint: proof,
+    parcelProfile: resolveClientValidatedParcelProfile([{ quantity: 1 }]),
     expiresAt: "2099-01-01T00:20:00.000Z", now: "2099-01-01T00:00:03.000Z",
   });
   const results = await Promise.allSettled([

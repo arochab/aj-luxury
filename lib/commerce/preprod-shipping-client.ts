@@ -32,7 +32,20 @@ export type PublicShippingQuote = Readonly<{
   estimatedDaysMax: number;
   dutiesTerms: "EU_INCLUDED" | "DAP" | "DDP";
   expiresAt: string;
+  parcel: PublicShippingParcel;
   cart: ShippingCartSnapshot;
+}>;
+
+export type PublicShippingParcel = Readonly<{
+  profileCode:
+    | "AJL_ENVELOPE_1_ITEM_V1"
+    | "AJL_ENVELOPE_2_ITEMS_V1"
+    | "AJL_ENVELOPE_3_ITEMS_V1";
+  itemCount: 1 | 2 | 3;
+  weightGrams: 150 | 250 | 350;
+  lengthCm: 40;
+  widthCm: 32;
+  heightCm: 4;
 }>;
 
 export type ShippingCartSnapshot = Readonly<{
@@ -61,6 +74,7 @@ const CART_ATTEMPT_INVALIDATING_ERRORS = new Set([
   "CART_EMPTY",
   "CART_EXPIRED",
   "CART_NOT_FOUND",
+  "PARCEL_CONFIGURATION_UNAVAILABLE",
 ]);
 
 export function shippingQuoteAttemptCanReplay(errorCode: string): boolean {
@@ -79,6 +93,37 @@ function hasExactKeys(value: Record<string, unknown>, expected: string[]): boole
 
 function isNonNegativeInteger(value: unknown): value is number {
   return Number.isSafeInteger(value) && (value as number) >= 0;
+}
+
+function parseShippingParcel(value: unknown): PublicShippingParcel {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, [
+      "heightCm", "itemCount", "lengthCm", "profileCode", "weightGrams",
+      "widthCm",
+    ]) ||
+    value.lengthCm !== 40 ||
+    value.widthCm !== 32 ||
+    value.heightCm !== 4
+  ) {
+    throw new ShippingQuoteApiError("MALFORMED_RESPONSE");
+  }
+  const tuple = `${String(value.profileCode)}:${String(value.itemCount)}:${String(value.weightGrams)}`;
+  if (![
+    "AJL_ENVELOPE_1_ITEM_V1:1:150",
+    "AJL_ENVELOPE_2_ITEMS_V1:2:250",
+    "AJL_ENVELOPE_3_ITEMS_V1:3:350",
+  ].includes(tuple)) {
+    throw new ShippingQuoteApiError("MALFORMED_RESPONSE");
+  }
+  return Object.freeze({
+    profileCode: value.profileCode as PublicShippingParcel["profileCode"],
+    itemCount: value.itemCount as PublicShippingParcel["itemCount"],
+    weightGrams: value.weightGrams as PublicShippingParcel["weightGrams"],
+    lengthCm: 40,
+    widthCm: 32,
+    heightCm: 4,
+  });
 }
 
 function parseShippingCartSnapshot(value: unknown): ShippingCartSnapshot {
@@ -138,6 +183,7 @@ export function parseShippingQuote(value: unknown): PublicShippingQuote {
       "estimatedDaysMax",
       "estimatedDaysMin",
       "expiresAt",
+      "parcel",
       "quoteId",
       "simulation",
       "zone",
@@ -166,6 +212,11 @@ export function parseShippingQuote(value: unknown): PublicShippingQuote {
   ) {
     throw new ShippingQuoteApiError("MALFORMED_RESPONSE");
   }
+  const parcel = parseShippingParcel(value.parcel);
+  const cart = parseShippingCartSnapshot(value.cart);
+  if (parcel.itemCount !== cart.itemCount) {
+    throw new ShippingQuoteApiError("MALFORMED_RESPONSE");
+  }
   return Object.freeze({
     quoteId: value.quoteId,
     simulation: true,
@@ -177,7 +228,8 @@ export function parseShippingQuote(value: unknown): PublicShippingQuote {
     estimatedDaysMax: value.estimatedDaysMax as number,
     dutiesTerms: value.dutiesTerms as PublicShippingQuote["dutiesTerms"],
     expiresAt,
-    cart: parseShippingCartSnapshot(value.cart),
+    parcel,
+    cart,
   });
 }
 

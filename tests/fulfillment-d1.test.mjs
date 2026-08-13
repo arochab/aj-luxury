@@ -16,13 +16,14 @@ import {
   FulfillmentProviderError,
   normalizeShippingAddress,
 } from "../lib/commerce/fulfillment-domain.ts";
+import { resolveClientValidatedParcelProfile } from "../lib/commerce/parcel-profiles.ts";
 import { assertVerifiedCarrierEvent } from "../lib/commerce/verified-carrier-event.ts";
 import { verifyTestCarrierEvent } from "./support/test-carrier-event.ts";
 import { verifyTestPaymentEvent } from "./support/test-payment-event.ts";
 
 const drizzleDirectory = fileURLToPath(new URL("../drizzle/", import.meta.url));
 const migrations = readdirSync(drizzleDirectory)
-  .filter((name) => /^000[0-5]_.+\.sql$/.test(name))
+  .filter((name) => /^000(?:[0-5]|9)_.+\.sql$/.test(name))
   .sort()
   .map((name) => `${drizzleDirectory}${name}`);
 const liveClockBase = Date.now();
@@ -119,6 +120,15 @@ function applyMigrations(database) {
       if (statement.trim()) database.exec(statement.trim());
     }
   }
+}
+
+function parcelProfileForCart(context, cartId) {
+  const lines = context.database.prepare(
+    "SELECT quantity FROM cart_lines WHERE cart_id=? ORDER BY id",
+  ).all(cartId);
+  const profile = resolveClientValidatedParcelProfile(lines);
+  assert.ok(profile, `cart ${cartId} must have a validated parcel profile`);
+  return profile;
 }
 
 function fixture(ports = {}) {
@@ -273,6 +283,7 @@ async function createPaidOrder(context, {
     id: `quote_${suffix}`,
     cartId,
     address: shippingAddress,
+    parcelProfile: parcelProfileForCart(context, cartId),
     expiresAt: quoteExpiresAt,
     now: quoteNow,
   });
@@ -428,6 +439,7 @@ test("D1 configurations and quotes fail closed, freeze selected carts and replay
     id: "quote_without_config",
     cartId,
     address: address("EU"),
+    parcelProfile: parcelProfileForCart(context, cartId),
     expiresAt: quoteExpiresAt,
     now: quoteNow,
   }), "CONFIGURATION_UNAVAILABLE");
@@ -542,6 +554,7 @@ test("D1 configurations and quotes fail closed, freeze selected carts and replay
     id: "quote_expiry_equality",
     cartId: equalityCart,
     address: address("EU"),
+    parcelProfile: parcelProfileForCart(context, equalityCart),
     expiresAt: quoteExpiresAt,
     now: quoteNow,
   });
@@ -556,6 +569,7 @@ test("D1 configurations and quotes fail closed, freeze selected carts and replay
     id: "quote_cas_exact",
     cartId: casCart,
     address: address("EU"),
+    parcelProfile: parcelProfileForCart(context, casCart),
     expiresAt: quoteExpiresAt,
     now: quoteNow,
   });
@@ -580,6 +594,7 @@ test("D1 configurations and quotes fail closed, freeze selected carts and replay
     id: "quote_changed_before_selection",
     cartId: changedBeforeSelectionCart,
     address: address("EU"),
+    parcelProfile: parcelProfileForCart(context, changedBeforeSelectionCart),
     expiresAt: quoteExpiresAt,
     now: quoteNow,
   });
@@ -609,6 +624,7 @@ test("D1 configurations and quotes fail closed, freeze selected carts and replay
     id: "quote_crossed_cart_address",
     cartId: crossedCart,
     address: address("EU"),
+    parcelProfile: parcelProfileForCart(context, crossedCart),
     expiresAt: quoteExpiresAt,
     now: quoteNow,
   });
@@ -640,6 +656,7 @@ test("D1 configurations and quotes fail closed, freeze selected carts and replay
       id: `quote_competing_${suffix}`,
       cartId: competingCart,
       address: address("EU"),
+      parcelProfile: parcelProfileForCart(context, competingCart),
       expiresAt: quoteExpiresAt,
       now: quoteNow,
     })));
@@ -664,6 +681,7 @@ test("D1 configurations and quotes fail closed, freeze selected carts and replay
     id: "quote_interleaved_cart_mutation",
     cartId: interleavedCart,
     address: address("EU"),
+    parcelProfile: parcelProfileForCart(context, interleavedCart),
     expiresAt: quoteExpiresAt,
     now: quoteNow,
   });
@@ -709,6 +727,7 @@ test("D1 configurations and quotes fail closed, freeze selected carts and replay
     id: "quote_outlives_cart",
     cartId: shortCart,
     address: address("EU"),
+    parcelProfile: parcelProfileForCart(context, shortCart),
     expiresAt: "2099-08-11T12:02:00.000Z",
     now: "2099-08-11T12:00:30.000Z",
   }), "INVALID_INPUT");
@@ -717,6 +736,7 @@ test("D1 configurations and quotes fail closed, freeze selected carts and replay
     id: "quote_selected",
     cartId,
     address: address("EU"),
+    parcelProfile: parcelProfileForCart(context, cartId),
     expiresAt: quoteExpiresAt,
     now: quoteNow,
   });
@@ -748,6 +768,7 @@ test("D1 configurations and quotes fail closed, freeze selected carts and replay
     id: "quote_expired_unselected",
     cartId: oldCart,
     address: address("EU"),
+    parcelProfile: parcelProfileForCart(context, oldCart),
     expiresAt: "2000-01-01T01:00:00.000Z",
     now: "2000-01-01T00:01:00.000Z",
   });
@@ -1370,8 +1391,8 @@ test("full fulfillment flow is leased, append-only, mixed-unit safe and keeps pa
     suffix: "flow",
     zone: "US",
     lines: [
-      { variantId: "variant_boxer_pourpre_l", quantity: 3 },
-      { variantId: "variant_boxer_rose-pale_m", quantity: 2 },
+      { variantId: "variant_boxer_pourpre_l", quantity: 2 },
+      { variantId: "variant_boxer_rose-pale_m", quantity: 1 },
     ],
   });
   await rejectsCode(() => context.fulfillment.selectShippingQuote({
@@ -1602,8 +1623,8 @@ test("full fulfillment flow is leased, append-only, mixed-unit safe and keeps pa
     orderId: order.orderId,
     kind: "withdrawal",
     lines: [
-      { orderLineId: order.orderLineIds[0], quantity: 3 },
-      { orderLineId: order.orderLineIds[1], quantity: 2 },
+      { orderLineId: order.orderLineIds[0], quantity: 2 },
+      { orderLineId: order.orderLineIds[1], quantity: 1 },
     ],
     actor: guest,
     locale: "fr",
@@ -1615,10 +1636,10 @@ test("full fulfillment flow is leased, append-only, mixed-unit safe and keeps pa
     requestId: withdrawal.id,
     lines: [{
       returnLineId: returnLines[0].id,
-      receivedQuantity: 3,
-      sellableQuantity: 2,
+      receivedQuantity: 2,
+      sellableQuantity: 1,
       nonSellableQuantity: 1,
-      restockedQuantity: 2,
+      restockedQuantity: 1,
     }],
     actor: admin,
     now: "2026-08-11T12:18:00.000Z",
@@ -1631,10 +1652,10 @@ test("full fulfillment flow is leased, append-only, mixed-unit safe and keeps pa
   const inspection = [
     {
       returnLineId: returnLines[0].id,
-      receivedQuantity: 3,
-      sellableQuantity: 2,
+      receivedQuantity: 2,
+      sellableQuantity: 1,
       nonSellableQuantity: 1,
-      restockedQuantity: 2,
+      restockedQuantity: 1,
     },
     {
       returnLineId: returnLines[1].id,
@@ -1669,7 +1690,7 @@ test("full fulfillment flow is leased, append-only, mixed-unit safe and keeps pa
     actorId: movement.actor_id,
   })).sort((left, right) => left.quantity - right.quantity), [
     { kind: "adjustment", referenceType: "physical_increase", quantity: 1, actorType: "system", actorId: null },
-    { kind: "adjustment", referenceType: "physical_increase", quantity: 2, actorType: "system", actorId: null },
+    { kind: "adjustment", referenceType: "physical_increase", quantity: 1, actorType: "system", actorId: null },
   ]);
   returnLines.forEach((line, index) => {
     const physical = context.database.prepare(`SELECT inventory.physical_quantity
