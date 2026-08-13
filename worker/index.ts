@@ -1177,7 +1177,7 @@ export async function preprodApiResponse(
       } catch {
         return unavailable(null);
       }
-      if (latestMigration !== "0006_allow_bounded_expired_cart_purge.sql") {
+      if (latestMigration !== "0007_transactional_preprod_order_payment.sql") {
         return unavailable(latestMigration);
       }
       try {

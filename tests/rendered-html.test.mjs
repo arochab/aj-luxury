@@ -3,7 +3,7 @@ import test from "node:test";
 
 async function invokeWorker(
   pathname = "/",
-  { method = "GET", headers = {}, assets, environment } = {},
+  { method = "GET", headers = {}, assets, database, environment } = {},
 ) {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
   workerUrl.searchParams.set(
@@ -22,6 +22,7 @@ async function invokeWorker(
       ...(environment === "preproduction"
         ? { PREPROD_ORIGIN: "https://preprod.example" }
         : {}),
+      ...(database ? { DB: database } : {}),
       ASSETS:
         assets ??
         ({
@@ -56,6 +57,21 @@ test("preproduction APIs are invisible without the exact isolated environment", 
   });
 });
 
+test("Gate B exposes no order or payment runtime routes", async () => {
+  for (const pathname of [
+    "/api/preprod/checkout/order",
+    "/api/preprod/checkout/payment",
+  ]) {
+    const response = await invokeWorker(pathname, {
+      method: "POST",
+      database: {},
+      environment: "preproduction",
+    });
+    assert.equal(response.status, 404);
+    assert.deepEqual(await response.json(), { error: "not-found" });
+  }
+});
+
 test("production pages remain indexable while preproduction is explicitly noindex", async () => {
   const production = await render("/");
   assert.equal(production.headers.get("x-robots-tag"), null);
@@ -67,7 +83,7 @@ test("production pages remain indexable while preproduction is explicitly noinde
   assert.equal(preproduction.headers.get("x-robots-tag"), "noindex, nofollow");
 });
 
-test("preproduction health is partial on migration 0006 and exposes all launch-zone gates, not quantities", async () => {
+test("preproduction health is partial on migration 0007 and exposes all launch-zone gates, not quantities", async () => {
   const statements = [];
   const database = {
     prepare(query) {
@@ -77,7 +93,7 @@ test("preproduction health is partial on migration 0006 and exposes all launch-z
         },
         async first() {
           if (query.includes("d1_migrations")) {
-            return { name: "0006_allow_bounded_expired_cart_purge.sql" };
+            return { name: "0007_transactional_preprod_order_payment.sql" };
           }
           return null;
         },
@@ -115,7 +131,7 @@ test("preproduction health is partial on migration 0006 and exposes all launch-z
   assert.equal(payload.status, "partial");
   assert.equal(
     payload.latestMigration,
-    "0006_allow_bounded_expired_cart_purge.sql",
+    "0007_transactional_preprod_order_payment.sql",
   );
   assert.deepEqual(payload.stockProjection, [
     { variantId: "variant_available", state: "available" },
@@ -136,47 +152,46 @@ test("preproduction health is partial on migration 0006 and exposes all launch-z
   assert.equal(statements.length, 3);
 });
 
-test("preproduction health stays fail-closed without querying tables from a missing migration", async () => {
-  const statements = [];
-  const database = {
-    prepare(query) {
-      statements.push(query);
-      const statement = {
-        bind() {
-          return statement;
-        },
-        async first() {
-          return query.includes("d1_migrations")
-            ? { name: "0004_email_outbox_data_rights.sql" }
-            : null;
-        },
-        async all() {
-          throw new Error("shipping tables must not be queried");
-        },
-      };
-      return statement;
-    },
-  };
-  const workerUrl = new URL("../dist/server/index.js", import.meta.url);
-  workerUrl.searchParams.set("health-old", `${process.pid}-${Date.now()}-${Math.random()}`);
-  const { default: worker } = await import(workerUrl.href);
-  const response = await worker.fetch(
-    new Request("https://preprod.example/api/preprod/health"),
-    {
-      APP_ENV: "preproduction",
-      PREPROD_ORIGIN: "https://preprod.example",
-      DB: database,
-    },
-    { waitUntil() {}, passThroughOnException() {} },
-  );
-  assert.equal(response.status, 503);
-  const payload = await response.json();
-  assert.equal(payload.status, "unavailable");
-  assert.equal(payload.capabilities.shippingQuotes, false);
-  assert.deepEqual(payload.capabilities.shippingQuoteZones, {
-    EU: false, UK: false, US: false, CA: false,
-  });
-  assert.equal(statements.length, 1);
+test("preproduction health stays fail-closed on every migration through 0006 without querying readiness tables", async () => {
+  for (const migrationName of [
+    "0000_flimsy_rhino.sql",
+    "0001_lock_cart_line_price_provenance.sql",
+    "0002_lock_order_line_snapshots.sql",
+    "0003_identity_access.sql",
+    "0004_email_outbox_data_rights.sql",
+    "0005_fulfillment_returns_refunds.sql",
+    "0006_allow_bounded_expired_cart_purge.sql",
+  ]) {
+    const statements = [];
+    const database = {
+      prepare(query) {
+        statements.push(query);
+        return {
+          async first() {
+            return query.includes("d1_migrations")
+              ? { name: migrationName }
+              : null;
+          },
+          async all() {
+            throw new Error("readiness tables must not be queried");
+          },
+        };
+      },
+    };
+    const response = await invokeWorker("/api/preprod/health", {
+      database,
+      environment: "preproduction",
+    });
+    assert.equal(response.status, 503);
+    const payload = await response.json();
+    assert.equal(payload.status, "unavailable");
+    assert.equal(payload.latestMigration, migrationName);
+    assert.equal(payload.capabilities.shippingQuotes, false);
+    assert.deepEqual(payload.capabilities.shippingQuoteZones, {
+      EU: false, UK: false, US: false, CA: false,
+    });
+    assert.equal(statements.length, 1);
+  }
 });
 
 test("preproduction health stays fail-closed when the migration ledger is absent", async () => {
@@ -205,6 +220,47 @@ test("preproduction health stays fail-closed when the migration ledger is absent
   assert.equal((await response.json()).status, "unavailable");
 });
 
+test("preproduction health stays fail-closed when readiness queries fail after 0007", async () => {
+  const database = {
+    prepare(query) {
+      return {
+        bind() {
+          return this;
+        },
+        async first() {
+          return query.includes("d1_migrations")
+            ? { name: "0007_transactional_preprod_order_payment.sql" }
+            : null;
+        },
+        async all() {
+          throw new Error("readiness query failed");
+        },
+      };
+    },
+  };
+  const response = await invokeWorker("/api/preprod/health", {
+    database,
+    environment: "preproduction",
+  });
+  assert.equal(response.status, 503);
+  const payload = await response.json();
+  assert.equal(payload.status, "unavailable");
+  assert.equal(
+    payload.latestMigration,
+    "0007_transactional_preprod_order_payment.sql",
+  );
+  assert.deepEqual(payload.capabilities, {
+    catalog: false,
+    cart: false,
+    shippingQuotes: false,
+    shippingQuoteZones: { EU: false, UK: false, US: false, CA: false },
+    payment: false,
+    orderCreation: false,
+    emailDelivery: false,
+    carrier: false,
+  });
+});
+
 test("preproduction health enables shipping quotes only when all four launch zones are active", async () => {
   const database = {
     prepare(query) {
@@ -214,7 +270,7 @@ test("preproduction health enables shipping quotes only when all four launch zon
         },
         async first() {
           return query.includes("d1_migrations")
-            ? { name: "0006_allow_bounded_expired_cart_purge.sql" }
+            ? { name: "0007_transactional_preprod_order_payment.sql" }
             : null;
         },
         async all() {

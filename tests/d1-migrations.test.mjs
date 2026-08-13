@@ -117,6 +117,8 @@ const expectedMigrationSha256 = {
     "2eff61c2caa307e094f9cf64885816beff5f476dbbfe52a9988560a57faa1008",
   "0006_allow_bounded_expired_cart_purge.sql":
     "3cbd7390bb8834305b11f6d791583a86f3c6fe7ba9be23fc91e1e1ea98203a52",
+  "0007_transactional_preprod_order_payment.sql":
+    "3b58d9e49e5154c855c2620fea80e733c8953ec713e75a2e8c5b31432840d838",
 };
 const ansiPattern = /\u001B\[[0-?]*[ -/]*[@-~]/g;
 
@@ -346,7 +348,7 @@ function migrationRows(input) {
   });
 }
 
-test("Wrangler applies the canonical D1 chain on empty and journaled databases, then replays as a no-op", async (t) => {
+test("Wrangler applies the canonical D1 chain 0000 to 0007 on empty and journaled databases, then replays as a no-op", async (t) => {
   assert.ok(existsSync(builtConfigPath), "npm run build must create Wrangler config");
   assert.ok(existsSync(wranglerCliPath), "local Wrangler must be installed");
   const migrationNames = readdirSync(migrationDirectory)
@@ -361,6 +363,7 @@ test("Wrangler applies the canonical D1 chain on empty and journaled databases, 
     [
       "0005_fulfillment_returns_refunds.sql",
       "0006_allow_bounded_expired_cart_purge.sql",
+      "0007_transactional_preprod_order_payment.sql",
     ],
   );
 
