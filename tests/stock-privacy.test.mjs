@@ -123,7 +123,8 @@ test("the client purchase component receives only public stock states", () => {
   assert.match(clientSource, /PublicStockBySize/);
   assert.match(clientSource, /disabled=\{soldOut\}/);
   assert.match(clientSource, /product\.available/);
-  assert.match(clientSource, /product\.onlyLeft/);
+  assert.match(clientSource, /product\.lowStockSimulated/);
+  assert.doesNotMatch(clientSource, /product\.onlyLeft/);
   assert.match(clientSource, /product\.soldOut/);
   assert.match(productPageSource, /getPublicStockBySize/);
   assert.match(productPageSource, /availability=\{availability\}/);
