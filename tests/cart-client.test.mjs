@@ -119,6 +119,68 @@ test("the client rejects an internally inconsistent server total", async () => {
   }
 });
 
+test("the client accepts the exact product slugs and color keys seeded by migration 0008", async () => {
+  const originalFetch = globalThis.fetch;
+  const migration = await readFile(
+    new URL("../drizzle/0008_preprod_synthetic_demo_dataset.sql", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    migration,
+    /'variant_boxer_rose-pale_m','AJ-APO-ROS-M','rose','Rose Velours'/,
+  );
+  assert.match(
+    migration,
+    /'variant_boxer_lilas-bleu-clair_m','AJ-APO-LIL-M','lilas','Lilas Céleste'/,
+  );
+  const seededLines = [
+    {
+      variantId: "variant_boxer_rose-pale_m",
+      productSlug: "rose-pale",
+      colorKey: "rose",
+      colorName: "Rose Velours",
+      size: "M",
+      imageUrl: "/images/client/raw/product-rose-profile.webp",
+    },
+    {
+      variantId: "variant_boxer_lilas-bleu-clair_m",
+      productSlug: "lilas-bleu-clair",
+      colorKey: "lilas",
+      colorName: "Lilas Céleste",
+      size: "M",
+      imageUrl: "/images/client/raw/product-lilas-model.webp",
+    },
+  ].map((line) => ({
+    ...line,
+    productId: "product_apollon",
+    quantity: 1,
+    unitPriceCents: 2999,
+    lineTotalCents: 2999,
+    stockState: "available",
+  }));
+
+  globalThis.fetch = async () =>
+    Response.json({
+      data: snapshot({
+        itemCount: 2,
+        subtotalCents: 5998,
+        lines: seededLines,
+      }),
+    });
+  try {
+    const cart = await getCart();
+    assert.deepEqual(
+      cart.lines.map(({ productSlug, colorKey }) => ({ productSlug, colorKey })),
+      [
+        { productSlug: "rose-pale", colorKey: "rose" },
+        { productSlug: "lilas-bleu-clair", colorKey: "lilas" },
+      ],
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("the client rejects malformed expiry and non-canonical catalogue fields", async () => {
   const originalFetch = globalThis.fetch;
   const validLine = {

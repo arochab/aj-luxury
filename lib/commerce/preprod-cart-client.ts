@@ -5,18 +5,18 @@ const CART_CSRF_COOKIE = "__Host-aj_cart_csrf";
 const OPAQUE_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 const UTC_TIMESTAMP_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 const publicVariantContract = Object.freeze({
-  "variant_boxer_pourpre_s": ["pourpre", "S", "Pourpre Impérial", "/images/client/raw/product-card-pourpre.webp"],
-  "variant_boxer_pourpre_m": ["pourpre", "M", "Pourpre Impérial", "/images/client/raw/product-card-pourpre.webp"],
-  "variant_boxer_pourpre_l": ["pourpre", "L", "Pourpre Impérial", "/images/client/raw/product-card-pourpre.webp"],
-  "variant_boxer_pourpre_xl": ["pourpre", "XL", "Pourpre Impérial", "/images/client/raw/product-card-pourpre.webp"],
-  "variant_boxer_rose-pale_s": ["rose-pale", "S", "Rose Velours", "/images/client/raw/product-rose-profile.webp"],
-  "variant_boxer_rose-pale_m": ["rose-pale", "M", "Rose Velours", "/images/client/raw/product-rose-profile.webp"],
-  "variant_boxer_rose-pale_l": ["rose-pale", "L", "Rose Velours", "/images/client/raw/product-rose-profile.webp"],
-  "variant_boxer_rose-pale_xl": ["rose-pale", "XL", "Rose Velours", "/images/client/raw/product-rose-profile.webp"],
-  "variant_boxer_lilas-bleu-clair_s": ["lilas-bleu-clair", "S", "Lilas Céleste", "/images/client/raw/product-lilas-model.webp"],
-  "variant_boxer_lilas-bleu-clair_m": ["lilas-bleu-clair", "M", "Lilas Céleste", "/images/client/raw/product-lilas-model.webp"],
-  "variant_boxer_lilas-bleu-clair_l": ["lilas-bleu-clair", "L", "Lilas Céleste", "/images/client/raw/product-lilas-model.webp"],
-  "variant_boxer_lilas-bleu-clair_xl": ["lilas-bleu-clair", "XL", "Lilas Céleste", "/images/client/raw/product-lilas-model.webp"],
+  "variant_boxer_pourpre_s": ["pourpre", "pourpre", "S", "Pourpre Impérial", "/images/client/raw/product-card-pourpre.webp"],
+  "variant_boxer_pourpre_m": ["pourpre", "pourpre", "M", "Pourpre Impérial", "/images/client/raw/product-card-pourpre.webp"],
+  "variant_boxer_pourpre_l": ["pourpre", "pourpre", "L", "Pourpre Impérial", "/images/client/raw/product-card-pourpre.webp"],
+  "variant_boxer_pourpre_xl": ["pourpre", "pourpre", "XL", "Pourpre Impérial", "/images/client/raw/product-card-pourpre.webp"],
+  "variant_boxer_rose-pale_s": ["rose-pale", "rose", "S", "Rose Velours", "/images/client/raw/product-rose-profile.webp"],
+  "variant_boxer_rose-pale_m": ["rose-pale", "rose", "M", "Rose Velours", "/images/client/raw/product-rose-profile.webp"],
+  "variant_boxer_rose-pale_l": ["rose-pale", "rose", "L", "Rose Velours", "/images/client/raw/product-rose-profile.webp"],
+  "variant_boxer_rose-pale_xl": ["rose-pale", "rose", "XL", "Rose Velours", "/images/client/raw/product-rose-profile.webp"],
+  "variant_boxer_lilas-bleu-clair_s": ["lilas-bleu-clair", "lilas", "S", "Lilas Céleste", "/images/client/raw/product-lilas-model.webp"],
+  "variant_boxer_lilas-bleu-clair_m": ["lilas-bleu-clair", "lilas", "M", "Lilas Céleste", "/images/client/raw/product-lilas-model.webp"],
+  "variant_boxer_lilas-bleu-clair_l": ["lilas-bleu-clair", "lilas", "L", "Lilas Céleste", "/images/client/raw/product-lilas-model.webp"],
+  "variant_boxer_lilas-bleu-clair_xl": ["lilas-bleu-clair", "lilas", "XL", "Lilas Céleste", "/images/client/raw/product-lilas-model.webp"],
 } as const);
 
 export type PublicCartLine = Readonly<{
@@ -94,10 +94,10 @@ function parseCartLine(value: unknown): PublicCartLine {
     !expected ||
     line.productId !== "product_apollon" ||
     line.productSlug !== expected[0] ||
-    line.colorKey !== expected[0] ||
-    line.size !== expected[1] ||
-    line.colorName !== expected[2] ||
-    line.imageUrl !== expected[3] ||
+    line.colorKey !== expected[1] ||
+    line.size !== expected[2] ||
+    line.colorName !== expected[3] ||
+    line.imageUrl !== expected[4] ||
     !Number.isSafeInteger(line.quantity) ||
     (line.quantity as number) < 1 ||
     (line.quantity as number) > 5 ||
