@@ -345,6 +345,10 @@
   line-height: 1.45;
 }
 
+.purchaseError {
+  color: #8b3138;
+}
+
 .cartLink {
   display: inline-flex;
   min-height: 2.75rem;
@@ -709,7 +713,8 @@
 }
 
 .sizeGuideTrigger:focus-visible,
-.sizeGuideClose:focus-visible {
+.sizeGuideClose:focus-visible,
+.purchaseError:focus-visible {
   outline: 2px solid #d9dadd;
   outline-offset: 3px;
 }
