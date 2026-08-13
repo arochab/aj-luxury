@@ -3,5 +3,9 @@
   "dataset_kind": "synthetic-demo",
   "fixture_version": "aj-demo-v1",
   "expires_at": "2026-09-30T23:59:59.999Z",
-  "production_promotion": "forbidden"
+  "production_promotion": "forbidden",
+  "allowed_source_branches": [
+    "codex/lot2-preprod-synthetic-demo-20260813",
+    "codex/lot2-preprod-owner-account-tracking-20260813"
+  ]
 }

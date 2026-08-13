@@ -16,8 +16,16 @@ import {
   D1PreprodCheckoutStore,
   PreprodCheckoutError,
 } from "../lib/commerce/d1-preprod-checkout-store.ts";
+import {
+  derivePreprodOwner,
+  D1PreprodOwnerDemoStore,
+  type PreprodOwner,
+} from "../lib/commerce/d1-preprod-owner-demo-store.ts";
 import { verifyPreprodTestPaymentEvent } from "../lib/commerce/preprod-test-payment-adapter.internal.ts";
-import type { CommerceD1Database } from "../lib/commerce/d1-port.ts";
+import type {
+  CommerceD1Database,
+  CommerceD1Result,
+} from "../lib/commerce/d1-port.ts";
 import {
   FulfillmentError,
   normalizeShippingAddress,
@@ -51,6 +59,7 @@ interface Env {
   APP_ENV?: string;
   PREPROD_ORIGIN?: string;
   PREPROD_DEMO_DATASET?: string;
+  PREPROD_OWNER_EMAIL?: string;
   IMAGES: {
     input(stream: ReadableStream): {
       transform(options: Record<string, unknown>): {
@@ -99,6 +108,10 @@ const PREPROD_SHIPPING_QUOTE_PATH =
 const PREPROD_ORDER_PATH = `${PREPROD_API_PREFIX}checkout/order`;
 const PREPROD_CURRENT_ORDER_PATH = `${PREPROD_API_PREFIX}orders/current`;
 const PREPROD_TEST_PAYMENT_PATH = `${PREPROD_API_PREFIX}checkout/test-payment`;
+const PREPROD_ACCOUNT_PATH = `${PREPROD_API_PREFIX}account/current`;
+const PREPROD_DIAGNOSTICS_PATH = `${PREPROD_API_PREFIX}diagnostics`;
+const PREPROD_TRACKING_ADVANCE_PATH =
+  `${PREPROD_API_PREFIX}orders/current/tracking/advance`;
 const CART_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
 const CART_MAX_QUANTITY = 5;
 const CART_MAX_ACTIVE_SESSIONS = 250;
@@ -124,6 +137,99 @@ type SyntheticDemoGate = Readonly<{
   latestMigration: string | null;
   expiresAt: string | null;
 }>;
+
+function constantTimeTextEqual(left: string, right: string): boolean {
+  const leftBytes = new TextEncoder().encode(left);
+  const rightBytes = new TextEncoder().encode(right);
+  let difference = leftBytes.length ^ rightBytes.length;
+  const length = Math.max(leftBytes.length, rightBytes.length);
+  for (let index = 0; index < length; index += 1) {
+    difference |= (leftBytes[index] ?? 0) ^ (rightBytes[index] ?? 0);
+  }
+  return difference === 0;
+}
+
+async function readPreprodOwner(
+  request: Request,
+  env: Env,
+): Promise<PreprodOwner | null> {
+  const configured = env.PREPROD_OWNER_EMAIL?.trim().toLowerCase();
+  const authenticatedEmail = request.headers
+    .get("oai-authenticated-user-email")
+    ?.trim()
+    .toLowerCase();
+  const authenticatedUserId = request.headers
+    .get("oai-authenticated-user-id")
+    ?.trim();
+  if (
+    !configured || !authenticatedEmail || !authenticatedUserId ||
+    !constantTimeTextEqual(authenticatedEmail, configured) ||
+    authenticatedUserId.length > 512
+  ) {
+    return null;
+  }
+  try {
+    return await derivePreprodOwner(configured);
+  } catch {
+    return null;
+  }
+}
+
+function cartPersistenceDiagnostic(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  if (/preprod_demo_dataset_inactive/i.test(message)) return "dataset-inactive";
+  if (/commerce_cart|constraint failed/i.test(message)) return "cart-invariant-rejected";
+  if (/D1_ERROR|database|SQLITE/i.test(message)) return "database-write-rejected";
+  return "unexpected-cart-write-failure";
+}
+
+function logPreprodUnavailable(
+  event: "preprod_health_unavailable" | "preprod_cart_gate_unavailable",
+  request: Request,
+  reason: string,
+  latestMigration: string | null,
+): void {
+  const candidateRay = request.headers.get("cf-ray");
+  const ray = candidateRay && /^[A-Za-z0-9-]{1,80}$/.test(candidateRay)
+    ? candidateRay
+    : null;
+  console.error(JSON.stringify({
+    event,
+    reason,
+    latestMigration,
+    requestId: `req_${crypto.randomUUID()}`,
+    ...(ray ? { ray } : {}),
+  }));
+}
+
+async function ownerCartDiagnosticResponse(
+  request: Request,
+  env: Env,
+  error: unknown,
+): Promise<Response> {
+  const diagnostic = cartPersistenceDiagnostic(error);
+  const requestId = `req_${crypto.randomUUID()}`;
+  if (await readPreprodOwner(request, env)) {
+    console.error(JSON.stringify({
+      event: "preprod_cart_write_failed",
+      diagnostic,
+      requestId,
+    }));
+    return jsonResponse({
+      error: {
+        code: "CART_PERSISTENCE_REJECTED",
+        message: "Le diagnostic privé a identifié un refus du stockage du panier.",
+        requestId,
+        diagnostic,
+      },
+    }, { status: 503 });
+  }
+  return cartErrorResponse(
+    "DATABASE_UNAVAILABLE",
+    "Le panier est momentanément indisponible.",
+    503,
+  );
+}
 
 async function readSyntheticDemoGate(
   env: Env,
@@ -985,10 +1091,124 @@ async function requireCheckoutMutation(
   }
 }
 
+async function handleOwnerAccountApi(
+  request: Request,
+  env: Env,
+  url: URL,
+  owner: PreprodOwner | null,
+): Promise<Response | null> {
+  if (
+    url.pathname !== PREPROD_ACCOUNT_PATH &&
+    url.pathname !== PREPROD_TRACKING_ADVANCE_PATH &&
+    url.pathname !== PREPROD_DIAGNOSTICS_PATH
+  ) return null;
+
+  const expectedMethod = url.pathname === PREPROD_TRACKING_ADVANCE_PATH
+    ? "POST"
+    : "GET";
+  if (request.method !== expectedMethod) {
+    return cartErrorResponse(
+      "METHOD_NOT_ALLOWED",
+      "Méthode non autorisée.",
+      405,
+      { Allow: expectedMethod },
+    );
+  }
+  if (!owner) return jsonResponse({ error: "not-found" }, { status: 404 });
+  if (url.pathname === PREPROD_DIAGNOSTICS_PATH) {
+    try {
+      const [clock, carts] = await Promise.all([
+        env.DB.prepare(
+          `SELECT strftime('%Y-%m-%dT%H:%M:%fZ', 'now') AS database_now,
+            fixture_version, expires_at
+          FROM preprod_demo_dataset WHERE singleton = 1`,
+        ).first<{
+          database_now: string;
+          fixture_version: string;
+          expires_at: string;
+        }>(),
+        env.DB.prepare(
+          `SELECT
+            SUM(CASE WHEN status = 'open' AND expires_at >
+              strftime('%Y-%m-%dT%H:%M:%fZ', 'now') THEN 1 ELSE 0 END)
+              AS active_count,
+            SUM(CASE WHEN created_at >=
+              strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-1 minute')
+              THEN 1 ELSE 0 END) AS recent_count
+          FROM carts`,
+        ).first<{ active_count: number | null; recent_count: number | null }>(),
+      ]);
+      if (!clock || !carts) throw new Error("diagnostic-unavailable");
+      return jsonResponse({ data: {
+        status: "ready",
+        environment: "preproduction",
+        database: "reachable",
+        ownerAccess: "recognized",
+        dataset: {
+          fixtureVersion: clock.fixture_version,
+          databaseNow: clock.database_now,
+          expiresAt: clock.expires_at,
+          active: clock.expires_at > clock.database_now,
+        },
+        cartCapacity: {
+          active: carts.active_count ?? 0,
+          activeLimit: CART_MAX_ACTIVE_SESSIONS,
+          createdLastMinute: carts.recent_count ?? 0,
+          perMinuteLimit: CART_MAX_CREATIONS_PER_MINUTE,
+        },
+        simulation: {
+          account: true,
+          order: true,
+          payment: true,
+          tracking: true,
+          emailSent: false,
+          externalCarrierContacted: false,
+          parcelSent: false,
+        },
+      } });
+    } catch {
+      return cartErrorResponse(
+        "DIAGNOSTICS_UNAVAILABLE",
+        "Le diagnostic privé est indisponible.",
+        503,
+      );
+    }
+  }
+  const store = new D1PreprodOwnerDemoStore(env.DB, env.APP_ENV);
+  try {
+    if (url.pathname === PREPROD_ACCOUNT_PATH) {
+      return jsonResponse({ data: await store.readAccount(owner) });
+    }
+    const authorized = await requireCheckoutMutation(request, env);
+    if (authorized instanceof Response) return authorized;
+    if (!(await requireEmptyBody(request))) {
+      return cartErrorResponse(
+        "INVALID_BODY",
+        "Le corps doit être strictement vide.",
+        400,
+      );
+    }
+    return jsonResponse({
+      data: await store.advanceCurrentOrder(
+        owner,
+        authorized.cartId,
+        new Date().toISOString(),
+      ),
+    });
+  } catch {
+    return cartErrorResponse(
+      "ACCOUNT_SIMULATION_UNAVAILABLE",
+      "L’espace client de démonstration est momentanément indisponible.",
+      503,
+    );
+  }
+}
+
 async function handleOrderPaymentApi(
   request: Request,
   env: Env,
   url: URL,
+  prevalidatedOwner: PreprodOwner | null,
 ): Promise<Response | null> {
   if (
     url.pathname !== PREPROD_ORDER_PATH &&
@@ -1027,6 +1247,16 @@ async function handleOrderPaymentApi(
   }
   try {
     if (url.pathname === PREPROD_ORDER_PATH) {
+      const owner = prevalidatedOwner ?? await readPreprodOwner(request, env);
+      const ownerRequired = typeof env.PREPROD_OWNER_EMAIL === "string" &&
+        env.PREPROD_OWNER_EMAIL.trim().length > 0;
+      if (ownerRequired && !owner) {
+        return cartErrorResponse(
+          "OWNER_ACCESS_REQUIRED",
+          "La commande de démonstration est réservée au compte propriétaire.",
+          403,
+        );
+      }
       const body = await parseCreateOrderBody(request);
       if (!body) return cartErrorResponse("INVALID_BODY", "Le formulaire est invalide ou trop volumineux.", 400);
       const normalizedAddress = await normalizeShippingAddress(body.address);
@@ -1052,6 +1282,11 @@ async function handleOrderPaymentApi(
         authorized.addressProofKey,
         normalizedAddress.canonicalJson,
       );
+      const now = new Date().toISOString();
+      if (owner) {
+        await new D1PreprodOwnerDemoStore(env.DB, env.APP_ENV)
+          .ensureOwner(owner, now);
+      }
       return jsonResponse({
         data: await store.createOrder({
           cartId: authorized.cartId,
@@ -1060,10 +1295,11 @@ async function handleOrderPaymentApi(
           addressFingerprint,
           countryCode: normalizedAddress.address.countryCode,
           email: body.email,
+          customerId: owner?.customerId ?? null,
           idempotencyKey,
           termsVersion: LEGAL_VERSION,
           privacyVersion: LEGAL_VERSION,
-          now: new Date().toISOString(),
+          now,
         }),
       });
     }
@@ -1186,7 +1422,42 @@ async function handleCartApi(
       const retentionCutoff = new Date(
         now.getTime() - CART_RETENTION_DAYS * 24 * 60 * 60 * 1000,
       ).toISOString();
-      const [, , , , created] = await env.DB.batch<[
+      const createCartStatement = () => env.DB
+        .prepare(
+          `INSERT INTO carts (
+            id, customer_id, email, status, currency, expires_at,
+            created_at, updated_at
+          )
+          SELECT ?, NULL, NULL, 'open', 'EUR', ?, ?, ?
+          WHERE (
+            SELECT COUNT(*) FROM carts
+            WHERE length(id) = 69
+              AND substr(id, 1, 5) = 'cart_'
+              AND substr(id, 6) = lower(substr(id, 6))
+              AND substr(id, 6) NOT GLOB '*[^0-9a-f]*'
+              AND status = 'open' AND expires_at > ?
+          ) < ? AND (
+            SELECT COUNT(*) FROM carts
+            WHERE length(id) = 69
+              AND substr(id, 1, 5) = 'cart_'
+              AND substr(id, 6) = lower(substr(id, 6))
+              AND substr(id, 6) NOT GLOB '*[^0-9a-f]*'
+              AND created_at >= ?
+          ) < ?`,
+        )
+        .bind(
+          cartId,
+          expiresAt,
+          nowIso,
+          nowIso,
+          nowIso,
+          CART_MAX_ACTIVE_SESSIONS,
+          minuteAgo,
+          CART_MAX_CREATIONS_PER_MINUTE,
+        );
+      let created: CommerceD1Result<{ id: string }>;
+      try {
+        [, , , , created] = await env.DB.batch<[
         Record<string, never>,
         Record<string, never>,
         Record<string, never>,
@@ -1252,41 +1523,28 @@ async function handleCartApi(
               AND status = 'open' AND expires_at <= ?`,
           )
           .bind(nowIso, nowIso),
-        env.DB
-          .prepare(
-            `INSERT INTO carts (
-              id, customer_id, email, status, currency, expires_at,
-              created_at, updated_at
-            )
-            SELECT ?, NULL, NULL, 'open', 'EUR', ?, ?, ?
-            WHERE (
-              SELECT COUNT(*) FROM carts
-              WHERE length(id) = 69
-                AND substr(id, 1, 5) = 'cart_'
-                AND substr(id, 6) = lower(substr(id, 6))
-                AND substr(id, 6) NOT GLOB '*[^0-9a-f]*'
-                AND status = 'open' AND expires_at > ?
-            ) < ? AND (
-              SELECT COUNT(*) FROM carts
-              WHERE length(id) = 69
-                AND substr(id, 1, 5) = 'cart_'
-                AND substr(id, 6) = lower(substr(id, 6))
-                AND substr(id, 6) NOT GLOB '*[^0-9a-f]*'
-                AND created_at >= ?
-            ) < ?`,
-          )
-          .bind(
-            cartId,
-            expiresAt,
-            nowIso,
-            nowIso,
-            nowIso,
-            CART_MAX_ACTIVE_SESSIONS,
-            minuteAgo,
-            CART_MAX_CREATIONS_PER_MINUTE,
-          ),
+        createCartStatement(),
         env.DB.prepare("SELECT id FROM carts WHERE id = ?").bind(cartId),
       ]);
+      } catch (maintenanceError) {
+        // Cart availability must not depend on opportunistic retention work.
+        // D1 still enforces the exact dataset, capacity and cart invariants on
+        // this smaller atomic retry; no guard is bypassed.
+        try {
+          [, created] = await env.DB.batch<[
+            Record<string, never>,
+            { id: string },
+          ]>([
+            createCartStatement(),
+            env.DB.prepare("SELECT id FROM carts WHERE id = ?").bind(cartId),
+          ]);
+        } catch (createError) {
+          throw new Error(
+            `${cartPersistenceDiagnostic(maintenanceError)};${cartPersistenceDiagnostic(createError)}`,
+            { cause: createError },
+          );
+        }
+      }
       if (!created.results[0]) {
         return cartErrorResponse(
           "CART_CAPACITY_REACHED",
@@ -1309,7 +1567,7 @@ async function handleCartApi(
         { status: 201, headers },
       );
     } catch (error) {
-      return mapCartError(error);
+      return ownerCartDiagnosticResponse(request, env, error);
     }
   }
 
@@ -1401,7 +1659,44 @@ export async function preprodApiResponse(
     return jsonResponse({ error: "not-found" }, { status: 404 });
   }
 
-  if (!env?.DB) {
+  const ownerEndpoint =
+    url.pathname === PREPROD_ACCOUNT_PATH ||
+    url.pathname === PREPROD_TRACKING_ADVANCE_PATH ||
+    url.pathname === PREPROD_DIAGNOSTICS_PATH;
+  const ownerCheckout =
+    url.pathname === PREPROD_ORDER_PATH &&
+    request.method === "POST" &&
+    typeof env.PREPROD_OWNER_EMAIL === "string" &&
+    env.PREPROD_OWNER_EMAIL.trim().length > 0;
+  // Owner-exclusive requests are rejected from authenticated edge headers
+  // before the first D1 query. The configured address alone never grants
+  // access and unauthorized callers cannot use these paths as DB oracles.
+  const prevalidatedOwner = ownerEndpoint || ownerCheckout
+    ? await readPreprodOwner(request, env)
+    : null;
+  if ((ownerEndpoint || ownerCheckout) && !prevalidatedOwner) {
+    return jsonResponse({ error: "not-found" }, { status: 404 });
+  }
+
+  if (!env.DB) {
+    if (url.pathname === `${PREPROD_API_PREFIX}health`) {
+      logPreprodUnavailable(
+        "preprod_health_unavailable",
+        request,
+        "preproduction-database-not-bound",
+        null,
+      );
+    } else if (
+      url.pathname === PREPROD_CART_PATH ||
+      PREPROD_CART_LINE_PATTERN.test(url.pathname)
+    ) {
+      logPreprodUnavailable(
+        "preprod_cart_gate_unavailable",
+        request,
+        "preproduction-database-not-bound",
+        null,
+      );
+    }
     return jsonResponse(
       { status: "unavailable", reason: "preproduction-database-not-bound" },
       { status: 503 },
@@ -1417,8 +1712,14 @@ export async function preprodApiResponse(
     }
     return (async () => {
       const database = env.DB;
-      const unavailable = (latestMigration: string | null) => jsonResponse(
-        {
+      const unavailable = (latestMigration: string | null, reason: string) => {
+        logPreprodUnavailable(
+          "preprod_health_unavailable",
+          request,
+          reason,
+          latestMigration,
+        );
+        return jsonResponse({
           status: "unavailable",
           environment: "preproduction",
           capabilities: {
@@ -1445,15 +1746,16 @@ export async function preprodApiResponse(
           stockProjection: [],
           syntheticDataset: {
             active: false,
-            reason: syntheticGate.reason,
+            reason,
             fixtureVersion: SYNTHETIC_DEMO_FIXTURE_VERSION,
             expiresAt: syntheticGate.expiresAt,
           },
-        },
-        { status: 503 },
-      );
+        }, { status: 503 });
+      };
       let latestMigration: string | null = syntheticGate.latestMigration;
-      if (syntheticGate.required && !syntheticGate.ready) return unavailable(latestMigration);
+      if (syntheticGate.required && !syntheticGate.ready) {
+        return unavailable(latestMigration, syntheticGate.reason);
+      }
       try {
         const migration = await database
           .prepare(
@@ -1462,13 +1764,13 @@ export async function preprodApiResponse(
           .first<{ name: string }>();
         latestMigration = migration?.name ?? null;
       } catch {
-        return unavailable(null);
+        return unavailable(null, "readiness-query-failed");
       }
       const expectedMigration = syntheticGate.required
         ? SYNTHETIC_DEMO_MIGRATION
         : "0007_transactional_preprod_order_payment.sql";
       if (latestMigration !== expectedMigration) {
-        return unavailable(latestMigration);
+        return unavailable(latestMigration, "migration-missing");
       }
       try {
         const [stock, shippingConfigurations, reserveValidation] = await Promise.all([
@@ -1570,12 +1872,23 @@ export async function preprodApiResponse(
           { status: 200 },
         );
       } catch {
-        return unavailable(latestMigration);
+        return unavailable(latestMigration, "readiness-query-failed");
       }
     })();
   }
 
   if (syntheticGate.required && !syntheticGate.ready) {
+    if (
+      url.pathname === PREPROD_CART_PATH ||
+      PREPROD_CART_LINE_PATTERN.test(url.pathname)
+    ) {
+      logPreprodUnavailable(
+        "preprod_cart_gate_unavailable",
+        request,
+        syntheticGate.reason,
+        syntheticGate.latestMigration,
+      );
+    }
     return cartErrorResponse(
       "SYNTHETIC_DEMO_UNAVAILABLE",
       "La démonstration privée est fermée.",
@@ -1584,7 +1897,20 @@ export async function preprodApiResponse(
     );
   }
 
-  const orderPaymentResponse = await handleOrderPaymentApi(request, env, url);
+  const accountResponse = await handleOwnerAccountApi(
+    request,
+    env,
+    url,
+    prevalidatedOwner,
+  );
+  if (accountResponse) return accountResponse;
+
+  const orderPaymentResponse = await handleOrderPaymentApi(
+    request,
+    env,
+    url,
+    prevalidatedOwner,
+  );
   if (orderPaymentResponse) return orderPaymentResponse;
 
   const shippingQuoteResponse = await handleShippingQuoteApi(request, env, url);

@@ -786,7 +786,7 @@ test("checkout uses the cookie-backed cart and ignores legacy URL variants", asy
 const commerceCases = [
   ["/cart", /prix et stocks simulés, non commerciaux/i],
   ["/checkout", /aucun débit, e-mail ou transporteur réel/i],
-  ["/account", /authentification non activée/i],
+  ["/account", /espace client privé de préproduction[^<]*aucune commande réelle/i],
 ];
 
 for (const [pathname, marker] of commerceCases) {

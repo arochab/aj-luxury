@@ -33,6 +33,9 @@ function check(overrides = {}) {
 
 test("synthetic demo build boundary requires the exact preproduction target", () => {
   assert.equal(check().status, 0);
+  assert.equal(check({
+    GITHUB_REF_NAME: "codex/lot2-preprod-owner-account-tracking-20260813",
+  }).status, 0);
   assert.notEqual(check({ APP_ENV: "production" }).status, 0);
   assert.notEqual(check({ PREPROD_TARGET_PROJECT_ID: "wrong-project" }).status, 0);
   assert.notEqual(check({ GITHUB_REF_NAME: "main" }).status, 0);

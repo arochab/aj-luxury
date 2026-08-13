@@ -5,6 +5,7 @@ import type {
 } from "./verified-carrier-event.ts";
 
 const verifiedCarrierEvents = new WeakSet<object>();
+const preprodWorkerRegistrars = new WeakSet<object>();
 
 type NodeTestProcess = Readonly<{
   env?: Readonly<Record<string, string | undefined>>;
@@ -39,6 +40,43 @@ export function registerVerifiedCarrierEventForNodeTest(
   const event = Object.freeze({ ...claims });
   verifiedCarrierEvents.add(event);
   return event as VerifiedCarrierEvent;
+}
+
+/** Request-local capability for the private synthetic carrier simulator. */
+export function issuePreprodWorkerCarrierRegistrar(
+  environment: unknown,
+): Readonly<{
+  register(
+    currentEnvironment: unknown,
+    claims: VerifiedCarrierEventClaims,
+  ): VerifiedCarrierEvent;
+}> {
+  if (environment !== "preproduction") {
+    throw new FulfillmentError(
+      "TRACKING_VERIFICATION_REQUIRED",
+      "The synthetic carrier registrar is restricted to preproduction.",
+    );
+  }
+  const capability = Object.freeze({});
+  preprodWorkerRegistrars.add(capability);
+  return Object.freeze({
+    register(currentEnvironment, claims) {
+      if (
+        currentEnvironment !== "preproduction" ||
+        !preprodWorkerRegistrars.has(capability) ||
+        claims.providerCode !== "synthetic_demo" ||
+        claims.verificationMethod !== "test_adapter"
+      ) {
+        throw new FulfillmentError(
+          "TRACKING_VERIFICATION_REQUIRED",
+          "The synthetic carrier event lacks trusted preproduction provenance.",
+        );
+      }
+      const event = Object.freeze({ ...claims });
+      verifiedCarrierEvents.add(event);
+      return event as VerifiedCarrierEvent;
+    },
+  });
 }
 
 export function isRegisteredVerifiedCarrierEvent(

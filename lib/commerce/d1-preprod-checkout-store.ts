@@ -65,6 +65,7 @@ type OrderRow = {
   id: string;
   order_number: string;
   cart_id: string;
+  customer_id: string | null;
   status: "pending_payment" | "paid";
   currency: "EUR";
   email: string;
@@ -105,7 +106,7 @@ type ReservationTimingRow = {
   maximum_updated_at: string | null;
 };
 
-const orderSelectColumns = `id, order_number, cart_id, status, currency, email,
+const orderSelectColumns = `id, order_number, cart_id, customer_id, status, currency, email,
   subtotal_cents, shipping_cents, tax_cents, total_cents,
   shipping_country_code, shipping_address_json, billing_address_json,
   shipping_quote_id, shipping_address_fingerprint, terms_version,
@@ -142,6 +143,7 @@ export type CreatePreprodOrderInput = Readonly<{
   addressFingerprint: string;
   countryCode: string;
   email: string;
+  customerId?: string | null;
   idempotencyKey: string;
   termsVersion: string;
   privacyVersion: string;
@@ -222,6 +224,9 @@ function assertCreateInput(input: CreatePreprodOrderInput): string {
   assertFulfillmentIdentifier(input.idempotencyKey, "idempotencyKey");
   assertFulfillmentFingerprint(input.addressFingerprint, "addressFingerprint");
   assertFulfillmentTimestamp(input.now, "now");
+  if (input.customerId !== undefined && input.customerId !== null) {
+    assertFulfillmentIdentifier(input.customerId, "customerId");
+  }
   if (!/^[A-Z]{2}$/.test(input.countryCode)) {
     throw new PreprodCheckoutError("INVALID_INPUT", "countryCode is invalid.");
   }
@@ -264,6 +269,7 @@ function orderMatches(
     countryCode: string;
     termsVersion: string;
     privacyVersion: string;
+    customerId: string | null;
   }>,
 ): boolean {
   return order.id === expected.orderId &&
@@ -273,6 +279,7 @@ function orderMatches(
     order.shipping_country_code === expected.countryCode &&
     order.shipping_address_json === expected.addressJson &&
     order.billing_address_json === expected.addressJson &&
+    order.customer_id === expected.customerId &&
     order.terms_version === expected.termsVersion &&
     order.privacy_version === expected.privacyVersion &&
     order.currency === "EUR" && order.tax_cents === 0 &&
@@ -335,6 +342,7 @@ export class D1PreprodCheckoutStore {
       countryCode: input.countryCode,
       currency: "EUR",
       email,
+      customerId: input.customerId ?? null,
       lines: lines.map((line) => ({
         colorName: line.color_name,
         internalReference: line.internal_reference,
@@ -368,6 +376,7 @@ export class D1PreprodCheckoutStore {
       countryCode: input.countryCode,
       termsVersion: input.termsVersion,
       privacyVersion: input.privacyVersion,
+      customerId: input.customerId ?? null,
     } as const;
     if (existing) {
       if (
@@ -415,12 +424,13 @@ export class D1PreprodCheckoutStore {
           shipping_address_fingerprint, billing_address_json,
           shipping_quote_id, terms_version, privacy_version, paid_at,
           created_at, updated_at
-        ) VALUES (?, ?, ?, NULL, ?, 'pending_payment', 'EUR', ?, ?, 0, ?,
+        ) VALUES (?, ?, ?, ?, ?, 'pending_payment', 'EUR', ?, ?, 0, ?,
           ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)`,
       ).bind(
         orderId,
         orderNumber,
         input.cartId,
+        input.customerId ?? null,
         email,
         subtotalCents,
         quote.amount_cents,

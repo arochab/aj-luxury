@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
@@ -17,19 +18,45 @@ const migration = readFileSync(
   `${root}drizzle/0008_preprod_synthetic_demo_dataset.sql`,
   "utf8",
 );
-const allowedSourceBranch = "codex/lot2-preprod-synthetic-demo-20260813";
+const journal = JSON.parse(readFileSync(`${root}drizzle/meta/_journal.json`, "utf8"));
+const expectedSourceBranches = [
+  "codex/lot2-preprod-synthetic-demo-20260813",
+  "codex/lot2-preprod-owner-account-tracking-20260813",
+];
+const releaseBuildEpoch = 1786622400000;
+const frozenMigrationHash =
+  "794e1c67471427ba3d92e979e79e07a8393244794d7d98b827db6b0fda07b5b5";
 
 assert.equal(marker.production_promotion, "forbidden");
 assert.equal(marker.dataset_kind, SYNTHETIC_DEMO_DATASET_KIND);
 assert.equal(marker.fixture_version, SYNTHETIC_DEMO_FIXTURE_VERSION);
 assert.equal(marker.expires_at, SYNTHETIC_DEMO_EXPIRES_AT);
 assert.equal(marker.project_id, hosting.project_id);
+assert.deepEqual(marker.allowed_source_branches, expectedSourceBranches);
 assert.match(migration, /PREPRODUCTION-ONLY SYNTHETIC DATASET/);
 assert.match(migration, new RegExp(SYNTHETIC_DEMO_MIGRATION.replace(".sql", "")));
 assert.match(migration, new RegExp(SYNTHETIC_DEMO_DATASET_KIND, "g"));
 assert.match(migration, new RegExp(SYNTHETIC_DEMO_FIXTURE_VERSION, "g"));
 assert.match(migration, new RegExp(SYNTHETIC_DEMO_EXPIRES_AT.replaceAll(".", "\\."), "g"));
 assert.doesNotMatch(migration, /DHL/i);
+assert.equal(
+  createHash("sha256").update(migration).digest("hex"),
+  frozenMigrationHash,
+  "0008 SQL must remain byte-identical",
+);
+assert.ok(
+  journal.entries.every((entry, index, entries) =>
+    index === 0 || entry.when > entries[index - 1].when
+  ),
+  "D1 migration journal timestamps must be strictly monotone",
+);
+const terminalMigration = journal.entries.at(-1);
+assert.equal(terminalMigration.tag, "0008_preprod_synthetic_demo_dataset");
+assert.equal(terminalMigration.when, releaseBuildEpoch);
+assert.ok(
+  terminalMigration.when <= releaseBuildEpoch,
+  "terminal D1 migration cannot be future-dated relative to this release",
+);
 
 if (
   process.env.APP_ENV !== "preproduction" ||
@@ -41,9 +68,9 @@ if (
 }
 if (process.env.GITHUB_ACTIONS === "true") {
   const sourceBranch = process.env.GITHUB_HEAD_REF || process.env.GITHUB_REF_NAME;
-  if (sourceBranch !== allowedSourceBranch) {
+  if (!marker.allowed_source_branches.includes(sourceBranch)) {
     throw new Error(
-      `Synthetic migration 0008 CI is restricted to ${allowedSourceBranch}.`,
+      "Synthetic migration 0008 CI is restricted to governed preproduction branches.",
     );
   }
 }

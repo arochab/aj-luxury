@@ -432,6 +432,74 @@ button.button {
   line-height: 1.7;
 }
 
+.deliveryStatus {
+  margin-top: 28px;
+  padding: 20px;
+  border: 1px solid rgba(9, 9, 9, 0.18);
+  background: #fff;
+}
+
+.demoReady {
+  color: #365f45;
+  font-weight: 600;
+}
+
+.deliveryStatus > strong {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.deliveryStatus p {
+  margin: 12px 0 0;
+  color: #626262;
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.timeline {
+  display: grid;
+  gap: 12px;
+  margin: 20px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.timeline li {
+  position: relative;
+  min-height: 20px;
+  padding-left: 28px;
+  color: #8a8a86;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.timeline li::before {
+  position: absolute;
+  top: 2px;
+  left: 0;
+  width: 12px;
+  height: 12px;
+  border: 1px solid #aaa;
+  border-radius: 50%;
+  content: "";
+}
+
+.timeline .stageComplete {
+  color: #090909;
+  font-weight: 600;
+}
+
+.timeline .stageComplete::before {
+  border-color: #090909;
+  background: #090909;
+}
+
+.deliveryStatus:focus-visible {
+  outline: 2px solid #62646a;
+  outline-offset: 3px;
+}
+
 @media (max-width: 800px) {
   .main {
     grid-template-columns: 1fr;
