@@ -114,7 +114,7 @@ function MetallicCanvas({
         vec3 normal = normalize(vec3(local, z));
 
         float horizon = smoothstep(-0.56, 0.72, normal.y);
-        float sweep = sin(normal.y * 5.2 + offset + u_phase * 0.24) * 0.5 + 0.5;
+        float sweep = sin(normal.y * 5.2 + offset + u_phase) * 0.5 + 0.5;
         float highlight = pow(
           max(0.0, dot(normal, normalize(vec3(-0.48, 0.58, 0.78)))),
           10.0
@@ -159,7 +159,7 @@ function MetallicCanvas({
 
       float referenceHeight(vec2 p) {
         float phase = u_phase;
-        vec2 drift = vec2(cos(phase * 0.72), sin(phase * 0.72)) * 0.18;
+        vec2 drift = vec2(cos(phase), sin(phase)) * 0.18;
         float fieldA = lowFrequencyNoise(p * 1.34 + drift + vec2(2.1, 7.4));
         float fieldB = lowFrequencyNoise(
           vec2(-p.y, p.x) * 1.12 -
@@ -172,13 +172,13 @@ function MetallicCanvas({
           warped.x * 2.15 +
           warped.y * 0.84 +
           fieldB * 3.4 +
-          phase * 0.14
+          phase
         );
         float foldB = sin(
           warped.y * 2.52 -
           warped.x * 0.58 +
           fieldA * 2.8 -
-          phase * 0.11
+          phase
         );
 
         return fieldA * 0.50 + fieldB * 0.32 + foldA * 0.24 + foldB * 0.16;
@@ -265,6 +265,7 @@ function MetallicCanvas({
         material *= 1.0 - duskVariant * 0.08;
 
         float referenceVariant = step(2.5, u_variant);
+        float finalDepth = smoothstep(0.12, 0.90, height);
         if (referenceVariant > 0.5) {
           /*
            * The homepage treatment translates the four motion references chosen
@@ -297,7 +298,7 @@ function MetallicCanvas({
           float membrane = sin(
             referenceSurface * 8.4 +
             referenceReflection.x * 2.6 +
-            u_phase * 0.12
+            u_phase
           ) * 0.5 + 0.5;
           float membraneLight = smoothstep(0.48, 0.78, membrane);
           float membraneShadow = 1.0 - smoothstep(0.20, 0.48, membrane);
@@ -332,6 +333,7 @@ function MetallicCanvas({
             ) * 0.34
           );
           float referenceDepth = smoothstep(0.08, 0.88, referenceSurface);
+          finalDepth = referenceDepth;
           referenceBase *= 0.68 + referenceDepth * 0.40;
           referenceBase = smoothstep(
             vec3(0.045),
@@ -392,7 +394,7 @@ function MetallicCanvas({
             sculpture * 2.4 +
             scene.y * 6.0 -
             scene.x * 2.4 +
-            u_phase * 0.18
+            u_phase
           ) * 0.5 + 0.5;
           vec3 sculptureColor = mix(
             vec3(0.035, 0.036, 0.041),
@@ -415,8 +417,7 @@ function MetallicCanvas({
           sin(gl_FragCoord.y * 0.72) * 0.0035;
         material += textileGrain;
 
-        float depth = smoothstep(0.12, 0.90, height);
-        vec3 color = material * (0.80 + depth * 0.28);
+        vec3 color = material * (0.80 + finalDepth * 0.28);
         color *= mix(0.76 + flowingLight * 0.34, 1.0, referenceVariant);
         float vignette = smoothstep(1.24, 0.16, length((uv - 0.5) * vec2(0.78, 1.0)));
         color *= 0.88 + vignette * 0.13;

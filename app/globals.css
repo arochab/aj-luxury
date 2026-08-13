@@ -2915,7 +2915,9 @@ footer:not([class]) > p {
 .aj-film__hero-stage,
 .aj-film__hero-poster,
 .aj-film__hero-poster img,
-.aj-film__hero-video {
+.aj-film__hero-video,
+.aj-film__identity,
+.aj-film__identity img {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -2968,6 +2970,41 @@ footer:not([class]) > p {
   opacity: 1;
 }
 
+.aj-film__hero-reflection {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0.12;
+  pointer-events: none;
+  mix-blend-mode: soft-light;
+  -webkit-mask-image: radial-gradient(
+    ellipse 31% 61% at 52% 43%,
+    transparent 0%,
+    transparent 66%,
+    rgba(0, 0, 0, 0.44) 78%,
+    #000 100%
+  );
+  mask-image: radial-gradient(
+    ellipse 31% 61% at 52% 43%,
+    transparent 0%,
+    transparent 66%,
+    rgba(0, 0, 0, 0.44) 78%,
+    #000 100%
+  );
+}
+
+.aj-film__identity {
+  z-index: 3;
+  pointer-events: none;
+}
+
+.aj-film__identity img {
+  object-fit: cover;
+  object-position: center top;
+}
+
 @media (min-aspect-ratio: 801 / 1000) {
   .aj-film__hero-backdrop {
     opacity: 1;
@@ -2982,6 +3019,11 @@ footer:not([class]) > p {
     top: 96px;
     bottom: 0;
     height: auto;
+  }
+
+  .aj-film__hero-poster img,
+  .aj-film__hero-video {
+    object-position: center top;
   }
 }
 
@@ -3015,6 +3057,11 @@ footer:not([class]) > p {
 
   .aj-film__hero-poster img,
   .aj-film__hero-video {
+    object-position: center;
+  }
+
+  .aj-film__identity img {
+    object-fit: contain;
     object-position: center;
   }
 }

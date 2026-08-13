@@ -561,9 +561,13 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
   assert.doesNotMatch(html, /<video[^>]*\ssrc=/);
   assert.doesNotMatch(html, /<video[^>]*\sposter=/);
   assert.doesNotMatch(html, /images\/client\/hero-duo-(?:static|cutout)/);
+  assert.match(html, /data-identity-source="client-approved-campaign-photo"/);
+  assert.match(html, /hero-identity-overlay-landscape-v1\.png/);
+  assert.match(html, /hero-identity-overlay-portrait-v1\.png/);
+  assert.match(html, /aj-film__hero-reflection/);
   assert.equal(
     (html.match(/data-metallic-mounted="false"/g) ?? []).length,
-    2,
+    3,
     "homepage metallic fields must remain unmounted during initial hero render",
   );
   assert.doesNotMatch(html, /class="metallic-field__canvas"/);
