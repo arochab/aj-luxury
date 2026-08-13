@@ -78,7 +78,10 @@ export default function AccountClient() {
   const currentIndex = deliveryStages.indexOf(currentStage);
 
   return (
-    <div className={styles.main} aria-busy={loading || advancing}>
+    <div
+      className={`${styles.main} ${styles.accountMain}`}
+      aria-busy={loading || advancing}
+    >
       <section aria-labelledby="account-title">
         <p className={styles.eyebrow}>{t("account.eyebrow")}</p>
         <h1 className={styles.title} id="account-title">
@@ -119,9 +122,12 @@ export default function AccountClient() {
       </section>
 
       {order && (
-        <aside className={styles.summary} aria-label={t("account.latestOrder")}>
+        <aside
+          className={`${styles.summary} ${styles.accountOrderSummary}`}
+          aria-label={t("account.latestOrder")}
+        >
           <p className={styles.eyebrow}>{t("account.latestOrder")}</p>
-          <h2>{order.orderNumber}</h2>
+          <h2 className={styles.orderNumber}>{order.orderNumber}</h2>
           {order.lines.map((line, index) => (
             <div className={styles.row} key={`${line.colorName}-${line.size}-${index}`}>
               <span>{line.colorName} · {line.size} × {line.quantity}</span>

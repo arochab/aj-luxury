@@ -115,6 +115,32 @@
   font-weight: 500;
 }
 
+.accountMain > *,
+.accountMain .cards,
+.accountMain .card,
+.accountOrderSummary,
+.accountOrderSummary .deliveryStatus {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.orderNumber,
+.accountMain .card p,
+.accountOrderSummary .deliveryStatus p,
+.accountOrderSummary .row > :first-child {
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+.accountOrderSummary .row > :first-child {
+  min-width: 0;
+}
+
+.accountOrderSummary .row > :last-child {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
 .row {
   display: flex;
   justify-content: space-between;
@@ -504,6 +530,10 @@ button.button {
   .main {
     grid-template-columns: 1fr;
     padding: 70px 20px 90px;
+  }
+
+  .accountMain {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .header {

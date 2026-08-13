@@ -255,3 +255,32 @@ test("product and cart UI have no demo cart or URL-variant path", async () => {
   assert.match(cartStyles, /\.quantityControl button,[\s\S]*min-height: 44px/);
   assert.match(cartStyles, /@media \(max-width: 360px\)/);
 });
+
+test("owner account keeps long order and tracking references inside narrow viewports", async () => {
+  const projectRoot = new URL("../", import.meta.url);
+  const [accountClient, commerceStyles] = await Promise.all([
+    readFile(new URL("app/account/AccountClient.tsx", projectRoot), "utf8"),
+    readFile(new URL("app/cart/CommerceShell.module.css", projectRoot), "utf8"),
+  ]);
+
+  assert.match(accountClient, /styles\.main\} \$\{styles\.accountMain/);
+  assert.match(accountClient, /styles\.summary\} \$\{styles\.accountOrderSummary/);
+  assert.match(accountClient, /className=\{styles\.orderNumber\}/);
+  assert.match(
+    commerceStyles,
+    /\.accountMain > \*,[\s\S]*min-width: 0;[\s\S]*max-width: 100%;/,
+  );
+  assert.match(
+    commerceStyles,
+    /\.orderNumber,[\s\S]*overflow-wrap: anywhere;[\s\S]*word-break: normal;/,
+  );
+  assert.match(
+    commerceStyles,
+    /\.accountOrderSummary \.row > :last-child[\s\S]*white-space: nowrap;/,
+  );
+  assert.match(
+    commerceStyles,
+    /@media \(max-width: 800px\)[\s\S]*\.accountMain[\s\S]*grid-template-columns: minmax\(0, 1fr\);/,
+  );
+  assert.doesNotMatch(commerceStyles, /\.account(?:Main|OrderSummary)[^{]*\{[^}]*overflow-x:\s*hidden/s);
+});
