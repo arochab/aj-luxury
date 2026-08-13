@@ -1289,6 +1289,124 @@ async function handleCartApi(
   return null;
 }
 
+const BRIDGE_B7_EXPECTED_MIGRATION =
+  "0007_transactional_preprod_order_payment.sql";
+const BRIDGE_B7_EXPECTED_MIGRATIONS = Object.freeze([
+  "0000_flimsy_rhino.sql",
+  "0001_lock_cart_line_price_provenance.sql",
+  "0002_lock_order_line_snapshots.sql",
+  "0003_identity_access.sql",
+  "0004_email_outbox_data_rights.sql",
+  "0005_fulfillment_returns_refunds.sql",
+  "0006_allow_bounded_expired_cart_purge.sql",
+  BRIDGE_B7_EXPECTED_MIGRATION,
+]);
+
+function isBridgeB7CommerceRoute(url: URL): boolean {
+  return (
+    url.pathname === PREPROD_CART_PATH ||
+    PREPROD_CART_LINE_PATTERN.test(url.pathname) ||
+    url.pathname === PREPROD_SHIPPING_QUOTE_PATH ||
+    url.pathname === PREPROD_ORDER_PATH ||
+    url.pathname === PREPROD_TEST_PAYMENT_PATH ||
+    url.pathname === PREPROD_CURRENT_ORDER_PATH
+  );
+}
+
+function bridgeB7Capabilities() {
+  return Object.freeze({
+    catalog: false,
+    cart: false,
+    shippingQuotes: false,
+    shippingQuoteZones: Object.freeze({
+      EU: false,
+      UK: false,
+      US: false,
+      CA: false,
+    }),
+    shippingQuoteSimulation: false,
+    shippingQuoteSimulationZones: Object.freeze({
+      EU: false,
+      UK: false,
+      US: false,
+      CA: false,
+    }),
+    payment: false,
+    orderCreation: false,
+    reservesValidated: false,
+    syntheticReservesReady: false,
+    orderSimulation: false,
+    paymentTestSimulation: false,
+    emailCaptureSimulation: false,
+    emailDelivery: false,
+    carrier: false,
+    stockSimulation: false,
+    shippingSimulation: false,
+    launchReadiness: false,
+  });
+}
+
+async function bridgeB7HealthResponse(
+  request: Request,
+  env: RuntimeEnv,
+): Promise<Response> {
+  if (request.method !== "GET") {
+    return jsonResponse({ error: "method-not-allowed" }, { status: 405 });
+  }
+
+  const unavailable = (reason: string, latestMigration: string | null) =>
+    jsonResponse(
+      {
+        status: "unavailable",
+        environment: "preproduction",
+        runtimeMode: "pre-0008-bridge",
+        reason,
+        latestMigration,
+        launchReadiness: false,
+        capabilities: bridgeB7Capabilities(),
+        stockProjection: [],
+      },
+      { status: 503 },
+    );
+
+  if (!env?.DB) {
+    return unavailable("preproduction-database-not-bound", null);
+  }
+
+  let migrationNames: string[] = [];
+  try {
+    const migrations = await env.DB
+      .prepare("SELECT name FROM d1_migrations ORDER BY name ASC")
+      .all<{ name: string }>();
+    migrationNames = migrations.results.map(({ name }) => name);
+  } catch {
+    return unavailable("migration-ledger-unavailable", null);
+  }
+
+  const latestMigration = migrationNames.at(-1) ?? null;
+  if (
+    migrationNames.length !== BRIDGE_B7_EXPECTED_MIGRATIONS.length ||
+    migrationNames.some(
+      (name, index) => name !== BRIDGE_B7_EXPECTED_MIGRATIONS[index],
+    )
+  ) {
+    return unavailable("unexpected-migration", latestMigration);
+  }
+
+  return jsonResponse(
+    {
+      status: "rollback",
+      environment: "preproduction",
+      runtimeMode: "pre-0008-bridge",
+      latestMigration,
+      launchReadiness: false,
+      capabilities: bridgeB7Capabilities(),
+      stockProjection: [],
+    },
+    { status: 200 },
+  );
+}
+
 export async function preprodApiResponse(
   request: Request,
   env: RuntimeEnv,
@@ -1307,151 +1425,20 @@ export async function preprodApiResponse(
     return jsonResponse({ error: "not-found" }, { status: 404 });
   }
 
-  if (!env?.DB) {
+  if (url.pathname === `${PREPROD_API_PREFIX}health`) {
+    return bridgeB7HealthResponse(request, env);
+  }
+
+  if (isBridgeB7CommerceRoute(url)) {
     return jsonResponse(
-      { status: "unavailable", reason: "preproduction-database-not-bound" },
+      {
+        status: "unavailable",
+        reason: "pre-0008-bridge",
+        launchReadiness: false,
+      },
       { status: 503 },
     );
   }
-
-  if (url.pathname === `${PREPROD_API_PREFIX}health`) {
-    if (request.method !== "GET") {
-      return jsonResponse({ error: "method-not-allowed" }, { status: 405 });
-    }
-    return (async () => {
-      const database = env.DB;
-      const unavailable = (latestMigration: string | null) => jsonResponse(
-        {
-          status: "unavailable",
-          environment: "preproduction",
-          capabilities: {
-            catalog: false,
-            cart: false,
-            shippingQuotes: false,
-            shippingQuoteZones: { EU: false, UK: false, US: false, CA: false },
-            payment: false,
-            orderCreation: false,
-            reservesValidated: false,
-            paymentTestSimulation: false,
-            emailCaptureSimulation: false,
-            emailDelivery: false,
-            carrier: false,
-          },
-          latestMigration,
-          stockProjection: [],
-        },
-        { status: 503 },
-      );
-      let latestMigration: string | null = null;
-      try {
-        const migration = await database
-          .prepare(
-            "SELECT name FROM d1_migrations ORDER BY name DESC LIMIT 1",
-          )
-          .first<{ name: string }>();
-        latestMigration = migration?.name ?? null;
-      } catch {
-        return unavailable(null);
-      }
-      if (latestMigration !== "0007_transactional_preprod_order_payment.sql") {
-        return unavailable(latestMigration);
-      }
-      try {
-        const [stock, shippingConfigurations, reserveValidation] = await Promise.all([
-          database
-            .prepare(
-              `SELECT variant.id AS variant_id,
-                stock.physical_quantity - stock.gift_reserve_quantity
-                  - stock.safety_reserve_quantity - stock.active_reserved_quantity
-                  - stock.sold_quantity AS available_to_sell
-              FROM variants AS variant
-              INNER JOIN inventory AS stock ON stock.variant_id = variant.id
-              WHERE variant.color_key = ?
-              ORDER BY variant.sort_order`,
-            )
-            .bind("rose")
-            .all<{ variant_id: string; available_to_sell: number }>(),
-          database
-            .prepare(
-              `SELECT zone FROM shipping_zone_configurations
-              WHERE status = 'active'
-              GROUP BY zone`,
-            )
-            .all<{ zone: string }>(),
-          database
-            .prepare(
-              `SELECT COUNT(*) AS total,
-                SUM(CASE WHEN reserves_validated = 1 THEN 1 ELSE 0 END) AS validated
-              FROM inventory`,
-            )
-            .first<{ total: number; validated: number }>(),
-        ]);
-        const configuredZones = new Set(
-          shippingConfigurations.results.map((row) => row.zone),
-        );
-        const shippingQuoteZones = Object.freeze({
-          EU: configuredZones.has("EU"),
-          UK: configuredZones.has("UK"),
-          US: configuredZones.has("US"),
-          CA: configuredZones.has("CA"),
-        });
-        const shippingQuotesReady = Object.values(shippingQuoteZones)
-          .every(Boolean);
-        const reservesReady = Boolean(
-          reserveValidation && reserveValidation.total > 0 &&
-          reserveValidation.total === reserveValidation.validated,
-        );
-        const sellableStockReady = stock.results.some(
-          (position: { available_to_sell: number }) => position.available_to_sell > 0,
-        );
-        const testCheckoutReady = shippingQuotesReady && reservesReady &&
-          sellableStockReady;
-        return jsonResponse(
-          {
-            status: "partial",
-            environment: "preproduction",
-            capabilities: {
-              catalog: true,
-              cart: true,
-              shippingQuotes: shippingQuotesReady,
-              shippingQuoteZones,
-              payment: false,
-              reservesValidated: reservesReady,
-              orderCreation: testCheckoutReady,
-              paymentTestSimulation: testCheckoutReady,
-              emailCaptureSimulation: testCheckoutReady,
-              emailDelivery: false,
-              carrier: false,
-            },
-            latestMigration,
-            stockProjection: stock.results.map((position: {
-              variant_id: string;
-              available_to_sell: number;
-            }) => ({
-              variantId: position.variant_id,
-              state: position.available_to_sell <= 0
-                  ? "sold-out"
-                  : position.available_to_sell <= 5
-                    ? "low-stock"
-                    : "available",
-            })),
-          },
-          { status: 200 },
-        );
-      } catch {
-        return unavailable(latestMigration);
-      }
-    })();
-  }
-
-  const orderPaymentResponse = await handleOrderPaymentApi(request, env, url);
-  if (orderPaymentResponse) return orderPaymentResponse;
-
-  const shippingQuoteResponse = await handleShippingQuoteApi(request, env, url);
-  if (shippingQuoteResponse) return shippingQuoteResponse;
-
-  const cartResponse = await handleCartApi(request, env, url);
-  if (cartResponse) return cartResponse;
 
   return jsonResponse({ error: "not-found" }, { status: 404 });
 }

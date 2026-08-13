@@ -50,10 +50,11 @@ test("preproduction APIs are invisible without the exact isolated environment", 
     environment: "preproduction",
   });
   assert.equal(isolatedWithoutDatabase.status, 503);
-  assert.deepEqual(await isolatedWithoutDatabase.json(), {
-    status: "unavailable",
-    reason: "preproduction-database-not-bound",
-  });
+  const unavailable = await isolatedWithoutDatabase.json();
+  assert.equal(unavailable.status, "unavailable");
+  assert.equal(unavailable.reason, "preproduction-database-not-bound");
+  assert.equal(unavailable.runtimeMode, "pre-0008-bridge");
+  assert.equal(unavailable.launchReadiness, false);
 });
 
 test("production pages remain indexable while preproduction is explicitly noindex", async () => {
@@ -67,7 +68,7 @@ test("production pages remain indexable while preproduction is explicitly noinde
   assert.equal(preproduction.headers.get("x-robots-tag"), "noindex, nofollow");
 });
 
-test("preproduction health is partial on migration 0007 and exposes all launch-zone gates, not quantities", async () => {
+test("Bridge B7 health reports the 0007 rollback mode without exposing commerce capability", async () => {
   const statements = [];
   const database = {
     prepare(query) {
@@ -85,6 +86,18 @@ test("preproduction health is partial on migration 0007 and exposes all launch-z
           return null;
         },
         async all() {
+          if (query.includes("d1_migrations")) {
+            return { results: [
+              "0000_flimsy_rhino.sql",
+              "0001_lock_cart_line_price_provenance.sql",
+              "0002_lock_order_line_snapshots.sql",
+              "0003_identity_access.sql",
+              "0004_email_outbox_data_rights.sql",
+              "0005_fulfillment_returns_refunds.sql",
+              "0006_allow_bounded_expired_cart_purge.sql",
+              "0007_transactional_preprod_order_payment.sql",
+            ].map((name) => ({ name })) };
+          }
           if (query.includes("shipping_zone_configurations")) {
             return { results: [{ zone: "EU" }] };
           }
@@ -115,31 +128,36 @@ test("preproduction health is partial on migration 0007 and exposes all launch-z
   );
   assert.equal(response.status, 200);
   const payload = await response.json();
-  assert.equal(payload.status, "partial");
+  assert.equal(payload.status, "rollback");
+  assert.equal(payload.runtimeMode, "pre-0008-bridge");
+  assert.equal(payload.launchReadiness, false);
   assert.equal(
     payload.latestMigration,
     "0007_transactional_preprod_order_payment.sql",
   );
-  assert.deepEqual(payload.stockProjection, [
-    { variantId: "variant_available", state: "available" },
-    { variantId: "variant_low", state: "low-stock" },
-    { variantId: "variant_sold", state: "sold-out" },
-  ]);
+  assert.deepEqual(payload.stockProjection, []);
   assert.deepEqual(payload.capabilities, {
-    catalog: true,
-    cart: true,
+    catalog: false,
+    cart: false,
     shippingQuotes: false,
-    shippingQuoteZones: { EU: true, UK: false, US: false, CA: false },
+    shippingQuoteZones: { EU: false, UK: false, US: false, CA: false },
+    shippingQuoteSimulation: false,
+    shippingQuoteSimulationZones: { EU: false, UK: false, US: false, CA: false },
     payment: false,
     orderCreation: false,
-    reservesValidated: true,
+    reservesValidated: false,
+    syntheticReservesReady: false,
+    orderSimulation: false,
     paymentTestSimulation: false,
     emailCaptureSimulation: false,
     emailDelivery: false,
     carrier: false,
+    stockSimulation: false,
+    shippingSimulation: false,
+    launchReadiness: false,
   });
   assert.equal(JSON.stringify(payload).includes("available_to_sell"), false);
-  assert.equal(statements.length, 4);
+  assert.equal(statements.length, 1);
 });
 
 test("preproduction health stays fail-closed without querying tables from a missing migration", async () => {
@@ -211,7 +229,7 @@ test("preproduction health stays fail-closed when the migration ledger is absent
   assert.equal((await response.json()).status, "unavailable");
 });
 
-test("preproduction health enables shipping quotes only when all four launch zones are active", async () => {
+test("Bridge B7 health never reopens commerce even when legacy launch-zone rows are active", async () => {
   const database = {
     prepare(query) {
       const statement = {
@@ -226,6 +244,18 @@ test("preproduction health enables shipping quotes only when all four launch zon
               : null;
         },
         async all() {
+          if (query.includes("d1_migrations")) {
+            return { results: [
+              "0000_flimsy_rhino.sql",
+              "0001_lock_cart_line_price_provenance.sql",
+              "0002_lock_order_line_snapshots.sql",
+              "0003_identity_access.sql",
+              "0004_email_outbox_data_rights.sql",
+              "0005_fulfillment_returns_refunds.sql",
+              "0006_allow_bounded_expired_cart_purge.sql",
+              "0007_transactional_preprod_order_payment.sql",
+            ].map((name) => ({ name })) };
+          }
           return query.includes("shipping_zone_configurations")
             ? { results: [{ zone: "EU" }, { zone: "UK" }, { zone: "US" }, { zone: "CA" }] }
             : { results: [{ variant_id: "variant_available", available_to_sell: 1 }] };
@@ -248,16 +278,18 @@ test("preproduction health enables shipping quotes only when all four launch zon
   );
   assert.equal(response.status, 200);
   const payload = await response.json();
-  assert.equal(payload.status, "partial");
-  assert.equal(payload.capabilities.shippingQuotes, true);
+  assert.equal(payload.status, "rollback");
+  assert.equal(payload.runtimeMode, "pre-0008-bridge");
+  assert.equal(payload.capabilities.shippingQuotes, false);
   assert.deepEqual(payload.capabilities.shippingQuoteZones, {
-    EU: true, UK: true, US: true, CA: true,
+    EU: false, UK: false, US: false, CA: false,
   });
   assert.equal(payload.capabilities.payment, false);
-  assert.equal(payload.capabilities.orderCreation, true);
-  assert.equal(payload.capabilities.paymentTestSimulation, true);
-  assert.equal(payload.capabilities.emailCaptureSimulation, true);
+  assert.equal(payload.capabilities.orderCreation, false);
+  assert.equal(payload.capabilities.paymentTestSimulation, false);
+  assert.equal(payload.capabilities.emailCaptureSimulation, false);
   assert.equal(payload.capabilities.carrier, false);
+  assert.equal(payload.launchReadiness, false);
 });
 
 async function render(pathname = "/", headers = {}) {
