@@ -34,7 +34,9 @@ const migrationNames = [
   "0005_fulfillment_returns_refunds.sql",
   "0006_allow_bounded_expired_cart_purge.sql",
   "0007_transactional_preprod_order_payment.sql",
+  "0008_preprod_synthetic_demo_dataset.sql",
 ];
+const legacyMigrationNames = migrationNames.slice(0, 8);
 // Hosted D1 bootstrap version 1 succeeded with exactly these LF-normalized
 // bytes. From this point onward, every schema change must be additive in a new
 // migration; rewriting 0000 through 0005 is forbidden.
@@ -56,13 +58,15 @@ const retentionMigrationSha256 =
   "3cbd7390bb8834305b11f6d791583a86f3c6fe7ba9be23fc91e1e1ea98203a52";
 const transactionalCheckoutMigrationSha256 =
   "3b58d9e49e5154c855c2620fea80e733c8953ec713e75a2e8c5b31432840d838";
+const syntheticDemoMigrationSha256 =
+  "794e1c67471427ba3d92e979e79e07a8393244794d7d98b827db6b0fda07b5b5";
 
 test("the exact Drizzle D1 splitter emits no blank statements", () => {
   const migrations = readMigrationFiles({ migrationsFolder: migrationRoot });
   assert.equal(migrations.length, migrationNames.length);
   assert.equal(
     migrations.reduce((total, migration) => total + migration.sql.length, 0),
-    365,
+    396,
   );
   for (const [migrationIndex, migration] of migrations.entries()) {
     for (const [statementIndex, statement] of migration.sql.entries()) {
@@ -74,12 +78,15 @@ test("the exact Drizzle D1 splitter emits no blank statements", () => {
   }
 
   const fulfillmentMigration = readFileSync(
-    join(migrationRoot, migrationNames.at(-1)),
+    join(migrationRoot, "0005_fulfillment_returns_refunds.sql"),
     "utf8",
   );
   assert.doesNotMatch(fulfillmentMigration, /--> statement-breakpoint\s*$/);
-  assert.match(migrations.at(-1).sql.at(-1), /trg_orders_lock_shipping_snapshot/);
-  assert.match(migrations.at(-1).sql.at(-1), /END;\s*$/);
+  const transactionalMigration = migrations[migrationNames.indexOf(
+    "0007_transactional_preprod_order_payment.sql",
+  )];
+  assert.match(transactionalMigration.sql.at(-1), /trg_orders_lock_shipping_snapshot/);
+  assert.match(transactionalMigration.sql.at(-1), /END;\s*$/);
 });
 
 test("every trigger is compatible with the Sites D1 statement ingester", () => {
@@ -244,7 +251,7 @@ function query(root, configPath, state, sql, expectFailure = false) {
   return parseFirstJsonArray(output)[0].results;
 }
 
-test("0005 stays frozen; 0006 retention and 0007 transactional checkout remain additive", () => {
+test("0005 stays frozen; 0006 through 0008 remain additive", () => {
   for (const [name, expected] of Object.entries(bootstrapHashes)) {
     const normalized = readFileSync(join(migrationRoot, name), "utf8").replaceAll(
       "\r\n",
@@ -270,14 +277,18 @@ test("0005 stays frozen; 0006 retention and 0007 transactional checkout remain a
   const journal = JSON.parse(
     readFileSync(join(migrationRoot, "meta", "_journal.json"), "utf8"),
   );
-  assert.equal(journal.entries.at(-3).tag, "0005_fulfillment_returns_refunds");
+  assert.equal(journal.entries[5].tag, "0005_fulfillment_returns_refunds");
   assert.equal(
-    journal.entries.at(-2).tag,
+    journal.entries[6].tag,
     "0006_allow_bounded_expired_cart_purge",
   );
   assert.equal(
-    journal.entries.at(-1).tag,
+    journal.entries[7].tag,
     "0007_transactional_preprod_order_payment",
+  );
+  assert.equal(
+    journal.entries[8].tag,
+    "0008_preprod_synthetic_demo_dataset",
   );
   const retentionMigration = readFileSync(
     join(migrationRoot, "0006_allow_bounded_expired_cart_purge.sql"),
@@ -305,6 +316,16 @@ test("0005 stays frozen; 0006 retention and 0007 transactional checkout remain a
       .digest("hex"),
     transactionalCheckoutMigrationSha256,
   );
+  const syntheticDemoMigration = readFileSync(
+    join(migrationRoot, "0008_preprod_synthetic_demo_dataset.sql"),
+    "utf8",
+  );
+  assert.equal(
+    createHash("sha256")
+      .update(syntheticDemoMigration.replaceAll("\r\n", "\n"))
+      .digest("hex"),
+    syntheticDemoMigrationSha256,
+  );
   assert.match(retentionMigration, /orders/);
   assert.match(retentionMigration, /shipping_quotes/);
   const snapshotPath = join(migrationRoot, "meta", "0005_snapshot.json");
@@ -329,7 +350,7 @@ test("real local D1 applies 0000 to 0007, upgrades populated 0004 and replays", 
 
   const emptyRoot = join(proofRoot, "empty");
   mkdirSync(emptyRoot);
-  const emptyConfig = createConfig(emptyRoot, migrationNames);
+  const emptyConfig = createConfig(emptyRoot, legacyMigrationNames);
   const emptyState = join(emptyRoot, "state");
   mkdirSync(emptyState, { recursive: true });
   apply(emptyRoot, emptyConfig, emptyState);
@@ -340,7 +361,7 @@ test("real local D1 applies 0000 to 0007, upgrades populated 0004 and replays", 
       emptyState,
       "SELECT name FROM d1_migrations ORDER BY id",
     ).map((row) => row.name),
-    migrationNames,
+    legacyMigrationNames,
   );
   assert.equal(
     query(
@@ -400,7 +421,7 @@ test("real local D1 applies 0000 to 0007, upgrades populated 0004 and replays", 
       '2026-08-11T12:00:00.000Z',
       '2026-08-11T12:00:00.000Z')`,
   );
-  for (const migrationName of migrationNames.slice(5)) {
+  for (const migrationName of legacyMigrationNames.slice(5)) {
     copyFileSync(
       join(migrationRoot, migrationName),
       join(upgradeRoot, "migrations", migrationName),
@@ -415,7 +436,7 @@ test("real local D1 applies 0000 to 0007, upgrades populated 0004 and replays", 
       upgradeState,
       "SELECT name FROM d1_migrations ORDER BY id",
     ).map((row) => row.name),
-    migrationNames,
+    legacyMigrationNames,
   );
   assert.deepEqual(
     query(
@@ -663,7 +684,7 @@ test("real local D1 applies 0000 to 0007, upgrades populated 0004 and replays", 
     `UPDATE carts SET status='expired', expires_at='2000-01-01T00:00:00.000Z'
       WHERE id='${retainedCartId}'`,
   );
-  for (const migrationName of migrationNames.slice(6)) {
+  for (const migrationName of legacyMigrationNames.slice(6)) {
     copyFileSync(
       join(migrationRoot, migrationName),
       join(retentionRoot, "migrations", migrationName),
@@ -678,7 +699,7 @@ test("real local D1 applies 0000 to 0007, upgrades populated 0004 and replays", 
       retentionState,
       "SELECT name FROM d1_migrations ORDER BY id",
     ).map((row) => row.name),
-    migrationNames,
+    legacyMigrationNames,
   );
   query(
     retentionRoot,
