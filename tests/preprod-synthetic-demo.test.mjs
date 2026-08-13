@@ -31,8 +31,11 @@ class Statement {
 
 class D1 {
   #tail = Promise.resolve();
-  constructor(database) { this.database = database; }
-  prepare(query) { return new Statement(this.database, query); }
+  constructor(database) { this.database = database; this.queries = []; }
+  prepare(query) {
+    this.queries.push(query);
+    return new Statement(this.database, query);
+  }
   batch(statements) {
     const execute = () => this.#execute(statements);
     const result = this.#tail.then(execute, execute);
@@ -215,6 +218,7 @@ test("synthetic health is honest and missing flag or expiration fails closed wit
   assert.equal(payload.capabilities.syntheticReservesReady, true);
   assert.equal(payload.capabilities.stockSimulation, true);
   assert.equal(payload.syntheticDataset.active, true);
+  assert.equal(context.d1.queries.some((query) => /d1_migrations/.test(query)), false);
 
   const before = context.sqlite.prepare("SELECT COUNT(*) count FROM carts").get().count;
   const missingFlag = await invoke(context, "/api/preprod/cart", { method: "POST", headers: headers() }, { PREPROD_DEMO_DATASET: undefined });
@@ -234,6 +238,62 @@ test("synthetic health is honest and missing flag or expiration fails closed wit
   } finally {
     globalThis.Date = RealDate;
   }
+  context.sqlite.close();
+});
+
+test("missing, extra or renamed synthetic guards invalidate proof with zero writes", async () => {
+  const mutations = [
+    "DROP TRIGGER trg_preprod_demo_payment_active_insert",
+    `CREATE TRIGGER trg_preprod_demo_unexpected_guard
+      BEFORE INSERT ON payments BEGIN SELECT 1; END`,
+    `DROP TRIGGER trg_preprod_demo_payment_active_insert;
+      CREATE TRIGGER trg_preprod_demo_payment_guard_renamed
+      BEFORE INSERT ON payments BEGIN SELECT 1; END`,
+  ];
+  for (const mutation of mutations) {
+    const context = await runtime();
+    context.sqlite.exec(mutation);
+    const before = context.sqlite.prepare("SELECT COUNT(*) count FROM carts").get().count;
+
+    const health = await invoke(context, "/api/preprod/health");
+    assert.equal(health.status, 503);
+    const payload = await health.json();
+    assert.equal(payload.syntheticDataset.reason, "installation-proof-invalid");
+    assert.equal(payload.latestMigration, null);
+
+    const cart = await invoke(context, "/api/preprod/cart", {
+      method: "POST",
+      headers: headers(),
+    });
+    assert.equal(cart.status, 503);
+    assert.equal(context.sqlite.prepare("SELECT COUNT(*) count FROM carts").get().count, before);
+    assert.equal(context.d1.queries.some((query) => /d1_migrations/.test(query)), false);
+    context.sqlite.close();
+  }
+});
+
+test("an altered future sentinel expiry is invalid and writes nothing", async () => {
+  const context = await runtime();
+  context.sqlite.exec("DROP TRIGGER trg_preprod_demo_dataset_immutable_update");
+  context.sqlite.exec("PRAGMA ignore_check_constraints=ON");
+  context.sqlite.exec(
+    "UPDATE preprod_demo_dataset SET expires_at='2099-12-31T23:59:59.999Z'",
+  );
+  context.sqlite.exec("PRAGMA ignore_check_constraints=OFF");
+  const before = context.sqlite.prepare("SELECT COUNT(*) count FROM carts").get().count;
+
+  const health = await invoke(context, "/api/preprod/health");
+  assert.equal(health.status, 503);
+  const payload = await health.json();
+  assert.equal(payload.syntheticDataset.reason, "sentinel-invalid");
+  assert.equal(payload.latestMigration, null);
+
+  const cart = await invoke(context, "/api/preprod/cart", {
+    method: "POST",
+    headers: headers(),
+  });
+  assert.equal(cart.status, 503);
+  assert.equal(context.sqlite.prepare("SELECT COUNT(*) count FROM carts").get().count, before);
   context.sqlite.close();
 });
 

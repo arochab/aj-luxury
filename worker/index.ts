@@ -45,6 +45,7 @@ import {
   isExactSyntheticDemoAddress,
   SYNTHETIC_DEMO_DATASET_KIND,
   SYNTHETIC_DEMO_EMAIL,
+  SYNTHETIC_DEMO_EXPIRES_AT,
   SYNTHETIC_DEMO_FIXTURE_VERSION,
   SYNTHETIC_DEMO_MIGRATION,
 } from "../lib/preprod/synthetic-demo.ts";
@@ -129,14 +130,33 @@ type SyntheticDemoGate = Readonly<{
   reason:
     | "ready"
     | "flag-disabled"
-    | "migration-missing"
     | "sentinel-missing"
     | "sentinel-invalid"
+    | "installation-proof-invalid"
     | "dataset-expired"
     | "database-unavailable";
   latestMigration: string | null;
   expiresAt: string | null;
 }>;
+
+const SYNTHETIC_DEMO_TRIGGER_INVENTORY = Object.freeze([
+  "trg_preprod_demo_cart_active_delete",
+  "trg_preprod_demo_cart_active_insert",
+  "trg_preprod_demo_cart_active_update",
+  "trg_preprod_demo_cart_line_active_delete",
+  "trg_preprod_demo_cart_line_active_insert",
+  "trg_preprod_demo_cart_line_active_update",
+  "trg_preprod_demo_dataset_immutable_delete",
+  "trg_preprod_demo_dataset_immutable_update",
+  "trg_preprod_demo_order_active_insert",
+  "trg_preprod_demo_order_active_update",
+  "trg_preprod_demo_payment_active_insert",
+  "trg_preprod_demo_reservation_active_insert",
+  "trg_preprod_demo_reservation_active_update",
+  "trg_preprod_demo_shipping_quote_active_insert",
+  "trg_preprod_demo_shipping_quote_active_update",
+  "trg_preprod_demo_webhook_active_insert",
+] as const);
 
 function constantTimeTextEqual(left: string, right: string): boolean {
   const leftBytes = new TextEncoder().encode(left);
@@ -250,27 +270,42 @@ async function readSyntheticDemoGate(
   if (!flagEnabled) {
     return Object.freeze({ required: true, ready: false, reason: "flag-disabled", latestMigration: null, expiresAt: sentinel?.expires_at ?? null });
   }
+  if (!sentinel) {
+    return Object.freeze({ required: true, ready: false, reason: "sentinel-missing", latestMigration: null, expiresAt: null });
+  }
+  if (
+    sentinel.dataset_kind !== SYNTHETIC_DEMO_DATASET_KIND ||
+    sentinel.fixture_version !== SYNTHETIC_DEMO_FIXTURE_VERSION ||
+    sentinel.expires_at !== SYNTHETIC_DEMO_EXPIRES_AT
+  ) {
+    return Object.freeze({ required: true, ready: false, reason: "sentinel-invalid", latestMigration: null, expiresAt: sentinel.expires_at });
+  }
+  if (sentinel.expires_at <= now) {
+    return Object.freeze({ required: true, ready: false, reason: "dataset-expired", latestMigration: null, expiresAt: sentinel.expires_at });
+  }
   try {
-    const migration = await env.DB.prepare(
-      "SELECT name FROM d1_migrations ORDER BY name DESC LIMIT 1",
-    ).first<{ name: string }>();
-    const latestMigration = migration?.name ?? null;
-    if (latestMigration !== SYNTHETIC_DEMO_MIGRATION) {
-      return Object.freeze({ required: true, ready: false, reason: "migration-missing", latestMigration, expiresAt: sentinel?.expires_at ?? null });
-    }
-    if (!sentinel) {
-      return Object.freeze({ required: true, ready: false, reason: "sentinel-missing", latestMigration, expiresAt: null });
-    }
+    // Sites does not expose its internal migration ledger to the Worker.
+    // Prove 0008 from its immutable sentinel plus the exhaustive guard
+    // inventory that 0008 installs in the application database itself.
+    const installed = await env.DB.prepare(
+      `SELECT name FROM sqlite_master
+      WHERE type = 'trigger' AND name LIKE 'trg_preprod_demo_%'
+      ORDER BY name`,
+    ).all<{ name: string }>();
+    const names = installed.results.map((row) => row.name);
     if (
-      sentinel.dataset_kind !== SYNTHETIC_DEMO_DATASET_KIND ||
-      sentinel.fixture_version !== SYNTHETIC_DEMO_FIXTURE_VERSION
+      names.length !== SYNTHETIC_DEMO_TRIGGER_INVENTORY.length ||
+      names.some((name, index) => name !== SYNTHETIC_DEMO_TRIGGER_INVENTORY[index])
     ) {
-      return Object.freeze({ required: true, ready: false, reason: "sentinel-invalid", latestMigration, expiresAt: sentinel.expires_at });
+      return Object.freeze({
+        required: true,
+        ready: false,
+        reason: "installation-proof-invalid",
+        latestMigration: null,
+        expiresAt: sentinel.expires_at,
+      });
     }
-    if (sentinel.expires_at <= now) {
-      return Object.freeze({ required: true, ready: false, reason: "dataset-expired", latestMigration, expiresAt: sentinel.expires_at });
-    }
-    return Object.freeze({ required: true, ready: true, reason: "ready", latestMigration, expiresAt: sentinel.expires_at });
+    return Object.freeze({ required: true, ready: true, reason: "ready", latestMigration: SYNTHETIC_DEMO_MIGRATION, expiresAt: sentinel.expires_at });
   } catch {
     return Object.freeze({ required: true, ready: false, reason: "database-unavailable", latestMigration: null, expiresAt: sentinel?.expires_at ?? null });
   }
@@ -1752,25 +1787,12 @@ export async function preprodApiResponse(
           },
         }, { status: 503 });
       };
-      let latestMigration: string | null = syntheticGate.latestMigration;
+      const latestMigration = syntheticGate.latestMigration;
       if (syntheticGate.required && !syntheticGate.ready) {
         return unavailable(latestMigration, syntheticGate.reason);
       }
-      try {
-        const migration = await database
-          .prepare(
-            "SELECT name FROM d1_migrations ORDER BY name DESC LIMIT 1",
-          )
-          .first<{ name: string }>();
-        latestMigration = migration?.name ?? null;
-      } catch {
-        return unavailable(null, "readiness-query-failed");
-      }
-      const expectedMigration = syntheticGate.required
-        ? SYNTHETIC_DEMO_MIGRATION
-        : "0007_transactional_preprod_order_payment.sql";
-      if (latestMigration !== expectedMigration) {
-        return unavailable(latestMigration, "migration-missing");
+      if (!syntheticGate.ready || latestMigration !== SYNTHETIC_DEMO_MIGRATION) {
+        return unavailable(latestMigration, "installation-proof-invalid");
       }
       try {
         const [stock, shippingConfigurations, reserveValidation] = await Promise.all([

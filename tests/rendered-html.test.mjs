@@ -1,6 +1,25 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+const syntheticTriggerRows = [
+  "trg_preprod_demo_cart_active_delete",
+  "trg_preprod_demo_cart_active_insert",
+  "trg_preprod_demo_cart_active_update",
+  "trg_preprod_demo_cart_line_active_delete",
+  "trg_preprod_demo_cart_line_active_insert",
+  "trg_preprod_demo_cart_line_active_update",
+  "trg_preprod_demo_dataset_immutable_delete",
+  "trg_preprod_demo_dataset_immutable_update",
+  "trg_preprod_demo_order_active_insert",
+  "trg_preprod_demo_order_active_update",
+  "trg_preprod_demo_payment_active_insert",
+  "trg_preprod_demo_reservation_active_insert",
+  "trg_preprod_demo_reservation_active_update",
+  "trg_preprod_demo_shipping_quote_active_insert",
+  "trg_preprod_demo_shipping_quote_active_update",
+  "trg_preprod_demo_webhook_active_insert",
+].map((name) => ({ name }));
+
 async function invokeWorker(
   pathname = "/",
   { method = "GET", headers = {}, assets, environment } = {},
@@ -79,9 +98,6 @@ test("synthetic candidate stays unavailable on migration 0007 without its sentin
           if (query.includes("preprod_demo_dataset")) {
             return null;
           }
-          if (query.includes("d1_migrations")) {
-            return { name: "0007_transactional_preprod_order_payment.sql" };
-          }
           if (query.includes("reserves_validated")) {
             return { total: 3, validated: 3 };
           }
@@ -120,10 +136,7 @@ test("synthetic candidate stays unavailable on migration 0007 without its sentin
   assert.equal(response.status, 503);
   const payload = await response.json();
   assert.equal(payload.status, "unavailable");
-  assert.equal(
-    payload.latestMigration,
-    "0007_transactional_preprod_order_payment.sql",
-  );
+  assert.equal(payload.latestMigration, null);
   assert.deepEqual(payload.capabilities, {
     catalog: false,
     cart: false,
@@ -146,9 +159,9 @@ test("synthetic candidate stays unavailable on migration 0007 without its sentin
   });
   assert.deepEqual(payload.stockProjection, []);
   assert.equal(JSON.stringify(payload).includes("available_to_sell"), false);
-  assert.equal(statements.length, 2);
+  assert.equal(statements.length, 1);
   assert.match(statements[0], /preprod_demo_dataset/);
-  assert.match(statements[1], /d1_migrations/);
+  assert.equal(statements.some((query) => /d1_migrations/.test(query)), false);
   assert.equal(
     statements.some((query) => /inventory|shipping_zone_configurations/.test(query)),
     false,
@@ -168,9 +181,7 @@ test("preproduction health stays fail-closed without querying tables from a miss
           if (query.includes("preprod_demo_dataset")) {
             throw new Error("no such table: preprod_demo_dataset");
           }
-          return query.includes("d1_migrations")
-            ? { name: "0004_email_outbox_data_rights.sql" }
-            : null;
+          return null;
         },
         async all() {
           throw new Error("shipping tables must not be queried");
@@ -198,21 +209,24 @@ test("preproduction health stays fail-closed without querying tables from a miss
   assert.deepEqual(payload.capabilities.shippingQuoteZones, {
     EU: false, UK: false, US: false, CA: false,
   });
-  assert.equal(statements.length, 2);
+  assert.equal(statements.length, 1);
   assert.match(statements[0], /preprod_demo_dataset/);
-  assert.match(statements[1], /d1_migrations/);
+  assert.equal(statements.some((query) => /d1_migrations/.test(query)), false);
   assert.equal(
     statements.some((query) => /inventory|shipping_zone_configurations/.test(query)),
     false,
   );
 });
 
-test("preproduction health stays fail-closed when the migration ledger is absent", async () => {
+test("preproduction health never depends on the Sites migration ledger", async () => {
+  const statements = [];
   const database = {
-    prepare() {
+    prepare(query) {
+      statements.push(query);
+      assert.doesNotMatch(query, /d1_migrations/);
       return {
         async first() {
-          throw new Error("no such table: d1_migrations");
+          throw new Error("no such table: preprod_demo_dataset");
         },
       };
     },
@@ -231,6 +245,7 @@ test("preproduction health stays fail-closed when the migration ledger is absent
   );
   assert.equal(response.status, 503);
   assert.equal((await response.json()).status, "unavailable");
+  assert.equal(statements.length, 1);
 });
 
 test("synthetic health exposes simulations, never live capabilities, when all four zones are ready", async () => {
@@ -248,14 +263,14 @@ test("synthetic health exposes simulations, never live capabilities, when all fo
               expires_at: "2026-09-30T23:59:59.999Z",
             };
           }
-          return query.includes("d1_migrations")
-            ? { name: "0008_preprod_synthetic_demo_dataset.sql" }
-            : query.includes("reserves_validated")
+          return query.includes("reserves_validated")
               ? { total: 12, validated: 12 }
               : null;
         },
         async all() {
-          return query.includes("shipping_zone_configurations")
+          return query.includes("sqlite_master")
+            ? { results: syntheticTriggerRows }
+            : query.includes("shipping_zone_configurations")
             ? { results: [{ zone: "EU" }, { zone: "UK" }, { zone: "US" }, { zone: "CA" }] }
             : { results: [{ variant_id: "variant_available", available_to_sell: 1 }] };
         },
