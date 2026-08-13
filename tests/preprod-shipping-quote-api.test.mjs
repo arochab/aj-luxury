@@ -201,6 +201,142 @@ test("shipping quote fails closed until a complete active runtime configuration 
   context.sqlite.close();
 });
 
+test("preproduction order and payment simulation are session-bound, strict and never send", async () => {
+  const context = await fixture();
+  activate(context, "EU", 1200);
+  context.sqlite.exec("UPDATE inventory SET reserves_validated=1");
+  const session = await cartWithLine(context);
+  const quoteResponse = await invoke(
+    context,
+    "/api/preprod/checkout/shipping-quote",
+    quoteRequest(session, france, "quote-attempt-order-flow"),
+  );
+  assert.equal(quoteResponse.status, 200);
+  const quote = (await quoteResponse.json()).data;
+  const orderBody = {
+    quoteId: quote.quoteId,
+    address: france,
+    email: "client@demo.invalid",
+    termsAccepted: true,
+    privacyAccepted: true,
+    simulationAcknowledged: true,
+  };
+  const createRequest = {
+    method: "POST",
+    headers: headers(session, {
+      "Content-Type": "application/json",
+      "Idempotency-Key": "order-attempt-api-gate-c",
+    }),
+    body: JSON.stringify(orderBody),
+  };
+  const created = await invoke(context, "/api/preprod/checkout/order", createRequest);
+  assert.equal(created.status, 200);
+  const createdPayload = (await created.json()).data;
+  assert.deepEqual(Object.keys(createdPayload).sort(), [
+    "createdAt", "currency", "debited", "emailCaptured", "emailSent",
+    "lines", "orderNumber", "paidAt", "paymentMode", "shippingCents",
+    "simulation", "status", "subtotalCents", "totalCents",
+  ].sort());
+  assert.equal(createdPayload.status, "pending_payment");
+  assert.equal(createdPayload.debited, false);
+  assert.doesNotMatch(JSON.stringify(createdPayload), /Ada|rue du Test|demo\.invalid|quote_|order_[0-9a-f]/i);
+  const replay = await invoke(context, "/api/preprod/checkout/order", createRequest);
+  assert.equal(replay.status, 200);
+  assert.deepEqual(await replay.json(), { data: createdPayload });
+
+  const changedEmail = await invoke(context, "/api/preprod/checkout/order", {
+    ...createRequest,
+    body: JSON.stringify({ ...orderBody, email: "other@demo.invalid" }),
+  });
+  assert.equal(changedEmail.status, 409);
+  const realEmail = await invoke(context, "/api/preprod/checkout/order", {
+    ...createRequest,
+    headers: headers(session, {
+      "Content-Type": "application/json",
+      "Idempotency-Key": "order-attempt-api-real-email",
+    }),
+    body: JSON.stringify({ ...orderBody, email: "real@example.com" }),
+  });
+  assert.equal(realEmail.status, 400);
+  const extraField = await invoke(context, "/api/preprod/checkout/order", {
+    ...createRequest,
+    headers: headers(session, {
+      "Content-Type": "application/json",
+      "Idempotency-Key": "order-attempt-api-extra-field",
+    }),
+    body: JSON.stringify({ ...orderBody, cardNumber: "4111111111111111" }),
+  });
+  assert.equal(extraField.status, 400);
+  const compressed = await invoke(context, "/api/preprod/checkout/order", {
+    ...createRequest,
+    headers: headers(session, {
+      "Content-Type": "application/json",
+      "Content-Encoding": "gzip",
+      "Idempotency-Key": "order-attempt-api-compressed",
+    }),
+  });
+  assert.equal(compressed.status, 400);
+
+  const paymentRequest = {
+    method: "POST",
+    headers: headers(session, { "Idempotency-Key": "payment-attempt-api-gate-c" }),
+  };
+  const paid = await invoke(context, "/api/preprod/checkout/test-payment", paymentRequest);
+  assert.equal(paid.status, 200);
+  const paidPayload = (await paid.json()).data;
+  assert.equal(paidPayload.status, "paid");
+  assert.equal(paidPayload.debited, false);
+  assert.equal(paidPayload.emailCaptured, true);
+  assert.equal(paidPayload.emailSent, false);
+  assert.equal(context.sqlite.prepare("SELECT COUNT(*) count FROM email_outbox WHERE status='pending' AND sent_at IS NULL").get().count, 1);
+  const refreshed = await invoke(context, "/api/preprod/orders/current", {
+    method: "GET",
+    headers: headers(session),
+  });
+  assert.equal(refreshed.status, 200);
+  assert.deepEqual((await refreshed.json()).data, paidPayload);
+  const paymentBody = await invoke(context, "/api/preprod/checkout/test-payment", {
+    ...paymentRequest,
+    headers: headers(session, {
+      "Content-Type": "application/json",
+      "Idempotency-Key": "payment-attempt-api-body-rejected",
+    }),
+    body: JSON.stringify({ cardNumber: "4111111111111111" }),
+  });
+  assert.equal(paymentBody.status, 400);
+
+  const otherSession = await cartWithLine(context, "variant_boxer_pourpre_l");
+  const crossed = await invoke(context, "/api/preprod/checkout/test-payment", {
+    method: "POST",
+    headers: headers(otherSession, { "Idempotency-Key": "payment-attempt-api-crossed" }),
+  });
+  assert.equal(crossed.status, 404);
+  context.sqlite.close();
+});
+
+test("production order/payment routes are invisible before any D1 access", async () => {
+  const context = await fixture();
+  let databaseTouches = 0;
+  const forbiddenDb = {
+    prepare() { databaseTouches += 1; throw new Error("D1 touched"); },
+    batch() { databaseTouches += 1; throw new Error("D1 touched"); },
+  };
+  for (const pathname of [
+    "/api/preprod/checkout/order",
+    "/api/preprod/orders/current",
+    "/api/preprod/checkout/test-payment",
+  ]) {
+    const response = await context.worker.fetch(
+      new Request(`${ORIGIN}${pathname}`, { method: "POST" }),
+      { APP_ENV: "production", PREPROD_ORIGIN: ORIGIN, DB: forbiddenDb },
+      { waitUntil() {}, passThroughOnException() {} },
+    );
+    assert.equal(response.status, 404);
+  }
+  assert.equal(databaseTouches, 0);
+  context.sqlite.close();
+});
+
 test("shipping quote is D1-persistent, deterministic and exposes only the public allowlist", async () => {
   const context = await fixture();
   activate(context, "EU", 1375);

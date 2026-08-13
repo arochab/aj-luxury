@@ -12,6 +12,11 @@ import { CommerceError } from "../lib/commerce/backend-domain.ts";
 import { D1CommerceStore } from "../lib/commerce/d1-commerce-store.ts";
 import type { PublicCartSnapshot } from "../lib/commerce/d1-commerce-store.ts";
 import { D1FulfillmentStore } from "../lib/commerce/d1-fulfillment-store.ts";
+import {
+  D1PreprodCheckoutStore,
+  PreprodCheckoutError,
+} from "../lib/commerce/d1-preprod-checkout-store.ts";
+import { verifyPreprodTestPaymentEvent } from "../lib/commerce/preprod-test-payment-adapter.internal.ts";
 import type { CommerceD1Database } from "../lib/commerce/d1-port.ts";
 import {
   FulfillmentError,
@@ -27,6 +32,7 @@ import {
   clearSessionCookie,
   isTrustedMutationOrigin,
 } from "../lib/commerce/identity-access-policy.ts";
+import { LEGAL_VERSION } from "../lib/legal.ts";
 
 interface Fetcher {
   fetch(request: Request): Promise<Response>;
@@ -82,12 +88,16 @@ const PREPROD_CART_PATH = `${PREPROD_API_PREFIX}cart`;
 const PREPROD_CART_LINE_PATTERN = /^\/api\/preprod\/cart\/lines\/([^/]+)$/;
 const PREPROD_SHIPPING_QUOTE_PATH =
   `${PREPROD_API_PREFIX}checkout/shipping-quote`;
+const PREPROD_ORDER_PATH = `${PREPROD_API_PREFIX}checkout/order`;
+const PREPROD_CURRENT_ORDER_PATH = `${PREPROD_API_PREFIX}orders/current`;
+const PREPROD_TEST_PAYMENT_PATH = `${PREPROD_API_PREFIX}checkout/test-payment`;
 const CART_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
 const CART_MAX_QUANTITY = 5;
 const CART_MAX_ACTIVE_SESSIONS = 250;
 const CART_MAX_CREATIONS_PER_MINUTE = 30;
 const CART_RETENTION_DAYS = 30;
 const SHIPPING_QUOTE_BODY_MAX_BYTES = 4 * 1024;
+const ORDER_BODY_MAX_BYTES = 8 * 1024;
 const SHIPPING_QUOTE_TTL_MS = 15 * 60 * 1_000;
 const SHIPPING_QUOTE_IDEMPOTENCY_PATTERN =
   /^[A-Za-z0-9][A-Za-z0-9_.:-]{7,127}$/;
@@ -817,6 +827,169 @@ async function handleShippingQuoteApi(
   }
 }
 
+type CreateOrderBody = Readonly<{
+  quoteId: string;
+  address: ShippingAddressInput;
+  email: string;
+  termsAccepted: true;
+  privacyAccepted: true;
+  simulationAcknowledged: true;
+}>;
+
+async function parseCreateOrderBody(
+  request: Request,
+): Promise<CreateOrderBody | null> {
+  const contentType = request.headers.get("Content-Type")?.split(";", 1)[0]
+    .trim().toLowerCase();
+  if (contentType !== "application/json") return null;
+  const bytes = await readBoundedBody(request, ORDER_BODY_MAX_BYTES);
+  if (!bytes) return null;
+  let body: unknown;
+  try {
+    body = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+  } catch {
+    return null;
+  }
+  if (
+    !exactObjectKeys(body, new Set([
+      "quoteId", "address", "email", "termsAccepted", "privacyAccepted",
+      "simulationAcknowledged",
+    ])) ||
+    Object.keys(body).length !== 6 ||
+    typeof body.quoteId !== "string" ||
+    typeof body.email !== "string" ||
+    body.termsAccepted !== true || body.privacyAccepted !== true ||
+    body.simulationAcknowledged !== true
+  ) return null;
+  return Object.freeze({
+    quoteId: body.quoteId,
+    address: body.address as ShippingAddressInput,
+    email: body.email,
+    termsAccepted: true,
+    privacyAccepted: true,
+    simulationAcknowledged: true,
+  });
+}
+
+function mapCheckoutError(error: unknown): Response {
+  if (!(error instanceof PreprodCheckoutError)) {
+    return cartErrorResponse(
+      "CHECKOUT_UNAVAILABLE",
+      "La simulation de commande est momentanément indisponible.",
+      503,
+    );
+  }
+  switch (error.code) {
+    case "INVALID_INPUT":
+      return cartErrorResponse("INVALID_BODY", "Le formulaire est invalide.", 400);
+    case "ORDER_NOT_FOUND":
+      return cartErrorResponse("ORDER_NOT_FOUND", "Aucune commande de test n’est liée à cette session.", 404);
+    case "ORDER_EXPIRED":
+      return cartErrorResponse("ORDER_EXPIRED", "La réservation de stock a expiré.", 409);
+    case "ORDER_CONFLICT":
+    case "PAYMENT_CONFLICT":
+      return cartErrorResponse("IDEMPOTENCY_CONFLICT", "Cette tentative ne correspond pas au même parcours.", 409);
+    default:
+      return cartErrorResponse("CHECKOUT_UNAVAILABLE", "Le parcours reste fermé tant que ses prérequis ne sont pas validés.", 503);
+  }
+}
+
+async function requireCheckoutMutation(
+  request: Request,
+  env: Env,
+): Promise<CartSession | Response> {
+  if (!mutationOriginIsTrusted(request, env) || !mutationIsAuthorized(request, env)) {
+    return cartErrorResponse("REQUEST_REJECTED", "La requête n’est pas autorisée.", 403);
+  }
+  try {
+    const session = await readCartSession(request);
+    return session ?? cartErrorResponse("CART_NOT_FOUND", "Le panier doit être initialisé.", 401);
+  } catch {
+    return cartErrorResponse("CART_NOT_FOUND", "Le panier n’est plus disponible.", 401, clearCartCookieHeaders());
+  }
+}
+
+async function handleOrderPaymentApi(
+  request: Request,
+  env: Env,
+  url: URL,
+): Promise<Response | null> {
+  if (
+    url.pathname !== PREPROD_ORDER_PATH &&
+    url.pathname !== PREPROD_CURRENT_ORDER_PATH &&
+    url.pathname !== PREPROD_TEST_PAYMENT_PATH
+  ) {
+    return null;
+  }
+  const store = new D1PreprodCheckoutStore(env.DB);
+  if (url.pathname === PREPROD_CURRENT_ORDER_PATH && request.method === "GET") {
+    let session: CartSession | null;
+    try {
+      session = await readCartSession(request);
+    } catch {
+      return cartErrorResponse("CART_NOT_FOUND", "Le panier n’est plus disponible.", 401, clearCartCookieHeaders());
+    }
+    if (!session) return jsonResponse({ data: null });
+    try {
+      return jsonResponse({ data: await store.getCurrentOrder(session.cartId) });
+    } catch (error) {
+      return mapCheckoutError(error);
+    }
+  }
+  if (
+    (url.pathname === PREPROD_ORDER_PATH && request.method !== "POST") ||
+    (url.pathname === PREPROD_CURRENT_ORDER_PATH && request.method !== "GET") ||
+    (url.pathname === PREPROD_TEST_PAYMENT_PATH && request.method !== "POST")
+  ) {
+    return cartErrorResponse("METHOD_NOT_ALLOWED", "Méthode non autorisée.", 405, { Allow: url.pathname === PREPROD_CURRENT_ORDER_PATH ? "GET" : "POST" });
+  }
+  const authorized = await requireCheckoutMutation(request, env);
+  if (authorized instanceof Response) return authorized;
+  const idempotencyKey = request.headers.get("Idempotency-Key");
+  if (!idempotencyKey || !SHIPPING_QUOTE_IDEMPOTENCY_PATTERN.test(idempotencyKey)) {
+    return cartErrorResponse("IDEMPOTENCY_CONFLICT", "Une clé de tentative valide est requise.", 409);
+  }
+  try {
+    if (url.pathname === PREPROD_ORDER_PATH) {
+      const body = await parseCreateOrderBody(request);
+      if (!body) return cartErrorResponse("INVALID_BODY", "Le formulaire est invalide ou trop volumineux.", 400);
+      const normalizedAddress = await normalizeShippingAddress(body.address);
+      const addressFingerprint = await hmacSha256Hex(
+        authorized.addressProofKey,
+        normalizedAddress.canonicalJson,
+      );
+      return jsonResponse({
+        data: await store.createOrder({
+          cartId: authorized.cartId,
+          quoteId: body.quoteId,
+          addressJson: normalizedAddress.canonicalJson,
+          addressFingerprint,
+          countryCode: normalizedAddress.address.countryCode,
+          email: body.email,
+          idempotencyKey,
+          termsVersion: LEGAL_VERSION,
+          privacyVersion: LEGAL_VERSION,
+          now: new Date().toISOString(),
+        }),
+      });
+    }
+    if (!(await requireEmptyBody(request))) {
+      return cartErrorResponse("INVALID_BODY", "Le corps doit être strictement vide.", 400);
+    }
+    const prepared = await store.prepareTestPayment({
+      cartId: authorized.cartId,
+      idempotencyKey,
+      requestedAt: new Date().toISOString(),
+    });
+    if (!("claims" in prepared)) return jsonResponse({ data: prepared });
+    const verified = verifyPreprodTestPaymentEvent(env.APP_ENV, prepared.claims);
+    return jsonResponse({ data: await store.completeTestPayment(prepared, verified) });
+  } catch (error) {
+    if (error instanceof FulfillmentError) return mapShippingQuoteError(error);
+    return mapCheckoutError(error);
+  }
+}
+
 async function handleCartApi(
   request: Request,
   env: Env,
@@ -1158,6 +1331,9 @@ export async function preprodApiResponse(
             shippingQuoteZones: { EU: false, UK: false, US: false, CA: false },
             payment: false,
             orderCreation: false,
+            reservesValidated: false,
+            paymentTestSimulation: false,
+            emailCaptureSimulation: false,
             emailDelivery: false,
             carrier: false,
           },
@@ -1181,7 +1357,7 @@ export async function preprodApiResponse(
         return unavailable(latestMigration);
       }
       try {
-        const [stock, shippingConfigurations] = await Promise.all([
+        const [stock, shippingConfigurations, reserveValidation] = await Promise.all([
           database
             .prepare(
               `SELECT variant.id AS variant_id,
@@ -1202,6 +1378,13 @@ export async function preprodApiResponse(
               GROUP BY zone`,
             )
             .all<{ zone: string }>(),
+          database
+            .prepare(
+              `SELECT COUNT(*) AS total,
+                SUM(CASE WHEN reserves_validated = 1 THEN 1 ELSE 0 END) AS validated
+              FROM inventory`,
+            )
+            .first<{ total: number; validated: number }>(),
         ]);
         const configuredZones = new Set(
           shippingConfigurations.results.map((row) => row.zone),
@@ -1214,6 +1397,15 @@ export async function preprodApiResponse(
         });
         const shippingQuotesReady = Object.values(shippingQuoteZones)
           .every(Boolean);
+        const reservesReady = Boolean(
+          reserveValidation && reserveValidation.total > 0 &&
+          reserveValidation.total === reserveValidation.validated,
+        );
+        const sellableStockReady = stock.results.some(
+          (position: { available_to_sell: number }) => position.available_to_sell > 0,
+        );
+        const testCheckoutReady = shippingQuotesReady && reservesReady &&
+          sellableStockReady;
         return jsonResponse(
           {
             status: "partial",
@@ -1224,7 +1416,10 @@ export async function preprodApiResponse(
               shippingQuotes: shippingQuotesReady,
               shippingQuoteZones,
               payment: false,
-              orderCreation: false,
+              reservesValidated: reservesReady,
+              orderCreation: testCheckoutReady,
+              paymentTestSimulation: testCheckoutReady,
+              emailCaptureSimulation: testCheckoutReady,
               emailDelivery: false,
               carrier: false,
             },
@@ -1248,6 +1443,9 @@ export async function preprodApiResponse(
       }
     })();
   }
+
+  const orderPaymentResponse = await handleOrderPaymentApi(request, env, url);
+  if (orderPaymentResponse) return orderPaymentResponse;
 
   const shippingQuoteResponse = await handleShippingQuoteApi(request, env, url);
   if (shippingQuoteResponse) return shippingQuoteResponse;

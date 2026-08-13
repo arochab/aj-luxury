@@ -5,6 +5,7 @@ import type {
 } from "./verified-payment-event.ts";
 
 const verifiedPaymentEvents = new WeakSet<object>();
+const preprodWorkerRegistrars = new WeakSet<object>();
 
 type NodeTestProcess = Readonly<{
   env?: Readonly<Record<string, string | undefined>>;
@@ -44,6 +45,50 @@ export function registerVerifiedPaymentEventForNodeTest(
   const event = Object.freeze({ ...claims });
   verifiedPaymentEvents.add(event);
   return event as VerifiedPaymentEvent;
+}
+
+/**
+ * Issues a request-local registrar for the private Worker test-payment adapter.
+ *
+ * The opaque capability never crosses the closure boundary. Application code
+ * receives only `register`, and that function remains fail-closed unless both
+ * the issuer and every call observe the exact preproduction environment.
+ */
+export function issuePreprodWorkerPaymentRegistrar(
+  environment: unknown,
+): Readonly<{
+  register(
+    currentEnvironment: unknown,
+    claims: VerifiedPaymentEventClaims,
+  ): VerifiedPaymentEvent;
+}> {
+  if (environment !== "preproduction") {
+    throw new CommerceError(
+      "PAYMENT_VERIFICATION_REQUIRED",
+      "The test payment registrar is restricted to preproduction.",
+    );
+  }
+  const capability = Object.freeze({});
+  preprodWorkerRegistrars.add(capability);
+  return Object.freeze({
+    register(currentEnvironment, claims) {
+      if (
+        currentEnvironment !== "preproduction" ||
+        !preprodWorkerRegistrars.has(capability) ||
+        claims.provider !== "test" ||
+        claims.verificationMethod !== "test_adapter" ||
+        claims.eventType !== "payment.succeeded"
+      ) {
+        throw new CommerceError(
+          "PAYMENT_VERIFICATION_REQUIRED",
+          "The test payment event lacks trusted preproduction provenance.",
+        );
+      }
+      const event = Object.freeze({ ...claims });
+      verifiedPaymentEvents.add(event);
+      return event as VerifiedPaymentEvent;
+    },
+  });
 }
 
 export function isRegisteredVerifiedPaymentEvent(

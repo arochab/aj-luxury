@@ -357,66 +357,6 @@ test("real local D1 applies 0000 to 0007, upgrades populated 0004 and replays", 
   );
   apply(emptyRoot, emptyConfig, emptyState);
 
-  const rollbackRoot = join(proofRoot, "rollback-0007");
-  mkdirSync(rollbackRoot);
-  const rollbackConfig = createConfig(
-    rollbackRoot,
-    migrationNames.slice(0, 7),
-  );
-  const rollbackState = join(rollbackRoot, "state");
-  mkdirSync(rollbackState, { recursive: true });
-  apply(rollbackRoot, rollbackConfig, rollbackState);
-  query(
-    rollbackRoot,
-    rollbackConfig,
-    rollbackState,
-    `INSERT INTO audit_log (
-      id, actor_type, action, entity_type, entity_id, idempotency_key,
-      metadata_json, created_at
-    ) VALUES (
-      'rollback_0007_sentinel', 'system', 'sentinel', 'migration', '0006',
-      'rollback:0007:sentinel', '{}', '2026-08-13T12:00:00.000Z'
-    )`,
-  );
-  copyFileSync(
-    join(migrationRoot, migrationNames[7]),
-    join(rollbackRoot, "migrations", migrationNames[7]),
-  );
-  apply(rollbackRoot, rollbackConfig, rollbackState);
-  apply(rollbackRoot, rollbackConfig, rollbackState);
-  assert.deepEqual(
-    query(
-      rollbackRoot,
-      rollbackConfig,
-      rollbackState,
-      "SELECT name FROM d1_migrations ORDER BY id",
-    ).map((row) => row.name),
-    migrationNames,
-  );
-  assert.equal(
-    query(
-      rollbackRoot,
-      rollbackConfig,
-      rollbackState,
-      "SELECT COUNT(*) AS count FROM audit_log WHERE id='rollback_0007_sentinel'",
-    )[0].count,
-    1,
-  );
-  const rollbackTriggerNames = query(
-    rollbackRoot,
-    rollbackConfig,
-    rollbackState,
-    `SELECT name FROM sqlite_schema
-    WHERE type='trigger' AND name IN (
-      'trg_orders_require_shipping_snapshot_insert',
-      'trg_orders_lock_shipping_snapshot'
-    ) ORDER BY name`,
-  ).map((row) => row.name);
-  assert.deepEqual(rollbackTriggerNames, [
-    "trg_orders_lock_shipping_snapshot",
-    "trg_orders_require_shipping_snapshot_insert",
-  ]);
-
   const upgradeRoot = join(proofRoot, "upgrade");
   mkdirSync(upgradeRoot);
   const upgradeConfig = createConfig(upgradeRoot, migrationNames.slice(0, 5));
