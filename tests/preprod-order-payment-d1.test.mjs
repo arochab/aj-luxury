@@ -259,13 +259,15 @@ test("test payment adapter stays outside public and browser import graphs", () =
         if (entry.isDirectory()) visit(target);
         else if (/\.(?:ts|tsx|mjs)$/.test(entry.name)) {
           const source = readFileSync(target, "utf8");
-          if (source.includes("preprod-test-payment-adapter.internal")) hits.push(target.slice(root.length));
+          if (source.includes("preprod-test-payment-adapter.internal")) {
+            hits.push(target.slice(root.length).replaceAll("\\", "/"));
+          }
         }
       }
     };
     visit(join(root, directory));
   }
-  assert.deepEqual(hits, ["worker\\index.ts"]);
+  assert.deepEqual(hits, ["worker/index.ts"]);
   const issuerHits = [];
   for (const directory of ["app", "lib", "worker"]) {
     const visit = (path) => {
@@ -274,15 +276,17 @@ test("test payment adapter stays outside public and browser import graphs", () =
         if (entry.isDirectory()) visit(target);
         else if (/\.(?:ts|tsx|mjs)$/.test(entry.name)) {
           const source = readFileSync(target, "utf8");
-          if (source.includes("issuePreprodWorkerPaymentRegistrar")) issuerHits.push(target.slice(root.length));
+          if (source.includes("issuePreprodWorkerPaymentRegistrar")) {
+            issuerHits.push(target.slice(root.length).replaceAll("\\", "/"));
+          }
         }
       }
     };
     visit(join(root, directory));
   }
   assert.deepEqual(issuerHits.sort(), [
-    "lib\\commerce\\payment-event-registration.internal.ts",
-    "lib\\commerce\\preprod-test-payment-adapter.internal.ts",
+    "lib/commerce/payment-event-registration.internal.ts",
+    "lib/commerce/preprod-test-payment-adapter.internal.ts",
   ]);
 });
 
