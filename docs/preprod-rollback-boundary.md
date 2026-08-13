@@ -28,3 +28,26 @@ built Worker.
 
 This branch is not a production candidate and authorizes no deployment, Sites
 version save, source fast-forward, custom domain or D1 migration.
+
+## Rollback R8
+
+Rollback R8 is the child of the CI-green Bridge B7 commit. It is the only
+rollback runtime in this chain that understands the terminal synthetic
+migration 0008.
+
+- It contains migration 0008 byte-for-byte from the audited synthetic candidate
+  (`SHA-256 794e1c67471427ba3d92e979e79e07a8393244794d7d98b827db6b0fda07b5b5`).
+- It retains the same all-method, pre-store closure for every cart, cart-line,
+  shipping-quote, order, current-order and test-payment path.
+- Health returns `200` only for the exact ordered 0000-through-0008 ledger plus
+  the exact `synthetic-demo` / `aj-demo-v1` sentinel whose immutable expiry is
+  still in the future. It reports `runtimeMode=post-0008-rollback`, every real
+  and simulated capability false, and `launchReadiness=false`.
+- Missing, invalid, widened or expired sentinel state, or any ledger drift,
+  returns `503`.
+- The marker fixes this runtime to the private Sites project and explicitly
+  forbids production promotion.
+
+Rollback R8 is not a production candidate. Its existence authorizes no
+deployment, Sites version save, source fast-forward, custom domain or D1
+migration.

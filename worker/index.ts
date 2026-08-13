@@ -1289,9 +1289,9 @@ async function handleCartApi(
   return null;
 }
 
-const BRIDGE_B7_EXPECTED_MIGRATION =
-  "0007_transactional_preprod_order_payment.sql";
-const BRIDGE_B7_EXPECTED_MIGRATIONS = Object.freeze([
+const ROLLBACK_R8_EXPECTED_MIGRATION =
+  "0008_preprod_synthetic_demo_dataset.sql";
+const ROLLBACK_R8_EXPECTED_MIGRATIONS = Object.freeze([
   "0000_flimsy_rhino.sql",
   "0001_lock_cart_line_price_provenance.sql",
   "0002_lock_order_line_snapshots.sql",
@@ -1299,10 +1299,14 @@ const BRIDGE_B7_EXPECTED_MIGRATIONS = Object.freeze([
   "0004_email_outbox_data_rights.sql",
   "0005_fulfillment_returns_refunds.sql",
   "0006_allow_bounded_expired_cart_purge.sql",
-  BRIDGE_B7_EXPECTED_MIGRATION,
+  "0007_transactional_preprod_order_payment.sql",
+  ROLLBACK_R8_EXPECTED_MIGRATION,
 ]);
+const ROLLBACK_R8_DATASET_KIND = "synthetic-demo";
+const ROLLBACK_R8_FIXTURE_VERSION = "aj-demo-v1";
+const ROLLBACK_R8_EXPIRES_AT = "2026-09-30T23:59:59.999Z";
 
-function isBridgeB7CommerceRoute(url: URL): boolean {
+function isRollbackR8CommerceRoute(url: URL): boolean {
   return (
     url.pathname === PREPROD_CART_PATH ||
     PREPROD_CART_LINE_PATTERN.test(url.pathname) ||
@@ -1313,7 +1317,7 @@ function isBridgeB7CommerceRoute(url: URL): boolean {
   );
 }
 
-function bridgeB7Capabilities() {
+function rollbackR8Capabilities() {
   return Object.freeze({
     catalog: false,
     cart: false,
@@ -1346,7 +1350,7 @@ function bridgeB7Capabilities() {
   });
 }
 
-async function bridgeB7HealthResponse(
+async function rollbackR8HealthResponse(
   request: Request,
   env: RuntimeEnv,
 ): Promise<Response> {
@@ -1359,12 +1363,18 @@ async function bridgeB7HealthResponse(
       {
         status: "unavailable",
         environment: "preproduction",
-        runtimeMode: "pre-0008-bridge",
+        runtimeMode: "post-0008-rollback",
         reason,
         latestMigration,
         launchReadiness: false,
-        capabilities: bridgeB7Capabilities(),
+        capabilities: rollbackR8Capabilities(),
         stockProjection: [],
+        syntheticDataset: {
+          active: false,
+          valid: false,
+          fixtureVersion: ROLLBACK_R8_FIXTURE_VERSION,
+          expiresAt: ROLLBACK_R8_EXPIRES_AT,
+        },
       },
       { status: 503 },
     );
@@ -1385,23 +1395,62 @@ async function bridgeB7HealthResponse(
 
   const latestMigration = migrationNames.at(-1) ?? null;
   if (
-    migrationNames.length !== BRIDGE_B7_EXPECTED_MIGRATIONS.length ||
+    migrationNames.length !== ROLLBACK_R8_EXPECTED_MIGRATIONS.length ||
     migrationNames.some(
-      (name, index) => name !== BRIDGE_B7_EXPECTED_MIGRATIONS[index],
+      (name, index) => name !== ROLLBACK_R8_EXPECTED_MIGRATIONS[index],
     )
   ) {
     return unavailable("unexpected-migration", latestMigration);
+  }
+
+  let sentinel: {
+    dataset_kind: string;
+    fixture_version: string;
+    expires_at: string;
+  } | null = null;
+  try {
+    sentinel = await env.DB
+      .prepare(
+        `SELECT dataset_kind, fixture_version, expires_at
+        FROM preprod_demo_dataset WHERE singleton = 1`,
+      )
+      .first<{
+        dataset_kind: string;
+        fixture_version: string;
+        expires_at: string;
+      }>();
+  } catch {
+    return unavailable("synthetic-sentinel-unavailable", latestMigration);
+  }
+
+  if (
+    !sentinel ||
+    sentinel.dataset_kind !== ROLLBACK_R8_DATASET_KIND ||
+    sentinel.fixture_version !== ROLLBACK_R8_FIXTURE_VERSION ||
+    sentinel.expires_at !== ROLLBACK_R8_EXPIRES_AT
+  ) {
+    return unavailable("synthetic-sentinel-invalid", latestMigration);
+  }
+
+  if (sentinel.expires_at <= new Date().toISOString()) {
+    return unavailable("synthetic-dataset-expired", latestMigration);
   }
 
   return jsonResponse(
     {
       status: "rollback",
       environment: "preproduction",
-      runtimeMode: "pre-0008-bridge",
+      runtimeMode: "post-0008-rollback",
       latestMigration,
       launchReadiness: false,
-      capabilities: bridgeB7Capabilities(),
+      capabilities: rollbackR8Capabilities(),
       stockProjection: [],
+      syntheticDataset: {
+        active: false,
+        valid: true,
+        fixtureVersion: ROLLBACK_R8_FIXTURE_VERSION,
+        expiresAt: sentinel.expires_at,
+      },
     },
     { status: 200 },
   );
@@ -1426,14 +1475,14 @@ export async function preprodApiResponse(
   }
 
   if (url.pathname === `${PREPROD_API_PREFIX}health`) {
-    return bridgeB7HealthResponse(request, env);
+    return rollbackR8HealthResponse(request, env);
   }
 
-  if (isBridgeB7CommerceRoute(url)) {
+  if (isRollbackR8CommerceRoute(url)) {
     return jsonResponse(
       {
         status: "unavailable",
-        reason: "pre-0008-bridge",
+        reason: "post-0008-rollback",
         launchReadiness: false,
       },
       { status: 503 },

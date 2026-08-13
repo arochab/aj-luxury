@@ -12,7 +12,7 @@ import { normalizeShippingAddress } from "../lib/commerce/fulfillment-domain.ts"
 import { verifyPreprodTestPaymentEvent } from "../lib/commerce/preprod-test-payment-adapter.internal.ts";
 
 const drizzle = fileURLToPath(new URL("../drizzle/", import.meta.url));
-const migrationPaths = readdirSync(drizzle).filter((name) => /^000\d_.+\.sql$/.test(name)).sort();
+const migrationPaths = readdirSync(drizzle).filter((name) => /^000[0-7]_.+\.sql$/.test(name)).sort();
 
 class Statement {
   constructor(database, query, values = []) { this.database = database; this.query = query; this.values = values; }

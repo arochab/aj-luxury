@@ -53,7 +53,7 @@ test("preproduction APIs are invisible without the exact isolated environment", 
   const unavailable = await isolatedWithoutDatabase.json();
   assert.equal(unavailable.status, "unavailable");
   assert.equal(unavailable.reason, "preproduction-database-not-bound");
-  assert.equal(unavailable.runtimeMode, "pre-0008-bridge");
+  assert.equal(unavailable.runtimeMode, "post-0008-rollback");
   assert.equal(unavailable.launchReadiness, false);
 });
 
@@ -68,7 +68,7 @@ test("production pages remain indexable while preproduction is explicitly noinde
   assert.equal(preproduction.headers.get("x-robots-tag"), "noindex, nofollow");
 });
 
-test("Bridge B7 health reports the 0007 rollback mode without exposing commerce capability", async () => {
+test("Rollback R8 health reports the exact 0008 sentinel without exposing commerce capability", async () => {
   const statements = [];
   const database = {
     prepare(query) {
@@ -77,8 +77,12 @@ test("Bridge B7 health reports the 0007 rollback mode without exposing commerce 
           return statement;
         },
         async first() {
-          if (query.includes("d1_migrations")) {
-            return { name: "0007_transactional_preprod_order_payment.sql" };
+          if (query.includes("preprod_demo_dataset")) {
+            return {
+              dataset_kind: "synthetic-demo",
+              fixture_version: "aj-demo-v1",
+              expires_at: "2026-09-30T23:59:59.999Z",
+            };
           }
           if (query.includes("reserves_validated")) {
             return { total: 3, validated: 3 };
@@ -96,6 +100,7 @@ test("Bridge B7 health reports the 0007 rollback mode without exposing commerce 
               "0005_fulfillment_returns_refunds.sql",
               "0006_allow_bounded_expired_cart_purge.sql",
               "0007_transactional_preprod_order_payment.sql",
+              "0008_preprod_synthetic_demo_dataset.sql",
             ].map((name) => ({ name })) };
           }
           if (query.includes("shipping_zone_configurations")) {
@@ -129,11 +134,11 @@ test("Bridge B7 health reports the 0007 rollback mode without exposing commerce 
   assert.equal(response.status, 200);
   const payload = await response.json();
   assert.equal(payload.status, "rollback");
-  assert.equal(payload.runtimeMode, "pre-0008-bridge");
+  assert.equal(payload.runtimeMode, "post-0008-rollback");
   assert.equal(payload.launchReadiness, false);
   assert.equal(
     payload.latestMigration,
-    "0007_transactional_preprod_order_payment.sql",
+    "0008_preprod_synthetic_demo_dataset.sql",
   );
   assert.deepEqual(payload.stockProjection, []);
   assert.deepEqual(payload.capabilities, {
@@ -157,7 +162,7 @@ test("Bridge B7 health reports the 0007 rollback mode without exposing commerce 
     launchReadiness: false,
   });
   assert.equal(JSON.stringify(payload).includes("available_to_sell"), false);
-  assert.equal(statements.length, 1);
+  assert.equal(statements.length, 2);
 });
 
 test("preproduction health stays fail-closed without querying tables from a missing migration", async () => {
@@ -175,7 +180,7 @@ test("preproduction health stays fail-closed without querying tables from a miss
             : null;
         },
         async all() {
-          throw new Error("shipping tables must not be queried");
+          return { results: [{ name: "0004_email_outbox_data_rights.sql" }] };
         },
       };
       return statement;
@@ -207,7 +212,7 @@ test("preproduction health stays fail-closed when the migration ledger is absent
   const database = {
     prepare() {
       return {
-        async first() {
+        async all() {
           throw new Error("no such table: d1_migrations");
         },
       };
@@ -229,7 +234,7 @@ test("preproduction health stays fail-closed when the migration ledger is absent
   assert.equal((await response.json()).status, "unavailable");
 });
 
-test("Bridge B7 health never reopens commerce even when legacy launch-zone rows are active", async () => {
+test("Rollback R8 health never reopens commerce even when synthetic rows are active", async () => {
   const database = {
     prepare(query) {
       const statement = {
@@ -237,8 +242,12 @@ test("Bridge B7 health never reopens commerce even when legacy launch-zone rows 
           return statement;
         },
         async first() {
-          return query.includes("d1_migrations")
-            ? { name: "0007_transactional_preprod_order_payment.sql" }
+          return query.includes("preprod_demo_dataset")
+            ? {
+                dataset_kind: "synthetic-demo",
+                fixture_version: "aj-demo-v1",
+                expires_at: "2026-09-30T23:59:59.999Z",
+              }
             : query.includes("reserves_validated")
               ? { total: 12, validated: 12 }
               : null;
@@ -254,6 +263,7 @@ test("Bridge B7 health never reopens commerce even when legacy launch-zone rows 
               "0005_fulfillment_returns_refunds.sql",
               "0006_allow_bounded_expired_cart_purge.sql",
               "0007_transactional_preprod_order_payment.sql",
+              "0008_preprod_synthetic_demo_dataset.sql",
             ].map((name) => ({ name })) };
           }
           return query.includes("shipping_zone_configurations")
@@ -279,7 +289,7 @@ test("Bridge B7 health never reopens commerce even when legacy launch-zone rows 
   assert.equal(response.status, 200);
   const payload = await response.json();
   assert.equal(payload.status, "rollback");
-  assert.equal(payload.runtimeMode, "pre-0008-bridge");
+  assert.equal(payload.runtimeMode, "post-0008-rollback");
   assert.equal(payload.capabilities.shippingQuotes, false);
   assert.deepEqual(payload.capabilities.shippingQuoteZones, {
     EU: false, UK: false, US: false, CA: false,

@@ -10,7 +10,8 @@
     "check:analytics-boundary": "node --experimental-strip-types scripts/check-analytics-client-boundary.mjs",
     "check:analytics-artifacts": "node --experimental-strip-types scripts/check-analytics-client-boundary.mjs --artifacts",
     "test:analytics-build-canaries": "node scripts/check-analytics-build-canaries.mjs",
-    "prebuild": "npm run check:analytics-boundary",
+    "check:rollback-r8-boundary": "node scripts/check-rollback-r8-boundary.mjs",
+    "prebuild": "npm run check:analytics-boundary && npm run check:rollback-r8-boundary",
     "build": "vinext build",
     "postbuild": "npm run check:analytics-artifacts",
     "start": "vinext start",
@@ -26,7 +27,7 @@
     "test:lot2-policies": "node --experimental-strip-types --test tests/lot2-policies.test.mjs tests/lot2-security.test.mjs",
     "test:preprod-demo": "node --experimental-strip-types --test tests/preprod-commerce-checkout.test.mjs tests/preprod-identity-demo.test.mjs",
     "test:rollback-boundary": "node --test tests/preprod-rollback-boundary.test.mjs",
-    "prelint": "npm run check:analytics-boundary",
+    "prelint": "npm run check:analytics-boundary && npm run check:rollback-r8-boundary",
     "lint": "eslint app lib tests --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate"
   },
