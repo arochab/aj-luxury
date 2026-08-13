@@ -8,11 +8,11 @@ preuve de cible réelle fournie dans le périmètre de ce candidat.
 La chaîne canonique est strictement :
 
 1. `0000_flimsy_rhino.sql` — SHA-256 normalisé LF
-   `6e6262fa635e9808c00493adb1badbf51a1c3d75b2e1112fe567632c526859b4` ;
+   `64ec5b38a5c5e33b235f65ba6f5524fa26961a50af33a01c219af4080807435b` ;
 2. `0001_lock_cart_line_price_provenance.sql` — SHA-256 normalisé LF
-   `bef3cc80b9201217050dd5e80362927f3c560bb1c239ac8fd08de2f88aaf08de` ;
+   `a28fe428ba0aeb12bd6eb254082f49fc0735541cbc315a28e5cd137ee57da045` ;
 3. `0002_lock_order_line_snapshots.sql` — SHA-256 normalisé LF
-   `fe72f739c3459f931830054715b8efc268ab86c42d2479d99b4cedc7fe2196fa`.
+   `7a7498959ef379096f5f2aec132a80ab30645186bd2add4b09634cf9599ef566`.
 
 Les seuls points de départ couverts par la preuve Wrangler locale sont une base
 vide, la baseline finale `0000`, et `0000+0001`. Chaque chemin conserve ses

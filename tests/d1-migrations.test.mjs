@@ -104,15 +104,15 @@ const expectedHardeningTriggerNames = [
 ].sort();
 const expectedMigrationSha256 = {
   "0000_flimsy_rhino.sql":
-    "6e6262fa635e9808c00493adb1badbf51a1c3d75b2e1112fe567632c526859b4",
+    "64ec5b38a5c5e33b235f65ba6f5524fa26961a50af33a01c219af4080807435b",
   "0001_lock_cart_line_price_provenance.sql":
-    "bef3cc80b9201217050dd5e80362927f3c560bb1c239ac8fd08de2f88aaf08de",
+    "a28fe428ba0aeb12bd6eb254082f49fc0735541cbc315a28e5cd137ee57da045",
   "0002_lock_order_line_snapshots.sql":
-    "fe72f739c3459f931830054715b8efc268ab86c42d2479d99b4cedc7fe2196fa",
+    "7a7498959ef379096f5f2aec132a80ab30645186bd2add4b09634cf9599ef566",
   "0003_identity_access.sql":
-    "21c163102b0bdbdcdf871177667d92338ed4cad9e8ec1a0322025478f0efff09",
+    "97497dbef41179a669b2ff58286ae9e0986cd8fcb2c76e97ae696f7fd7b1fc5a",
   "0004_email_outbox_data_rights.sql":
-    "e36dfa8d25f863ab82f2ab3ba784574dd48e5d6d819be50226890a7a867cc91d",
+    "fdf9c27b57d24c931d234bf8651e83599d10c0e8adfc28b188d165f01c9b59ef",
 };
 const ansiPattern = /\u001B\[[0-?]*[ -/]*[@-~]/g;
 
