@@ -10,8 +10,7 @@ WHEN NEW.`status` = 'active'
     SELECT 1 FROM `inventory`
     WHERE `variant_id` = NEW.`variant_id` AND `reserves_validated` = 0
   )
-BEGIN
-  SELECT CASE WHEN NOT EXISTS (
+  AND NOT EXISTS (
     SELECT 1
     FROM `carts` AS cart
     INNER JOIN `inventory` AS stock
@@ -33,5 +32,7 @@ BEGIN
         - stock.`safety_reserve_quantity`
         - stock.`active_reserved_quantity`
         - stock.`sold_quantity` >= NEW.`quantity`
-  ) THEN RAISE(ABORT, 'commerce_insufficient_stock_or_cart_closed') END;
+  )
+BEGIN
+  SELECT RAISE(ABORT, 'commerce_insufficient_stock_or_cart_closed');
 END;
