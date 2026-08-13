@@ -1,0 +1,26 @@
+{
+  "brandStory": {
+    "sourceLocale": "fr",
+    "fallbackLocale": "fr",
+    "status": "localized",
+    "source": "Chez AJ Luxury, nous sommes convaincus que le véritable luxe commence par ce que l’on porte au plus près de soi.",
+    "translations": {
+      "en": "At AJ Luxury, we believe that true luxury begins with what you wear closest to your skin.",
+      "es": "En AJ Luxury creemos que el verdadero lujo empieza por lo que llevamos más cerca de la piel.",
+      "de": "Bei AJ Luxury glauben wir, dass wahrer Luxus mit dem beginnt, was man direkt auf der Haut trägt.",
+      "it": "In AJ Luxury crediamo che il vero lusso cominci da ciò che indossiamo più vicino alla pelle."
+    }
+  },
+  "brandPromise": {
+    "sourceLocale": "fr",
+    "fallbackLocale": "fr",
+    "status": "localized",
+    "source": "Reveal Your Inner Beauty.",
+    "translations": {
+      "en": "Reveal Your Inner Beauty.",
+      "es": "Reveal Your Inner Beauty.",
+      "de": "Reveal Your Inner Beauty.",
+      "it": "Reveal Your Inner Beauty."
+    }
+  }
+}

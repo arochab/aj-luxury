@@ -1,0 +1,93 @@
+# AJ Luxury — registre juridique de pré-lancement
+
+Date de revue : 30 juillet 2026
+
+Responsable de l’intégration : Adam CHABBI
+
+Statut : socle rédigé et intégré, ouverture commerciale bloquée jusqu’aux confirmations listées ci-dessous.
+
+## Documents publics intégrés
+
+| Document | Route | Contenu couvert | Statut |
+|---|---|---|---|
+| Conditions générales de vente | `/terms` | Produits, prix, commande, paiement, livraison, rétractation, hygiène, garanties, responsabilité, médiation | Socle complet ; identité, logistique, paiement et médiateur à compléter |
+| Politique de confidentialité | `/privacy` | Finalités, bases légales, catégories de données, durées, destinataires, transferts, droits | État actuel documenté ; prestataires de production à ajouter |
+| Cookies et traceurs | `/cookies` | Stockages réellement utilisés, futur consentement, réglages | Conforme au prototype actuel ; à réviser avant tout nouvel outil |
+| Mentions légales | `/legal-notice` | Éditeur, publication, hébergeur, propriété intellectuelle, responsabilité | Hébergeur documenté ; identité vendeur à compléter |
+| Livraison et retours | `/shipping-returns` | Livraison, suivi, rétractation, hygiène, remboursement, non-conformité | Cadre défini ; valeurs opérationnelles à confirmer |
+| Rétractation en ligne | `/withdrawal` | Accès direct, informations requises, confirmation et accusé durable | Route visible ; backend et e-mail transactionnel à connecter |
+
+## Décisions juridiques retenues
+
+- Délai de rétractation : 14 jours à compter de la réception.
+- Retour : notification sous 14 jours, puis expédition sous 14 jours.
+- Remboursement : prix et livraison standard initiale, sous 14 jours, avec possibilité d’attendre le bien ou la preuve d’expédition.
+- Sous-vêtements : aucune exclusion générale. L’exception d’hygiène ne s’applique que si un produit scellé ne peut plus être renvoyé après descellement pour des raisons de santé ou d’hygiène.
+- Garantie légale de conformité : 2 ans à compter de la délivrance.
+- Garantie des vices cachés : action dans les 2 ans suivant la découverte du vice.
+- Stocks : aucune quantité interne publiée ; seuls les états disponible, stock faible ou épuisé sont destinés au client.
+- Paiement : AJ Luxury ne conservera pas le cryptogramme ; le prestataire final devra être identifié dans la politique.
+- Cookies : aucun outil publicitaire ou d’audience soumis au consentement n’est actuellement actif.
+- Consentement futur : accepter et refuser au même niveau, choix granulaire, aucune activation avant consentement, conservation du choix de référence pendant 6 mois.
+- Rétractation 2026 : une fonctionnalité directement accessible, gratuite et disponible pendant le délai légal doit être connectée avant toute commande.
+- Médiation : AJ Luxury doit conventionner avec un médiateur référencé et publier ses coordonnées. L’ancienne plateforme européenne ODR, fermée en 2025, ne doit pas être ajoutée.
+
+## État technique vérifié
+
+| Élément | État constaté |
+|---|---|
+| Paiement réel | Inactif |
+| Commande réelle | Inactive |
+| Compte client réel | Inactif |
+| Newsletter | Inactive |
+| Publicité / pixels sociaux | Inactifs |
+| Mesure d’audience | Inactive |
+| Stockage de langue | `localStorage` : `aj-luxury.locale.v1` |
+| Introduction déjà vue | `sessionStorage` : `aj-luxury-intro-seen` |
+| Hébergement de prévisualisation | Cloudflare |
+
+## Verrous avant ouverture des ventes
+
+| Priorité | Information ou action requise | Responsable | Preuve attendue |
+|---|---|---|---|
+| Bloquant | Dénomination légale, forme, capital, siège, SIREN/SIRET, RCS/RNE, TVA | AJ Luxury | Extrait officiel à jour |
+| Bloquant | Téléphone public et directeur de publication | AJ Luxury | Validation écrite |
+| Bloquant | Adresse de retour | AJ Luxury | Validation écrite |
+| Bloquant | Médiateur de la consommation conventionné | AJ Luxury | Convention et coordonnées |
+| Bloquant | Pays, transporteurs, tarifs, délais, douane et responsabilité import | AJ Luxury + Adam | Matrice logistique validée |
+| Bloquant | Prestataire et moyens de paiement | AJ Luxury + Adam | Compte marchand et recette |
+| Bloquant | Formulaire de rétractation relié aux commandes et accusé durable | Adam | Test bout en bout horodaté |
+| Bloquant | Prestataires compte, e-mail, paiement, livraison et hébergement final | Adam | Registre des sous-traitants |
+| Bloquant si activé | Bandeau et gestionnaire de consentement avant analytics/marketing | Adam | Recette avant/après consentement |
+| Recommandé | Relecture par un professionnel du droit avant ouverture internationale | AJ Luxury | Avis et corrections tracés |
+
+## Tests juridiques à inclure dans la recette commerce
+
+1. Le bouton final indique sans ambiguïté l’obligation de paiement.
+2. Le prix total, les taxes, les frais, le délai et l’adresse sont vérifiables avant paiement.
+3. La confirmation et les CGV sont envoyées sur un support durable.
+4. Le retour et la rétractation restent accessibles sans compte.
+5. Le formulaire de rétractation génère un accusé daté et reprend le contenu envoyé.
+6. Aucun stock interne, cryptogramme ou secret de paiement n’apparaît côté client.
+7. Aucun traceur non essentiel ne se déclenche avant consentement.
+8. Refuser les cookies est aussi simple que les accepter.
+9. Les liens juridiques restent accessibles sur ordinateur et mobile.
+10. L’identité du vendeur, le médiateur et l’hébergeur sont complets sur toutes les pages pertinentes.
+
+## Sources officielles de référence
+
+- DGCCRF, règles du commerce électronique : https://www.economie.gouv.fr/dgccrf/les-fiches-pratiques/e-commerce-les-regles-entre-professionnels-et-consommateurs
+- Service Public, mentions obligatoires d’un site professionnel : https://entreprendre.service-public.gouv.fr/vosdroits/F37351
+- Légifrance, droit de rétractation : https://www.legifrance.gouv.fr/codes/id/LEGISCTA000032226844
+- France Num, rétractation en ligne depuis le 19 juin 2026 : https://www.francenum.gouv.fr/guides-et-conseils/developpement-commercial/gestion-de-la-relation-client/la-retractation-en-1-clic
+- DGCCRF, garanties légales : https://www.economie.gouv.fr/dgccrf/les-fiches-pratiques/les-garanties-legales-de-conformite-et-contre-les-vices-caches
+- DGCCRF, médiation de la consommation : https://www.economie.gouv.fr/dgccrf/les-fiches-pratiques/la-mediation-de-la-consommation-ce-que-vous-devez-savoir
+- CNIL, information des personnes : https://cnil.fr/fr/conformite-rgpd-information-des-personnes-et-transparence
+- CNIL, recommandations cookies consolidées 2026 : https://www.cnil.fr/sites/default/files/2026-01/recommandation_cookies_consolidee.pdf
+- CNIL, paiement à distance par carte : https://www.cnil.fr/fr/le-paiement-distance-par-carte-bancaire
+
+## Benchmark de structure
+
+Le benchmark des boutiques de mode consultées confirme l’intérêt de séparer clairement CGV, confidentialité, cookies, livraison/retours et mentions légales. Cette structure est plus accessible et maintenable qu’un document unique mélangeant toutes les finalités. Les formulations commerciales concurrentes n’ont pas été recopiées : seuls les patterns de navigation et les rubriques utiles ont été comparés.
+
+> Ce registre documente la conception et facilite la validation. Il ne remplace pas une consultation juridique adaptée à l’identité réelle d’AJ Luxury, à ses pays de vente et à sa chaîne logistique.

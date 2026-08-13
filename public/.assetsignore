@@ -1,0 +1,2 @@
+# Local review proofs are intentionally retained outside the runtime bundle.
+images/review/**

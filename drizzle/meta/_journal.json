@@ -1,0 +1,48 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1786400180848,
+      "tag": "0000_flimsy_rhino",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1786411726568,
+      "tag": "0001_lock_cart_line_price_provenance",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1786418415978,
+      "tag": "0002_lock_order_line_snapshots",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1786447244202,
+      "tag": "0003_identity_access",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1786447375370,
+      "tag": "0004_email_outbox_data_rights",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1786453489947,
+      "tag": "0005_fulfillment_returns_refunds",
+      "breakpoints": true
+    }
+  ]
+}

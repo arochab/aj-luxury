@@ -1,0 +1,477 @@
+.page {
+  --story-ink: #0b0b0d;
+  --story-paper: #f6f6f3;
+  --story-silver: #a9adb5;
+  --story-line-dark: rgba(255, 255, 255, 0.18);
+  --story-line-light: rgba(11, 11, 13, 0.16);
+  --story-sequence-gap: clamp(1.25rem, 1.8vw, 2rem);
+  min-width: 0;
+  overflow: clip;
+  background: var(--story-paper);
+  color: var(--story-ink);
+  font-family: var(--font-manrope), Arial, sans-serif;
+}
+
+.hero {
+  min-height: 100svh;
+  background: var(--story-ink);
+  color: #f7f7f5;
+}
+
+.heroTop {
+  position: relative;
+  z-index: 4;
+}
+
+.heroTop :global(a:not([aria-label="AJ Luxury, accueil"])),
+.heroTop :global(select) {
+  font-size: 0.75rem;
+}
+
+.heroBody {
+  display: grid;
+  min-height: calc(100svh - 5.75rem);
+  grid-template-columns: minmax(20rem, 0.39fr) minmax(0, 0.61fr);
+}
+
+.heroCopy {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: clamp(2.5rem, 5vw, 6.5rem) clamp(1.5rem, 4vw, 5rem);
+  border-right: 1px solid var(--story-line-dark);
+  background:
+    radial-gradient(circle at 12% 8%, rgba(255, 255, 255, 0.06), transparent 18rem),
+    #0b0b0d;
+}
+
+.eyebrow,
+.actIndex {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 650;
+  letter-spacing: 0.18em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+.eyebrow {
+  color: var(--story-silver);
+}
+
+.heroCopy h1 {
+  max-width: 7ch;
+  margin: clamp(1.25rem, 2.5vw, 2.5rem) 0 0;
+  font-size: clamp(4.25rem, 8.2vw, 8.5rem);
+  font-weight: 300;
+  letter-spacing: -0.075em;
+  line-height: 0.86;
+}
+
+.heroCopy blockquote {
+  max-width: 29rem;
+  margin: clamp(2rem, 5vh, 4.5rem) 0 0;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--story-line-dark);
+  color: #d7d8db;
+  font-size: clamp(1rem, 1.25vw, 1.25rem);
+  font-weight: 360;
+  line-height: 1.55;
+}
+
+.heroImage {
+  position: relative;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  background: #292934;
+}
+
+.heroImage img {
+  object-fit: cover;
+  object-position: 50% 25%;
+}
+
+.origin {
+  display: grid;
+  align-items: start;
+  grid-template-columns: minmax(15rem, 0.36fr) minmax(0, 0.64fr);
+  gap: clamp(2rem, 6vw, 8rem);
+  padding: clamp(4rem, 7vw, 8rem) clamp(1.25rem, 5vw, 6rem);
+  border-bottom: 1px solid var(--story-line-light);
+  background: #fff;
+}
+
+.actHeading {
+  min-width: 0;
+}
+
+.actIndex {
+  color: #6a6e76;
+}
+
+.actHeading h2 {
+  margin: 1.25rem 0 0;
+  font-size: clamp(2.5rem, 5vw, 5.75rem);
+  font-weight: 310;
+  letter-spacing: -0.06em;
+  line-height: 0.98;
+}
+
+.originCopy {
+  max-width: 54rem;
+}
+
+.originCopy p {
+  margin: 0;
+  font-size: clamp(1.2rem, 1.9vw, 2rem);
+  font-weight: 350;
+  letter-spacing: -0.025em;
+  line-height: 1.45;
+}
+
+.originCopy p + p {
+  max-width: 42rem;
+  margin-top: clamp(1.5rem, 3vw, 2.75rem);
+  color: #595b60;
+  font-size: clamp(1rem, 1.2vw, 1.2rem);
+  letter-spacing: -0.01em;
+  line-height: 1.6;
+}
+
+.people {
+  padding: clamp(4rem, 6.5vw, 7.5rem) clamp(1.25rem, 4vw, 4.5rem);
+  background: var(--story-ink);
+  color: #f7f7f5;
+}
+
+.peopleHeader {
+  display: grid;
+  align-items: end;
+  grid-template-columns: minmax(15rem, 0.45fr) minmax(0, 0.55fr);
+  gap: clamp(2rem, 6vw, 8rem);
+  margin-bottom: clamp(2.5rem, 5vw, 5rem);
+}
+
+.people .actIndex {
+  color: var(--story-silver);
+}
+
+.peopleStatement {
+  max-width: 42rem;
+  margin: 0;
+  color: #d7d8db;
+  font-size: clamp(1rem, 1.35vw, 1.3rem);
+  line-height: 1.55;
+}
+
+.portraitGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(0.3rem, 1vw, 1rem);
+}
+
+.portrait {
+  position: relative;
+  min-width: 0;
+  aspect-ratio: 2 / 3;
+  margin: 0;
+  overflow: hidden;
+  background: #262631;
+}
+
+.portrait img {
+  object-fit: contain;
+  object-position: center;
+}
+
+.portrait::after {
+  position: absolute;
+  inset: auto 0 0;
+  height: 28%;
+  background: linear-gradient(0deg, rgba(5, 5, 7, 0.72), transparent);
+  content: "";
+  pointer-events: none;
+}
+
+.portrait figcaption {
+  position: absolute;
+  z-index: 1;
+  right: clamp(0.9rem, 2vw, 1.75rem);
+  bottom: clamp(0.9rem, 2vw, 1.75rem);
+  left: clamp(0.9rem, 2vw, 1.75rem);
+  padding-top: 0.9rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.52);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 650;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.definition {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 0.61fr) minmax(20rem, 0.39fr);
+  border-top: var(--story-sequence-gap) solid var(--story-paper);
+  border-bottom: 1px solid var(--story-line-light);
+  background: #fff;
+}
+
+.definitionCopy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: center;
+  padding: clamp(4rem, 7vw, 8rem) clamp(1.25rem, 5vw, 6rem);
+}
+
+.definitionCopy .actHeading h2 {
+  max-width: 12ch;
+}
+
+.definitionText {
+  max-width: 45rem;
+  margin-top: clamp(2.25rem, 4vw, 4rem);
+  padding-top: clamp(1.5rem, 2.5vw, 2.5rem);
+  border-top: 1px solid var(--story-line-light);
+}
+
+.definitionText p {
+  margin: 0;
+  color: #343438;
+  font-size: clamp(1rem, 1.35vw, 1.3rem);
+  line-height: 1.62;
+}
+
+.definitionText p + p {
+  margin-top: 1.25rem;
+  color: #666970;
+}
+
+.definitionVisual {
+  position: relative;
+  min-width: 0;
+  min-height: clamp(34rem, 58vw, 56rem);
+  margin: 0;
+  overflow: hidden;
+  background: #292934;
+}
+
+.definitionVisual img {
+  object-fit: cover;
+  object-position: 50% 58%;
+}
+
+.closing {
+  display: flex;
+  min-height: clamp(14rem, 28vw, 22rem);
+  align-items: center;
+  justify-content: space-between;
+  gap: clamp(2rem, 6vw, 8rem);
+  padding: clamp(3rem, 6vw, 6rem) clamp(1.25rem, 5vw, 6rem);
+  border-top: var(--story-sequence-gap) solid var(--story-paper);
+  border-bottom: 1px solid rgba(11, 11, 13, 0.22);
+  background:
+    linear-gradient(112deg, transparent 0 23%, rgba(255, 255, 255, 0.68) 42%, transparent 59%),
+    linear-gradient(165deg, #8d9096 0%, #e6e7e8 31%, #a8abb0 61%, #f0f0ef 100%);
+  color: var(--story-ink);
+}
+
+.closing h2 {
+  max-width: 13ch;
+  margin: 0;
+  color: var(--story-ink);
+  font-size: clamp(2.75rem, 6vw, 7.25rem);
+  font-weight: 300;
+  letter-spacing: -0.07em;
+  line-height: 0.9;
+}
+
+.closing a {
+  display: inline-flex;
+  min-width: min(100%, 15.5rem);
+  min-height: 3.25rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0.85rem 1.25rem;
+  border: 1px solid rgba(11, 11, 13, 0.58);
+  color: var(--story-ink);
+  font-size: 0.75rem;
+  font-weight: 650;
+  letter-spacing: 0.13em;
+  text-align: center;
+  text-decoration: none;
+  text-transform: uppercase;
+  transition:
+    background-color 180ms ease,
+    color 180ms ease,
+    border-color 180ms ease;
+}
+
+.closing a:hover {
+  border-color: var(--story-ink);
+  background: var(--story-ink);
+  color: #fff;
+}
+
+.closing a:focus-visible {
+  outline: 2px solid var(--story-ink);
+  outline-offset: 0.35rem;
+}
+
+@media (max-width: 1080px) {
+  .heroBody {
+    grid-template-columns: minmax(18rem, 0.42fr) minmax(0, 0.58fr);
+  }
+
+  .definition {
+    grid-template-columns: minmax(0, 0.57fr) minmax(18rem, 0.43fr);
+  }
+}
+
+@media (max-width: 760px) {
+  .page {
+    --story-sequence-gap: 0.875rem;
+  }
+  .hero {
+    min-height: 0;
+  }
+
+  .heroBody {
+    display: flex;
+    min-height: 0;
+    flex-direction: column;
+  }
+
+  .heroImage {
+    order: 1;
+    width: 100%;
+    aspect-ratio: 4 / 5;
+  }
+
+  .heroImage img {
+    object-position: 50% 34%;
+  }
+
+  .heroCopy {
+    order: 2;
+    padding: 2.75rem 1.25rem 3.25rem;
+    border-top: 1px solid var(--story-line-dark);
+    border-right: 0;
+  }
+
+  .heroCopy h1 {
+    max-width: none;
+    margin-top: 1rem;
+    font-size: clamp(4rem, 19vw, 6rem);
+  }
+
+  .heroCopy blockquote {
+    max-width: 23rem;
+    margin-top: 2rem;
+    font-size: 1rem;
+  }
+
+  .origin {
+    grid-template-columns: 1fr;
+    gap: 2.5rem;
+    padding: 4.25rem 1.25rem 4.75rem;
+  }
+
+  .actHeading h2 {
+    font-size: clamp(2.65rem, 13vw, 4.75rem);
+  }
+
+  .originCopy p {
+    font-size: 1.18rem;
+  }
+
+  .originCopy p + p {
+    font-size: 1rem;
+  }
+
+  .people {
+    padding: 4.25rem 0 0;
+  }
+
+  .peopleHeader {
+    grid-template-columns: 1fr;
+    gap: 2rem;
+    margin-bottom: 2.75rem;
+    padding: 0 1.25rem;
+  }
+
+  .peopleStatement {
+    font-size: 1rem;
+  }
+
+  .portraitGrid {
+    gap: 0.25rem;
+  }
+
+  .portrait figcaption {
+    right: 0.75rem;
+    bottom: 0.75rem;
+    left: 0.75rem;
+    font-size: 0.75rem;
+  }
+
+  .definition {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .definitionCopy {
+    padding: 4.5rem 1.25rem;
+  }
+
+  .definitionText {
+    margin-top: 2.5rem;
+    padding-top: 1.5rem;
+  }
+
+  .definitionText p {
+    font-size: 1rem;
+  }
+
+  .definitionVisual {
+    display: none;
+  }
+
+  .closing {
+    min-height: 0;
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 3.75rem 1.25rem 4.25rem;
+  }
+
+  .closing h2 {
+    max-width: 11ch;
+    font-size: clamp(3.25rem, 15vw, 5rem);
+  }
+
+  .closing a {
+    width: 100%;
+  }
+}
+
+@media (max-width: 390px) {
+  .heroTop :global(a:not([aria-label="AJ Luxury, accueil"])),
+  .heroTop :global(select) {
+    font-size: 0.75rem;
+  }
+
+  .portrait figcaption {
+    letter-spacing: 0.12em;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .closing a {
+    transition: none;
+  }
+}
