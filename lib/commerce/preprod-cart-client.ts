@@ -114,7 +114,7 @@ function parseCartLine(value: unknown): PublicCartLine {
   return Object.freeze(line as PublicCartLine);
 }
 
-function parseCartSnapshot(value: unknown): PublicCartSnapshot {
+export function parseCartSnapshot(value: unknown): PublicCartSnapshot {
   if (!isRecord(value) || !Array.isArray(value.lines)) {
     throw new CartApiError("MALFORMED_RESPONSE");
   }

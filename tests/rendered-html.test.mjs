@@ -67,7 +67,7 @@ test("production pages remain indexable while preproduction is explicitly noinde
   assert.equal(preproduction.headers.get("x-robots-tag"), "noindex, nofollow");
 });
 
-test("preproduction health is ready only on migration 0006 and exposes stock states, not quantities", async () => {
+test("preproduction health is partial on migration 0006 and exposes all launch-zone gates, not quantities", async () => {
   const statements = [];
   const database = {
     prepare(query) {
@@ -76,11 +76,15 @@ test("preproduction health is ready only on migration 0006 and exposes stock sta
           return statement;
         },
         async first() {
-          return query.includes("d1_migrations")
-            ? { name: "0006_allow_bounded_expired_cart_purge.sql" }
-            : null;
+          if (query.includes("d1_migrations")) {
+            return { name: "0006_allow_bounded_expired_cart_purge.sql" };
+          }
+          return null;
         },
         async all() {
+          if (query.includes("shipping_zone_configurations")) {
+            return { results: [{ zone: "EU" }] };
+          }
           return {
             results: [
               { variant_id: "variant_available", available_to_sell: 18 },
@@ -108,7 +112,7 @@ test("preproduction health is ready only on migration 0006 and exposes stock sta
   );
   assert.equal(response.status, 200);
   const payload = await response.json();
-  assert.equal(payload.status, "ready");
+  assert.equal(payload.status, "partial");
   assert.equal(
     payload.latestMigration,
     "0006_allow_bounded_expired_cart_purge.sql",
@@ -118,13 +122,25 @@ test("preproduction health is ready only on migration 0006 and exposes stock sta
     { variantId: "variant_low", state: "low-stock" },
     { variantId: "variant_sold", state: "sold-out" },
   ]);
+  assert.deepEqual(payload.capabilities, {
+    catalog: true,
+    cart: true,
+    shippingQuotes: false,
+    shippingQuoteZones: { EU: true, UK: false, US: false, CA: false },
+    payment: false,
+    orderCreation: false,
+    emailDelivery: false,
+    carrier: false,
+  });
   assert.equal(JSON.stringify(payload).includes("available_to_sell"), false);
-  assert.equal(statements.length, 2);
+  assert.equal(statements.length, 3);
 });
 
-test("preproduction health stays unavailable on an incomplete migration chain", async () => {
+test("preproduction health stays fail-closed without querying tables from a missing migration", async () => {
+  const statements = [];
   const database = {
     prepare(query) {
+      statements.push(query);
       const statement = {
         bind() {
           return statement;
@@ -135,7 +151,7 @@ test("preproduction health stays unavailable on an incomplete migration chain", 
             : null;
         },
         async all() {
-          return { results: [] };
+          throw new Error("shipping tables must not be queried");
         },
       };
       return statement;
@@ -154,7 +170,83 @@ test("preproduction health stays unavailable on an incomplete migration chain", 
     { waitUntil() {}, passThroughOnException() {} },
   );
   assert.equal(response.status, 503);
+  const payload = await response.json();
+  assert.equal(payload.status, "unavailable");
+  assert.equal(payload.capabilities.shippingQuotes, false);
+  assert.deepEqual(payload.capabilities.shippingQuoteZones, {
+    EU: false, UK: false, US: false, CA: false,
+  });
+  assert.equal(statements.length, 1);
+});
+
+test("preproduction health stays fail-closed when the migration ledger is absent", async () => {
+  const database = {
+    prepare() {
+      return {
+        async first() {
+          throw new Error("no such table: d1_migrations");
+        },
+      };
+    },
+  };
+  const workerUrl = new URL("../dist/server/index.js", import.meta.url);
+  workerUrl.searchParams.set("health-no-ledger", `${process.pid}-${Date.now()}-${Math.random()}`);
+  const { default: worker } = await import(workerUrl.href);
+  const response = await worker.fetch(
+    new Request("https://preprod.example/api/preprod/health"),
+    {
+      APP_ENV: "preproduction",
+      PREPROD_ORIGIN: "https://preprod.example",
+      DB: database,
+    },
+    { waitUntil() {}, passThroughOnException() {} },
+  );
+  assert.equal(response.status, 503);
   assert.equal((await response.json()).status, "unavailable");
+});
+
+test("preproduction health enables shipping quotes only when all four launch zones are active", async () => {
+  const database = {
+    prepare(query) {
+      const statement = {
+        bind() {
+          return statement;
+        },
+        async first() {
+          return query.includes("d1_migrations")
+            ? { name: "0006_allow_bounded_expired_cart_purge.sql" }
+            : null;
+        },
+        async all() {
+          return query.includes("shipping_zone_configurations")
+            ? { results: [{ zone: "EU" }, { zone: "UK" }, { zone: "US" }, { zone: "CA" }] }
+            : { results: [] };
+        },
+      };
+      return statement;
+    },
+  };
+  const workerUrl = new URL("../dist/server/index.js", import.meta.url);
+  workerUrl.searchParams.set("health-all-zones", `${process.pid}-${Date.now()}-${Math.random()}`);
+  const { default: worker } = await import(workerUrl.href);
+  const response = await worker.fetch(
+    new Request("https://preprod.example/api/preprod/health"),
+    {
+      APP_ENV: "preproduction",
+      PREPROD_ORIGIN: "https://preprod.example",
+      DB: database,
+    },
+    { waitUntil() {}, passThroughOnException() {} },
+  );
+  assert.equal(response.status, 200);
+  const payload = await response.json();
+  assert.equal(payload.status, "partial");
+  assert.equal(payload.capabilities.shippingQuotes, true);
+  assert.deepEqual(payload.capabilities.shippingQuoteZones, {
+    EU: true, UK: true, US: true, CA: true,
+  });
+  assert.equal(payload.capabilities.payment, false);
+  assert.equal(payload.capabilities.carrier, false);
 });
 
 async function render(pathname = "/", headers = {}) {
@@ -627,22 +719,20 @@ test("cart renders a secure loading state and ignores legacy URL variants", asyn
   assert.doesNotMatch(html, /href="\/checkout|cart\?variant/);
 });
 
-test("the untouched checkout simulation keeps its selected color and size", async () => {
+test("checkout uses the cookie-backed cart and ignores legacy URL variants", async () => {
   const checkout = await render(
     "/checkout?variant=variant_boxer_rose-pale_xl",
   );
   const checkoutHtml = await checkout.text();
-  assert.match(checkoutHtml, /Rose Velours/);
-  assert.match(checkoutHtml, /29,99(?:\s|&nbsp;|&#xA0;)*€/);
-  assert.match(
-    checkoutHtml,
-    /\/cart\?variant=variant_boxer_rose-pale_xl/,
-  );
+  assert.match(checkoutHtml, /Simulation de livraison sur le stock de préproduction/i);
+  assert.match(checkoutHtml, /Chargement du panier/i);
+  assert.match(checkoutHtml, /aria-busy="true"/);
+  assert.doesNotMatch(checkoutHtml, /Rose Velours|29,99|cart\?variant/);
 });
 
 const commerceCases = [
   ["/cart", /paiement et livraison non activés/i],
-  ["/checkout", /aucune commande n’est enregistrée/i],
+  ["/checkout", /aucun transporteur, paiement ou commande n’est activé/i],
   ["/account", /authentification non activée/i],
 ];
 

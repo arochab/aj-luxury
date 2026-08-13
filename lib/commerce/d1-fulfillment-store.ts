@@ -347,6 +347,7 @@ export class D1FulfillmentStore {
     id: string;
     cartId: string;
     address: ShippingAddressInput;
+    addressFingerprint?: string;
     expiresAt: string;
     now: string;
   }>): Promise<QuoteRow> {
@@ -362,6 +363,22 @@ export class D1FulfillmentStore {
       normalizeShippingAddress(input.address),
       this.#openCartSnapshot(input.cartId, input.now),
     ]);
+    if (input.addressFingerprint !== undefined) {
+      assertFulfillmentFingerprint(input.addressFingerprint, "addressFingerprint");
+    }
+    const addressFingerprint = input.addressFingerprint ?? address.fingerprint;
+    // D1 still rechecks the launch zone, but it receives only a representative
+    // non-personal routing proof. The validated customer country, postcode,
+    // region, name, street and city never enter durable quote storage.
+    const routingProofJson = JSON.stringify(
+      address.zone === "EU"
+        ? { countryCode: "FR", postalCode: "00000", regionCode: null }
+        : address.zone === "UK"
+          ? { countryCode: "GB", postalCode: "AA0", regionCode: null }
+          : address.zone === "US"
+            ? { countryCode: "US", postalCode: "00000", regionCode: "NY" }
+            : { countryCode: "CA", postalCode: "A0A", regionCode: null },
+    );
     if (input.expiresAt > cart.expiresAt) {
       throw new FulfillmentError(
         "INVALID_INPUT",
@@ -400,8 +417,8 @@ export class D1FulfillmentStore {
           cart.fingerprint,
           cart.revision,
           configuration.id,
-          address.canonicalJson,
-          address.fingerprint,
+          routingProofJson,
+          addressFingerprint,
           configuration.price_cents,
           configuration.estimated_days_min,
           configuration.estimated_days_max,
@@ -420,8 +437,8 @@ export class D1FulfillmentStore {
       quote.cart_fingerprint !== cart.fingerprint ||
       quote.cart_revision !== cart.revision ||
       quote.configuration_id !== configuration.id ||
-      quote.shipping_address_fingerprint !== address.fingerprint ||
-      quote.expires_at !== input.expiresAt
+      quote.shipping_address_fingerprint !== addressFingerprint ||
+      quote.shipping_address_json !== routingProofJson
     ) {
       throw new FulfillmentError(
         "QUOTE_MISMATCH",
@@ -451,6 +468,9 @@ export class D1FulfillmentStore {
     address: ShippingAddressInput;
     now: string;
   }>): Promise<QuoteRow> {
+    // This legacy store method accepts an unkeyed address proof and is not
+    // exposed by Gate B. Any future order API must pass and verify the same
+    // request-local HMAC proof as the quote endpoint before enabling select.
     assertFulfillmentIdentifier(input.quoteId, "quoteId");
     assertFulfillmentIdentifier(input.cartId, "cartId");
     assertFulfillmentTimestamp(input.now, "now");
@@ -458,11 +478,20 @@ export class D1FulfillmentStore {
       this.getShippingQuote(input.quoteId),
       normalizeShippingAddress(input.address),
     ]);
+    const routingProofJson = JSON.stringify(
+      address.zone === "EU"
+        ? { countryCode: "FR", postalCode: "00000", regionCode: null }
+        : address.zone === "UK"
+          ? { countryCode: "GB", postalCode: "AA0", regionCode: null }
+          : address.zone === "US"
+            ? { countryCode: "US", postalCode: "00000", regionCode: "NY" }
+            : { countryCode: "CA", postalCode: "A0A", regionCode: null },
+    );
     if (
       !quote ||
       quote.cart_id !== input.cartId ||
       quote.shipping_address_fingerprint !== address.fingerprint ||
-      quote.shipping_address_json !== address.canonicalJson
+      quote.shipping_address_json !== routingProofJson
     ) {
       throw new FulfillmentError("QUOTE_MISMATCH", "The quote no longer matches the cart.");
     }
@@ -526,10 +555,15 @@ export class D1FulfillmentStore {
       const result = await this.#database
         .prepare(
           `DELETE FROM shipping_quotes
-          WHERE selected_at IS NULL AND expires_at <= ?
-            AND NOT EXISTS (
-              SELECT 1 FROM orders WHERE shipping_quote_id = shipping_quotes.id
-            )`,
+          WHERE id IN (
+            SELECT quote.id FROM shipping_quotes AS quote
+            WHERE quote.selected_at IS NULL AND quote.expires_at <= ?
+              AND NOT EXISTS (
+                SELECT 1 FROM orders WHERE shipping_quote_id = quote.id
+              )
+            ORDER BY quote.expires_at, quote.id
+            LIMIT 100
+          )`,
         )
         .bind(input.expiredBefore)
         .run();

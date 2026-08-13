@@ -10,7 +10,15 @@ import {
 } from "../lib/commerce/account-security.ts";
 import { CommerceError } from "../lib/commerce/backend-domain.ts";
 import { D1CommerceStore } from "../lib/commerce/d1-commerce-store.ts";
+import type { PublicCartSnapshot } from "../lib/commerce/d1-commerce-store.ts";
+import { D1FulfillmentStore } from "../lib/commerce/d1-fulfillment-store.ts";
 import type { CommerceD1Database } from "../lib/commerce/d1-port.ts";
+import {
+  FulfillmentError,
+  normalizeShippingAddress,
+  sha256Hex,
+  type ShippingAddressInput,
+} from "../lib/commerce/fulfillment-domain.ts";
 import {
   authorizeBrowserMutation,
   buildCsrfCookie,
@@ -72,17 +80,32 @@ const HTML_CACHE_VERSION = "2026-08-10-hero-v4";
 const PREPROD_API_PREFIX = "/api/preprod/";
 const PREPROD_CART_PATH = `${PREPROD_API_PREFIX}cart`;
 const PREPROD_CART_LINE_PATTERN = /^\/api\/preprod\/cart\/lines\/([^/]+)$/;
+const PREPROD_SHIPPING_QUOTE_PATH =
+  `${PREPROD_API_PREFIX}checkout/shipping-quote`;
 const CART_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
 const CART_MAX_QUANTITY = 5;
 const CART_MAX_ACTIVE_SESSIONS = 250;
 const CART_MAX_CREATIONS_PER_MINUTE = 30;
 const CART_RETENTION_DAYS = 30;
+const SHIPPING_QUOTE_BODY_MAX_BYTES = 4 * 1024;
+const SHIPPING_QUOTE_TTL_MS = 15 * 60 * 1_000;
+const SHIPPING_QUOTE_IDEMPOTENCY_PATTERN =
+  /^[A-Za-z0-9][A-Za-z0-9_.:-]{7,127}$/;
 
 // These limits are a private-preproduction circuit breaker, not a public
 // anti-bot control. A public launch still requires a separately approved edge
 // rate-limit/Turnstile gate and production-sized capacity settings.
 
-type CartSession = Readonly<{ cartId: string }>;
+type CartSession = Readonly<{ cartId: string; addressProofKey: string }>;
+
+type PublicShippingCartSnapshot = Readonly<{
+  status: "open";
+  currency: "EUR";
+  expiresAt: string;
+  itemCount: number;
+  subtotalCents: number;
+  lines: readonly Readonly<Omit<PublicCartSnapshot["lines"][number], "stockState">>[];
+}>;
 
 function jsonResponse(
   value: unknown,
@@ -151,7 +174,30 @@ async function readCartSession(request: Request): Promise<CartSession | null> {
     `${values[0]}:${csrfValues[0]}`,
     accessTokenHashContexts.cartSession,
   );
-  return Object.freeze({ cartId: `cart_${tokenHash}` });
+  return Object.freeze({
+    cartId: `cart_${tokenHash}`,
+    // The raw opaque session token remains request-local and is never written
+    // to D1. It keys address proofs so a database reader cannot guess them.
+    addressProofKey: values[0],
+  });
+}
+
+async function hmacSha256Hex(key: string, value: string): Promise<string> {
+  const cryptoKey = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(key),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const signature = await crypto.subtle.sign(
+    "HMAC",
+    cryptoKey,
+    new TextEncoder().encode(value),
+  );
+  return Array.from(new Uint8Array(signature), (byte) =>
+    byte.toString(16).padStart(2, "0")
+  ).join("");
 }
 
 function clearCartCookieHeaders(): Headers {
@@ -325,6 +371,449 @@ function mapCartError(error: unknown): Response {
         "Le panier ne peut pas être modifié.",
         409,
       );
+  }
+}
+
+type ShippingQuoteAddressBody = Readonly<{
+  address: ShippingAddressInput;
+}>;
+
+type CartQuoteReadiness = Readonly<{
+  revision: number;
+  insufficientCount: number;
+  lineCount: number;
+}>;
+
+function shippingQuoteErrorResponse(
+  code: string,
+  message: string,
+  status: number,
+  headers?: HeadersInit,
+): Response {
+  return cartErrorResponse(code, message, status, headers);
+}
+
+function exactObjectKeys(
+  value: unknown,
+  allowedKeys: ReadonlySet<string>,
+): value is Record<string, unknown> {
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    Array.isArray(value) ||
+    Object.getPrototypeOf(value) !== Object.prototype
+  ) {
+    return false;
+  }
+  const keys = Reflect.ownKeys(value);
+  return keys.every(
+    (key) => typeof key === "string" && allowedKeys.has(key),
+  );
+}
+
+async function parseShippingQuoteBody(
+  request: Request,
+): Promise<
+  | Readonly<{ ok: true; value: ShippingQuoteAddressBody }>
+  | Readonly<{ ok: false; code: "BODY_TOO_LARGE" | "INVALID_JSON" }>
+> {
+  const declaredLength = request.headers.get("Content-Length");
+  if (
+    declaredLength !== null &&
+    (/^\d+$/.test(declaredLength) === false ||
+      Number(declaredLength) > SHIPPING_QUOTE_BODY_MAX_BYTES)
+  ) {
+    try {
+      await request.body?.cancel();
+    } catch {
+      // The size gate is authoritative even when transport cancellation fails.
+    }
+    return Object.freeze({ ok: false, code: "BODY_TOO_LARGE" });
+  }
+  const contentType = request.headers.get("Content-Type")
+    ?.split(";", 1)[0]
+    .trim()
+    .toLowerCase();
+  const contentEncoding = request.headers.get("Content-Encoding");
+  if (
+    contentType !== "application/json" ||
+    (contentEncoding !== null && contentEncoding.toLowerCase() !== "identity")
+  ) {
+    try {
+      await request.body?.cancel();
+    } catch {
+      // Invalid content metadata is rejected regardless of cancellation support.
+    }
+    return Object.freeze({ ok: false, code: "INVALID_JSON" });
+  }
+
+  const bytes = await readBoundedBody(request, SHIPPING_QUOTE_BODY_MAX_BYTES);
+  if (bytes === null) {
+    return Object.freeze({ ok: false, code: "BODY_TOO_LARGE" });
+  }
+  let body: unknown;
+  try {
+    body = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+  } catch {
+    return Object.freeze({ ok: false, code: "INVALID_JSON" });
+  }
+  if (
+    !exactObjectKeys(body, new Set(["address"])) ||
+    Object.keys(body).length !== 1 ||
+    !("address" in body)
+  ) {
+    return Object.freeze({ ok: false, code: "INVALID_JSON" });
+  }
+  return Object.freeze({
+    ok: true,
+    value: Object.freeze({ address: body.address as ShippingAddressInput }),
+  });
+}
+
+async function getCartQuoteReadiness(
+  database: CommerceD1Database,
+  cartId: string,
+): Promise<CartQuoteReadiness | null> {
+  const row = await database
+    .prepare(
+      `SELECT cart.fulfillment_revision AS revision,
+        COUNT(line.id) AS line_count,
+        COALESCE(SUM(CASE
+          WHEN stock.physical_quantity - stock.gift_reserve_quantity
+            - stock.safety_reserve_quantity - stock.active_reserved_quantity
+            - stock.sold_quantity < line.quantity THEN 1 ELSE 0 END), 0)
+          AS insufficient_count
+      FROM carts AS cart
+      LEFT JOIN cart_lines AS line ON line.cart_id = cart.id
+      LEFT JOIN inventory AS stock ON stock.variant_id = line.variant_id
+      WHERE cart.id = ?
+      GROUP BY cart.id`,
+    )
+    .bind(cartId)
+    .first<{
+      revision: number;
+      line_count: number;
+      insufficient_count: number;
+    }>();
+  if (!row) return null;
+  return Object.freeze({
+    revision: Number(row.revision),
+    lineCount: Number(row.line_count),
+    insufficientCount: Number(row.insufficient_count),
+  });
+}
+
+function mapShippingQuoteError(error: unknown): Response {
+  if (error instanceof CommerceError) {
+    switch (error.code) {
+      case "CART_NOT_FOUND":
+        return shippingQuoteErrorResponse(
+          "CART_NOT_FOUND",
+          "Le panier n’est plus disponible.",
+          401,
+          clearCartCookieHeaders(),
+        );
+      case "CART_EXPIRED":
+        return shippingQuoteErrorResponse(
+          "CART_EXPIRED",
+          "Le panier a expiré.",
+          409,
+          clearCartCookieHeaders(),
+        );
+      case "CART_CLOSED":
+        return shippingQuoteErrorResponse(
+          "CART_CHANGED",
+          "Le panier a changé. Actualisez avant de continuer.",
+          409,
+        );
+      case "STOCK_UNAVAILABLE":
+        return shippingQuoteErrorResponse(
+          "OUT_OF_STOCK",
+          "Un article n’est plus disponible dans la quantité demandée.",
+          409,
+        );
+      default:
+        return shippingQuoteErrorResponse(
+          "INTERNAL_ERROR",
+          "Le devis de livraison est momentanément indisponible.",
+          503,
+        );
+    }
+  }
+  if (error instanceof FulfillmentError) {
+    switch (error.code) {
+      case "INVALID_INPUT":
+        return shippingQuoteErrorResponse(
+          "INVALID_ADDRESS",
+          "L’adresse de livraison est invalide.",
+          400,
+        );
+      case "DESTINATION_UNAVAILABLE":
+        return shippingQuoteErrorResponse(
+          "DESTINATION_UNAVAILABLE",
+          "Cette destination n’est pas disponible au lancement.",
+          422,
+        );
+      case "CONFIGURATION_UNAVAILABLE":
+      case "DEPENDENCY_UNAVAILABLE":
+        return shippingQuoteErrorResponse(
+          "CONFIGURATION_UNAVAILABLE",
+          "Les tarifs de livraison ne sont pas encore configurés.",
+          503,
+        );
+      case "QUOTE_MISMATCH":
+        return shippingQuoteErrorResponse(
+          "IDEMPOTENCY_CONFLICT",
+          "Cette tentative ne correspond plus au même devis.",
+          409,
+        );
+      case "QUOTE_EXPIRED":
+        return shippingQuoteErrorResponse(
+          "CART_CHANGED",
+          "Le devis a expiré. Demandez un nouveau tarif.",
+          409,
+        );
+      default:
+        return shippingQuoteErrorResponse(
+          "INTERNAL_ERROR",
+          "Le devis de livraison est momentanément indisponible.",
+          503,
+        );
+    }
+  }
+  return shippingQuoteErrorResponse(
+    "INTERNAL_ERROR",
+    "Le devis de livraison est momentanément indisponible.",
+    503,
+  );
+}
+
+function publicShippingQuoteResponse(
+  quote: Readonly<{
+    id: string;
+    amount_cents: number;
+    currency: "EUR";
+    estimated_days_min: number;
+    estimated_days_max: number;
+    duties_terms: "EU_INCLUDED" | "DAP" | "DDP";
+    expires_at: string;
+  }>,
+  zone: "EU" | "UK" | "US" | "CA",
+  cart: PublicCartSnapshot,
+): Response {
+  const stableCart: PublicShippingCartSnapshot = Object.freeze({
+    status: cart.status,
+    currency: cart.currency,
+    expiresAt: cart.expiresAt,
+    itemCount: cart.itemCount,
+    subtotalCents: cart.subtotalCents,
+    lines: Object.freeze(cart.lines.map((line) => Object.freeze({
+      variantId: line.variantId,
+      productId: line.productId,
+      productSlug: line.productSlug,
+      colorKey: line.colorKey,
+      colorName: line.colorName,
+      size: line.size,
+      imageUrl: line.imageUrl,
+      quantity: line.quantity,
+      unitPriceCents: line.unitPriceCents,
+      lineTotalCents: line.lineTotalCents,
+    }))),
+  });
+  return jsonResponse({
+    data: {
+      quoteId: quote.id,
+      simulation: true,
+      carrierConnected: false,
+      zone,
+      amountCents: quote.amount_cents,
+      currency: quote.currency,
+      estimatedDaysMin: quote.estimated_days_min,
+      estimatedDaysMax: quote.estimated_days_max,
+      dutiesTerms: quote.duties_terms,
+      expiresAt: quote.expires_at,
+      cart: stableCart,
+    },
+  });
+}
+
+async function handleShippingQuoteApi(
+  request: Request,
+  env: Env,
+  url: URL,
+): Promise<Response | null> {
+  if (url.pathname !== PREPROD_SHIPPING_QUOTE_PATH) return null;
+  if (request.method !== "POST") {
+    return shippingQuoteErrorResponse(
+      "METHOD_NOT_ALLOWED",
+      "Méthode non autorisée.",
+      405,
+      { Allow: "POST" },
+    );
+  }
+  if (!mutationOriginIsTrusted(request, env)) {
+    return shippingQuoteErrorResponse(
+      "ORIGIN_REJECTED",
+      "La requête n’est pas autorisée.",
+      403,
+    );
+  }
+  let session: CartSession | null;
+  try {
+    session = await readCartSession(request);
+  } catch {
+    return shippingQuoteErrorResponse(
+      "CART_NOT_FOUND",
+      "Le panier n’est plus disponible.",
+      401,
+      clearCartCookieHeaders(),
+    );
+  }
+  if (!session) {
+    return shippingQuoteErrorResponse(
+      "CART_NOT_FOUND",
+      "Le panier doit être initialisé.",
+      401,
+    );
+  }
+  if (!mutationIsAuthorized(request, env)) {
+    return shippingQuoteErrorResponse(
+      "CSRF_REJECTED",
+      "La requête n’est pas autorisée.",
+      403,
+    );
+  }
+  const idempotencyKey = request.headers.get("Idempotency-Key");
+  if (
+    idempotencyKey === null ||
+    !SHIPPING_QUOTE_IDEMPOTENCY_PATTERN.test(idempotencyKey)
+  ) {
+    return shippingQuoteErrorResponse(
+      "IDEMPOTENCY_CONFLICT",
+      "Une clé de tentative valide est requise.",
+      409,
+    );
+  }
+  const parsedBody = await parseShippingQuoteBody(request);
+  if (!parsedBody.ok) {
+    return shippingQuoteErrorResponse(
+      parsedBody.code,
+      parsedBody.code === "BODY_TOO_LARGE"
+        ? "Le formulaire de livraison est trop volumineux."
+        : "Le formulaire de livraison est invalide.",
+      parsedBody.code === "BODY_TOO_LARGE" ? 413 : 400,
+    );
+  }
+
+  const commerce = new D1CommerceStore(env.DB);
+  const fulfillment = new D1FulfillmentStore(env.DB);
+  try {
+    const now = new Date().toISOString();
+    const [cart, normalizedAddress] = await Promise.all([
+      commerce.getPublicCartSnapshot(session.cartId, now),
+      normalizeShippingAddress(parsedBody.value.address),
+    ]);
+    if (cart.lines.length === 0) {
+      return shippingQuoteErrorResponse(
+        "CART_EMPTY",
+        "Le panier est vide.",
+        409,
+      );
+    }
+    const readiness = await getCartQuoteReadiness(env.DB, session.cartId);
+    if (!readiness || readiness.lineCount !== cart.lines.length) {
+      return shippingQuoteErrorResponse(
+        "CART_CHANGED",
+        "Le panier a changé. Actualisez avant de continuer.",
+        409,
+      );
+    }
+    if (readiness.insufficientCount > 0) {
+      return shippingQuoteErrorResponse(
+        "OUT_OF_STOCK",
+        "Un article n’est plus disponible dans la quantité demandée.",
+        409,
+      );
+    }
+
+    const quoteId = `quote_${await sha256Hex(
+      `${session.cartId}\u0000${idempotencyKey}`,
+    )}`;
+    const addressProofFingerprint = await hmacSha256Hex(
+      session.addressProofKey,
+      normalizedAddress.canonicalJson,
+    );
+    const existing = await fulfillment.getShippingQuote(quoteId);
+    if (
+      existing &&
+      (existing.cart_id !== session.cartId ||
+        existing.shipping_address_fingerprint !== addressProofFingerprint)
+    ) {
+      return shippingQuoteErrorResponse(
+        "IDEMPOTENCY_CONFLICT",
+        "Cette tentative ne correspond plus au même devis.",
+        409,
+      );
+    }
+    await fulfillment.purgeExpiredUnselectedShippingQuotes({
+      expiredBefore: now,
+      now,
+    });
+    if (existing && existing.cart_revision !== readiness.revision) {
+      return shippingQuoteErrorResponse(
+        "CART_CHANGED",
+        "Le panier a changé. Demandez un nouveau devis.",
+        409,
+      );
+    }
+    if (existing && existing.expires_at <= now) {
+      return shippingQuoteErrorResponse(
+        "CART_CHANGED",
+        "Le devis a expiré. Demandez un nouveau devis.",
+        409,
+      );
+    }
+    const expiresAt = existing?.expires_at ?? new Date(
+      Math.min(
+        Date.parse(now) + SHIPPING_QUOTE_TTL_MS,
+        Date.parse(cart.expiresAt),
+      ),
+    ).toISOString();
+    const quote = existing ?? await fulfillment.createShippingQuote({
+        id: quoteId,
+        cartId: session.cartId,
+        address: parsedBody.value.address,
+        addressFingerprint: addressProofFingerprint,
+        expiresAt,
+        now,
+      });
+    const [verifiedCart, verifiedReadiness] = await Promise.all([
+      commerce.getPublicCartSnapshot(session.cartId, now),
+      getCartQuoteReadiness(env.DB, session.cartId),
+    ]);
+    if (
+      !verifiedReadiness ||
+      verifiedReadiness.revision !== quote.cart_revision ||
+      verifiedReadiness.insufficientCount > 0 ||
+      verifiedReadiness.lineCount !== verifiedCart.lines.length
+    ) {
+      return shippingQuoteErrorResponse(
+        verifiedReadiness?.insufficientCount
+          ? "OUT_OF_STOCK"
+          : "CART_CHANGED",
+        verifiedReadiness?.insufficientCount
+          ? "Un article n’est plus disponible dans la quantité demandée."
+          : "Le panier a changé. Demandez un nouveau devis.",
+        409,
+      );
+    }
+    return publicShippingQuoteResponse(
+      quote,
+      normalizedAddress.zone,
+      verifiedCart,
+    );
+  } catch (error) {
+    return mapShippingQuoteError(error);
   }
 }
 
@@ -658,51 +1147,110 @@ export async function preprodApiResponse(
     }
     return (async () => {
       const database = env.DB;
-      const migration = await database
-        .prepare(
-          "SELECT name FROM d1_migrations ORDER BY name DESC LIMIT 1",
-        )
-        .first<{ name: string }>();
-      const stock = await database
-        .prepare(
-          `SELECT variant.id AS variant_id,
-            stock.physical_quantity - stock.gift_reserve_quantity
-              - stock.safety_reserve_quantity - stock.active_reserved_quantity
-              - stock.sold_quantity AS available_to_sell
-          FROM variants AS variant
-          INNER JOIN inventory AS stock ON stock.variant_id = variant.id
-          WHERE variant.color_key = ?
-          ORDER BY variant.sort_order`,
-        )
-        .bind("rose")
-        .all<{ variant_id: string; available_to_sell: number }>();
-
-      const latestMigration = migration?.name ?? null;
-      const migrationReady = latestMigration === "0006_allow_bounded_expired_cart_purge.sql";
-      return jsonResponse(
+      const unavailable = (latestMigration: string | null) => jsonResponse(
         {
-          status: migrationReady ? "ready" : "unavailable",
+          status: "unavailable",
           environment: "preproduction",
-          payment: "test-only-not-connected",
-          email: "captured-not-sent",
-          carrier: "not-connected",
+          capabilities: {
+            catalog: false,
+            cart: false,
+            shippingQuotes: false,
+            shippingQuoteZones: { EU: false, UK: false, US: false, CA: false },
+            payment: false,
+            orderCreation: false,
+            emailDelivery: false,
+            carrier: false,
+          },
           latestMigration,
-          stockProjection: stock.results.map((position: {
-            variant_id: string;
-            available_to_sell: number;
-          }) => ({
-            variantId: position.variant_id,
-            state: position.available_to_sell <= 0
-                ? "sold-out"
-                : position.available_to_sell <= 5
-                  ? "low-stock"
-                  : "available",
-          })),
+          stockProjection: [],
         },
-        { status: migrationReady ? 200 : 503 },
+        { status: 503 },
       );
+      let latestMigration: string | null = null;
+      try {
+        const migration = await database
+          .prepare(
+            "SELECT name FROM d1_migrations ORDER BY name DESC LIMIT 1",
+          )
+          .first<{ name: string }>();
+        latestMigration = migration?.name ?? null;
+      } catch {
+        return unavailable(null);
+      }
+      if (latestMigration !== "0006_allow_bounded_expired_cart_purge.sql") {
+        return unavailable(latestMigration);
+      }
+      try {
+        const [stock, shippingConfigurations] = await Promise.all([
+          database
+            .prepare(
+              `SELECT variant.id AS variant_id,
+                stock.physical_quantity - stock.gift_reserve_quantity
+                  - stock.safety_reserve_quantity - stock.active_reserved_quantity
+                  - stock.sold_quantity AS available_to_sell
+              FROM variants AS variant
+              INNER JOIN inventory AS stock ON stock.variant_id = variant.id
+              WHERE variant.color_key = ?
+              ORDER BY variant.sort_order`,
+            )
+            .bind("rose")
+            .all<{ variant_id: string; available_to_sell: number }>(),
+          database
+            .prepare(
+              `SELECT zone FROM shipping_zone_configurations
+              WHERE status = 'active'
+              GROUP BY zone`,
+            )
+            .all<{ zone: string }>(),
+        ]);
+        const configuredZones = new Set(
+          shippingConfigurations.results.map((row) => row.zone),
+        );
+        const shippingQuoteZones = Object.freeze({
+          EU: configuredZones.has("EU"),
+          UK: configuredZones.has("UK"),
+          US: configuredZones.has("US"),
+          CA: configuredZones.has("CA"),
+        });
+        const shippingQuotesReady = Object.values(shippingQuoteZones)
+          .every(Boolean);
+        return jsonResponse(
+          {
+            status: "partial",
+            environment: "preproduction",
+            capabilities: {
+              catalog: true,
+              cart: true,
+              shippingQuotes: shippingQuotesReady,
+              shippingQuoteZones,
+              payment: false,
+              orderCreation: false,
+              emailDelivery: false,
+              carrier: false,
+            },
+            latestMigration,
+            stockProjection: stock.results.map((position: {
+              variant_id: string;
+              available_to_sell: number;
+            }) => ({
+              variantId: position.variant_id,
+              state: position.available_to_sell <= 0
+                  ? "sold-out"
+                  : position.available_to_sell <= 5
+                    ? "low-stock"
+                    : "available",
+            })),
+          },
+          { status: 200 },
+        );
+      } catch {
+        return unavailable(latestMigration);
+      }
     })();
   }
+
+  const shippingQuoteResponse = await handleShippingQuoteApi(request, env, url);
+  if (shippingQuoteResponse) return shippingQuoteResponse;
 
   const cartResponse = await handleCartApi(request, env, url);
   if (cartResponse) return cartResponse;

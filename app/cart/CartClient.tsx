@@ -257,9 +257,9 @@ export default function CartClient() {
               <LocalizedPrice amountCents={cart.subtotalCents} />
             </span>
           </div>
-          <button className={styles.lockedButton} type="button" disabled>
-            {t("cart.checkoutUnavailable")}
-          </button>
+          <Link className={styles.button} href="/checkout">
+            {t("cart.continueToCheckout")}
+          </Link>
           <Link className={styles.secondary} href="/shop">
             {t("cart.continueShopping")}
           </Link>
