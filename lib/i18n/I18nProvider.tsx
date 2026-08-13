@@ -59,7 +59,7 @@ const PAGE_TITLE_KEYS: Record<string, TranslationKey> = {
   "/notre-histoire": "nav.story",
   "/account": "nav.account",
   "/cart": "cart.title",
-  "/checkout": "checkout.demoLabel",
+  "/checkout": "checkout.preprodLabel",
   "/contact": "nav.contact",
   "/shipping-returns": "info.shipping.title",
   "/privacy": "info.privacy.title",

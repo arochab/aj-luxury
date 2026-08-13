@@ -148,6 +148,17 @@
   text-transform: uppercase;
 }
 
+button.button {
+  width: 100%;
+  cursor: pointer;
+  font: inherit;
+}
+
+.button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
 .secondary {
   display: flex;
   min-height: 44px;
@@ -177,12 +188,17 @@
   text-transform: uppercase;
 }
 
-.form input {
+.form input,
+.form select {
   min-height: 48px;
   padding: 0 14px;
   border: 1px solid rgba(9, 9, 9, 0.18);
   background: white;
   font: inherit;
+}
+
+.form select {
+  width: 100%;
 }
 
 .formGrid {
@@ -203,6 +219,26 @@
   font-weight: 600;
   letter-spacing: 0.13em;
   text-transform: uppercase;
+}
+
+.quote {
+  margin: 20px 0;
+  padding: 18px;
+  border: 1px solid rgba(9, 9, 9, 0.18);
+  background: #fff;
+}
+
+.quote strong {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.quote p {
+  margin: 10px 0 0;
+  color: #555;
+  font-size: 10px;
+  line-height: 1.6;
 }
 
 .cartStatus {
@@ -304,6 +340,14 @@
 .error:focus-visible,
 .error button:focus-visible,
 .quantityControl button:focus-visible {
+  outline: 2px solid #62646a;
+  outline-offset: 3px;
+}
+
+.form input:focus-visible,
+.form select:focus-visible,
+.button:focus-visible,
+.lockedButton:focus-visible {
   outline: 2px solid #62646a;
   outline-offset: 3px;
 }
