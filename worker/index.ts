@@ -1783,26 +1783,37 @@ async function handleCartApi(
 
 const ROLLBACK_R10_EXPECTED_MIGRATION =
   "0010_multicarrier_delivery_foundation.sql";
+type RollbackR10SchemaObject = Readonly<{
+  type: string;
+  name: string;
+  tableName: string;
+}>;
+
 const ROLLBACK_R10_EXPECTED_SCHEMA_OBJECTS = Object.freeze([
-  "index:idx_delivery_options_cart_expiry",
-  "index:idx_delivery_service_points_option_expiry",
-  "index:ux_delivery_options_quote",
-  "index:ux_delivery_options_selected_cart",
-  "index:ux_delivery_service_point_provider_ref",
-  "index:ux_shipping_document_reference",
-  "table:delivery_option_snapshots",
-  "table:delivery_service_point_snapshots",
-  "table:shipping_document_metadata",
-  "trigger:trg_delivery_option_retain",
-  "trigger:trg_delivery_option_select_once",
-  "trigger:trg_delivery_option_validate_insert",
-  "trigger:trg_delivery_order_requires_selected_option",
-  "trigger:trg_delivery_service_point_immutable",
-  "trigger:trg_delivery_service_point_retain",
-  "trigger:trg_delivery_service_point_validate_insert",
-  "trigger:trg_shipping_document_immutable",
-  "trigger:trg_shipping_document_retain",
-].sort());
+  ["index", "idx_delivery_options_cart_expiry", "delivery_option_snapshots"],
+  ["index", "idx_delivery_service_points_option_expiry", "delivery_service_point_snapshots"],
+  ["index", "ux_delivery_options_quote", "delivery_option_snapshots"],
+  ["index", "ux_delivery_options_selected_cart", "delivery_option_snapshots"],
+  ["index", "ux_delivery_service_point_provider_ref", "delivery_service_point_snapshots"],
+  ["index", "ux_shipping_document_reference", "shipping_document_metadata"],
+  ["table", "delivery_option_snapshots", "delivery_option_snapshots"],
+  ["table", "delivery_service_point_snapshots", "delivery_service_point_snapshots"],
+  ["table", "shipping_document_metadata", "shipping_document_metadata"],
+  ["trigger", "trg_delivery_option_retain", "delivery_option_snapshots"],
+  ["trigger", "trg_delivery_option_select_once", "delivery_option_snapshots"],
+  ["trigger", "trg_delivery_option_validate_insert", "delivery_option_snapshots"],
+  ["trigger", "trg_delivery_order_requires_selected_option", "orders"],
+  ["trigger", "trg_delivery_service_point_immutable", "delivery_service_point_snapshots"],
+  ["trigger", "trg_delivery_service_point_retain", "delivery_service_point_snapshots"],
+  ["trigger", "trg_delivery_service_point_validate_insert", "delivery_service_point_snapshots"],
+  ["trigger", "trg_shipping_document_immutable", "shipping_document_metadata"],
+  ["trigger", "trg_shipping_document_retain", "shipping_document_metadata"],
+].map(([type, name, tableName]) => Object.freeze({ type, name, tableName }))
+  .sort((left, right) =>
+    left.type.localeCompare(right.type) ||
+    left.name.localeCompare(right.name) ||
+    left.tableName.localeCompare(right.tableName)
+  ));
 const ROLLBACK_R10_DATASET_KIND = "synthetic-demo";
 const ROLLBACK_R10_FIXTURE_VERSION = "aj-demo-v1";
 const ROLLBACK_R10_EXPIRES_AT = "2026-09-30T23:59:59.999Z";
@@ -1884,32 +1895,58 @@ async function rollbackR10HealthResponse(
   // Sites applies migrations outside the Worker and does not expose its
   // internal ledger through the runtime D1 binding. Prove the terminal 0010
   // schema only from its complete, prefix-collision-sensitive object set.
-  let schemaObjects: string[] = [];
+  // Include each object's target table so a correctly named but retargeted
+  // trigger or index cannot satisfy the proof.
+  let schemaObjects: RollbackR10SchemaObject[] = [];
   try {
     const installed = await env.DB
       .prepare(
-        `SELECT type, name FROM sqlite_master
+        `SELECT
+          lower(type) AS type,
+          lower(name) AS name,
+          lower(tbl_name) AS table_name
+        FROM sqlite_master
         WHERE
           (type = 'table' AND (
-            name LIKE 'delivery_option_snapshot%'
-            OR name LIKE 'delivery_service_point_snapshot%'
-            OR name LIKE 'shipping_document_metadata%'
+            lower(name) GLOB 'delivery_option_snapshot*'
+            OR lower(name) GLOB 'delivery_service_point_snapshot*'
+            OR lower(name) GLOB 'shipping_document_metadata*'
           ))
           OR (type = 'index' AND (
-            name LIKE 'idx_delivery_%'
-            OR name LIKE 'ux_delivery_%'
-            OR name LIKE 'ux_shipping_document_%'
+            lower(name) GLOB 'idx_delivery_*'
+            OR lower(name) GLOB 'ux_delivery_*'
+            OR lower(name) GLOB 'ux_shipping_document_*'
+            OR lower(tbl_name) IN (
+              'delivery_option_snapshots',
+              'delivery_service_point_snapshots',
+              'shipping_document_metadata'
+            )
           ))
           OR (type = 'trigger' AND (
-            name LIKE 'trg_delivery_%'
-            OR name LIKE 'trg_shipping_document_%'
+            lower(name) GLOB 'trg_delivery_*'
+            OR lower(name) GLOB 'trg_shipping_document_*'
+            OR lower(tbl_name) IN (
+              'delivery_option_snapshots',
+              'delivery_service_point_snapshots',
+              'shipping_document_metadata'
+            )
           ))
         ORDER BY type ASC, name ASC`,
       )
-      .all<{ type: string; name: string }>();
+      .all<{ type: string; name: string; table_name: string }>();
     schemaObjects = installed.results
-      .map(({ type, name }) => `${type}:${name}`)
-      .sort();
+      .map(({ type, name, table_name: tableName }) =>
+        Object.freeze({
+          type: type.toLowerCase(),
+          name: name.toLowerCase(),
+          tableName: tableName.toLowerCase(),
+        })
+      )
+      .sort((left, right) =>
+        left.type.localeCompare(right.type) ||
+        left.name.localeCompare(right.name) ||
+        left.tableName.localeCompare(right.tableName)
+      );
   } catch {
     return unavailable("schema-proof-unavailable", null);
   }
@@ -1917,8 +1954,12 @@ async function rollbackR10HealthResponse(
   if (
     schemaObjects.length !== ROLLBACK_R10_EXPECTED_SCHEMA_OBJECTS.length ||
     schemaObjects.some(
-      (objectName, index) =>
-        objectName !== ROLLBACK_R10_EXPECTED_SCHEMA_OBJECTS[index],
+      (object, index) => {
+        const expected = ROLLBACK_R10_EXPECTED_SCHEMA_OBJECTS[index];
+        return object.type !== expected?.type ||
+          object.name !== expected.name ||
+          object.tableName !== expected.tableName;
+      },
     )
   ) {
     return unavailable("unexpected-schema", null);

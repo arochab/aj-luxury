@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
+import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 
 const ORIGIN = "https://preprod.example";
@@ -18,25 +19,25 @@ const EXPECTED_MIGRATIONS = [
   "0010_multicarrier_delivery_foundation.sql",
 ];
 const EXPECTED_SCHEMA_OBJECTS = [
-  ["index", "idx_delivery_options_cart_expiry"],
-  ["index", "idx_delivery_service_points_option_expiry"],
-  ["index", "ux_delivery_options_quote"],
-  ["index", "ux_delivery_options_selected_cart"],
-  ["index", "ux_delivery_service_point_provider_ref"],
-  ["index", "ux_shipping_document_reference"],
-  ["table", "delivery_option_snapshots"],
-  ["table", "delivery_service_point_snapshots"],
-  ["table", "shipping_document_metadata"],
-  ["trigger", "trg_delivery_option_retain"],
-  ["trigger", "trg_delivery_option_select_once"],
-  ["trigger", "trg_delivery_option_validate_insert"],
-  ["trigger", "trg_delivery_order_requires_selected_option"],
-  ["trigger", "trg_delivery_service_point_immutable"],
-  ["trigger", "trg_delivery_service_point_retain"],
-  ["trigger", "trg_delivery_service_point_validate_insert"],
-  ["trigger", "trg_shipping_document_immutable"],
-  ["trigger", "trg_shipping_document_retain"],
-].map(([type, name]) => ({ type, name }));
+  ["index", "idx_delivery_options_cart_expiry", "delivery_option_snapshots"],
+  ["index", "idx_delivery_service_points_option_expiry", "delivery_service_point_snapshots"],
+  ["index", "ux_delivery_options_quote", "delivery_option_snapshots"],
+  ["index", "ux_delivery_options_selected_cart", "delivery_option_snapshots"],
+  ["index", "ux_delivery_service_point_provider_ref", "delivery_service_point_snapshots"],
+  ["index", "ux_shipping_document_reference", "shipping_document_metadata"],
+  ["table", "delivery_option_snapshots", "delivery_option_snapshots"],
+  ["table", "delivery_service_point_snapshots", "delivery_service_point_snapshots"],
+  ["table", "shipping_document_metadata", "shipping_document_metadata"],
+  ["trigger", "trg_delivery_option_retain", "delivery_option_snapshots"],
+  ["trigger", "trg_delivery_option_select_once", "delivery_option_snapshots"],
+  ["trigger", "trg_delivery_option_validate_insert", "delivery_option_snapshots"],
+  ["trigger", "trg_delivery_order_requires_selected_option", "orders"],
+  ["trigger", "trg_delivery_service_point_immutable", "delivery_service_point_snapshots"],
+  ["trigger", "trg_delivery_service_point_retain", "delivery_service_point_snapshots"],
+  ["trigger", "trg_delivery_service_point_validate_insert", "delivery_service_point_snapshots"],
+  ["trigger", "trg_shipping_document_immutable", "shipping_document_metadata"],
+  ["trigger", "trg_shipping_document_retain", "shipping_document_metadata"],
+].map(([type, name, table_name]) => ({ type, name, table_name }));
 const VALID_SENTINEL = Object.freeze({
   dataset_kind: "synthetic-demo",
   fixture_version: "aj-demo-v1",
@@ -96,6 +97,47 @@ function healthDatabase({
         };
       }
       throw new Error(`unexpected health query: ${query}`);
+    },
+  };
+}
+
+class SqliteHealthStatement {
+  constructor(database, query) {
+    this.database = database;
+    this.query = query;
+  }
+
+  async all() {
+    return { results: this.database.prepare(this.query).all() };
+  }
+
+  async first() {
+    return this.database.prepare(this.query).get() ?? null;
+  }
+}
+
+function installedRollbackDatabase(statements) {
+  const sqlite = new DatabaseSync(":memory:");
+  sqlite.exec("PRAGMA foreign_keys=ON");
+  for (const migration of EXPECTED_MIGRATIONS) {
+    const source = readFileSync(
+      new URL(`../drizzle/${migration}`, import.meta.url),
+      "utf8",
+    );
+    for (const statement of source.split("--> statement-breakpoint")) {
+      if (statement.trim()) sqlite.exec(statement);
+    }
+  }
+  return {
+    sqlite,
+    d1: {
+      prepare(query) {
+        statements.push(query);
+        if (query.includes("d1_migrations")) {
+          throw new Error("Sites does not expose its migration ledger to Workers");
+        }
+        return new SqliteHealthStatement(sqlite, query);
+      },
     },
   };
 }
@@ -226,17 +268,61 @@ test("Rollback R10 health exhaustively rejects missing, renamed and prefix-colli
       EXPECTED_SCHEMA_OBJECTS.with(index, {
         type: entry.type,
         name: `unrelated_renamed_object_${index}`,
+        table_name: entry.table_name,
       }),
     ]);
   }
   for (const collision of [
-    { type: "table", name: "delivery_option_snapshots_shadow" },
-    { type: "index", name: "ux_delivery_options_quote_shadow" },
-    { type: "trigger", name: "trg_delivery_option_unreviewed" },
+    {
+      type: "table",
+      name: "delivery_option_snapshots_shadow",
+      table_name: "delivery_option_snapshots_shadow",
+    },
+    {
+      type: "index",
+      name: "ux_delivery_options_quote_shadow",
+      table_name: "carts",
+    },
+    {
+      type: "trigger",
+      name: "trg_delivery_option_unreviewed",
+      table_name: "carts",
+    },
+    {
+      type: "table",
+      name: "DELIVERY_OPTION_SNAPSHOTS_SHADOW",
+      table_name: "DELIVERY_OPTION_SNAPSHOTS_SHADOW",
+    },
+    {
+      type: "index",
+      name: "UX_DELIVERY_PREFIX_COLLISION",
+      table_name: "carts",
+    },
+    {
+      type: "index",
+      name: "unrelated_extra_index",
+      table_name: "delivery_option_snapshots",
+    },
+    {
+      type: "trigger",
+      name: "unrelated_extra_trigger",
+      table_name: "delivery_service_point_snapshots",
+    },
   ]) {
     cases.push([
       `prefix-collision-${collision.type}`,
       [...EXPECTED_SCHEMA_OBJECTS, collision],
+    ]);
+  }
+  for (const [label, name, table_name] of [
+    ["retargeted-trigger", "trg_delivery_option_select_once", "carts"],
+    ["retargeted-index", "ux_delivery_options_quote", "carts"],
+  ]) {
+    cases.push([
+      label,
+      EXPECTED_SCHEMA_OBJECTS.map((entry) =>
+        entry.name === name ? { ...entry, table_name } : entry
+      ),
     ]);
   }
 
@@ -259,6 +345,55 @@ test("Rollback R10 health exhaustively rejects missing, renamed and prefix-colli
       false,
       label,
     );
+  }
+});
+
+test("Rollback R10 sqlite inventory rejects case collisions, governed extras and retargeted objects", async () => {
+  const worker = await builtWorker("health-real-sqlite-rejections");
+  const mutations = [
+    "DROP TABLE shipping_document_metadata",
+    "DROP INDEX ux_delivery_options_quote",
+    "DROP TRIGGER trg_delivery_option_select_once",
+    "CREATE TABLE delivery_option_snapshots_shadow (id TEXT)",
+    "CREATE INDEX unrelated_extra_index ON delivery_option_snapshots (carrier_code)",
+    `DROP INDEX ux_delivery_options_quote;
+      CREATE UNIQUE INDEX renamed_quote_index
+      ON delivery_option_snapshots (shipping_quote_id)`,
+    "CREATE INDEX ux_delivery_prefix_collision ON carts (id)",
+    `CREATE TRIGGER unrelated_extra_trigger
+      BEFORE INSERT ON delivery_service_point_snapshots BEGIN SELECT 1; END`,
+    "CREATE TABLE DELIVERY_OPTION_SNAPSHOTS_SHADOW (id TEXT)",
+    "CREATE INDEX UX_DELIVERY_PREFIX_COLLISION ON carts (id)",
+    `DROP TRIGGER trg_delivery_option_select_once;
+      CREATE TRIGGER trg_delivery_option_select_once
+      BEFORE INSERT ON carts BEGIN SELECT 1; END`,
+    `DROP INDEX ux_delivery_options_quote;
+      CREATE UNIQUE INDEX ux_delivery_options_quote ON carts (id)`,
+  ];
+
+  for (const mutation of mutations) {
+    const statements = [];
+    const { sqlite, d1 } = installedRollbackDatabase(statements);
+    try {
+      sqlite.exec(mutation);
+      const response = await worker.fetch(
+        request("/api/preprod/health", "GET"),
+        { APP_ENV: "preproduction", PREPROD_ORIGIN: ORIGIN, DB: d1 },
+        executionContext(),
+      );
+      assert.equal(response.status, 503, mutation);
+      const payload = await response.json();
+      assert.equal(payload.reason, "unexpected-schema", mutation);
+      assert.equal(payload.launchReadiness, false, mutation);
+      assertOnlyFalseCapabilities(payload.capabilities);
+      assert.equal(
+        statements.some((query) => query.includes("d1_migrations")),
+        false,
+        mutation,
+      );
+    } finally {
+      sqlite.close();
+    }
   }
 });
 
