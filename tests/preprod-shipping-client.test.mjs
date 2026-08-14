@@ -169,7 +169,8 @@ test("checkout UI remains real-cart, test-only payment and carrier-neutral", asy
   ]);
   const source = `${page}\n${client}\n${cart}`;
   assert.doesNotMatch(source, /createDemoCart|searchParams|cart\?variant|DHL|FedEx|UPS/);
-  assert.match(client, /requestShippingQuote/);
+  assert.match(client, /requestDeliveryOptions/);
+  assert.match(client, /selectDeliveryOption/);
   assert.match(client, /getCart/);
   assert.match(client, /crypto\.randomUUID\(\)/);
   assert.match(client, /attemptRef\.current = null/);

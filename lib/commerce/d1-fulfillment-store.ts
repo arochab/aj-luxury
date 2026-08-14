@@ -640,22 +640,44 @@ export class D1FulfillmentStore {
       throw new FulfillmentError("INVALID_INPUT", "The purge cutoff is in the future.");
     }
     try {
-      const result = await this.#database
-        .prepare(
-          `DELETE FROM shipping_quotes
-          WHERE id IN (
-            SELECT quote.id FROM shipping_quotes AS quote
-            WHERE quote.selected_at IS NULL AND quote.expires_at <= ?
-              AND NOT EXISTS (
-                SELECT 1 FROM orders WHERE shipping_quote_id = quote.id
-              )
-            ORDER BY quote.expires_at, quote.id
-            LIMIT 100
+      const foundation = await this.#database.prepare(
+        `SELECT COUNT(*) AS count FROM sqlite_master
+        WHERE type = 'table' AND name = 'delivery_option_snapshots'`,
+      ).first<{ count: number }>();
+      const expiredQuoteIds = `
+        SELECT quote.id FROM shipping_quotes AS quote
+        WHERE quote.selected_at IS NULL AND quote.expires_at <= ?
+          AND NOT EXISTS (
+            SELECT 1 FROM orders WHERE shipping_quote_id = quote.id
+          )
+        ORDER BY quote.expires_at, quote.id
+        LIMIT 100`;
+      if (foundation?.count !== 1) {
+        const legacy = await this.#database.prepare(
+          `DELETE FROM shipping_quotes WHERE id IN (${expiredQuoteIds})`,
+        ).bind(input.expiredBefore).run();
+        return changed(legacy);
+      }
+      const results = await this.#database.batch([
+        this.#database.prepare(
+          `DELETE FROM delivery_service_point_snapshots
+          WHERE delivery_option_id IN (
+            SELECT id FROM delivery_option_snapshots
+            WHERE shipping_quote_id IN (${expiredQuoteIds})
+              AND selected_at IS NULL
           )`,
-        )
-        .bind(input.expiredBefore)
-        .run();
-      return changed(result);
+        ).bind(input.expiredBefore),
+        this.#database.prepare(
+          `DELETE FROM delivery_option_snapshots
+          WHERE shipping_quote_id IN (${expiredQuoteIds})
+            AND selected_at IS NULL`,
+        ).bind(input.expiredBefore),
+        this.#database.prepare(
+          `DELETE FROM shipping_quotes
+          WHERE id IN (${expiredQuoteIds})`,
+        ).bind(input.expiredBefore),
+      ]);
+      return changed(results[2] ?? {});
     } catch (error) {
       mapDatabaseError(error);
     }

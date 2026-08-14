@@ -132,6 +132,10 @@
   "checkout.fixtureCA": "Canada",
   "checkout.usState": "Stato USA (2 lettere)",
   "checkout.calculateShipping": "Calcola la spedizione",
+  "checkout.chooseDelivery": "Scegli la consegna",
+  "checkout.deliveryDeterministic": "Simulazione del meccanismo: non viene interrogato alcun corriere o tariffa reale. In produzione saranno mostrate solo offerte confermate.",
+  "checkout.homeDelivery": "Consegna a domicilio",
+  "checkout.servicePointDelivery": "Punto di ritiro",
   "checkout.calculatingShipping": "Calcolo in corso…",
   "checkout.loadingCart": "Caricamento del carrello…",
   "checkout.emptyTitle": "Il carrello è vuoto.",
@@ -279,5 +283,13 @@
   "account.stageLabelReady": "Etichetta fittizia pronta",
   "account.stageHandedOver": "Consegna al corriere simulata",
   "account.stageInTransit": "Transito simulato",
-  "account.stageDelivered": "Consegna simulata completata"
+  "account.stageDelivered": "Consegna simulata completata",
+  "account.deliveryMethod": "Metodo scelto:",
+  "account.preparationTitle": "Scheda di preparazione",
+  "account.preparationWarning": "Solo simulazione: questa scheda non contiene etichetta, codice a barre o ordine di spedizione reale.",
+  "account.preparationPack": "Controllare articoli, taglie e quantità, quindi chiudere il pacco.",
+  "account.preparationLabelClosed": "Creare l’etichetta solo dopo l’attivazione dell’account e del servizio reale del corriere.",
+  "account.preparationDropoff": "Consegnare il pacco nel luogo corrispondente alla scelta del cliente.",
+  "account.preparationTracking": "Verificare il tracking reale prima di archiviare l’ordine.",
+  "account.printPreparation": "Stampa scheda di preparazione"
 }

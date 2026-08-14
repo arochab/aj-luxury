@@ -132,6 +132,10 @@
   "checkout.fixtureCA": "Canada",
   "checkout.usState": "US state (2 letters)",
   "checkout.calculateShipping": "Calculate shipping",
+  "checkout.chooseDelivery": "Choose your delivery",
+  "checkout.deliveryDeterministic": "Mechanism simulation: no real carrier or rate is queried. In production, only confirmed offers will be shown.",
+  "checkout.homeDelivery": "Home delivery",
+  "checkout.servicePointDelivery": "Service point",
   "checkout.calculatingShipping": "Calculating…",
   "checkout.loadingCart": "Loading cart…",
   "checkout.emptyTitle": "Your cart is empty.",
@@ -279,5 +283,13 @@
   "account.stageLabelReady": "Fictional label ready",
   "account.stageHandedOver": "Simulated handover",
   "account.stageInTransit": "Simulated transit",
-  "account.stageDelivered": "Simulated delivery complete"
+  "account.stageDelivered": "Simulated delivery complete",
+  "account.deliveryMethod": "Selected method:",
+  "account.preparationTitle": "Packing sheet",
+  "account.preparationWarning": "Simulation only: this sheet contains no label, barcode or real shipping instruction.",
+  "account.preparationPack": "Check items, sizes and quantities, then close the parcel.",
+  "account.preparationLabelClosed": "Create a label only after the carrier account and real service are enabled.",
+  "account.preparationDropoff": "Drop off the parcel at the location matching the customer's choice.",
+  "account.preparationTracking": "Confirm real tracking is active before filing the order.",
+  "account.printPreparation": "Print packing sheet"
 }

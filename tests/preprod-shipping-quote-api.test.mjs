@@ -4,12 +4,13 @@ import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { D1CommerceStore } from "../lib/commerce/d1-commerce-store.ts";
+import { D1DeliveryOptionsStore } from "../lib/commerce/d1-delivery-options-store.ts";
 import { normalizeShippingAddress } from "../lib/commerce/fulfillment-domain.ts";
 
 const ORIGIN = "https://aj-luxury-preprod.example";
 const drizzleDirectory = fileURLToPath(new URL("../drizzle/", import.meta.url));
 const migrationPaths = readdirSync(drizzleDirectory)
-  .filter((name) => /^000(?:[0-7]|9)_.+\.sql$/.test(name))
+  .filter((name) => /^(?:000[0-7]|0009|0010)_.+\.sql$/.test(name))
   .sort()
   .map((name) => `${drizzleDirectory}${name}`);
 
@@ -213,6 +214,22 @@ test("preproduction order and payment simulation are session-bound, strict and n
   );
   assert.equal(quoteResponse.status, 200);
   const quote = (await quoteResponse.json()).data;
+  const option = context.sqlite.prepare(
+    "SELECT id FROM delivery_option_snapshots WHERE shipping_quote_id = ?",
+  ).get(quote.quoteId);
+  const selectedOption = await invoke(
+    context,
+    "/api/preprod/checkout/delivery-options/select",
+    {
+      method: "POST",
+      headers: headers(session, {
+        "Content-Type": "application/json",
+        "Idempotency-Key": "delivery-select-order-flow",
+      }),
+      body: JSON.stringify({ address: france, optionId: option.id }),
+    },
+  );
+  assert.equal(selectedOption.status, 200);
   const orderBody = {
     quoteId: quote.quoteId,
     address: france,
@@ -239,6 +256,9 @@ test("preproduction order and payment simulation are session-bound, strict and n
   ].sort());
   assert.equal(createdPayload.status, "pending_payment");
   assert.equal(createdPayload.debited, false);
+  assert.equal(context.sqlite.prepare(
+    "SELECT COUNT(*) count FROM delivery_option_snapshots WHERE selected_at IS NOT NULL",
+  ).get().count, 1);
   assert.doesNotMatch(
     JSON.stringify(createdPayload),
     /Ada Test|rue du Test|demo\.invalid|quote_|order_[0-9a-f]/i,
@@ -641,6 +661,159 @@ test("shipping quote enforces method, origin, CSRF, idempotency and 4 KiB JSON",
   assert.equal((await oversized.json()).error.code, "BODY_TOO_LARGE");
   assert.equal(cancelled, true);
   assert.equal(context.sqlite.prepare("SELECT COUNT(*) AS count FROM shipping_quotes").get().count, 0);
+  context.sqlite.close();
+});
+
+test("delivery options are session-bound, explicitly selected and converge under replay", async () => {
+  const context = await fixture();
+  activate(context, "EU", 1375);
+  const session = await cartWithLine(context);
+  const optionsPath = "/api/preprod/checkout/delivery-options";
+  const optionsRequest = quoteRequest(
+    session,
+    france,
+    "delivery-options-attempt-0001",
+  );
+  const first = await invoke(context, optionsPath, optionsRequest);
+  assert.equal(first.status, 200);
+  const firstPayload = await first.json();
+  assert.equal(firstPayload.data.connectorReady, false);
+  assert.equal(firstPayload.data.providerConnected, false);
+  assert.equal(firstPayload.data.options.length, 1);
+  const option = firstPayload.data.options[0];
+  assert.equal(option.deliveryMode, "home");
+  assert.equal(option.provider, "not-connected");
+  assert.equal(option.selected, false);
+
+  const replay = await invoke(context, optionsPath, optionsRequest);
+  assert.equal(replay.status, 200);
+  assert.deepEqual(await replay.json(), firstPayload);
+  assert.equal(context.sqlite.prepare(
+    "SELECT COUNT(*) AS count FROM delivery_option_snapshots",
+  ).get().count, 1);
+
+  const select = (targetSession, key, address = france) => invoke(
+    context,
+    "/api/preprod/checkout/delivery-options/select",
+    {
+      method: "POST",
+      headers: headers(targetSession, {
+        "Content-Type": "application/json",
+        "Idempotency-Key": key,
+      }),
+      body: JSON.stringify({ address, optionId: option.optionId }),
+    },
+  );
+  const selected = await select(session, "delivery-select-attempt-0001");
+  assert.equal(selected.status, 200);
+  assert.equal((await selected.json()).data.validated, true);
+  const selectedReplay = await select(session, "delivery-select-attempt-0001");
+  assert.equal(selectedReplay.status, 200);
+  const concurrent = await Promise.all([
+    select(session, "delivery-select-attempt-race-a"),
+    select(session, "delivery-select-attempt-race-b"),
+  ]);
+  assert.deepEqual(concurrent.map((response) => response.status), [200, 200]);
+  assert.equal(context.sqlite.prepare(
+    "SELECT COUNT(*) AS count FROM delivery_option_snapshots WHERE selected_at IS NOT NULL",
+  ).get().count, 0);
+  assert.throws(() => context.sqlite.prepare(`UPDATE delivery_option_snapshots
+    SET selected_at = ?, provider_receipt_fingerprint = ? WHERE id = ?`).run(
+      new Date().toISOString(),
+      "a".repeat(64),
+      option.optionId,
+    ), /delivery_option_selection_invalid/);
+
+  const other = await cartWithLine(context, "variant_boxer_rose-pale_m");
+  const crossed = await select(other, "delivery-select-attempt-crossed");
+  assert.equal(crossed.status, 404);
+  assert.equal((await crossed.json()).error.code, "OPTION_NOT_FOUND");
+
+  const points = await invoke(context, "/api/preprod/checkout/service-points", {
+    method: "POST",
+    headers: headers(session, {
+      "Content-Type": "application/json",
+      "Idempotency-Key": "service-points-attempt-0001",
+    }),
+    body: JSON.stringify({ optionId: option.optionId }),
+  });
+  assert.equal(points.status, 200);
+  assert.deepEqual((await points.json()).data.servicePoints, []);
+  const crossedPoints = await invoke(context, "/api/preprod/checkout/service-points", {
+    method: "POST",
+    headers: headers(other, {
+      "Content-Type": "application/json",
+      "Idempotency-Key": "service-points-attempt-crossed",
+    }),
+    body: JSON.stringify({ optionId: option.optionId }),
+  });
+  assert.equal(crossedPoints.status, 404);
+  assert.equal((await crossedPoints.json()).error.code, "OPTION_NOT_FOUND");
+
+  context.sqlite.prepare(
+    "DELETE FROM delivery_option_snapshots WHERE id = ?",
+  ).run(option.optionId);
+  context.sqlite.prepare(`INSERT INTO delivery_option_snapshots (
+    id, cart_id, cart_revision, shipping_quote_id,
+    shipping_address_fingerprint, provider_code, carrier_code, service_code,
+    display_name, delivery_mode, amount_cents, currency,
+    estimated_days_min, estimated_days_max, duties_terms, proof_kind,
+    provider_quote_reference_hash, provider_receipt_fingerprint,
+    quoted_at, expires_at, selected_at, created_at
+  ) SELECT 'option_service_point_closed', cart_id, cart_revision, id,
+    shipping_address_fingerprint, 'synthetic_demo', 'synthetic_demo',
+    'SYNTHETIC_DEMO_NOT_COMMERCIAL', 'Relais fermé', 'service_point',
+    amount_cents, currency, estimated_days_min, estimated_days_max,
+    duties_terms, 'synthetic_demo', NULL, NULL, created_at, expires_at, NULL,
+    created_at FROM shipping_quotes WHERE id = ?`).run(option.quoteId);
+  await assert.rejects(
+    () => new D1DeliveryOptionsStore(context.d1).selectOption({
+      optionId: "option_service_point_closed",
+      cartId: firstPayload.data.cart.lines.length > 0
+        ? context.sqlite.prepare("SELECT cart_id FROM shipping_quotes WHERE id = ?").get(option.quoteId).cart_id
+        : "unreachable",
+      addressFingerprint: context.sqlite.prepare(
+        "SELECT shipping_address_fingerprint FROM shipping_quotes WHERE id = ?",
+      ).get(option.quoteId).shipping_address_fingerprint,
+      now: new Date().toISOString(),
+    }),
+    (error) => error?.code === "SERVICE_POINT_REQUIRED",
+  );
+  context.sqlite.close();
+});
+
+test("an expired unselected option is purged before a fresh quote for the same cart", async () => {
+  const context = await fixture();
+  activate(context, "EU", 1375);
+  const session = await cartWithLine(context);
+  const RealDate = globalThis.Date;
+  class FirstQuoteDate extends RealDate {
+    constructor(...args) {
+      super(...(args.length === 0 ? ["2026-08-13T12:00:00.000Z"] : args));
+    }
+  }
+  class FreshQuoteDate extends RealDate {
+    constructor(...args) {
+      super(...(args.length === 0 ? ["2026-08-13T12:20:00.000Z"] : args));
+    }
+  }
+  let first;
+  let fresh;
+  try {
+    globalThis.Date = FirstQuoteDate;
+    first = await invoke(context, "/api/preprod/checkout/delivery-options",
+      quoteRequest(session, france, "delivery-options-expired-old"));
+    globalThis.Date = FreshQuoteDate;
+    fresh = await invoke(context, "/api/preprod/checkout/delivery-options",
+      quoteRequest(session, france, "delivery-options-fresh-new"));
+  } finally {
+    globalThis.Date = RealDate;
+  }
+  assert.equal(first.status, 200);
+  assert.equal(fresh.status, 200);
+  assert.notEqual((await first.json()).data.options[0].optionId, (await fresh.json()).data.options[0].optionId);
+  assert.equal(context.sqlite.prepare("SELECT COUNT(*) count FROM shipping_quotes").get().count, 1);
+  assert.equal(context.sqlite.prepare("SELECT COUNT(*) count FROM delivery_option_snapshots").get().count, 1);
   context.sqlite.close();
 });
 
