@@ -3,12 +3,7 @@
   "dataset_kind": "synthetic-demo",
   "fixture_version": "aj-demo-v1",
   "expires_at": "2026-09-30T23:59:59.999Z",
+  "runtime_mode": "post-0010-rollback",
   "production_promotion": "forbidden",
-  "allowed_source_branches": [
-    "codex/lot2-preprod-synthetic-demo-20260813",
-    "codex/lot2-preprod-owner-account-tracking-20260813",
-    "codex/ajl-ship-profiles-20260813",
-    "codex/ajl-private-preview-final-20260813",
-    "codex/ajl-multicarrier-fulfillment-20260813"
-  ]
+  "allowed_source_branch": "codex/aj-luxury-rollback-r10-20260814"
 }

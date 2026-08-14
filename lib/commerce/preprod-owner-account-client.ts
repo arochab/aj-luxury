@@ -31,11 +31,6 @@ export type PublicOwnerAccount = Readonly<{
       labelCreatedAt: string | null;
       handedOverAt: string | null;
       deliveredAt: string | null;
-      method: string;
-      mode: "home" | "service_point";
-      connectorReady: true;
-      providerConnected: false;
-      realLabelAvailable: false;
     }>;
     lines: readonly Readonly<{
       productName: string;
@@ -95,12 +90,6 @@ export function parseOwnerAccount(value: unknown): PublicOwnerAccount {
       !nullableString(order.delivery.labelCreatedAt) ||
       !nullableString(order.delivery.handedOverAt) ||
       !nullableString(order.delivery.deliveredAt) ||
-      typeof order.delivery.method !== "string" ||
-      order.delivery.method.length < 1 || order.delivery.method.length > 160 ||
-      !["home", "service_point"].includes(String(order.delivery.mode)) ||
-      order.delivery.connectorReady !== true ||
-      order.delivery.providerConnected !== false ||
-      order.delivery.realLabelAvailable !== false ||
       ![order.subtotalCents, order.shippingCents, order.totalCents]
         .every((amount) => Number.isSafeInteger(amount) && (amount as number) >= 0)
     ) throw new OwnerAccountApiError();

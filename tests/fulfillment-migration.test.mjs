@@ -253,7 +253,7 @@ function query(root, configPath, state, sql, expectFailure = false) {
   return parseFirstJsonArray(output)[0].results;
 }
 
-test("0005 stays frozen; 0006 through 0009 remain additive", () => {
+test("0005 stays frozen; 0006 through 0010 remain additive", () => {
   for (const [name, expected] of Object.entries(bootstrapHashes)) {
     const normalized = readFileSync(join(migrationRoot, name), "utf8").replaceAll(
       "\r\n",
