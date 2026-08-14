@@ -63,6 +63,7 @@ import {
   SYNTHETIC_DEMO_FIXTURE_VERSION,
   SYNTHETIC_DEMO_MIGRATION,
 } from "../lib/preprod/synthetic-demo.ts";
+import { productionCommerceApiResponse } from "./production-commerce-api.ts";
 
 interface Fetcher {
   fetch(request: Request): Promise<Response>;
@@ -2718,6 +2719,15 @@ const worker = {
     ctx: ExecutionContext,
   ): Promise<Response> {
     const url = new URL(request.url);
+
+    const productionCommerceResponse = productionCommerceApiResponse(request, env);
+    if (productionCommerceResponse) {
+      return withSecurityHeaders(
+        productionCommerceResponse,
+        url.pathname,
+        env?.APP_ENV,
+      );
+    }
 
     const preprodResponse = await preprodApiResponse(request, env);
     if (preprodResponse) {
