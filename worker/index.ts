@@ -1783,19 +1783,6 @@ async function handleCartApi(
 
 const ROLLBACK_R10_EXPECTED_MIGRATION =
   "0010_multicarrier_delivery_foundation.sql";
-const ROLLBACK_R10_EXPECTED_MIGRATIONS = Object.freeze([
-  "0000_flimsy_rhino.sql",
-  "0001_lock_cart_line_price_provenance.sql",
-  "0002_lock_order_line_snapshots.sql",
-  "0003_identity_access.sql",
-  "0004_email_outbox_data_rights.sql",
-  "0005_fulfillment_returns_refunds.sql",
-  "0006_allow_bounded_expired_cart_purge.sql",
-  "0007_transactional_preprod_order_payment.sql",
-  "0008_preprod_synthetic_demo_dataset.sql",
-  "0009_shipping_quote_parcel_snapshots.sql",
-  ROLLBACK_R10_EXPECTED_MIGRATION,
-]);
 const ROLLBACK_R10_EXPECTED_SCHEMA_OBJECTS = Object.freeze([
   "index:idx_delivery_options_cart_expiry",
   "index:idx_delivery_service_points_option_expiry",
@@ -1894,26 +1881,9 @@ async function rollbackR10HealthResponse(
     return unavailable("preproduction-database-not-bound", null);
   }
 
-  let migrationNames: string[] = [];
-  try {
-    const migrations = await env.DB
-      .prepare("SELECT name FROM d1_migrations ORDER BY name ASC")
-      .all<{ name: string }>();
-    migrationNames = migrations.results.map(({ name }) => name);
-  } catch {
-    return unavailable("migration-ledger-unavailable", null);
-  }
-
-  const latestMigration = migrationNames.at(-1) ?? null;
-  if (
-    migrationNames.length !== ROLLBACK_R10_EXPECTED_MIGRATIONS.length ||
-    migrationNames.some(
-      (name, index) => name !== ROLLBACK_R10_EXPECTED_MIGRATIONS[index],
-    )
-  ) {
-    return unavailable("unexpected-migration", latestMigration);
-  }
-
+  // Sites applies migrations outside the Worker and does not expose its
+  // internal ledger through the runtime D1 binding. Prove the terminal 0010
+  // schema only from its complete, prefix-collision-sensitive object set.
   let schemaObjects: string[] = [];
   try {
     const installed = await env.DB
@@ -1941,7 +1911,7 @@ async function rollbackR10HealthResponse(
       .map(({ type, name }) => `${type}:${name}`)
       .sort();
   } catch {
-    return unavailable("schema-proof-unavailable", latestMigration);
+    return unavailable("schema-proof-unavailable", null);
   }
 
   if (
@@ -1951,8 +1921,10 @@ async function rollbackR10HealthResponse(
         objectName !== ROLLBACK_R10_EXPECTED_SCHEMA_OBJECTS[index],
     )
   ) {
-    return unavailable("unexpected-schema", latestMigration);
+    return unavailable("unexpected-schema", null);
   }
+
+  const latestMigration = ROLLBACK_R10_EXPECTED_MIGRATION;
 
   let sentinel: {
     dataset_kind: string;

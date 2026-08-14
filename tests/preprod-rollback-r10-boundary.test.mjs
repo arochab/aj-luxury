@@ -71,7 +71,6 @@ function executionContext() {
 }
 
 function healthDatabase({
-  migrations = EXPECTED_MIGRATIONS,
   schemaObjects = EXPECTED_SCHEMA_OBJECTS,
   sentinel = VALID_SENTINEL,
   statements = [],
@@ -80,11 +79,7 @@ function healthDatabase({
     prepare(query) {
       statements.push(query);
       if (query.includes("d1_migrations")) {
-        return {
-          async all() {
-            return { results: migrations.map((name) => ({ name })) };
-          },
-        };
+        throw new Error("Sites does not expose its migration ledger to Workers");
       }
       if (query.includes("sqlite_master")) {
         return {
@@ -188,7 +183,7 @@ test("Rollback R10 returns production 404 and private-preproduction 503 before a
   assert.equal(d1Accesses, 0);
 });
 
-test("Rollback R10 health is 200 only for the exact 0000-0010 ledger, exact 0010 schema and valid sentinel", async () => {
+test("Rollback R10 health is hosted-like: exact 0010 schema and sentinel return 200 without the inaccessible ledger", async () => {
   const worker = await builtWorker("health-ready");
   const statements = [];
   const response = await worker.fetch(
@@ -214,38 +209,40 @@ test("Rollback R10 health is 200 only for the exact 0000-0010 ledger, exact 0010
     fixtureVersion: "aj-demo-v1",
     expiresAt: "2026-09-30T23:59:59.999Z",
   });
-  assert.equal(statements.length, 3);
+  assert.equal(statements.length, 2);
+  assert.equal(statements.some((query) => query.includes("d1_migrations")), false);
 });
 
-test("Rollback R10 health fails closed for missing, extra or renamed 0010 proof", async () => {
+test("Rollback R10 health exhaustively rejects missing, renamed and prefix-colliding 0010 objects", async () => {
   const worker = await builtWorker("health-schema-rejections");
-  const withoutLast = EXPECTED_SCHEMA_OBJECTS.slice(0, -1);
-  const extra = [
-    ...EXPECTED_SCHEMA_OBJECTS,
+  const cases = [];
+  for (const [index, entry] of EXPECTED_SCHEMA_OBJECTS.entries()) {
+    cases.push([
+      `missing-${entry.type}-${entry.name}`,
+      EXPECTED_SCHEMA_OBJECTS.toSpliced(index, 1),
+    ]);
+    cases.push([
+      `renamed-${entry.type}-${entry.name}`,
+      EXPECTED_SCHEMA_OBJECTS.with(index, {
+        type: entry.type,
+        name: `unrelated_renamed_object_${index}`,
+      }),
+    ]);
+  }
+  for (const collision of [
     { type: "table", name: "delivery_option_snapshots_shadow" },
-  ];
-  const renamed = EXPECTED_SCHEMA_OBJECTS.map((entry) =>
-    entry.name === "delivery_option_snapshots"
-      ? { type: entry.type, name: "delivery_option_snapshot_renamed" }
-      : entry
-  );
-  const cases = [
-    [
-      "missing-migration",
-      healthDatabase({ migrations: EXPECTED_MIGRATIONS.slice(0, -1) }),
-      "unexpected-migration",
-    ],
-    [
-      "extra-migration",
-      healthDatabase({ migrations: [...EXPECTED_MIGRATIONS, "0011_unreviewed.sql"] }),
-      "unexpected-migration",
-    ],
-    ["missing-schema", healthDatabase({ schemaObjects: withoutLast }), "unexpected-schema"],
-    ["extra-schema", healthDatabase({ schemaObjects: extra }), "unexpected-schema"],
-    ["renamed-schema", healthDatabase({ schemaObjects: renamed }), "unexpected-schema"],
-  ];
+    { type: "index", name: "ux_delivery_options_quote_shadow" },
+    { type: "trigger", name: "trg_delivery_option_unreviewed" },
+  ]) {
+    cases.push([
+      `prefix-collision-${collision.type}`,
+      [...EXPECTED_SCHEMA_OBJECTS, collision],
+    ]);
+  }
 
-  for (const [label, database, expectedReason] of cases) {
+  for (const [label, schemaObjects] of cases) {
+    const statements = [];
+    const database = healthDatabase({ schemaObjects, statements });
     const rejected = await worker.fetch(
       request("/api/preprod/health", "GET"),
       { APP_ENV: "preproduction", PREPROD_ORIGIN: ORIGIN, DB: database },
@@ -253,10 +250,49 @@ test("Rollback R10 health fails closed for missing, extra or renamed 0010 proof"
     );
     assert.equal(rejected.status, 503, label);
     const payload = await rejected.json();
-    assert.equal(payload.reason, expectedReason, label);
+    assert.equal(payload.reason, "unexpected-schema", label);
     assert.equal(payload.runtimeMode, "post-0010-rollback", label);
     assert.equal(payload.launchReadiness, false, label);
     assertOnlyFalseCapabilities(payload.capabilities);
+    assert.equal(
+      statements.some((query) => query.includes("d1_migrations")),
+      false,
+      label,
+    );
+  }
+});
+
+test("Rollback R10 health rejects every non-exact synthetic sentinel without consulting the ledger", async () => {
+  const worker = await builtWorker("health-sentinel-rejections");
+  const sentinels = [
+    null,
+    { ...VALID_SENTINEL, dataset_kind: "other" },
+    { ...VALID_SENTINEL, fixture_version: "other" },
+    { ...VALID_SENTINEL, expires_at: "2026-09-29T23:59:59.999Z" },
+  ];
+
+  for (const [index, sentinel] of sentinels.entries()) {
+    const statements = [];
+    const rejected = await worker.fetch(
+      request("/api/preprod/health", "GET"),
+      {
+        APP_ENV: "preproduction",
+        PREPROD_ORIGIN: ORIGIN,
+        DB: healthDatabase({ sentinel, statements }),
+      },
+      executionContext(),
+    );
+    assert.equal(rejected.status, 503, `sentinel-${index}`);
+    const payload = await rejected.json();
+    assert.equal(payload.reason, "synthetic-sentinel-invalid", `sentinel-${index}`);
+    assert.equal(payload.launchReadiness, false, `sentinel-${index}`);
+    assertOnlyFalseCapabilities(payload.capabilities);
+    assert.equal(statements.length, 2, `sentinel-${index}`);
+    assert.equal(
+      statements.some((query) => query.includes("d1_migrations")),
+      false,
+      `sentinel-${index}`,
+    );
   }
 });
 
@@ -315,6 +351,10 @@ test("Rollback R10 artifact is non-promotable and contains no positive commerce 
   assert.doesNotMatch(
     artifact,
     /internal-functional|preprodFunctional|handleCartApi|handleShippingQuoteApi|handleDeliveryOptionsApi|handleOrderPaymentApi|Sendcloud|panel\.sendcloud|servicepoints\.sendcloud/i,
+  );
+  assert.doesNotMatch(
+    artifact,
+    /d1_migrations|migration-ledger-unavailable|unexpected-migration/i,
   );
   assert.match(artifact, /post-0010-rollback/);
   assert.match(artifact, /0010_multicarrier_delivery_foundation\.sql/);
