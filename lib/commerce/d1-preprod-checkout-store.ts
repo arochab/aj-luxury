@@ -306,7 +306,7 @@ export class D1PreprodCheckoutStore {
 
   async createOrder(input: CreatePreprodOrderInput): Promise<PreprodOrderSnapshot> {
     const email = assertCreateInput(input);
-    const [quote, linesResult, existing] = await Promise.all([
+    const [quote, deliveryOption, linesResult, existing] = await Promise.all([
       this.#database.prepare(
         `SELECT quote.id, quote.cart_id, quote.cart_revision,
           quote.shipping_address_fingerprint, quote.amount_cents, quote.currency,
@@ -317,6 +317,11 @@ export class D1PreprodCheckoutStore {
         INNER JOIN carts AS cart ON cart.id = quote.cart_id
         WHERE quote.id = ? AND quote.cart_id = ?`,
       ).bind(input.quoteId, input.cartId).first<QuoteCheckoutRow>(),
+      this.#database.prepare(
+        `SELECT id FROM delivery_option_snapshots
+        WHERE shipping_quote_id = ? AND cart_id = ?
+          AND delivery_mode = 'home' AND expires_at > ?`,
+      ).bind(input.quoteId, input.cartId, input.now).first<{ id: string }>(),
       this.#database.prepare(
         `SELECT line.variant_id, variant.internal_reference,
           product.name AS product_name, variant.color_name, variant.size,
@@ -390,6 +395,12 @@ export class D1PreprodCheckoutStore {
       }
       return this.#snapshot(existing);
     }
+    if (!deliveryOption) {
+      throw new PreprodCheckoutError(
+        "CHECKOUT_UNAVAILABLE",
+        "A current delivery option must be selected before order creation.",
+      );
+    }
     if (
       !quote || lines.length < 1 || quote.cart_status !== "open" ||
       quote.currency !== "EUR" || quote.cart_revision !== quote.fulfillment_revision ||
@@ -410,6 +421,21 @@ export class D1PreprodCheckoutStore {
           AND expires_at > ?`,
       ).bind(
         input.now,
+        input.quoteId,
+        input.cartId,
+        quote.cart_revision,
+        input.addressFingerprint,
+        input.now,
+      ),
+      this.#database.prepare(
+        `UPDATE delivery_option_snapshots SET selected_at = ?
+        WHERE id = ? AND shipping_quote_id = ? AND cart_id = ?
+          AND cart_revision = ? AND shipping_address_fingerprint = ?
+          AND delivery_mode = 'home' AND selected_at IS NULL
+          AND expires_at > ?`,
+      ).bind(
+        input.now,
+        deliveryOption.id,
         input.quoteId,
         input.cartId,
         quote.cart_revision,
@@ -798,7 +824,7 @@ export class D1PreprodCheckoutStore {
     expectedExpiry: string | null,
   ): Promise<boolean> {
     if (!expectedExpiry) return false;
-    const [lines, reservations, quote] = await Promise.all([
+    const [lines, reservations, quote, deliveryOption] = await Promise.all([
       this.#database.prepare(
         `SELECT variant_id, internal_reference, product_name, color_name, size,
           quantity, unit_price_cents
@@ -819,11 +845,17 @@ export class D1PreprodCheckoutStore {
       ).bind(order.shipping_quote_id, order.cart_id).first<{
         selected_at: string | null;
       }>(),
+      this.#database.prepare(
+        `SELECT selected_at FROM delivery_option_snapshots
+        WHERE shipping_quote_id = ? AND cart_id = ? AND delivery_mode = 'home'`,
+      ).bind(order.shipping_quote_id, order.cart_id).first<{
+        selected_at: string | null;
+      }>(),
     ]);
     const expected = [...expectedLines].sort((left, right) =>
       left.variant_id.localeCompare(right.variant_id)
     );
-    return Boolean(quote?.selected_at) &&
+    return Boolean(quote?.selected_at) && Boolean(deliveryOption?.selected_at) &&
       lines.results.length === expected.length &&
       reservations.results.length === expected.length &&
       expected.every((line, index) => {

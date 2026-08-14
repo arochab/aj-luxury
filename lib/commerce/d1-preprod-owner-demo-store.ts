@@ -26,6 +26,9 @@ type OwnerOrderRow = {
   label_created_at: string | null;
   handed_over_at: string | null;
   delivered_at: string | null;
+  delivery_display_name: string | null;
+  delivery_mode: "home" | "service_point" | null;
+  delivery_provider_code: string | null;
 };
 
 type ShipmentStateRow = {
@@ -78,6 +81,11 @@ export type PreprodOwnerOrder = Readonly<{
     labelCreatedAt: string | null;
     handedOverAt: string | null;
     deliveredAt: string | null;
+    method: string;
+    mode: "home" | "service_point";
+    connectorReady: true;
+    providerConnected: false;
+    realLabelAvailable: false;
   }>;
   lines: readonly Readonly<{
     productName: string;
@@ -200,9 +208,14 @@ export class D1PreprodOwnerDemoStore {
         customer_order.paid_at, shipment.id AS shipment_id,
         shipment.status AS shipment_status,
         shipment.tracking_reference, shipment.label_created_at,
-        shipment.handed_over_at, shipment.delivered_at
+        shipment.handed_over_at, shipment.delivered_at,
+        delivery_option.display_name AS delivery_display_name,
+        delivery_option.delivery_mode,
+        delivery_option.provider_code AS delivery_provider_code
       FROM orders AS customer_order
       LEFT JOIN shipments AS shipment ON shipment.order_id = customer_order.id
+      LEFT JOIN delivery_option_snapshots AS delivery_option
+        ON delivery_option.shipping_quote_id = customer_order.shipping_quote_id
       WHERE customer_order.customer_id = ?
       ORDER BY customer_order.created_at DESC, customer_order.id DESC
       LIMIT 20`,
@@ -239,6 +252,11 @@ export class D1PreprodOwnerDemoStore {
           labelCreatedAt: row.label_created_at,
           handedOverAt: row.handed_over_at,
           deliveredAt: row.delivered_at,
+          method: row.delivery_display_name ?? "Livraison suivie - simulation",
+          mode: row.delivery_mode ?? "home",
+          connectorReady: true as const,
+          providerConnected: false as const,
+          realLabelAvailable: false as const,
         }),
         lines: Object.freeze(lines.results.map((line) => Object.freeze({
           productName: line.product_name,

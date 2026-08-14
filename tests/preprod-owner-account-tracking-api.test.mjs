@@ -13,7 +13,7 @@ const ORIGIN = "https://aj-luxury-preprod.example";
 const OWNER_EMAIL = "adam.chabbi94@gmail.com";
 const drizzleDirectory = fileURLToPath(new URL("../drizzle/", import.meta.url));
 const migrations = readdirSync(drizzleDirectory)
-  .filter((name) => /^000[0-9]_.+\.sql$/.test(name))
+  .filter((name) => /^(?:000[0-9]|0010)_.+\.sql$/.test(name))
   .sort()
   .map((name) => `${drizzleDirectory}${name}`);
 
@@ -134,7 +134,7 @@ async function createPaidOrder(context) {
     body: JSON.stringify({ quantity: 1 }),
   })).status, 200);
   const address = SYNTHETIC_DEMO_ADDRESS_FIXTURES[0].address;
-  const quoted = await invoke(context, "/api/preprod/checkout/shipping-quote", {
+  const quoted = await invoke(context, "/api/preprod/checkout/delivery-options", {
     method: "POST",
     headers: {
       ...headers(session),
@@ -144,7 +144,18 @@ async function createPaidOrder(context) {
     body: JSON.stringify({ address }),
   });
   assert.equal(quoted.status, 200);
-  const quoteId = (await quoted.json()).data.quoteId;
+  const option = (await quoted.json()).data.options[0];
+  const selected = await invoke(context, "/api/preprod/checkout/delivery-options/select", {
+    method: "POST",
+    headers: {
+      ...headers(session),
+      "Content-Type": "application/json",
+      "Idempotency-Key": "owner-delivery-select-attempt-0001",
+    },
+    body: JSON.stringify({ address, optionId: option.optionId }),
+  });
+  assert.equal(selected.status, 200);
+  const quoteId = option.quoteId;
   const created = await invoke(context, "/api/preprod/checkout/order", {
     method: "POST",
     headers: {
