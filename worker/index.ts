@@ -159,53 +159,95 @@ type SyntheticDemoGate = Readonly<{
   expiresAt: string | null;
 }>;
 
-const SYNTHETIC_DEMO_TRIGGER_INVENTORY = Object.freeze([
-  "trg_preprod_demo_cart_active_delete",
-  "trg_preprod_demo_cart_active_insert",
-  "trg_preprod_demo_cart_active_update",
-  "trg_preprod_demo_cart_line_active_delete",
-  "trg_preprod_demo_cart_line_active_insert",
-  "trg_preprod_demo_cart_line_active_update",
-  "trg_preprod_demo_dataset_immutable_delete",
-  "trg_preprod_demo_dataset_immutable_update",
-  "trg_preprod_demo_order_active_insert",
-  "trg_preprod_demo_order_active_update",
-  "trg_preprod_demo_payment_active_insert",
-  "trg_preprod_demo_reservation_active_insert",
-  "trg_preprod_demo_reservation_active_update",
-  "trg_preprod_demo_shipping_quote_active_insert",
-  "trg_preprod_demo_shipping_quote_active_update",
-  "trg_preprod_demo_webhook_active_insert",
-] as const);
+const SYNTHETIC_DEMO_TRIGGER_INVENTORY = Object.freeze({
+  trg_preprod_demo_cart_active_delete: "carts",
+  trg_preprod_demo_cart_active_insert: "carts",
+  trg_preprod_demo_cart_active_update: "carts",
+  trg_preprod_demo_cart_line_active_delete: "cart_lines",
+  trg_preprod_demo_cart_line_active_insert: "cart_lines",
+  trg_preprod_demo_cart_line_active_update: "cart_lines",
+  trg_preprod_demo_dataset_immutable_delete: "preprod_demo_dataset",
+  trg_preprod_demo_dataset_immutable_update: "preprod_demo_dataset",
+  trg_preprod_demo_order_active_insert: "orders",
+  trg_preprod_demo_order_active_update: "orders",
+  trg_preprod_demo_payment_active_insert: "payments",
+  trg_preprod_demo_reservation_active_insert: "stock_reservations",
+  trg_preprod_demo_reservation_active_update: "stock_reservations",
+  trg_preprod_demo_shipping_quote_active_insert: "shipping_quotes",
+  trg_preprod_demo_shipping_quote_active_update: "shipping_quotes",
+  trg_preprod_demo_webhook_active_insert: "webhook_events",
+} as const);
 
-const SHIPPING_PARCEL_TRIGGER_INVENTORY = Object.freeze([
-  "trg_shipping_quote_parcel_snapshot_immutable_update",
-  "trg_shipping_quote_parcel_snapshot_matches_cart",
-  "trg_shipping_quote_parcel_snapshot_retain_delete",
-] as const);
+const SYNTHETIC_DEMO_TABLE_INVENTORY = Object.freeze({
+  preprod_demo_dataset: "preprod_demo_dataset",
+} as const);
 
-const SHIPPING_PARCEL_TABLE_INVENTORY = Object.freeze([
-  "shipping_quote_parcel_snapshots",
-] as const);
+const SHIPPING_PARCEL_TRIGGER_INVENTORY = Object.freeze({
+  trg_shipping_quote_parcel_snapshot_immutable_update:
+    "shipping_quote_parcel_snapshots",
+  trg_shipping_quote_parcel_snapshot_matches_cart:
+    "shipping_quote_parcel_snapshots",
+  trg_shipping_quote_parcel_snapshot_retain_delete:
+    "shipping_quote_parcel_snapshots",
+} as const);
+
+const SHIPPING_PARCEL_TABLE_INVENTORY = Object.freeze({
+  shipping_quote_parcel_snapshots: "shipping_quote_parcel_snapshots",
+} as const);
 
 const MULTICARRIER_FOUNDATION_MIGRATION =
   "0010_multicarrier_delivery_foundation.sql" as const;
-const MULTICARRIER_TABLE_INVENTORY = Object.freeze([
-  "delivery_option_snapshots",
-  "delivery_service_point_snapshots",
-  "shipping_document_metadata",
-] as const);
-const MULTICARRIER_TRIGGER_INVENTORY = Object.freeze([
-  "trg_delivery_order_requires_selected_option",
-  "trg_delivery_option_retain",
-  "trg_delivery_option_select_once",
-  "trg_delivery_option_validate_insert",
-  "trg_delivery_service_point_immutable",
-  "trg_delivery_service_point_retain",
-  "trg_delivery_service_point_validate_insert",
-  "trg_shipping_document_immutable",
-  "trg_shipping_document_retain",
-] as const);
+const MULTICARRIER_TABLE_INVENTORY = Object.freeze({
+  delivery_option_snapshots: "delivery_option_snapshots",
+  delivery_service_point_snapshots: "delivery_service_point_snapshots",
+  shipping_document_metadata: "shipping_document_metadata",
+} as const);
+const MULTICARRIER_INDEX_INVENTORY = Object.freeze({
+  idx_delivery_options_cart_expiry: "delivery_option_snapshots",
+  idx_delivery_service_points_option_expiry:
+    "delivery_service_point_snapshots",
+  ux_delivery_options_quote: "delivery_option_snapshots",
+  ux_delivery_options_selected_cart: "delivery_option_snapshots",
+  ux_delivery_service_point_provider_ref:
+    "delivery_service_point_snapshots",
+  ux_shipping_document_reference: "shipping_document_metadata",
+} as const);
+const MULTICARRIER_TRIGGER_INVENTORY = Object.freeze({
+  trg_delivery_order_requires_selected_option: "orders",
+  trg_delivery_option_retain: "delivery_option_snapshots",
+  trg_delivery_option_select_once: "delivery_option_snapshots",
+  trg_delivery_option_validate_insert: "delivery_option_snapshots",
+  trg_delivery_service_point_immutable: "delivery_service_point_snapshots",
+  trg_delivery_service_point_retain: "delivery_service_point_snapshots",
+  trg_delivery_service_point_validate_insert:
+    "delivery_service_point_snapshots",
+  trg_shipping_document_immutable: "shipping_document_metadata",
+  trg_shipping_document_retain: "shipping_document_metadata",
+} as const);
+
+type InstalledSchemaObject = Readonly<{
+  type: string;
+  name: string;
+  table_name: string;
+}>;
+
+function matchesExactSchemaInventory(
+  installed: readonly InstalledSchemaObject[],
+  type: "table" | "index" | "trigger",
+  expectedTableByName: Readonly<Record<string, string>>,
+): boolean {
+  const actual = [...installed].sort((left, right) =>
+    left.name < right.name ? -1 : left.name > right.name ? 1 : 0
+  );
+  const expected = Object.entries(expectedTableByName).sort(
+    ([left], [right]) => left < right ? -1 : left > right ? 1 : 0,
+  );
+  return actual.length === expected.length && actual.every((row, index) =>
+    row.type === type &&
+    row.name === expected[index]?.[0] &&
+    row.table_name === expected[index]?.[1]
+  );
+}
 
 function constantTimeTextEqual(left: string, right: string): boolean {
   const leftBytes = new TextEncoder().encode(left);
@@ -335,33 +377,65 @@ async function readSyntheticDemoGate(
   try {
     // Sites does not expose its internal migration ledger to the Worker.
     // Prove 0008 from its immutable sentinel plus its exhaustive guard
-    // inventory, then prove 0009 and 0010 from exact table/trigger inventories.
+    // inventory, then prove 0009 and 0010 from exact schema inventories.
     // Any missing, renamed or prefix-colliding object keeps the runtime closed.
     const installed = await env.DB.prepare(
-      `SELECT type, name FROM sqlite_master
+      `SELECT type, name, tbl_name AS table_name FROM sqlite_master
       WHERE (type = 'trigger' AND (
-          name LIKE 'trg_preprod_demo_%'
-          OR name LIKE 'trg_shipping_quote_parcel_snapshot_%'
-          OR name LIKE 'trg_delivery_option_%'
-          OR name LIKE 'trg_delivery_order_%'
-          OR name LIKE 'trg_delivery_service_point_%'
-          OR name LIKE 'trg_shipping_document_%'
+          lower(name) GLOB 'trg_preprod_demo_*'
+          OR lower(name) GLOB 'trg_shipping_quote_parcel_snapshot_*'
+          OR lower(name) GLOB 'trg_delivery_option_*'
+          OR lower(name) GLOB 'trg_delivery_order_*'
+          OR lower(name) GLOB 'trg_delivery_service_point_*'
+          OR lower(name) GLOB 'trg_shipping_document_*'
+          OR lower(tbl_name) IN (
+            'preprod_demo_dataset',
+            'shipping_quote_parcel_snapshots',
+            'delivery_option_snapshots',
+            'delivery_service_point_snapshots',
+            'shipping_document_metadata'
+          )
         ))
         OR (type = 'table' AND (
-          name LIKE 'shipping_quote_parcel_snapshot%'
-          OR name LIKE 'delivery_option_snapshot%'
-          OR name LIKE 'delivery_service_point_snapshot%'
-          OR name LIKE 'shipping_document_metadata%'
+          lower(name) GLOB 'preprod_demo_dataset*'
+          OR lower(name) GLOB 'shipping_quote_parcel_snapshot*'
+          OR lower(name) GLOB 'delivery_option_snapshot*'
+          OR lower(name) GLOB 'delivery_service_point_snapshot*'
+          OR lower(name) GLOB 'shipping_document_metadata*'
+        ))
+        OR (type = 'index' AND lower(name) NOT GLOB 'sqlite_autoindex_*' AND (
+          lower(name) GLOB 'idx_delivery_*'
+          OR lower(name) GLOB 'ux_delivery_*'
+          OR lower(name) GLOB 'ux_shipping_document_*'
+          OR lower(tbl_name) IN (
+            'delivery_option_snapshots',
+            'delivery_service_point_snapshots',
+            'shipping_document_metadata'
+          )
         ))
       ORDER BY type, name`,
-    ).all<{ type: string; name: string }>();
-    const syntheticTriggerNames = installed.results
-      .filter((row) => row.type === "trigger" && row.name.startsWith("trg_preprod_demo_"))
-      .map((row) => row.name);
+    ).all<InstalledSchemaObject>();
+    const syntheticTables = installed.results
+      .filter((row) =>
+        row.type === "table" &&
+        row.name.toLowerCase().startsWith("preprod_demo_dataset")
+      );
+    const syntheticTriggers = installed.results
+      .filter((row) =>
+        row.type === "trigger" &&
+        (row.name.toLowerCase().startsWith("trg_preprod_demo_") ||
+          row.table_name.toLowerCase() === "preprod_demo_dataset")
+      );
     if (
-      syntheticTriggerNames.length !== SYNTHETIC_DEMO_TRIGGER_INVENTORY.length ||
-      syntheticTriggerNames.some(
-        (name, index) => name !== SYNTHETIC_DEMO_TRIGGER_INVENTORY[index],
+      !matchesExactSchemaInventory(
+        syntheticTables,
+        "table",
+        SYNTHETIC_DEMO_TABLE_INVENTORY,
+      ) ||
+      !matchesExactSchemaInventory(
+        syntheticTriggers,
+        "trigger",
+        SYNTHETIC_DEMO_TRIGGER_INVENTORY,
       )
     ) {
       return Object.freeze({
@@ -372,20 +446,29 @@ async function readSyntheticDemoGate(
         expiresAt: sentinel.expires_at,
       });
     }
-    const parcelTableNames = installed.results
-      .filter((row) => row.type === "table" && row.name.startsWith("shipping_quote_parcel_snapshot"))
-      .map((row) => row.name);
-    const parcelTriggerNames = installed.results
-      .filter((row) => row.type === "trigger" && row.name.startsWith("trg_shipping_quote_parcel_snapshot_"))
-      .map((row) => row.name);
+    const parcelTables = installed.results
+      .filter((row) =>
+        row.type === "table" &&
+        row.name.toLowerCase().startsWith("shipping_quote_parcel_snapshot")
+      );
+    const parcelTriggers = installed.results
+      .filter((row) =>
+        row.type === "trigger" &&
+        (row.name.toLowerCase().startsWith(
+          "trg_shipping_quote_parcel_snapshot_",
+        ) || row.table_name.toLowerCase() ===
+          "shipping_quote_parcel_snapshots")
+      );
     if (
-      parcelTableNames.length !== SHIPPING_PARCEL_TABLE_INVENTORY.length ||
-      parcelTableNames.some(
-        (name, index) => name !== SHIPPING_PARCEL_TABLE_INVENTORY[index],
+      !matchesExactSchemaInventory(
+        parcelTables,
+        "table",
+        SHIPPING_PARCEL_TABLE_INVENTORY,
       ) ||
-      parcelTriggerNames.length !== SHIPPING_PARCEL_TRIGGER_INVENTORY.length ||
-      parcelTriggerNames.some(
-        (name, index) => name !== SHIPPING_PARCEL_TRIGGER_INVENTORY[index],
+      !matchesExactSchemaInventory(
+        parcelTriggers,
+        "trigger",
+        SHIPPING_PARCEL_TRIGGER_INVENTORY,
       )
     ) {
       return Object.freeze({
@@ -396,32 +479,40 @@ async function readSyntheticDemoGate(
         expiresAt: sentinel.expires_at,
       });
     }
-    const multicarrierTableNames = installed.results
+    const multicarrierTables = installed.results
       .filter((row) => row.type === "table" && (
-        row.name.startsWith("delivery_option_snapshot") ||
-        row.name.startsWith("delivery_service_point_snapshot") ||
-        row.name.startsWith("shipping_document_metadata")
-      ))
-      .map((row) => row.name)
-      .sort();
-    const multicarrierTriggerNames = installed.results
+        row.name.toLowerCase().startsWith("delivery_option_snapshot") ||
+        row.name.toLowerCase().startsWith("delivery_service_point_snapshot") ||
+        row.name.toLowerCase().startsWith("shipping_document_metadata")
+      ));
+    const multicarrierTriggers = installed.results
       .filter((row) => row.type === "trigger" && (
-        row.name.startsWith("trg_delivery_option_") ||
-        row.name.startsWith("trg_delivery_order_") ||
-        row.name.startsWith("trg_delivery_service_point_") ||
-        row.name.startsWith("trg_shipping_document_")
-      ))
-      .map((row) => row.name)
-      .sort();
+        row.name.toLowerCase().startsWith("trg_delivery_option_") ||
+        row.name.toLowerCase().startsWith("trg_delivery_order_") ||
+        row.name.toLowerCase().startsWith("trg_delivery_service_point_") ||
+        row.name.toLowerCase().startsWith("trg_shipping_document_") ||
+        Object.hasOwn(
+          MULTICARRIER_TABLE_INVENTORY,
+          row.table_name.toLowerCase(),
+        )
+      ));
+    const multicarrierIndexes = installed.results
+      .filter((row) => row.type === "index");
     if (
-      multicarrierTableNames.length !== MULTICARRIER_TABLE_INVENTORY.length ||
-      multicarrierTableNames.some(
-        (name, index) => name !== [...MULTICARRIER_TABLE_INVENTORY].sort()[index],
+      !matchesExactSchemaInventory(
+        multicarrierTables,
+        "table",
+        MULTICARRIER_TABLE_INVENTORY,
       ) ||
-      multicarrierTriggerNames.length !== MULTICARRIER_TRIGGER_INVENTORY.length ||
-      multicarrierTriggerNames.some(
-        (name, index) =>
-          name !== [...MULTICARRIER_TRIGGER_INVENTORY].sort()[index],
+      !matchesExactSchemaInventory(
+        multicarrierIndexes,
+        "index",
+        MULTICARRIER_INDEX_INVENTORY,
+      ) ||
+      !matchesExactSchemaInventory(
+        multicarrierTriggers,
+        "trigger",
+        MULTICARRIER_TRIGGER_INVENTORY,
       )
     ) {
       return Object.freeze({

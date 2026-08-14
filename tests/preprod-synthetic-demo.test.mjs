@@ -62,6 +62,17 @@ class D1 {
   }
 }
 
+class HostedLikeD1 extends D1 {
+  prepare(query) {
+    assert.doesNotMatch(
+      query,
+      /\bd1_migrations\b/,
+      "the hosted Worker cannot inspect the Sites migration ledger",
+    );
+    return super.prepare(query);
+  }
+}
+
 function applySql(database, name) {
   const source = readFileSync(`${drizzle}${name}`, "utf8");
   database.exec("BEGIN IMMEDIATE");
@@ -227,6 +238,17 @@ test("synthetic health is honest and missing flag or expiration fails closed wit
   assert.equal(payload.latestMigration, MULTICARRIER_FOUNDATION_MIGRATION);
   assert.equal(context.d1.queries.some((query) => /d1_migrations/.test(query)), false);
 
+  const missingFlagHealth = await invoke(
+    context,
+    "/api/preprod/health",
+    {},
+    { PREPROD_DEMO_DATASET: undefined },
+  );
+  assert.equal(missingFlagHealth.status, 503);
+  const missingFlagPayload = await missingFlagHealth.json();
+  assert.equal(missingFlagPayload.syntheticDataset.reason, "flag-disabled");
+  assert.equal(missingFlagPayload.latestMigration, null);
+
   const before = context.sqlite.prepare("SELECT COUNT(*) count FROM carts").get().count;
   const missingFlag = await invoke(context, "/api/preprod/cart", { method: "POST", headers: headers() }, { PREPROD_DEMO_DATASET: undefined });
   assert.equal(missingFlag.status, 503);
@@ -288,6 +310,107 @@ test("health stays closed through 0009 and becomes ready only with exact 0010", 
   assert.equal(readyPayload.capabilities.realShippingLabels, false);
   assert.equal(readyPayload.capabilities.deliveryLive, false);
   migration0010.sqlite.close();
+});
+
+test("hosted-like exact 0010 health never reads the Sites ledger", async () => {
+  const context = await runtime();
+  context.d1 = new HostedLikeD1(context.sqlite);
+
+  const health = await invoke(context, "/api/preprod/health");
+  assert.equal(health.status, 200);
+  const payload = await health.json();
+  assert.equal(payload.latestMigration, MULTICARRIER_FOUNDATION_MIGRATION);
+  assert.equal(payload.syntheticDataset.reason, "ready");
+  assert.deepEqual(
+    {
+      shippingQuoteSimulation: payload.capabilities.shippingQuoteSimulation,
+      orderSimulation: payload.capabilities.orderSimulation,
+      paymentTestSimulation: payload.capabilities.paymentTestSimulation,
+      emailCaptureSimulation: payload.capabilities.emailCaptureSimulation,
+      stockSimulation: payload.capabilities.stockSimulation,
+      shippingSimulation: payload.capabilities.shippingSimulation,
+      payment: payload.capabilities.payment,
+      emailDelivery: payload.capabilities.emailDelivery,
+      carrier: payload.capabilities.carrier,
+      deliveryConnectorReady: payload.capabilities.deliveryConnectorReady,
+      deliveryProviderConnected: payload.capabilities.deliveryProviderConnected,
+      realShippingRates: payload.capabilities.realShippingRates,
+      realShippingLabels: payload.capabilities.realShippingLabels,
+      deliveryLive: payload.capabilities.deliveryLive,
+      launchReadiness: payload.capabilities.launchReadiness,
+    },
+    {
+      shippingQuoteSimulation: true,
+      orderSimulation: true,
+      paymentTestSimulation: true,
+      emailCaptureSimulation: true,
+      stockSimulation: true,
+      shippingSimulation: true,
+      payment: false,
+      emailDelivery: false,
+      carrier: false,
+      deliveryConnectorReady: false,
+      deliveryProviderConnected: false,
+      realShippingRates: false,
+      realShippingLabels: false,
+      deliveryLive: false,
+      launchReadiness: false,
+    },
+  );
+  assert.equal(
+    context.d1.queries.some((query) => /\bd1_migrations\b/.test(query)),
+    false,
+  );
+  context.sqlite.close();
+});
+
+test("0010 inventory rejects missing, extra, renamed and prefix-colliding objects", async () => {
+  const mutations = [
+    "DROP TABLE shipping_document_metadata",
+    "DROP INDEX ux_delivery_options_quote",
+    "DROP TRIGGER trg_delivery_option_select_once",
+    "CREATE TABLE delivery_option_snapshots_shadow (id TEXT)",
+    "CREATE INDEX unrelated_extra_index ON delivery_option_snapshots (carrier_code)",
+    `DROP INDEX ux_delivery_options_quote;
+      CREATE UNIQUE INDEX renamed_quote_index
+      ON delivery_option_snapshots (shipping_quote_id)`,
+    "CREATE INDEX ux_delivery_prefix_collision ON carts (id)",
+    `CREATE TRIGGER unrelated_extra_trigger
+      BEFORE INSERT ON delivery_service_point_snapshots BEGIN SELECT 1; END`,
+    "CREATE TABLE DELIVERY_OPTION_SNAPSHOTS_SHADOW (id TEXT)",
+    "CREATE INDEX UX_DELIVERY_PREFIX_COLLISION ON carts (id)",
+    `DROP TRIGGER trg_delivery_option_select_once;
+      CREATE TRIGGER trg_delivery_option_select_once
+      BEFORE INSERT ON carts BEGIN SELECT 1; END`,
+    `DROP INDEX ux_delivery_options_quote;
+      CREATE UNIQUE INDEX ux_delivery_options_quote ON carts (id)`,
+  ];
+  for (const mutation of mutations) {
+    const context = await runtime();
+    context.sqlite.exec(mutation);
+    const before = context.sqlite.prepare("SELECT COUNT(*) count FROM carts").get().count;
+
+    const health = await invoke(context, "/api/preprod/health");
+    assert.equal(health.status, 503, mutation);
+    const payload = await health.json();
+    assert.equal(payload.syntheticDataset.reason, "installation-proof-invalid");
+    assert.equal(payload.latestMigration, CLIENT_VALIDATED_PARCEL_MIGRATION);
+
+    const cart = await invoke(context, "/api/preprod/cart", {
+      method: "POST",
+      headers: headers(),
+    });
+    assert.equal(cart.status, 503);
+    assert.equal(
+      context.sqlite.prepare("SELECT COUNT(*) count FROM carts").get().count,
+      before,
+    );
+    assert.equal(
+      context.d1.queries.some((query) => /\bd1_migrations\b/.test(query)),
+      false,
+    );
+    context.sqlite.close();
+  }
 });
 
 test("missing, extra or renamed 0009 schema objects fail closed without writes", async () => {

@@ -1,50 +1,67 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+function schemaRows(type, tableByName) {
+  return Object.entries(tableByName).map(([name, table_name]) => ({
+    type,
+    name,
+    table_name,
+  }));
+}
+
 const governedSchemaRows = [
-  "trg_preprod_demo_cart_active_delete",
-  "trg_preprod_demo_cart_active_insert",
-  "trg_preprod_demo_cart_active_update",
-  "trg_preprod_demo_cart_line_active_delete",
-  "trg_preprod_demo_cart_line_active_insert",
-  "trg_preprod_demo_cart_line_active_update",
-  "trg_preprod_demo_dataset_immutable_delete",
-  "trg_preprod_demo_dataset_immutable_update",
-  "trg_preprod_demo_order_active_insert",
-  "trg_preprod_demo_order_active_update",
-  "trg_preprod_demo_payment_active_insert",
-  "trg_preprod_demo_reservation_active_insert",
-  "trg_preprod_demo_reservation_active_update",
-  "trg_preprod_demo_shipping_quote_active_insert",
-  "trg_preprod_demo_shipping_quote_active_update",
-  "trg_preprod_demo_webhook_active_insert",
-].map((name) => ({ type: "trigger", name })).concat([
-  { type: "table", name: "shipping_quote_parcel_snapshots" },
-  {
-    type: "trigger",
-    name: "trg_shipping_quote_parcel_snapshot_immutable_update",
-  },
-  {
-    type: "trigger",
-    name: "trg_shipping_quote_parcel_snapshot_matches_cart",
-  },
-  {
-    type: "trigger",
-    name: "trg_shipping_quote_parcel_snapshot_retain_delete",
-  },
-  { type: "table", name: "delivery_option_snapshots" },
-  { type: "table", name: "delivery_service_point_snapshots" },
-  { type: "table", name: "shipping_document_metadata" },
-  { type: "trigger", name: "trg_delivery_order_requires_selected_option" },
-  { type: "trigger", name: "trg_delivery_option_retain" },
-  { type: "trigger", name: "trg_delivery_option_select_once" },
-  { type: "trigger", name: "trg_delivery_option_validate_insert" },
-  { type: "trigger", name: "trg_delivery_service_point_immutable" },
-  { type: "trigger", name: "trg_delivery_service_point_retain" },
-  { type: "trigger", name: "trg_delivery_service_point_validate_insert" },
-  { type: "trigger", name: "trg_shipping_document_immutable" },
-  { type: "trigger", name: "trg_shipping_document_retain" },
-]);
+  ...schemaRows("table", {
+    preprod_demo_dataset: "preprod_demo_dataset",
+    shipping_quote_parcel_snapshots: "shipping_quote_parcel_snapshots",
+    delivery_option_snapshots: "delivery_option_snapshots",
+    delivery_service_point_snapshots: "delivery_service_point_snapshots",
+    shipping_document_metadata: "shipping_document_metadata",
+  }),
+  ...schemaRows("index", {
+    idx_delivery_options_cart_expiry: "delivery_option_snapshots",
+    idx_delivery_service_points_option_expiry:
+      "delivery_service_point_snapshots",
+    ux_delivery_options_quote: "delivery_option_snapshots",
+    ux_delivery_options_selected_cart: "delivery_option_snapshots",
+    ux_delivery_service_point_provider_ref:
+      "delivery_service_point_snapshots",
+    ux_shipping_document_reference: "shipping_document_metadata",
+  }),
+  ...schemaRows("trigger", {
+    trg_preprod_demo_cart_active_delete: "carts",
+    trg_preprod_demo_cart_active_insert: "carts",
+    trg_preprod_demo_cart_active_update: "carts",
+    trg_preprod_demo_cart_line_active_delete: "cart_lines",
+    trg_preprod_demo_cart_line_active_insert: "cart_lines",
+    trg_preprod_demo_cart_line_active_update: "cart_lines",
+    trg_preprod_demo_dataset_immutable_delete: "preprod_demo_dataset",
+    trg_preprod_demo_dataset_immutable_update: "preprod_demo_dataset",
+    trg_preprod_demo_order_active_insert: "orders",
+    trg_preprod_demo_order_active_update: "orders",
+    trg_preprod_demo_payment_active_insert: "payments",
+    trg_preprod_demo_reservation_active_insert: "stock_reservations",
+    trg_preprod_demo_reservation_active_update: "stock_reservations",
+    trg_preprod_demo_shipping_quote_active_insert: "shipping_quotes",
+    trg_preprod_demo_shipping_quote_active_update: "shipping_quotes",
+    trg_preprod_demo_webhook_active_insert: "webhook_events",
+    trg_shipping_quote_parcel_snapshot_immutable_update:
+      "shipping_quote_parcel_snapshots",
+    trg_shipping_quote_parcel_snapshot_matches_cart:
+      "shipping_quote_parcel_snapshots",
+    trg_shipping_quote_parcel_snapshot_retain_delete:
+      "shipping_quote_parcel_snapshots",
+    trg_delivery_order_requires_selected_option: "orders",
+    trg_delivery_option_retain: "delivery_option_snapshots",
+    trg_delivery_option_select_once: "delivery_option_snapshots",
+    trg_delivery_option_validate_insert: "delivery_option_snapshots",
+    trg_delivery_service_point_immutable: "delivery_service_point_snapshots",
+    trg_delivery_service_point_retain: "delivery_service_point_snapshots",
+    trg_delivery_service_point_validate_insert:
+      "delivery_service_point_snapshots",
+    trg_shipping_document_immutable: "shipping_document_metadata",
+    trg_shipping_document_retain: "shipping_document_metadata",
+  }),
+];
 
 async function invokeWorker(
   pathname = "/",
