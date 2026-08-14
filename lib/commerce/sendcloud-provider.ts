@@ -1,5 +1,6 @@
 import {
   DeliveryProviderError,
+  type DeliveryDutiesTerms,
   type DeliveryProviderPorts,
   type DeliveryQuoteOffer,
   type DeliveryQuoteRequest,
@@ -121,7 +122,7 @@ export async function parseSendcloudDeliveryOptions(
   context: Readonly<{
     now: string;
     ttlSeconds: number;
-    dutiesTerms: "EU_INCLUDED" | "DAP";
+    dutiesTerms: DeliveryDutiesTerms;
   }>,
 ): Promise<readonly DeliveryQuoteOffer[]> {
   if (
@@ -130,7 +131,8 @@ export async function parseSendcloudDeliveryOptions(
     value.delivery_options.length > 100
   ) throw new DeliveryProviderError("MALFORMED_RESPONSE", "Delivery options envelope is invalid.");
   internalExpiry(context.now, context.ttlSeconds);
-  const parsed = await Promise.all(value.delivery_options.map(async (candidate) => {
+  const parsed = await Promise.all(value.delivery_options.map(
+    async (candidate): Promise<DeliveryQuoteOffer | null> => {
     const keys = [
       "carrier", "checkout_identifier", "cut_off_time", "delivery_dates",
       "delivery_method_type", "description", "id", "internal_title",
@@ -161,15 +163,19 @@ export async function parseSendcloudDeliveryOptions(
     // The documented V3 response may explicitly return no transit percentiles.
     // A null rate is not a zero/free rate. Omit either incomplete option only.
     if (candidate.lead_time_hours === null || candidate.shipping_rate.value === null) return null;
+    const leadTime = candidate.lead_time_hours as Record<
+      (typeof LEAD_TIME_KEYS)[number],
+      unknown
+    >;
     if (
-      !exactKeys(candidate.lead_time_hours, LEAD_TIME_KEYS) ||
+      !exactKeys(leadTime, LEAD_TIME_KEYS) ||
       LEAD_TIME_KEYS.some((key) =>
-        !Number.isSafeInteger(candidate.lead_time_hours?.[key]) ||
-        (candidate.lead_time_hours?.[key] as number) < 0
+        !Number.isSafeInteger(leadTime[key]) ||
+        (leadTime[key] as number) < 0
       ) ||
       LEAD_TIME_KEYS.some((key, index) => index > 0 &&
-        (candidate.lead_time_hours?.[key] as number) <
-          (candidate.lead_time_hours?.[LEAD_TIME_KEYS[index - 1]] as number))
+        (leadTime[key] as number) <
+          (leadTime[LEAD_TIME_KEYS[index - 1]] as number))
     ) {
       throw new DeliveryProviderError("MALFORMED_RESPONSE", "Delivery option lead time is invalid.");
     }
@@ -181,7 +187,7 @@ export async function parseSendcloudDeliveryOptions(
       configurationId: value.configuration_id,
       deliveryMethodType: candidate.delivery_method_type,
       id: candidate.id,
-      leadTimeHours: candidate.lead_time_hours,
+      leadTimeHours: leadTime,
       shippingRate: candidate.shipping_rate,
     });
     return Object.freeze({
@@ -202,15 +208,16 @@ export async function parseSendcloudDeliveryOptions(
         : "home" as const,
       amountCents: centsFromDecimal(candidate.shipping_rate.value),
       currency: "EUR" as const,
-      estimatedDaysMin: Math.max(1, Math.ceil((candidate.lead_time_hours.p50 as number) / 24)),
-      estimatedDaysMax: Math.max(1, Math.ceil((candidate.lead_time_hours.p90 as number) / 24)),
+      estimatedDaysMin: Math.max(1, Math.ceil((leadTime.p50 as number) / 24)),
+      estimatedDaysMax: Math.max(1, Math.ceil((leadTime.p90 as number) / 24)),
       dutiesTerms: context.dutiesTerms,
       expiresAt,
       // Sendcloud does not claim a signed response here. This is our canonical
       // response fingerprint for replay/audit, never a provider signature.
       responseFingerprint: await sha256Hex(canonical),
     });
-  }));
+    },
+  ));
   return Object.freeze(parsed.filter((option): option is DeliveryQuoteOffer => option !== null));
 }
 
