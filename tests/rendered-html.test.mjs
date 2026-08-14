@@ -32,6 +32,18 @@ const governedSchemaRows = [
     type: "trigger",
     name: "trg_shipping_quote_parcel_snapshot_retain_delete",
   },
+  { type: "table", name: "delivery_option_snapshots" },
+  { type: "table", name: "delivery_service_point_snapshots" },
+  { type: "table", name: "shipping_document_metadata" },
+  { type: "trigger", name: "trg_delivery_order_requires_selected_option" },
+  { type: "trigger", name: "trg_delivery_option_retain" },
+  { type: "trigger", name: "trg_delivery_option_select_once" },
+  { type: "trigger", name: "trg_delivery_option_validate_insert" },
+  { type: "trigger", name: "trg_delivery_service_point_immutable" },
+  { type: "trigger", name: "trg_delivery_service_point_retain" },
+  { type: "trigger", name: "trg_delivery_service_point_validate_insert" },
+  { type: "trigger", name: "trg_shipping_document_immutable" },
+  { type: "trigger", name: "trg_shipping_document_retain" },
 ]);
 
 async function invokeWorker(
@@ -169,6 +181,11 @@ test("synthetic candidate stays unavailable on migration 0007 without its sentin
     carrier: false,
     stockSimulation: false,
     shippingSimulation: false,
+    deliveryConnectorReady: false,
+    deliveryProviderConnected: false,
+    realShippingRates: false,
+    realShippingLabels: false,
+    deliveryLive: false,
     launchReadiness: false,
   });
   assert.deepEqual(payload.stockProjection, []);
