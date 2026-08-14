@@ -2600,3 +2600,124 @@ test("Wrangler applies the canonical D1 chain 0000 to 0007 on empty and journale
     ],
   );
 });
+
+test("Wrangler upgrades an exact 0009 database to 0010 and replays the terminal chain as a no-op", async (t) => {
+  assert.ok(existsSync(builtConfigPath), "npm run build must create Wrangler config");
+  assert.ok(existsSync(wranglerCliPath), "local Wrangler must be installed");
+  const migrationNames = readdirSync(migrationDirectory)
+    .filter((name) => /^\d+_.+\.sql$/.test(name))
+    .sort();
+  assert.equal(migrationNames.at(-2), "0009_shipping_quote_parcel_snapshots.sql");
+  assert.equal(migrationNames.at(-1), "0010_multicarrier_delivery_foundation.sql");
+
+  const canonicalConfig = JSON.parse(readFileSync(builtConfigPath, "utf8"));
+  const proofParent = join(projectRoot, ".wrangler");
+  mkdirSync(proofParent, { recursive: true });
+  const proofRoot = mkdtempSync(join(proofParent, "r10-"));
+  assertProjectLocal(proofRoot);
+  t.after(() => {
+    assertProjectLocal(proofRoot);
+    rmSync(proofRoot, {
+      force: true,
+      maxRetries: 5,
+      recursive: true,
+      retryDelay: 100,
+    });
+  });
+  const environment = createWranglerEnvironment(proofRoot);
+  const pre0010ConfigPath = createMigrationSubsetConfig({
+    canonicalConfig,
+    migrationNames: migrationNames.slice(0, -1),
+    root: join(proofRoot, "pre0010"),
+    workerName: "aj-luxury-d1-pre-0010-upgrade-proof",
+  });
+  const fullConfigPath = createMigrationSubsetConfig({
+    canonicalConfig,
+    migrationNames,
+    root: join(proofRoot, "full"),
+    workerName: "aj-luxury-d1-0010-upgrade-proof",
+  });
+  const statePath = join(proofRoot, "state");
+
+  await applyMigrations({
+    configPath: pre0010ConfigPath,
+    environment,
+    expectedLastMigration: "0009_shipping_quote_parcel_snapshots.sql",
+    statePath,
+  });
+  assert.deepEqual(
+    migrationRows({ configPath: pre0010ConfigPath, environment, statePath })
+      .map(({ name }) => name),
+    migrationNames.slice(0, -1),
+  );
+
+  await applyMigrations({
+    configPath: fullConfigPath,
+    environment,
+    expectedLastMigration: "0010_multicarrier_delivery_foundation.sql",
+    statePath,
+  });
+  const upgradedRows = migrationRows({
+    configPath: fullConfigPath,
+    environment,
+    statePath,
+  });
+  assert.deepEqual(upgradedRows.map(({ name }) => name), migrationNames);
+
+  const installedObjects = queryD1({
+    command: `SELECT type, name FROM sqlite_master
+      WHERE
+        (type = 'table' AND (
+          name LIKE 'delivery_option_snapshot%'
+          OR name LIKE 'delivery_service_point_snapshot%'
+          OR name LIKE 'shipping_document_metadata%'
+        ))
+        OR (type = 'index' AND (
+          name LIKE 'idx_delivery_%'
+          OR name LIKE 'ux_delivery_%'
+          OR name LIKE 'ux_shipping_document_%'
+        ))
+        OR (type = 'trigger' AND (
+          name LIKE 'trg_delivery_%'
+          OR name LIKE 'trg_shipping_document_%'
+        ))
+      ORDER BY type, name`,
+    configPath: fullConfigPath,
+    environment,
+    statePath,
+  });
+  assert.deepEqual(
+    installedObjects.map(({ type, name }) => `${type}:${name}`).sort(),
+    [
+      "index:idx_delivery_options_cart_expiry",
+      "index:idx_delivery_service_points_option_expiry",
+      "index:ux_delivery_options_quote",
+      "index:ux_delivery_options_selected_cart",
+      "index:ux_delivery_service_point_provider_ref",
+      "index:ux_shipping_document_reference",
+      "table:delivery_option_snapshots",
+      "table:delivery_service_point_snapshots",
+      "table:shipping_document_metadata",
+      "trigger:trg_delivery_option_retain",
+      "trigger:trg_delivery_option_select_once",
+      "trigger:trg_delivery_option_validate_insert",
+      "trigger:trg_delivery_order_requires_selected_option",
+      "trigger:trg_delivery_service_point_immutable",
+      "trigger:trg_delivery_service_point_retain",
+      "trigger:trg_delivery_service_point_validate_insert",
+      "trigger:trg_shipping_document_immutable",
+      "trigger:trg_shipping_document_retain",
+    ].sort(),
+  );
+
+  await applyMigrations({
+    configPath: fullConfigPath,
+    environment,
+    noOp: true,
+    statePath,
+  });
+  assert.deepEqual(
+    migrationRows({ configPath: fullConfigPath, environment, statePath }),
+    upgradedRows,
+  );
+});

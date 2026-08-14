@@ -132,10 +132,6 @@
   "checkout.fixtureCA": "Canadá",
   "checkout.usState": "Estado de EE. UU. (2 letras)",
   "checkout.calculateShipping": "Calcular el envío",
-  "checkout.chooseDelivery": "Elige tu entrega",
-  "checkout.deliveryDeterministic": "Simulación del mecanismo: no se consulta ningún transportista ni tarifa real. En producción solo se mostrarán ofertas confirmadas.",
-  "checkout.homeDelivery": "Entrega a domicilio",
-  "checkout.servicePointDelivery": "Punto de recogida",
   "checkout.calculatingShipping": "Calculando…",
   "checkout.loadingCart": "Cargando el carrito…",
   "checkout.emptyTitle": "Tu carrito está vacío.",
@@ -283,13 +279,5 @@
   "account.stageLabelReady": "Etiqueta ficticia lista",
   "account.stageHandedOver": "Entrega al transportista simulada",
   "account.stageInTransit": "Tránsito simulado",
-  "account.stageDelivered": "Entrega simulada completada",
-  "account.deliveryMethod": "Método elegido:",
-  "account.preparationTitle": "Ficha de preparación",
-  "account.preparationWarning": "Solo simulación: esta ficha no contiene etiqueta, código de barras ni orden de envío real.",
-  "account.preparationPack": "Comprobar artículos, tallas y cantidades y cerrar el paquete.",
-  "account.preparationLabelClosed": "Crear la etiqueta solo cuando la cuenta y el servicio real del transportista estén activos.",
-  "account.preparationDropoff": "Depositar el paquete en el lugar correspondiente a la elección del cliente.",
-  "account.preparationTracking": "Confirmar el seguimiento real antes de archivar el pedido.",
-  "account.printPreparation": "Imprimir ficha de preparación"
+  "account.stageDelivered": "Entrega simulada completada"
 }

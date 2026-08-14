@@ -1,51 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-const governedSchemaRows = [
-  "trg_preprod_demo_cart_active_delete",
-  "trg_preprod_demo_cart_active_insert",
-  "trg_preprod_demo_cart_active_update",
-  "trg_preprod_demo_cart_line_active_delete",
-  "trg_preprod_demo_cart_line_active_insert",
-  "trg_preprod_demo_cart_line_active_update",
-  "trg_preprod_demo_dataset_immutable_delete",
-  "trg_preprod_demo_dataset_immutable_update",
-  "trg_preprod_demo_order_active_insert",
-  "trg_preprod_demo_order_active_update",
-  "trg_preprod_demo_payment_active_insert",
-  "trg_preprod_demo_reservation_active_insert",
-  "trg_preprod_demo_reservation_active_update",
-  "trg_preprod_demo_shipping_quote_active_insert",
-  "trg_preprod_demo_shipping_quote_active_update",
-  "trg_preprod_demo_webhook_active_insert",
-].map((name) => ({ type: "trigger", name })).concat([
-  { type: "table", name: "shipping_quote_parcel_snapshots" },
-  {
-    type: "trigger",
-    name: "trg_shipping_quote_parcel_snapshot_immutable_update",
-  },
-  {
-    type: "trigger",
-    name: "trg_shipping_quote_parcel_snapshot_matches_cart",
-  },
-  {
-    type: "trigger",
-    name: "trg_shipping_quote_parcel_snapshot_retain_delete",
-  },
-  { type: "table", name: "delivery_option_snapshots" },
-  { type: "table", name: "delivery_service_point_snapshots" },
-  { type: "table", name: "shipping_document_metadata" },
-  { type: "trigger", name: "trg_delivery_order_requires_selected_option" },
-  { type: "trigger", name: "trg_delivery_option_retain" },
-  { type: "trigger", name: "trg_delivery_option_select_once" },
-  { type: "trigger", name: "trg_delivery_option_validate_insert" },
-  { type: "trigger", name: "trg_delivery_service_point_immutable" },
-  { type: "trigger", name: "trg_delivery_service_point_retain" },
-  { type: "trigger", name: "trg_delivery_service_point_validate_insert" },
-  { type: "trigger", name: "trg_shipping_document_immutable" },
-  { type: "trigger", name: "trg_shipping_document_retain" },
-]);
-
 async function invokeWorker(
   pathname = "/",
   { method = "GET", headers = {}, assets, environment } = {},
@@ -79,7 +34,6 @@ async function invokeWorker(
     },
   );
 }
-
 test("preproduction APIs are invisible without the exact isolated environment", async () => {
   const missing = await invokeWorker("/api/preprod/health");
   assert.equal(missing.status, 404);
@@ -95,10 +49,11 @@ test("preproduction APIs are invisible without the exact isolated environment", 
     environment: "preproduction",
   });
   assert.equal(isolatedWithoutDatabase.status, 503);
-  assert.deepEqual(await isolatedWithoutDatabase.json(), {
-    status: "unavailable",
-    reason: "preproduction-database-not-bound",
-  });
+  const payload = await isolatedWithoutDatabase.json();
+  assert.equal(payload.status, "unavailable");
+  assert.equal(payload.runtimeMode, "post-0010-rollback");
+  assert.equal(payload.reason, "preproduction-database-not-bound");
+  assert.equal(payload.launchReadiness, false);
 });
 
 test("production pages remain indexable while preproduction is explicitly noindex", async () => {
@@ -110,241 +65,6 @@ test("production pages remain indexable while preproduction is explicitly noinde
     environment: "preproduction",
   });
   assert.equal(preproduction.headers.get("x-robots-tag"), "noindex, nofollow");
-});
-
-test("synthetic candidate stays unavailable on migration 0007 without its sentinel", async () => {
-  const statements = [];
-  const database = {
-    prepare(query) {
-      const statement = {
-        bind() {
-          return statement;
-        },
-        async first() {
-          if (query.includes("preprod_demo_dataset")) {
-            return null;
-          }
-          if (query.includes("reserves_validated")) {
-            return { total: 3, validated: 3 };
-          }
-          return null;
-        },
-        async all() {
-          if (query.includes("shipping_zone_configurations")) {
-            return { results: [{ zone: "EU" }] };
-          }
-          return {
-            results: [
-              { variant_id: "variant_available", available_to_sell: 18 },
-              { variant_id: "variant_low", available_to_sell: 4 },
-              { variant_id: "variant_sold", available_to_sell: 0 },
-            ],
-          };
-        },
-      };
-      statements.push(query);
-      return statement;
-    },
-  };
-  const workerUrl = new URL("../dist/server/index.js", import.meta.url);
-  workerUrl.searchParams.set("health", `${process.pid}-${Date.now()}-${Math.random()}`);
-  const { default: worker } = await import(workerUrl.href);
-  const response = await worker.fetch(
-    new Request("https://preprod.example/api/preprod/health"),
-    {
-      APP_ENV: "preproduction",
-      PREPROD_ORIGIN: "https://preprod.example",
-      PREPROD_DEMO_DATASET: "aj-demo-v1",
-      DB: database,
-    },
-    { waitUntil() {}, passThroughOnException() {} },
-  );
-  assert.equal(response.status, 503);
-  const payload = await response.json();
-  assert.equal(payload.status, "unavailable");
-  assert.equal(payload.latestMigration, null);
-  assert.deepEqual(payload.capabilities, {
-    catalog: false,
-    cart: false,
-    shippingQuotes: false,
-    shippingQuoteZones: { EU: false, UK: false, US: false, CA: false },
-    shippingQuoteSimulation: false,
-    shippingQuoteSimulationZones: { EU: false, UK: false, US: false, CA: false },
-    payment: false,
-    orderCreation: false,
-    reservesValidated: false,
-    syntheticReservesReady: false,
-    orderSimulation: false,
-    paymentTestSimulation: false,
-    emailCaptureSimulation: false,
-    emailDelivery: false,
-    carrier: false,
-    stockSimulation: false,
-    shippingSimulation: false,
-    deliveryConnectorReady: false,
-    deliveryProviderConnected: false,
-    realShippingRates: false,
-    realShippingLabels: false,
-    deliveryLive: false,
-    launchReadiness: false,
-  });
-  assert.deepEqual(payload.stockProjection, []);
-  assert.equal(JSON.stringify(payload).includes("available_to_sell"), false);
-  assert.equal(statements.length, 1);
-  assert.match(statements[0], /preprod_demo_dataset/);
-  assert.equal(statements.some((query) => /d1_migrations/.test(query)), false);
-  assert.equal(
-    statements.some((query) => /inventory|shipping_zone_configurations/.test(query)),
-    false,
-  );
-});
-
-test("preproduction health stays fail-closed without querying tables from a missing migration", async () => {
-  const statements = [];
-  const database = {
-    prepare(query) {
-      statements.push(query);
-      const statement = {
-        bind() {
-          return statement;
-        },
-        async first() {
-          if (query.includes("preprod_demo_dataset")) {
-            throw new Error("no such table: preprod_demo_dataset");
-          }
-          return null;
-        },
-        async all() {
-          throw new Error("shipping tables must not be queried");
-        },
-      };
-      return statement;
-    },
-  };
-  const workerUrl = new URL("../dist/server/index.js", import.meta.url);
-  workerUrl.searchParams.set("health-old", `${process.pid}-${Date.now()}-${Math.random()}`);
-  const { default: worker } = await import(workerUrl.href);
-  const response = await worker.fetch(
-    new Request("https://preprod.example/api/preprod/health"),
-    {
-      APP_ENV: "preproduction",
-      PREPROD_ORIGIN: "https://preprod.example",
-      DB: database,
-    },
-    { waitUntil() {}, passThroughOnException() {} },
-  );
-  assert.equal(response.status, 503);
-  const payload = await response.json();
-  assert.equal(payload.status, "unavailable");
-  assert.equal(payload.capabilities.shippingQuotes, false);
-  assert.deepEqual(payload.capabilities.shippingQuoteZones, {
-    EU: false, UK: false, US: false, CA: false,
-  });
-  assert.equal(statements.length, 1);
-  assert.match(statements[0], /preprod_demo_dataset/);
-  assert.equal(statements.some((query) => /d1_migrations/.test(query)), false);
-  assert.equal(
-    statements.some((query) => /inventory|shipping_zone_configurations/.test(query)),
-    false,
-  );
-});
-
-test("preproduction health never depends on the Sites migration ledger", async () => {
-  const statements = [];
-  const database = {
-    prepare(query) {
-      statements.push(query);
-      assert.doesNotMatch(query, /d1_migrations/);
-      return {
-        async first() {
-          throw new Error("no such table: preprod_demo_dataset");
-        },
-      };
-    },
-  };
-  const workerUrl = new URL("../dist/server/index.js", import.meta.url);
-  workerUrl.searchParams.set("health-no-ledger", `${process.pid}-${Date.now()}-${Math.random()}`);
-  const { default: worker } = await import(workerUrl.href);
-  const response = await worker.fetch(
-    new Request("https://preprod.example/api/preprod/health"),
-    {
-      APP_ENV: "preproduction",
-      PREPROD_ORIGIN: "https://preprod.example",
-      DB: database,
-    },
-    { waitUntil() {}, passThroughOnException() {} },
-  );
-  assert.equal(response.status, 503);
-  assert.equal((await response.json()).status, "unavailable");
-  assert.equal(statements.length, 1);
-});
-
-test("synthetic health exposes simulations, never live capabilities, when all four zones are ready", async () => {
-  const database = {
-    prepare(query) {
-      const statement = {
-        bind() {
-          return statement;
-        },
-        async first() {
-          if (query.includes("preprod_demo_dataset")) {
-            return {
-              dataset_kind: "synthetic-demo",
-              fixture_version: "aj-demo-v1",
-              expires_at: "2026-09-30T23:59:59.999Z",
-            };
-          }
-          return query.includes("reserves_validated")
-              ? { total: 12, validated: 12 }
-              : null;
-        },
-        async all() {
-          return query.includes("sqlite_master")
-            ? { results: governedSchemaRows }
-            : query.includes("shipping_zone_configurations")
-            ? { results: [{ zone: "EU" }, { zone: "UK" }, { zone: "US" }, { zone: "CA" }] }
-            : { results: [{ variant_id: "variant_available", available_to_sell: 1 }] };
-        },
-      };
-      return statement;
-    },
-  };
-  const workerUrl = new URL("../dist/server/index.js", import.meta.url);
-  workerUrl.searchParams.set("health-all-zones", `${process.pid}-${Date.now()}-${Math.random()}`);
-  const { default: worker } = await import(workerUrl.href);
-  const response = await worker.fetch(
-    new Request("https://preprod.example/api/preprod/health"),
-    {
-      APP_ENV: "preproduction",
-      PREPROD_ORIGIN: "https://preprod.example",
-      PREPROD_DEMO_DATASET: "aj-demo-v1",
-      DB: database,
-    },
-    { waitUntil() {}, passThroughOnException() {} },
-  );
-  assert.equal(response.status, 200);
-  const payload = await response.json();
-  assert.equal(payload.status, "partial");
-  assert.equal(payload.capabilities.shippingQuotes, false);
-  assert.deepEqual(payload.capabilities.shippingQuoteZones, {
-    EU: false, UK: false, US: false, CA: false,
-  });
-  assert.equal(payload.capabilities.shippingQuoteSimulation, true);
-  assert.deepEqual(payload.capabilities.shippingQuoteSimulationZones, {
-    EU: true, UK: true, US: true, CA: true,
-  });
-  assert.equal(payload.capabilities.payment, false);
-  assert.equal(payload.capabilities.reservesValidated, false);
-  assert.equal(payload.capabilities.syntheticReservesReady, true);
-  assert.equal(payload.capabilities.orderCreation, false);
-  assert.equal(payload.capabilities.orderSimulation, true);
-  assert.equal(payload.capabilities.paymentTestSimulation, true);
-  assert.equal(payload.capabilities.emailCaptureSimulation, true);
-  assert.equal(payload.capabilities.carrier, false);
-  assert.equal(payload.capabilities.stockSimulation, true);
-  assert.equal(payload.capabilities.shippingSimulation, true);
-  assert.equal(payload.capabilities.launchReadiness, false);
-  assert.equal(payload.syntheticDataset.active, true);
 });
 
 async function render(pathname = "/", headers = {}) {
