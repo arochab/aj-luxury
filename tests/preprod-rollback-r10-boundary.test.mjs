@@ -255,6 +255,52 @@ test("Rollback R10 health is hosted-like: exact 0010 schema and sentinel return 
   assert.equal(statements.some((query) => query.includes("d1_migrations")), false);
 });
 
+test("Rollback R10 real sqlite baseline accepts exact 0010 and rejects a governed drift", async () => {
+  const worker = await builtWorker("health-real-sqlite-baseline");
+  const statements = [];
+  const { sqlite, d1 } = installedRollbackDatabase(statements);
+
+  try {
+    const baseline = await worker.fetch(
+      request("/api/preprod/health", "GET"),
+      { APP_ENV: "preproduction", PREPROD_ORIGIN: ORIGIN, DB: d1 },
+      executionContext(),
+    );
+    assert.equal(baseline.status, 200);
+    const baselinePayload = await baseline.json();
+    assert.equal(baselinePayload.status, "rollback");
+    assert.equal(baselinePayload.latestMigration, "0010_multicarrier_delivery_foundation.sql");
+    assert.equal(baselinePayload.launchReadiness, false);
+    assertOnlyFalseCapabilities(baselinePayload.capabilities);
+    assert.equal(statements.length, 2);
+    assert.match(
+      statements[0],
+      /lower\(name\) NOT GLOB 'sqlite_autoindex_\*'/,
+    );
+
+    sqlite.exec(
+      "CREATE INDEX unrelated_extra_index ON delivery_option_snapshots (carrier_code)",
+    );
+    const drifted = await worker.fetch(
+      request("/api/preprod/health", "GET"),
+      { APP_ENV: "preproduction", PREPROD_ORIGIN: ORIGIN, DB: d1 },
+      executionContext(),
+    );
+    assert.equal(drifted.status, 503);
+    const driftedPayload = await drifted.json();
+    assert.equal(driftedPayload.reason, "unexpected-schema");
+    assert.equal(driftedPayload.launchReadiness, false);
+    assertOnlyFalseCapabilities(driftedPayload.capabilities);
+    assert.equal(statements.length, 3);
+    assert.equal(
+      statements.some((query) => query.includes("d1_migrations")),
+      false,
+    );
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("Rollback R10 health exhaustively rejects missing, renamed and prefix-colliding 0010 objects", async () => {
   const worker = await builtWorker("health-schema-rejections");
   const cases = [];

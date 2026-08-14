@@ -1912,7 +1912,7 @@ async function rollbackR10HealthResponse(
             OR lower(name) GLOB 'delivery_service_point_snapshot*'
             OR lower(name) GLOB 'shipping_document_metadata*'
           ))
-          OR (type = 'index' AND (
+          OR (type = 'index' AND lower(name) NOT GLOB 'sqlite_autoindex_*' AND (
             lower(name) GLOB 'idx_delivery_*'
             OR lower(name) GLOB 'ux_delivery_*'
             OR lower(name) GLOB 'ux_shipping_document_*'
