@@ -14,7 +14,7 @@ import { verifyPreprodTestPaymentEvent } from "../lib/commerce/preprod-test-paym
 
 const drizzle = fileURLToPath(new URL("../drizzle/", import.meta.url));
 const migrationPaths = readdirSync(drizzle)
-  .filter((name) => /^000(?:[0-7]|9)_.+\.sql$/.test(name))
+  .filter((name) => /^(?:000[0-7]|0009|0010)_.+\.sql$/.test(name))
   .sort();
 
 class Statement {
@@ -118,6 +118,23 @@ async function fixture() {
     parcelProfile: resolveClientValidatedParcelProfile([{ quantity: 2 }]),
     now: "2099-01-01T00:00:03.000Z",
   });
+  sqlite.prepare(`INSERT INTO delivery_option_snapshots (
+    id, cart_id, cart_revision, shipping_quote_id,
+    shipping_address_fingerprint, provider_code, carrier_code, service_code,
+    display_name, delivery_mode, amount_cents, currency,
+    estimated_days_min, estimated_days_max, duties_terms, proof_kind,
+    provider_quote_reference_hash, provider_receipt_fingerprint,
+    quoted_at, expires_at, selected_at, created_at
+  ) VALUES ('option_gate_c', 'cart_gate_c', ?, ?, ?, 'synthetic_demo',
+    'synthetic_demo', 'SYNTHETIC_DEMO_NOT_COMMERCIAL',
+    'Livraison suivie - simulation', 'home', 1200, 'EUR', 2, 5,
+    'EU_INCLUDED', 'synthetic_demo', NULL, NULL,
+    '2099-01-01T00:00:03.000Z', '2099-01-01T00:20:00.000Z',
+    '2099-01-01T00:00:03.500Z', '2099-01-01T00:00:03.000Z')`).run(
+      quote.cart_revision,
+      quote.id,
+      proof,
+    );
   return { sqlite, d1, store: new D1PreprodCheckoutStore(d1), address, normalized, proof, quote };
 }
 

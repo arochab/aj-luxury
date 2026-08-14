@@ -114,6 +114,12 @@ const PREPROD_CART_PATH = `${PREPROD_API_PREFIX}cart`;
 const PREPROD_CART_LINE_PATTERN = /^\/api\/preprod\/cart\/lines\/([^/]+)$/;
 const PREPROD_SHIPPING_QUOTE_PATH =
   `${PREPROD_API_PREFIX}checkout/shipping-quote`;
+const PREPROD_DELIVERY_OPTIONS_PATH =
+  `${PREPROD_API_PREFIX}checkout/delivery-options`;
+const PREPROD_DELIVERY_SERVICE_POINTS_PATH =
+  `${PREPROD_API_PREFIX}checkout/service-points`;
+const PREPROD_DELIVERY_SELECT_PATH =
+  `${PREPROD_API_PREFIX}checkout/delivery-options/select`;
 const PREPROD_ORDER_PATH = `${PREPROD_API_PREFIX}checkout/order`;
 const PREPROD_CURRENT_ORDER_PATH = `${PREPROD_API_PREFIX}orders/current`;
 const PREPROD_TEST_PAYMENT_PATH = `${PREPROD_API_PREFIX}checkout/test-payment`;
@@ -1775,6 +1781,232 @@ async function handleCartApi(
   return null;
 }
 
+const ROLLBACK_R10_EXPECTED_MIGRATION =
+  "0010_multicarrier_delivery_foundation.sql";
+const ROLLBACK_R10_EXPECTED_MIGRATIONS = Object.freeze([
+  "0000_flimsy_rhino.sql",
+  "0001_lock_cart_line_price_provenance.sql",
+  "0002_lock_order_line_snapshots.sql",
+  "0003_identity_access.sql",
+  "0004_email_outbox_data_rights.sql",
+  "0005_fulfillment_returns_refunds.sql",
+  "0006_allow_bounded_expired_cart_purge.sql",
+  "0007_transactional_preprod_order_payment.sql",
+  "0008_preprod_synthetic_demo_dataset.sql",
+  "0009_shipping_quote_parcel_snapshots.sql",
+  ROLLBACK_R10_EXPECTED_MIGRATION,
+]);
+const ROLLBACK_R10_EXPECTED_SCHEMA_OBJECTS = Object.freeze([
+  "index:idx_delivery_options_cart_expiry",
+  "index:idx_delivery_service_points_option_expiry",
+  "index:ux_delivery_options_quote",
+  "index:ux_delivery_options_selected_cart",
+  "index:ux_delivery_service_point_provider_ref",
+  "index:ux_shipping_document_reference",
+  "table:delivery_option_snapshots",
+  "table:delivery_service_point_snapshots",
+  "table:shipping_document_metadata",
+  "trigger:trg_delivery_option_retain",
+  "trigger:trg_delivery_option_select_once",
+  "trigger:trg_delivery_option_validate_insert",
+  "trigger:trg_delivery_order_requires_selected_option",
+  "trigger:trg_delivery_service_point_immutable",
+  "trigger:trg_delivery_service_point_retain",
+  "trigger:trg_delivery_service_point_validate_insert",
+  "trigger:trg_shipping_document_immutable",
+  "trigger:trg_shipping_document_retain",
+].sort());
+const ROLLBACK_R10_DATASET_KIND = "synthetic-demo";
+const ROLLBACK_R10_FIXTURE_VERSION = "aj-demo-v1";
+const ROLLBACK_R10_EXPIRES_AT = "2026-09-30T23:59:59.999Z";
+
+function rollbackR10Capabilities() {
+  return Object.freeze({
+    catalog: false,
+    cart: false,
+    shippingQuotes: false,
+    shippingQuoteZones: Object.freeze({
+      EU: false,
+      UK: false,
+      US: false,
+      CA: false,
+    }),
+    shippingQuoteSimulation: false,
+    shippingQuoteSimulationZones: Object.freeze({
+      EU: false,
+      UK: false,
+      US: false,
+      CA: false,
+    }),
+    deliveryOptions: false,
+    deliveryOptionSimulation: false,
+    servicePoints: false,
+    servicePointSimulation: false,
+    carrierRates: false,
+    carrier: false,
+    shippingLabels: false,
+    customsDocuments: false,
+    returnLabels: false,
+    payment: false,
+    orderCreation: false,
+    reservesValidated: false,
+    syntheticReservesReady: false,
+    orderSimulation: false,
+    paymentTestSimulation: false,
+    emailCaptureSimulation: false,
+    emailDelivery: false,
+    stockSimulation: false,
+    shippingSimulation: false,
+    deliveryConnectorReady: false,
+    deliveryProviderConnected: false,
+    realShippingRates: false,
+    realShippingLabels: false,
+    deliveryLive: false,
+    launchReadiness: false,
+  });
+}
+
+async function rollbackR10HealthResponse(
+  env: RuntimeEnv,
+): Promise<Response> {
+  const unavailable = (reason: string, latestMigration: string | null) =>
+    jsonResponse(
+      {
+        status: "unavailable",
+        environment: "preproduction",
+        runtimeMode: "post-0010-rollback",
+        reason,
+        latestMigration,
+        launchReadiness: false,
+        capabilities: rollbackR10Capabilities(),
+        stockProjection: [],
+        syntheticDataset: {
+          active: false,
+          valid: false,
+          fixtureVersion: ROLLBACK_R10_FIXTURE_VERSION,
+          expiresAt: ROLLBACK_R10_EXPIRES_AT,
+        },
+      },
+      { status: 503 },
+    );
+
+  if (!env?.DB) {
+    return unavailable("preproduction-database-not-bound", null);
+  }
+
+  let migrationNames: string[] = [];
+  try {
+    const migrations = await env.DB
+      .prepare("SELECT name FROM d1_migrations ORDER BY name ASC")
+      .all<{ name: string }>();
+    migrationNames = migrations.results.map(({ name }) => name);
+  } catch {
+    return unavailable("migration-ledger-unavailable", null);
+  }
+
+  const latestMigration = migrationNames.at(-1) ?? null;
+  if (
+    migrationNames.length !== ROLLBACK_R10_EXPECTED_MIGRATIONS.length ||
+    migrationNames.some(
+      (name, index) => name !== ROLLBACK_R10_EXPECTED_MIGRATIONS[index],
+    )
+  ) {
+    return unavailable("unexpected-migration", latestMigration);
+  }
+
+  let schemaObjects: string[] = [];
+  try {
+    const installed = await env.DB
+      .prepare(
+        `SELECT type, name FROM sqlite_master
+        WHERE
+          (type = 'table' AND (
+            name LIKE 'delivery_option_snapshot%'
+            OR name LIKE 'delivery_service_point_snapshot%'
+            OR name LIKE 'shipping_document_metadata%'
+          ))
+          OR (type = 'index' AND (
+            name LIKE 'idx_delivery_%'
+            OR name LIKE 'ux_delivery_%'
+            OR name LIKE 'ux_shipping_document_%'
+          ))
+          OR (type = 'trigger' AND (
+            name LIKE 'trg_delivery_%'
+            OR name LIKE 'trg_shipping_document_%'
+          ))
+        ORDER BY type ASC, name ASC`,
+      )
+      .all<{ type: string; name: string }>();
+    schemaObjects = installed.results
+      .map(({ type, name }) => `${type}:${name}`)
+      .sort();
+  } catch {
+    return unavailable("schema-proof-unavailable", latestMigration);
+  }
+
+  if (
+    schemaObjects.length !== ROLLBACK_R10_EXPECTED_SCHEMA_OBJECTS.length ||
+    schemaObjects.some(
+      (objectName, index) =>
+        objectName !== ROLLBACK_R10_EXPECTED_SCHEMA_OBJECTS[index],
+    )
+  ) {
+    return unavailable("unexpected-schema", latestMigration);
+  }
+
+  let sentinel: {
+    dataset_kind: string;
+    fixture_version: string;
+    expires_at: string;
+  } | null = null;
+  try {
+    sentinel = await env.DB
+      .prepare(
+        `SELECT dataset_kind, fixture_version, expires_at
+        FROM preprod_demo_dataset WHERE singleton = 1`,
+      )
+      .first<{
+        dataset_kind: string;
+        fixture_version: string;
+        expires_at: string;
+      }>();
+  } catch {
+    return unavailable("synthetic-sentinel-unavailable", latestMigration);
+  }
+
+  if (
+    !sentinel ||
+    sentinel.dataset_kind !== ROLLBACK_R10_DATASET_KIND ||
+    sentinel.fixture_version !== ROLLBACK_R10_FIXTURE_VERSION ||
+    sentinel.expires_at !== ROLLBACK_R10_EXPIRES_AT
+  ) {
+    return unavailable("synthetic-sentinel-invalid", latestMigration);
+  }
+
+  if (sentinel.expires_at <= new Date().toISOString()) {
+    return unavailable("synthetic-dataset-expired", latestMigration);
+  }
+
+  return jsonResponse(
+    {
+      status: "rollback",
+      environment: "preproduction",
+      runtimeMode: "post-0010-rollback",
+      latestMigration,
+      launchReadiness: false,
+      capabilities: rollbackR10Capabilities(),
+      stockProjection: [],
+      syntheticDataset: {
+        active: false,
+        valid: true,
+        fixtureVersion: ROLLBACK_R10_FIXTURE_VERSION,
+        expiresAt: sentinel.expires_at,
+      },
+    },
+    { status: 200 },
+  );
+}
+
 export async function preprodApiResponse(
   request: Request,
   env: RuntimeEnv,
@@ -1793,257 +2025,21 @@ export async function preprodApiResponse(
     return jsonResponse({ error: "not-found" }, { status: 404 });
   }
 
-  const ownerEndpoint =
-    url.pathname === PREPROD_ACCOUNT_PATH ||
-    url.pathname === PREPROD_TRACKING_ADVANCE_PATH ||
-    url.pathname === PREPROD_DIAGNOSTICS_PATH;
-  const ownerCheckout =
-    url.pathname === PREPROD_ORDER_PATH &&
-    request.method === "POST" &&
-    typeof env.PREPROD_OWNER_EMAIL === "string" &&
-    env.PREPROD_OWNER_EMAIL.trim().length > 0;
-  // Owner-exclusive requests are rejected from authenticated edge headers
-  // before the first D1 query. The configured address alone never grants
-  // access and unauthorized callers cannot use these paths as DB oracles.
-  const prevalidatedOwner = ownerEndpoint || ownerCheckout
-    ? await readPreprodOwner(request, env)
-    : null;
-  if ((ownerEndpoint || ownerCheckout) && !prevalidatedOwner) {
-    return jsonResponse({ error: "not-found" }, { status: 404 });
+  if (
+    url.pathname === `${PREPROD_API_PREFIX}health` &&
+    request.method === "GET"
+  ) {
+    return rollbackR10HealthResponse(env);
   }
 
-  if (!env.DB) {
-    if (url.pathname === `${PREPROD_API_PREFIX}health`) {
-      logPreprodUnavailable(
-        "preprod_health_unavailable",
-        request,
-        "preproduction-database-not-bound",
-        null,
-      );
-    } else if (
-      url.pathname === PREPROD_CART_PATH ||
-      PREPROD_CART_LINE_PATTERN.test(url.pathname)
-    ) {
-      logPreprodUnavailable(
-        "preprod_cart_gate_unavailable",
-        request,
-        "preproduction-database-not-bound",
-        null,
-      );
-    }
-    return jsonResponse(
-      { status: "unavailable", reason: "preproduction-database-not-bound" },
-      { status: 503 },
-    );
-  }
-
-  const now = new Date().toISOString();
-  const syntheticGate = await readSyntheticDemoGate(env, now);
-
-  if (url.pathname === `${PREPROD_API_PREFIX}health`) {
-    if (request.method !== "GET") {
-      return jsonResponse({ error: "method-not-allowed" }, { status: 405 });
-    }
-    return (async () => {
-      const database = env.DB;
-      const unavailable = (latestMigration: string | null, reason: string) => {
-        logPreprodUnavailable(
-          "preprod_health_unavailable",
-          request,
-          reason,
-          latestMigration,
-        );
-        return jsonResponse({
-          status: "unavailable",
-          environment: "preproduction",
-          capabilities: {
-            catalog: false,
-            cart: false,
-            shippingQuotes: false,
-            shippingQuoteZones: { EU: false, UK: false, US: false, CA: false },
-            shippingQuoteSimulation: false,
-            shippingQuoteSimulationZones: { EU: false, UK: false, US: false, CA: false },
-            payment: false,
-            orderCreation: false,
-            reservesValidated: false,
-            syntheticReservesReady: false,
-            orderSimulation: false,
-            paymentTestSimulation: false,
-            emailCaptureSimulation: false,
-            emailDelivery: false,
-            carrier: false,
-            stockSimulation: false,
-            shippingSimulation: false,
-            launchReadiness: false,
-          },
-          latestMigration,
-          stockProjection: [],
-          syntheticDataset: {
-            active: false,
-            reason,
-            fixtureVersion: SYNTHETIC_DEMO_FIXTURE_VERSION,
-            expiresAt: syntheticGate.expiresAt,
-          },
-        }, { status: 503 });
-      };
-      const latestMigration = syntheticGate.latestMigration;
-      if (syntheticGate.required && !syntheticGate.ready) {
-        return unavailable(latestMigration, syntheticGate.reason);
-      }
-      if (
-        !syntheticGate.ready ||
-        latestMigration !== CLIENT_VALIDATED_PARCEL_MIGRATION
-      ) {
-        return unavailable(latestMigration, "installation-proof-invalid");
-      }
-      try {
-        const [stock, shippingConfigurations, reserveValidation] = await Promise.all([
-          database
-            .prepare(
-              `SELECT variant.id AS variant_id,
-                stock.physical_quantity - stock.gift_reserve_quantity
-                  - stock.safety_reserve_quantity - stock.active_reserved_quantity
-                  - stock.sold_quantity AS available_to_sell
-              FROM variants AS variant
-              INNER JOIN inventory AS stock ON stock.variant_id = variant.id
-              WHERE variant.color_key = ?
-              ORDER BY variant.sort_order`,
-            )
-            .bind("rose")
-            .all<{ variant_id: string; available_to_sell: number }>(),
-          database
-            .prepare(
-              `SELECT zone FROM shipping_zone_configurations
-              WHERE status = 'active'
-              GROUP BY zone`,
-            )
-            .all<{ zone: string }>(),
-          database
-            .prepare(
-              `SELECT COUNT(*) AS total,
-                SUM(CASE WHEN reserves_validated = 1 THEN 1 ELSE 0 END) AS validated
-              FROM inventory`,
-            )
-            .first<{ total: number; validated: number }>(),
-        ]);
-        const configuredZones = new Set(
-          shippingConfigurations.results.map((row) => row.zone),
-        );
-        const shippingQuoteZones = Object.freeze({
-          EU: configuredZones.has("EU"),
-          UK: configuredZones.has("UK"),
-          US: configuredZones.has("US"),
-          CA: configuredZones.has("CA"),
-        });
-        const shippingQuotesReady = Object.values(shippingQuoteZones)
-          .every(Boolean);
-        const reservesReady = Boolean(
-          reserveValidation && reserveValidation.total > 0 &&
-          reserveValidation.total === reserveValidation.validated,
-        );
-        const sellableStockReady = stock.results.some(
-          (position: { available_to_sell: number }) => position.available_to_sell > 0,
-        );
-        const testCheckoutReady = shippingQuotesReady && reservesReady &&
-          sellableStockReady;
-        return jsonResponse(
-          {
-            status: "partial",
-            environment: "preproduction",
-            capabilities: {
-              catalog: true,
-              cart: true,
-              shippingQuotes: syntheticGate.required ? false : shippingQuotesReady,
-              shippingQuoteZones: syntheticGate.required
-                ? { EU: false, UK: false, US: false, CA: false }
-                : shippingQuoteZones,
-              shippingQuoteSimulation: syntheticGate.required && shippingQuotesReady,
-              shippingQuoteSimulationZones: syntheticGate.required
-                ? shippingQuoteZones
-                : { EU: false, UK: false, US: false, CA: false },
-              payment: false,
-              reservesValidated: syntheticGate.required ? false : reservesReady,
-              syntheticReservesReady: syntheticGate.required && reservesReady,
-              orderCreation: syntheticGate.required ? false : testCheckoutReady,
-              orderSimulation: syntheticGate.required && testCheckoutReady,
-              paymentTestSimulation: testCheckoutReady,
-              emailCaptureSimulation: testCheckoutReady,
-              emailDelivery: false,
-              carrier: false,
-              stockSimulation: syntheticGate.required,
-              shippingSimulation: syntheticGate.required,
-              launchReadiness: false,
-            },
-            latestMigration,
-            stockProjection: stock.results.map((position: {
-              variant_id: string;
-              available_to_sell: number;
-            }) => ({
-              variantId: position.variant_id,
-              state: position.available_to_sell <= 0
-                  ? "sold-out"
-                  : position.available_to_sell <= 5
-                    ? "low-stock"
-                    : "available",
-            })),
-            syntheticDataset: {
-              active: true,
-              reason: "ready",
-              fixtureVersion: SYNTHETIC_DEMO_FIXTURE_VERSION,
-              expiresAt: syntheticGate.expiresAt,
-            },
-          },
-          { status: 200 },
-        );
-      } catch {
-        return unavailable(latestMigration, "readiness-query-failed");
-      }
-    })();
-  }
-
-  if (syntheticGate.required && !syntheticGate.ready) {
-    if (
-      url.pathname === PREPROD_CART_PATH ||
-      PREPROD_CART_LINE_PATTERN.test(url.pathname)
-    ) {
-      logPreprodUnavailable(
-        "preprod_cart_gate_unavailable",
-        request,
-        syntheticGate.reason,
-        syntheticGate.latestMigration,
-      );
-    }
-    return cartErrorResponse(
-      "SYNTHETIC_DEMO_UNAVAILABLE",
-      "La démonstration privée est fermée.",
-      503,
-      { "Retry-After": "60" },
-    );
-  }
-
-  const accountResponse = await handleOwnerAccountApi(
-    request,
-    env,
-    url,
-    prevalidatedOwner,
+  return jsonResponse(
+    {
+      status: "unavailable",
+      reason: "post-0010-rollback",
+      launchReadiness: false,
+    },
+    { status: 503 },
   );
-  if (accountResponse) return accountResponse;
-
-  const orderPaymentResponse = await handleOrderPaymentApi(
-    request,
-    env,
-    url,
-    prevalidatedOwner,
-  );
-  if (orderPaymentResponse) return orderPaymentResponse;
-
-  const shippingQuoteResponse = await handleShippingQuoteApi(request, env, url);
-  if (shippingQuoteResponse) return shippingQuoteResponse;
-
-  const cartResponse = await handleCartApi(request, env, url);
-  if (cartResponse) return cartResponse;
-
-  return jsonResponse({ error: "not-found" }, { status: 404 });
 }
 
 function withSecurityHeaders(

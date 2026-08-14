@@ -36,6 +36,7 @@ const migrationNames = [
   "0007_transactional_preprod_order_payment.sql",
   "0008_preprod_synthetic_demo_dataset.sql",
   "0009_shipping_quote_parcel_snapshots.sql",
+  "0010_multicarrier_delivery_foundation.sql",
 ];
 const legacyMigrationNames = migrationNames.slice(0, 8);
 // Hosted D1 bootstrap version 1 succeeded with exactly these LF-normalized
@@ -67,7 +68,7 @@ test("the exact Drizzle D1 splitter emits no blank statements", () => {
   assert.equal(migrations.length, migrationNames.length);
   assert.equal(
     migrations.reduce((total, migration) => total + migration.sql.length, 0),
-    400,
+    419,
   );
   for (const [migrationIndex, migration] of migrations.entries()) {
     for (const [statementIndex, statement] of migration.sql.entries()) {
@@ -252,7 +253,7 @@ function query(root, configPath, state, sql, expectFailure = false) {
   return parseFirstJsonArray(output)[0].results;
 }
 
-test("0005 stays frozen; 0006 through 0009 remain additive", () => {
+test("0005 stays frozen; 0006 through 0010 remain additive", () => {
   for (const [name, expected] of Object.entries(bootstrapHashes)) {
     const normalized = readFileSync(join(migrationRoot, name), "utf8").replaceAll(
       "\r\n",

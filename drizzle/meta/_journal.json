@@ -71,6 +71,13 @@
       "when": 1786648052538,
       "tag": "0009_shipping_quote_parcel_snapshots",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1786651200000,
+      "tag": "0010_multicarrier_delivery_foundation",
+      "breakpoints": true
     }
   ]
 }

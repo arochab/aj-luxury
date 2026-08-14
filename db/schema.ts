@@ -1308,6 +1308,144 @@ export const shippingQuoteParcelSnapshots = sqliteTable(
   ],
 );
 
+export const deliveryOptionSnapshots = sqliteTable(
+  "delivery_option_snapshots",
+  {
+    id: text("id").primaryKey(),
+    cartId: text("cart_id").notNull().references(() => carts.id, { onDelete: "restrict" }),
+    cartRevision: integer("cart_revision").notNull(),
+    shippingQuoteId: text("shipping_quote_id").notNull().references(
+      () => shippingQuotes.id,
+      { onDelete: "restrict" },
+    ),
+    shippingAddressFingerprint: text("shipping_address_fingerprint").notNull(),
+    providerCode: text("provider_code").notNull(),
+    carrierCode: text("carrier_code").notNull(),
+    serviceCode: text("service_code").notNull(),
+    displayName: text("display_name").notNull(),
+    deliveryMode: text("delivery_mode", { enum: ["home", "service_point"] }).notNull(),
+    amountCents: integer("amount_cents").notNull(),
+    currency: text("currency", { enum: ["EUR"] }).notNull().default("EUR"),
+    estimatedDaysMin: integer("estimated_days_min").notNull(),
+    estimatedDaysMax: integer("estimated_days_max").notNull(),
+    dutiesTerms: text("duties_terms", { enum: ["EU_INCLUDED", "DAP", "DDP"] }).notNull(),
+    proofKind: text("proof_kind", { enum: ["synthetic_demo", "provider_api_response"] }).notNull(),
+    providerQuoteReferenceHash: text("provider_quote_reference_hash"),
+    providerReceiptFingerprint: text("provider_receipt_fingerprint"),
+    quotedAt: text("quoted_at").notNull(),
+    expiresAt: text("expires_at").notNull(),
+    selectedAt: text("selected_at"),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("ux_delivery_options_quote").on(table.shippingQuoteId),
+    uniqueIndex("ux_delivery_options_selected_cart")
+      .on(table.cartId)
+      .where(sql`${table.selectedAt} IS NOT NULL`),
+    index("idx_delivery_options_cart_expiry").on(table.cartId, table.expiresAt),
+    check(
+      "ck_delivery_options_cart_revision",
+      sql`${table.cartRevision} >= 0`,
+    ),
+    check(
+      "ck_delivery_options_mode",
+      sql`${table.deliveryMode} IN ('home','service_point')`,
+    ),
+    check(
+      "ck_delivery_options_amount",
+      sql`${table.amountCents} >= 0 AND ${table.currency} = 'EUR'`,
+    ),
+    check(
+      "ck_delivery_options_eta",
+      sql`${table.estimatedDaysMin} > 0
+        AND ${table.estimatedDaysMax} >= ${table.estimatedDaysMin}`,
+    ),
+    check(
+      "ck_delivery_options_duties",
+      sql`${table.dutiesTerms} IN ('EU_INCLUDED','DAP','DDP')`,
+    ),
+    check(
+      "ck_delivery_options_proof",
+      sql`${table.proofKind} IN ('synthetic_demo','provider_api_response')`,
+    ),
+    check(
+      "ck_delivery_options_fingerprints",
+      sql`length(${table.shippingAddressFingerprint}) = 64
+        AND ${table.shippingAddressFingerprint} = lower(${table.shippingAddressFingerprint})
+        AND ${table.shippingAddressFingerprint} NOT GLOB '*[^0-9a-f]*'
+        AND (${table.providerQuoteReferenceHash} IS NULL OR (
+          length(${table.providerQuoteReferenceHash}) = 64
+          AND ${table.providerQuoteReferenceHash} = lower(${table.providerQuoteReferenceHash})
+          AND ${table.providerQuoteReferenceHash} NOT GLOB '*[^0-9a-f]*'
+        ))
+        AND (${table.providerReceiptFingerprint} IS NULL OR (
+          length(${table.providerReceiptFingerprint}) = 64
+          AND ${table.providerReceiptFingerprint} = lower(${table.providerReceiptFingerprint})
+          AND ${table.providerReceiptFingerprint} NOT GLOB '*[^0-9a-f]*'
+        ))`,
+    ),
+    check(
+      "ck_delivery_options_timestamps",
+      sql`strftime('%Y-%m-%dT%H:%M:%fZ',${table.quotedAt}) IS ${table.quotedAt}
+        AND strftime('%Y-%m-%dT%H:%M:%fZ',${table.expiresAt}) IS ${table.expiresAt}
+        AND strftime('%Y-%m-%dT%H:%M:%fZ',${table.createdAt}) IS ${table.createdAt}
+        AND (${table.selectedAt} IS NULL
+          OR strftime('%Y-%m-%dT%H:%M:%fZ',${table.selectedAt}) IS ${table.selectedAt})
+        AND ${table.expiresAt} > ${table.quotedAt}
+        AND julianday(${table.expiresAt}) - julianday(${table.quotedAt}) <= (1.0 / 24.0)
+        AND (${table.selectedAt} IS NULL OR (
+          ${table.selectedAt} >= ${table.quotedAt}
+          AND ${table.selectedAt} < ${table.expiresAt}
+        ))`,
+    ),
+  ],
+);
+
+export const deliveryServicePointSnapshots = sqliteTable(
+  "delivery_service_point_snapshots",
+  {
+    id: text("id").primaryKey(),
+    deliveryOptionId: text("delivery_option_id").notNull().references(
+      () => deliveryOptionSnapshots.id,
+      { onDelete: "restrict" },
+    ),
+    providerPointReferenceHash: text("provider_point_reference_hash").notNull(),
+    displayName: text("display_name").notNull(),
+    postalCode: text("postal_code").notNull(),
+    city: text("city").notNull(),
+    countryCode: text("country_code").notNull(),
+    openingHoursSummary: text("opening_hours_summary"),
+    expiresAt: text("expires_at").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("ux_delivery_service_point_provider_ref").on(
+      table.deliveryOptionId,
+      table.providerPointReferenceHash,
+    ),
+    index("idx_delivery_service_points_option_expiry").on(
+      table.deliveryOptionId,
+      table.expiresAt,
+    ),
+    check(
+      "ck_delivery_service_point_hash",
+      sql`length(${table.providerPointReferenceHash}) = 64
+        AND ${table.providerPointReferenceHash} = lower(${table.providerPointReferenceHash})
+        AND ${table.providerPointReferenceHash} NOT GLOB '*[^0-9a-f]*'`,
+    ),
+    check(
+      "ck_delivery_service_point_country",
+      sql`length(${table.countryCode}) = 2
+        AND ${table.countryCode} = upper(${table.countryCode})`,
+    ),
+    check(
+      "ck_delivery_service_point_timestamps",
+      sql`strftime('%Y-%m-%dT%H:%M:%fZ',${table.expiresAt}) IS ${table.expiresAt}
+        AND strftime('%Y-%m-%dT%H:%M:%fZ',${table.createdAt}) IS ${table.createdAt}
+        AND ${table.expiresAt} > ${table.createdAt}`,
+    ),
+  ],
+);
 export const shipments = sqliteTable(
   "shipments",
   {
@@ -1379,6 +1517,59 @@ export const shipments = sqliteTable(
         OR (length(${table.providerReceiptFingerprint}) = 64
           AND ${table.providerReceiptFingerprint} = lower(${table.providerReceiptFingerprint})
           AND ${table.providerReceiptFingerprint} NOT GLOB '*[^0-9a-f]*')`,
+    ),
+  ],
+);
+
+export const shippingDocumentMetadata = sqliteTable(
+  "shipping_document_metadata",
+  {
+    id: text("id").primaryKey(),
+    shipmentId: text("shipment_id").notNull().references(
+      () => shipments.id,
+      { onDelete: "restrict" },
+    ),
+    documentKind: text("document_kind", {
+      enum: ["label", "customs", "return_label"],
+    }).notNull(),
+    mediaType: text("media_type", {
+      enum: ["application/pdf", "image/png", "application/zpl"],
+    }).notNull(),
+    providerDocumentReferenceHash: text("provider_document_reference_hash").notNull(),
+    contentSha256: text("content_sha256").notNull(),
+    byteLength: integer("byte_length").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("ux_shipping_document_reference").on(
+      table.shipmentId,
+      table.documentKind,
+      table.providerDocumentReferenceHash,
+    ),
+    check(
+      "ck_shipping_document_kind",
+      sql`${table.documentKind} IN ('label','customs','return_label')`,
+    ),
+    check(
+      "ck_shipping_document_media",
+      sql`${table.mediaType} IN ('application/pdf','image/png','application/zpl')`,
+    ),
+    check(
+      "ck_shipping_document_hashes",
+      sql`length(${table.providerDocumentReferenceHash}) = 64
+        AND ${table.providerDocumentReferenceHash} = lower(${table.providerDocumentReferenceHash})
+        AND ${table.providerDocumentReferenceHash} NOT GLOB '*[^0-9a-f]*'
+        AND length(${table.contentSha256}) = 64
+        AND ${table.contentSha256} = lower(${table.contentSha256})
+        AND ${table.contentSha256} NOT GLOB '*[^0-9a-f]*'`,
+    ),
+    check(
+      "ck_shipping_document_length",
+      sql`${table.byteLength} > 0`,
+    ),
+    check(
+      "ck_shipping_document_timestamp",
+      sql`strftime('%Y-%m-%dT%H:%M:%fZ',${table.createdAt}) IS ${table.createdAt}`,
     ),
   ],
 );
