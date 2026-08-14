@@ -12,6 +12,12 @@ import { CommerceError } from "../lib/commerce/backend-domain.ts";
 import { D1CommerceStore } from "../lib/commerce/d1-commerce-store.ts";
 import type { PublicCartSnapshot } from "../lib/commerce/d1-commerce-store.ts";
 import {
+  D1DeliveryOptionsStore,
+  DeliveryOptionStoreError,
+  type DeliveryOptionSnapshotRow,
+} from "../lib/commerce/d1-delivery-options-store.ts";
+import { deliveryProviderClosed } from "../lib/commerce/delivery-provider.ts";
+import {
   D1FulfillmentStore,
   type ShippingQuoteParcelSnapshotRow,
 } from "../lib/commerce/d1-fulfillment-store.ts";
@@ -153,34 +159,95 @@ type SyntheticDemoGate = Readonly<{
   expiresAt: string | null;
 }>;
 
-const SYNTHETIC_DEMO_TRIGGER_INVENTORY = Object.freeze([
-  "trg_preprod_demo_cart_active_delete",
-  "trg_preprod_demo_cart_active_insert",
-  "trg_preprod_demo_cart_active_update",
-  "trg_preprod_demo_cart_line_active_delete",
-  "trg_preprod_demo_cart_line_active_insert",
-  "trg_preprod_demo_cart_line_active_update",
-  "trg_preprod_demo_dataset_immutable_delete",
-  "trg_preprod_demo_dataset_immutable_update",
-  "trg_preprod_demo_order_active_insert",
-  "trg_preprod_demo_order_active_update",
-  "trg_preprod_demo_payment_active_insert",
-  "trg_preprod_demo_reservation_active_insert",
-  "trg_preprod_demo_reservation_active_update",
-  "trg_preprod_demo_shipping_quote_active_insert",
-  "trg_preprod_demo_shipping_quote_active_update",
-  "trg_preprod_demo_webhook_active_insert",
-] as const);
+const SYNTHETIC_DEMO_TRIGGER_INVENTORY = Object.freeze({
+  trg_preprod_demo_cart_active_delete: "carts",
+  trg_preprod_demo_cart_active_insert: "carts",
+  trg_preprod_demo_cart_active_update: "carts",
+  trg_preprod_demo_cart_line_active_delete: "cart_lines",
+  trg_preprod_demo_cart_line_active_insert: "cart_lines",
+  trg_preprod_demo_cart_line_active_update: "cart_lines",
+  trg_preprod_demo_dataset_immutable_delete: "preprod_demo_dataset",
+  trg_preprod_demo_dataset_immutable_update: "preprod_demo_dataset",
+  trg_preprod_demo_order_active_insert: "orders",
+  trg_preprod_demo_order_active_update: "orders",
+  trg_preprod_demo_payment_active_insert: "payments",
+  trg_preprod_demo_reservation_active_insert: "stock_reservations",
+  trg_preprod_demo_reservation_active_update: "stock_reservations",
+  trg_preprod_demo_shipping_quote_active_insert: "shipping_quotes",
+  trg_preprod_demo_shipping_quote_active_update: "shipping_quotes",
+  trg_preprod_demo_webhook_active_insert: "webhook_events",
+} as const);
 
-const SHIPPING_PARCEL_TRIGGER_INVENTORY = Object.freeze([
-  "trg_shipping_quote_parcel_snapshot_immutable_update",
-  "trg_shipping_quote_parcel_snapshot_matches_cart",
-  "trg_shipping_quote_parcel_snapshot_retain_delete",
-] as const);
+const SYNTHETIC_DEMO_TABLE_INVENTORY = Object.freeze({
+  preprod_demo_dataset: "preprod_demo_dataset",
+} as const);
 
-const SHIPPING_PARCEL_TABLE_INVENTORY = Object.freeze([
-  "shipping_quote_parcel_snapshots",
-] as const);
+const SHIPPING_PARCEL_TRIGGER_INVENTORY = Object.freeze({
+  trg_shipping_quote_parcel_snapshot_immutable_update:
+    "shipping_quote_parcel_snapshots",
+  trg_shipping_quote_parcel_snapshot_matches_cart:
+    "shipping_quote_parcel_snapshots",
+  trg_shipping_quote_parcel_snapshot_retain_delete:
+    "shipping_quote_parcel_snapshots",
+} as const);
+
+const SHIPPING_PARCEL_TABLE_INVENTORY = Object.freeze({
+  shipping_quote_parcel_snapshots: "shipping_quote_parcel_snapshots",
+} as const);
+
+const MULTICARRIER_FOUNDATION_MIGRATION =
+  "0010_multicarrier_delivery_foundation.sql" as const;
+const MULTICARRIER_TABLE_INVENTORY = Object.freeze({
+  delivery_option_snapshots: "delivery_option_snapshots",
+  delivery_service_point_snapshots: "delivery_service_point_snapshots",
+  shipping_document_metadata: "shipping_document_metadata",
+} as const);
+const MULTICARRIER_INDEX_INVENTORY = Object.freeze({
+  idx_delivery_options_cart_expiry: "delivery_option_snapshots",
+  idx_delivery_service_points_option_expiry:
+    "delivery_service_point_snapshots",
+  ux_delivery_options_quote: "delivery_option_snapshots",
+  ux_delivery_options_selected_cart: "delivery_option_snapshots",
+  ux_delivery_service_point_provider_ref:
+    "delivery_service_point_snapshots",
+  ux_shipping_document_reference: "shipping_document_metadata",
+} as const);
+const MULTICARRIER_TRIGGER_INVENTORY = Object.freeze({
+  trg_delivery_order_requires_selected_option: "orders",
+  trg_delivery_option_retain: "delivery_option_snapshots",
+  trg_delivery_option_select_once: "delivery_option_snapshots",
+  trg_delivery_option_validate_insert: "delivery_option_snapshots",
+  trg_delivery_service_point_immutable: "delivery_service_point_snapshots",
+  trg_delivery_service_point_retain: "delivery_service_point_snapshots",
+  trg_delivery_service_point_validate_insert:
+    "delivery_service_point_snapshots",
+  trg_shipping_document_immutable: "shipping_document_metadata",
+  trg_shipping_document_retain: "shipping_document_metadata",
+} as const);
+
+type InstalledSchemaObject = Readonly<{
+  type: string;
+  name: string;
+  table_name: string;
+}>;
+
+function matchesExactSchemaInventory(
+  installed: readonly InstalledSchemaObject[],
+  type: "table" | "index" | "trigger",
+  expectedTableByName: Readonly<Record<string, string>>,
+): boolean {
+  const actual = [...installed].sort((left, right) =>
+    left.name < right.name ? -1 : left.name > right.name ? 1 : 0
+  );
+  const expected = Object.entries(expectedTableByName).sort(
+    ([left], [right]) => left < right ? -1 : left > right ? 1 : 0,
+  );
+  return actual.length === expected.length && actual.every((row, index) =>
+    row.type === type &&
+    row.name === expected[index]?.[0] &&
+    row.table_name === expected[index]?.[1]
+  );
+}
 
 function constantTimeTextEqual(left: string, right: string): boolean {
   const leftBytes = new TextEncoder().encode(left);
@@ -310,24 +377,65 @@ async function readSyntheticDemoGate(
   try {
     // Sites does not expose its internal migration ledger to the Worker.
     // Prove 0008 from its immutable sentinel plus its exhaustive guard
-    // inventory, then prove 0009 from its exact table and trigger inventory.
+    // inventory, then prove 0009 and 0010 from exact schema inventories.
     // Any missing, renamed or prefix-colliding object keeps the runtime closed.
     const installed = await env.DB.prepare(
-      `SELECT type, name FROM sqlite_master
+      `SELECT type, name, tbl_name AS table_name FROM sqlite_master
       WHERE (type = 'trigger' AND (
-          name LIKE 'trg_preprod_demo_%'
-          OR name LIKE 'trg_shipping_quote_parcel_snapshot_%'
+          lower(name) GLOB 'trg_preprod_demo_*'
+          OR lower(name) GLOB 'trg_shipping_quote_parcel_snapshot_*'
+          OR lower(name) GLOB 'trg_delivery_option_*'
+          OR lower(name) GLOB 'trg_delivery_order_*'
+          OR lower(name) GLOB 'trg_delivery_service_point_*'
+          OR lower(name) GLOB 'trg_shipping_document_*'
+          OR lower(tbl_name) IN (
+            'preprod_demo_dataset',
+            'shipping_quote_parcel_snapshots',
+            'delivery_option_snapshots',
+            'delivery_service_point_snapshots',
+            'shipping_document_metadata'
+          )
         ))
-        OR (type = 'table' AND name LIKE 'shipping_quote_parcel_snapshot%')
+        OR (type = 'table' AND (
+          lower(name) GLOB 'preprod_demo_dataset*'
+          OR lower(name) GLOB 'shipping_quote_parcel_snapshot*'
+          OR lower(name) GLOB 'delivery_option_snapshot*'
+          OR lower(name) GLOB 'delivery_service_point_snapshot*'
+          OR lower(name) GLOB 'shipping_document_metadata*'
+        ))
+        OR (type = 'index' AND lower(name) NOT GLOB 'sqlite_autoindex_*' AND (
+          lower(name) GLOB 'idx_delivery_*'
+          OR lower(name) GLOB 'ux_delivery_*'
+          OR lower(name) GLOB 'ux_shipping_document_*'
+          OR lower(tbl_name) IN (
+            'delivery_option_snapshots',
+            'delivery_service_point_snapshots',
+            'shipping_document_metadata'
+          )
+        ))
       ORDER BY type, name`,
-    ).all<{ type: string; name: string }>();
-    const syntheticTriggerNames = installed.results
-      .filter((row) => row.type === "trigger" && row.name.startsWith("trg_preprod_demo_"))
-      .map((row) => row.name);
+    ).all<InstalledSchemaObject>();
+    const syntheticTables = installed.results
+      .filter((row) =>
+        row.type === "table" &&
+        row.name.toLowerCase().startsWith("preprod_demo_dataset")
+      );
+    const syntheticTriggers = installed.results
+      .filter((row) =>
+        row.type === "trigger" &&
+        (row.name.toLowerCase().startsWith("trg_preprod_demo_") ||
+          row.table_name.toLowerCase() === "preprod_demo_dataset")
+      );
     if (
-      syntheticTriggerNames.length !== SYNTHETIC_DEMO_TRIGGER_INVENTORY.length ||
-      syntheticTriggerNames.some(
-        (name, index) => name !== SYNTHETIC_DEMO_TRIGGER_INVENTORY[index],
+      !matchesExactSchemaInventory(
+        syntheticTables,
+        "table",
+        SYNTHETIC_DEMO_TABLE_INVENTORY,
+      ) ||
+      !matchesExactSchemaInventory(
+        syntheticTriggers,
+        "trigger",
+        SYNTHETIC_DEMO_TRIGGER_INVENTORY,
       )
     ) {
       return Object.freeze({
@@ -338,20 +446,29 @@ async function readSyntheticDemoGate(
         expiresAt: sentinel.expires_at,
       });
     }
-    const parcelTableNames = installed.results
-      .filter((row) => row.type === "table" && row.name.startsWith("shipping_quote_parcel_snapshot"))
-      .map((row) => row.name);
-    const parcelTriggerNames = installed.results
-      .filter((row) => row.type === "trigger" && row.name.startsWith("trg_shipping_quote_parcel_snapshot_"))
-      .map((row) => row.name);
+    const parcelTables = installed.results
+      .filter((row) =>
+        row.type === "table" &&
+        row.name.toLowerCase().startsWith("shipping_quote_parcel_snapshot")
+      );
+    const parcelTriggers = installed.results
+      .filter((row) =>
+        row.type === "trigger" &&
+        (row.name.toLowerCase().startsWith(
+          "trg_shipping_quote_parcel_snapshot_",
+        ) || row.table_name.toLowerCase() ===
+          "shipping_quote_parcel_snapshots")
+      );
     if (
-      parcelTableNames.length !== SHIPPING_PARCEL_TABLE_INVENTORY.length ||
-      parcelTableNames.some(
-        (name, index) => name !== SHIPPING_PARCEL_TABLE_INVENTORY[index],
+      !matchesExactSchemaInventory(
+        parcelTables,
+        "table",
+        SHIPPING_PARCEL_TABLE_INVENTORY,
       ) ||
-      parcelTriggerNames.length !== SHIPPING_PARCEL_TRIGGER_INVENTORY.length ||
-      parcelTriggerNames.some(
-        (name, index) => name !== SHIPPING_PARCEL_TRIGGER_INVENTORY[index],
+      !matchesExactSchemaInventory(
+        parcelTriggers,
+        "trigger",
+        SHIPPING_PARCEL_TRIGGER_INVENTORY,
       )
     ) {
       return Object.freeze({
@@ -362,11 +479,55 @@ async function readSyntheticDemoGate(
         expiresAt: sentinel.expires_at,
       });
     }
+    const multicarrierTables = installed.results
+      .filter((row) => row.type === "table" && (
+        row.name.toLowerCase().startsWith("delivery_option_snapshot") ||
+        row.name.toLowerCase().startsWith("delivery_service_point_snapshot") ||
+        row.name.toLowerCase().startsWith("shipping_document_metadata")
+      ));
+    const multicarrierTriggers = installed.results
+      .filter((row) => row.type === "trigger" && (
+        row.name.toLowerCase().startsWith("trg_delivery_option_") ||
+        row.name.toLowerCase().startsWith("trg_delivery_order_") ||
+        row.name.toLowerCase().startsWith("trg_delivery_service_point_") ||
+        row.name.toLowerCase().startsWith("trg_shipping_document_") ||
+        Object.hasOwn(
+          MULTICARRIER_TABLE_INVENTORY,
+          row.table_name.toLowerCase(),
+        )
+      ));
+    const multicarrierIndexes = installed.results
+      .filter((row) => row.type === "index");
+    if (
+      !matchesExactSchemaInventory(
+        multicarrierTables,
+        "table",
+        MULTICARRIER_TABLE_INVENTORY,
+      ) ||
+      !matchesExactSchemaInventory(
+        multicarrierIndexes,
+        "index",
+        MULTICARRIER_INDEX_INVENTORY,
+      ) ||
+      !matchesExactSchemaInventory(
+        multicarrierTriggers,
+        "trigger",
+        MULTICARRIER_TRIGGER_INVENTORY,
+      )
+    ) {
+      return Object.freeze({
+        required: true,
+        ready: false,
+        reason: "installation-proof-invalid",
+        latestMigration: CLIENT_VALIDATED_PARCEL_MIGRATION,
+        expiresAt: sentinel.expires_at,
+      });
+    }
     return Object.freeze({
       required: true,
       ready: true,
       reason: "ready",
-      latestMigration: CLIENT_VALIDATED_PARCEL_MIGRATION,
+      latestMigration: MULTICARRIER_FOUNDATION_MIGRATION,
       expiresAt: sentinel.expires_at,
     });
   } catch {
@@ -932,12 +1093,42 @@ function publicShippingQuoteResponse(
   });
 }
 
+function publicDeliveryOption(
+  option: DeliveryOptionSnapshotRow,
+  zone: "EU" | "UK" | "US" | "CA",
+) {
+  return Object.freeze({
+    optionId: option.id,
+    quoteId: option.shipping_quote_id,
+    simulation: option.proof_kind === "synthetic_demo",
+    providerConnected: false,
+    provider: option.provider_code === "synthetic_demo"
+      ? "not-connected"
+      : option.provider_code,
+    carrierCode: option.carrier_code,
+    serviceCode: option.service_code,
+    displayName: option.display_name,
+    deliveryMode: option.delivery_mode,
+    zone,
+    amountCents: option.amount_cents,
+    currency: option.currency,
+    estimatedDaysMin: option.estimated_days_min,
+    estimatedDaysMax: option.estimated_days_max,
+    dutiesTerms: option.duties_terms,
+    expiresAt: option.expires_at,
+    selected: option.selected_at !== null,
+  });
+}
+
 async function handleShippingQuoteApi(
   request: Request,
   env: Env,
   url: URL,
 ): Promise<Response | null> {
-  if (url.pathname !== PREPROD_SHIPPING_QUOTE_PATH) return null;
+  const deliveryOptionsRequest = url.pathname === PREPROD_DELIVERY_OPTIONS_PATH;
+  if (url.pathname !== PREPROD_SHIPPING_QUOTE_PATH && !deliveryOptionsRequest) {
+    return null;
+  }
   if (request.method !== "POST") {
     return shippingQuoteErrorResponse(
       "METHOD_NOT_ALLOWED",
@@ -1138,14 +1329,148 @@ async function handleShippingQuoteApi(
         409,
       );
     }
-    return publicShippingQuoteResponse(
+    const option = await new D1DeliveryOptionsStore(env.DB).recordSyntheticOption({
+      optionId: `option_${quote.id.slice("quote_".length)}`,
+      cartId: session.cartId,
+      quoteId: quote.id,
+      cartRevision: quote.cart_revision,
+      addressFingerprint: quote.shipping_address_fingerprint,
+      amountCents: quote.amount_cents,
+      estimatedDaysMin: quote.estimated_days_min,
+      estimatedDaysMax: quote.estimated_days_max,
+      dutiesTerms: quote.duties_terms,
+      quotedAt: quote.created_at,
+      expiresAt: quote.expires_at,
+    });
+    if (!deliveryOptionsRequest) {
+      return publicShippingQuoteResponse(
+        quote,
+        normalizedAddress.zone,
+        verifiedCart,
+        parcelSnapshot,
+      );
+    }
+    const legacy = await publicShippingQuoteResponse(
       quote,
       normalizedAddress.zone,
       verifiedCart,
       parcelSnapshot,
-    );
+    ).json() as { data: { cart: unknown; parcel: unknown } };
+    return jsonResponse({
+      data: {
+        simulation: true,
+        connectorReady: deliveryProviderClosed.connectorReady,
+        providerConnected: false,
+        options: [publicDeliveryOption(option, normalizedAddress.zone)],
+        parcel: legacy.data.parcel,
+        cart: legacy.data.cart,
+      },
+    });
   } catch (error) {
     return mapShippingQuoteError(error);
+  }
+}
+
+async function parseExactJsonBody(
+  request: Request,
+  keys: readonly string[],
+): Promise<Record<string, unknown> | null> {
+  const contentType = request.headers.get("Content-Type")?.split(";", 1)[0]
+    .trim().toLowerCase();
+  if (contentType !== "application/json") return null;
+  const bytes = await readBoundedBody(request, SHIPPING_QUOTE_BODY_MAX_BYTES);
+  if (!bytes) return null;
+  let body: unknown;
+  try {
+    body = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+  } catch {
+    return null;
+  }
+  if (!exactObjectKeys(body, new Set(keys)) || Object.keys(body).length !== keys.length) {
+    return null;
+  }
+  return body;
+}
+
+function mapDeliveryOptionError(error: unknown): Response {
+  if (error instanceof DeliveryOptionStoreError) {
+    const status = error.code === "OPTION_NOT_FOUND" ? 404 : 409;
+    return cartErrorResponse(error.code, "Cette option de livraison n'est plus disponible.", status);
+  }
+  if (error instanceof FulfillmentError) return mapShippingQuoteError(error);
+  return cartErrorResponse(
+    "DELIVERY_OPTION_UNAVAILABLE",
+    "Les options de livraison sont momentanément indisponibles.",
+    503,
+  );
+}
+
+async function handleDeliveryOptionMutationApi(
+  request: Request,
+  env: Env,
+  url: URL,
+): Promise<Response | null> {
+  const isSelect = url.pathname === PREPROD_DELIVERY_SELECT_PATH;
+  const isServicePoints = url.pathname === PREPROD_DELIVERY_SERVICE_POINTS_PATH;
+  if (!isSelect && !isServicePoints) return null;
+  if (request.method !== "POST") {
+    return cartErrorResponse("METHOD_NOT_ALLOWED", "Méthode non autorisée.", 405, { Allow: "POST" });
+  }
+  const authorized = await requireCheckoutMutation(request, env);
+  if (authorized instanceof Response) return authorized;
+  const idempotencyKey = request.headers.get("Idempotency-Key");
+  if (!idempotencyKey || !SHIPPING_QUOTE_IDEMPOTENCY_PATTERN.test(idempotencyKey)) {
+    return cartErrorResponse("IDEMPOTENCY_CONFLICT", "Une clé de tentative valide est requise.", 409);
+  }
+  const body = await parseExactJsonBody(
+    request,
+    isSelect ? ["address", "optionId"] : ["optionId"],
+  );
+  if (!body || typeof body.optionId !== "string") {
+    return cartErrorResponse("INVALID_BODY", "Le choix de livraison est invalide.", 400);
+  }
+  const store = new D1DeliveryOptionsStore(env.DB);
+  try {
+    const now = new Date().toISOString();
+    if (isServicePoints) {
+      return jsonResponse({
+        data: {
+          optionId: body.optionId,
+          servicePoints: await store.servicePoints(
+            body.optionId,
+            authorized.cartId,
+            now,
+          ),
+        },
+      });
+    }
+    const normalized = await normalizeShippingAddress(body.address as ShippingAddressInput);
+    if (
+      env.PREPROD_DEMO_DATASET === SYNTHETIC_DEMO_FIXTURE_VERSION &&
+      !isExactSyntheticDemoAddress(normalized.zone, normalized.canonicalJson)
+    ) {
+      return cartErrorResponse("INVALID_ADDRESS", "L'adresse de livraison a changé.", 400);
+    }
+    const addressFingerprint = await hmacSha256Hex(
+      authorized.addressProofKey,
+      normalized.canonicalJson,
+    );
+    const selected = await store.selectOption({
+      optionId: body.optionId,
+      cartId: authorized.cartId,
+      addressFingerprint,
+      now,
+    });
+    return jsonResponse({
+      data: {
+        optionId: selected.id,
+        quoteId: selected.shipping_quote_id,
+        validated: true,
+        expiresAt: selected.expires_at,
+      },
+    });
+  } catch (error) {
+    return mapDeliveryOptionError(error);
   }
 }
 
@@ -1781,245 +2106,6 @@ async function handleCartApi(
   return null;
 }
 
-const ROLLBACK_R10_EXPECTED_MIGRATION =
-  "0010_multicarrier_delivery_foundation.sql";
-type RollbackR10SchemaObject = Readonly<{
-  type: string;
-  name: string;
-  tableName: string;
-}>;
-
-const ROLLBACK_R10_EXPECTED_SCHEMA_OBJECTS = Object.freeze([
-  ["index", "idx_delivery_options_cart_expiry", "delivery_option_snapshots"],
-  ["index", "idx_delivery_service_points_option_expiry", "delivery_service_point_snapshots"],
-  ["index", "ux_delivery_options_quote", "delivery_option_snapshots"],
-  ["index", "ux_delivery_options_selected_cart", "delivery_option_snapshots"],
-  ["index", "ux_delivery_service_point_provider_ref", "delivery_service_point_snapshots"],
-  ["index", "ux_shipping_document_reference", "shipping_document_metadata"],
-  ["table", "delivery_option_snapshots", "delivery_option_snapshots"],
-  ["table", "delivery_service_point_snapshots", "delivery_service_point_snapshots"],
-  ["table", "shipping_document_metadata", "shipping_document_metadata"],
-  ["trigger", "trg_delivery_option_retain", "delivery_option_snapshots"],
-  ["trigger", "trg_delivery_option_select_once", "delivery_option_snapshots"],
-  ["trigger", "trg_delivery_option_validate_insert", "delivery_option_snapshots"],
-  ["trigger", "trg_delivery_order_requires_selected_option", "orders"],
-  ["trigger", "trg_delivery_service_point_immutable", "delivery_service_point_snapshots"],
-  ["trigger", "trg_delivery_service_point_retain", "delivery_service_point_snapshots"],
-  ["trigger", "trg_delivery_service_point_validate_insert", "delivery_service_point_snapshots"],
-  ["trigger", "trg_shipping_document_immutable", "shipping_document_metadata"],
-  ["trigger", "trg_shipping_document_retain", "shipping_document_metadata"],
-].map(([type, name, tableName]) => Object.freeze({ type, name, tableName }))
-  .sort((left, right) =>
-    left.type.localeCompare(right.type) ||
-    left.name.localeCompare(right.name) ||
-    left.tableName.localeCompare(right.tableName)
-  ));
-const ROLLBACK_R10_DATASET_KIND = "synthetic-demo";
-const ROLLBACK_R10_FIXTURE_VERSION = "aj-demo-v1";
-const ROLLBACK_R10_EXPIRES_AT = "2026-09-30T23:59:59.999Z";
-
-function rollbackR10Capabilities() {
-  return Object.freeze({
-    catalog: false,
-    cart: false,
-    shippingQuotes: false,
-    shippingQuoteZones: Object.freeze({
-      EU: false,
-      UK: false,
-      US: false,
-      CA: false,
-    }),
-    shippingQuoteSimulation: false,
-    shippingQuoteSimulationZones: Object.freeze({
-      EU: false,
-      UK: false,
-      US: false,
-      CA: false,
-    }),
-    deliveryOptions: false,
-    deliveryOptionSimulation: false,
-    servicePoints: false,
-    servicePointSimulation: false,
-    carrierRates: false,
-    carrier: false,
-    shippingLabels: false,
-    customsDocuments: false,
-    returnLabels: false,
-    payment: false,
-    orderCreation: false,
-    reservesValidated: false,
-    syntheticReservesReady: false,
-    orderSimulation: false,
-    paymentTestSimulation: false,
-    emailCaptureSimulation: false,
-    emailDelivery: false,
-    stockSimulation: false,
-    shippingSimulation: false,
-    deliveryConnectorReady: false,
-    deliveryProviderConnected: false,
-    realShippingRates: false,
-    realShippingLabels: false,
-    deliveryLive: false,
-    launchReadiness: false,
-  });
-}
-
-async function rollbackR10HealthResponse(
-  env: RuntimeEnv,
-): Promise<Response> {
-  const unavailable = (reason: string, latestMigration: string | null) =>
-    jsonResponse(
-      {
-        status: "unavailable",
-        environment: "preproduction",
-        runtimeMode: "post-0010-rollback",
-        reason,
-        latestMigration,
-        launchReadiness: false,
-        capabilities: rollbackR10Capabilities(),
-        stockProjection: [],
-        syntheticDataset: {
-          active: false,
-          valid: false,
-          fixtureVersion: ROLLBACK_R10_FIXTURE_VERSION,
-          expiresAt: ROLLBACK_R10_EXPIRES_AT,
-        },
-      },
-      { status: 503 },
-    );
-
-  if (!env?.DB) {
-    return unavailable("preproduction-database-not-bound", null);
-  }
-
-  // Sites applies migrations outside the Worker and does not expose its
-  // internal ledger through the runtime D1 binding. Prove the terminal 0010
-  // schema only from its complete, prefix-collision-sensitive object set.
-  // Include each object's target table so a correctly named but retargeted
-  // trigger or index cannot satisfy the proof.
-  let schemaObjects: RollbackR10SchemaObject[] = [];
-  try {
-    const installed = await env.DB
-      .prepare(
-        `SELECT
-          lower(type) AS type,
-          lower(name) AS name,
-          lower(tbl_name) AS table_name
-        FROM sqlite_master
-        WHERE
-          (type = 'table' AND (
-            lower(name) GLOB 'delivery_option_snapshot*'
-            OR lower(name) GLOB 'delivery_service_point_snapshot*'
-            OR lower(name) GLOB 'shipping_document_metadata*'
-          ))
-          OR (type = 'index' AND lower(name) NOT GLOB 'sqlite_autoindex_*' AND (
-            lower(name) GLOB 'idx_delivery_*'
-            OR lower(name) GLOB 'ux_delivery_*'
-            OR lower(name) GLOB 'ux_shipping_document_*'
-            OR lower(tbl_name) IN (
-              'delivery_option_snapshots',
-              'delivery_service_point_snapshots',
-              'shipping_document_metadata'
-            )
-          ))
-          OR (type = 'trigger' AND (
-            lower(name) GLOB 'trg_delivery_*'
-            OR lower(name) GLOB 'trg_shipping_document_*'
-            OR lower(tbl_name) IN (
-              'delivery_option_snapshots',
-              'delivery_service_point_snapshots',
-              'shipping_document_metadata'
-            )
-          ))
-        ORDER BY type ASC, name ASC`,
-      )
-      .all<{ type: string; name: string; table_name: string }>();
-    schemaObjects = installed.results
-      .map(({ type, name, table_name: tableName }) =>
-        Object.freeze({
-          type: type.toLowerCase(),
-          name: name.toLowerCase(),
-          tableName: tableName.toLowerCase(),
-        })
-      )
-      .sort((left, right) =>
-        left.type.localeCompare(right.type) ||
-        left.name.localeCompare(right.name) ||
-        left.tableName.localeCompare(right.tableName)
-      );
-  } catch {
-    return unavailable("schema-proof-unavailable", null);
-  }
-
-  if (
-    schemaObjects.length !== ROLLBACK_R10_EXPECTED_SCHEMA_OBJECTS.length ||
-    schemaObjects.some(
-      (object, index) => {
-        const expected = ROLLBACK_R10_EXPECTED_SCHEMA_OBJECTS[index];
-        return object.type !== expected?.type ||
-          object.name !== expected.name ||
-          object.tableName !== expected.tableName;
-      },
-    )
-  ) {
-    return unavailable("unexpected-schema", null);
-  }
-
-  const latestMigration = ROLLBACK_R10_EXPECTED_MIGRATION;
-
-  let sentinel: {
-    dataset_kind: string;
-    fixture_version: string;
-    expires_at: string;
-  } | null = null;
-  try {
-    sentinel = await env.DB
-      .prepare(
-        `SELECT dataset_kind, fixture_version, expires_at
-        FROM preprod_demo_dataset WHERE singleton = 1`,
-      )
-      .first<{
-        dataset_kind: string;
-        fixture_version: string;
-        expires_at: string;
-      }>();
-  } catch {
-    return unavailable("synthetic-sentinel-unavailable", latestMigration);
-  }
-
-  if (
-    !sentinel ||
-    sentinel.dataset_kind !== ROLLBACK_R10_DATASET_KIND ||
-    sentinel.fixture_version !== ROLLBACK_R10_FIXTURE_VERSION ||
-    sentinel.expires_at !== ROLLBACK_R10_EXPIRES_AT
-  ) {
-    return unavailable("synthetic-sentinel-invalid", latestMigration);
-  }
-
-  if (sentinel.expires_at <= new Date().toISOString()) {
-    return unavailable("synthetic-dataset-expired", latestMigration);
-  }
-
-  return jsonResponse(
-    {
-      status: "rollback",
-      environment: "preproduction",
-      runtimeMode: "post-0010-rollback",
-      latestMigration,
-      launchReadiness: false,
-      capabilities: rollbackR10Capabilities(),
-      stockProjection: [],
-      syntheticDataset: {
-        active: false,
-        valid: true,
-        fixtureVersion: ROLLBACK_R10_FIXTURE_VERSION,
-        expiresAt: sentinel.expires_at,
-      },
-    },
-    { status: 200 },
-  );
-}
-
 export async function preprodApiResponse(
   request: Request,
   env: RuntimeEnv,
@@ -2038,21 +2124,274 @@ export async function preprodApiResponse(
     return jsonResponse({ error: "not-found" }, { status: 404 });
   }
 
-  if (
-    url.pathname === `${PREPROD_API_PREFIX}health` &&
-    request.method === "GET"
-  ) {
-    return rollbackR10HealthResponse(env);
+  const ownerEndpoint =
+    url.pathname === PREPROD_ACCOUNT_PATH ||
+    url.pathname === PREPROD_TRACKING_ADVANCE_PATH ||
+    url.pathname === PREPROD_DIAGNOSTICS_PATH;
+  const ownerCheckout =
+    url.pathname === PREPROD_ORDER_PATH &&
+    request.method === "POST" &&
+    typeof env.PREPROD_OWNER_EMAIL === "string" &&
+    env.PREPROD_OWNER_EMAIL.trim().length > 0;
+  // Owner-exclusive requests are rejected from authenticated edge headers
+  // before the first D1 query. The configured address alone never grants
+  // access and unauthorized callers cannot use these paths as DB oracles.
+  const prevalidatedOwner = ownerEndpoint || ownerCheckout
+    ? await readPreprodOwner(request, env)
+    : null;
+  if ((ownerEndpoint || ownerCheckout) && !prevalidatedOwner) {
+    return jsonResponse({ error: "not-found" }, { status: 404 });
   }
 
-  return jsonResponse(
-    {
-      status: "unavailable",
-      reason: "post-0010-rollback",
-      launchReadiness: false,
-    },
-    { status: 503 },
+  if (!env.DB) {
+    if (url.pathname === `${PREPROD_API_PREFIX}health`) {
+      logPreprodUnavailable(
+        "preprod_health_unavailable",
+        request,
+        "preproduction-database-not-bound",
+        null,
+      );
+    } else if (
+      url.pathname === PREPROD_CART_PATH ||
+      PREPROD_CART_LINE_PATTERN.test(url.pathname)
+    ) {
+      logPreprodUnavailable(
+        "preprod_cart_gate_unavailable",
+        request,
+        "preproduction-database-not-bound",
+        null,
+      );
+    }
+    return jsonResponse(
+      { status: "unavailable", reason: "preproduction-database-not-bound" },
+      { status: 503 },
+    );
+  }
+
+  const now = new Date().toISOString();
+  const syntheticGate = await readSyntheticDemoGate(env, now);
+
+  if (url.pathname === `${PREPROD_API_PREFIX}health`) {
+    if (request.method !== "GET") {
+      return jsonResponse({ error: "method-not-allowed" }, { status: 405 });
+    }
+    return (async () => {
+      const database = env.DB;
+      const unavailable = (latestMigration: string | null, reason: string) => {
+        logPreprodUnavailable(
+          "preprod_health_unavailable",
+          request,
+          reason,
+          latestMigration,
+        );
+        return jsonResponse({
+          status: "unavailable",
+          environment: "preproduction",
+          capabilities: {
+            catalog: false,
+            cart: false,
+            shippingQuotes: false,
+            shippingQuoteZones: { EU: false, UK: false, US: false, CA: false },
+            shippingQuoteSimulation: false,
+            shippingQuoteSimulationZones: { EU: false, UK: false, US: false, CA: false },
+            payment: false,
+            orderCreation: false,
+            reservesValidated: false,
+            syntheticReservesReady: false,
+            orderSimulation: false,
+            paymentTestSimulation: false,
+            emailCaptureSimulation: false,
+            emailDelivery: false,
+            carrier: false,
+            stockSimulation: false,
+            shippingSimulation: false,
+            deliveryConnectorReady: false,
+            deliveryProviderConnected: false,
+            realShippingRates: false,
+            realShippingLabels: false,
+            deliveryLive: false,
+            launchReadiness: false,
+          },
+          latestMigration,
+          stockProjection: [],
+          syntheticDataset: {
+            active: false,
+            reason,
+            fixtureVersion: SYNTHETIC_DEMO_FIXTURE_VERSION,
+            expiresAt: syntheticGate.expiresAt,
+          },
+        }, { status: 503 });
+      };
+      const latestMigration = syntheticGate.latestMigration;
+      if (syntheticGate.required && !syntheticGate.ready) {
+        return unavailable(latestMigration, syntheticGate.reason);
+      }
+      if (
+        !syntheticGate.ready ||
+        latestMigration !== MULTICARRIER_FOUNDATION_MIGRATION
+      ) {
+        return unavailable(latestMigration, "installation-proof-invalid");
+      }
+      try {
+        const [stock, shippingConfigurations, reserveValidation] = await Promise.all([
+          database
+            .prepare(
+              `SELECT variant.id AS variant_id,
+                stock.physical_quantity - stock.gift_reserve_quantity
+                  - stock.safety_reserve_quantity - stock.active_reserved_quantity
+                  - stock.sold_quantity AS available_to_sell
+              FROM variants AS variant
+              INNER JOIN inventory AS stock ON stock.variant_id = variant.id
+              WHERE variant.color_key = ?
+              ORDER BY variant.sort_order`,
+            )
+            .bind("rose")
+            .all<{ variant_id: string; available_to_sell: number }>(),
+          database
+            .prepare(
+              `SELECT zone FROM shipping_zone_configurations
+              WHERE status = 'active'
+              GROUP BY zone`,
+            )
+            .all<{ zone: string }>(),
+          database
+            .prepare(
+              `SELECT COUNT(*) AS total,
+                SUM(CASE WHEN reserves_validated = 1 THEN 1 ELSE 0 END) AS validated
+              FROM inventory`,
+            )
+            .first<{ total: number; validated: number }>(),
+        ]);
+        const configuredZones = new Set(
+          shippingConfigurations.results.map((row) => row.zone),
+        );
+        const shippingQuoteZones = Object.freeze({
+          EU: configuredZones.has("EU"),
+          UK: configuredZones.has("UK"),
+          US: configuredZones.has("US"),
+          CA: configuredZones.has("CA"),
+        });
+        const shippingQuotesReady = Object.values(shippingQuoteZones)
+          .every(Boolean);
+        const reservesReady = Boolean(
+          reserveValidation && reserveValidation.total > 0 &&
+          reserveValidation.total === reserveValidation.validated,
+        );
+        const sellableStockReady = stock.results.some(
+          (position: { available_to_sell: number }) => position.available_to_sell > 0,
+        );
+        const testCheckoutReady = shippingQuotesReady && reservesReady &&
+          sellableStockReady;
+        return jsonResponse(
+          {
+            status: "partial",
+            environment: "preproduction",
+            capabilities: {
+              catalog: true,
+              cart: true,
+              shippingQuotes: syntheticGate.required ? false : shippingQuotesReady,
+              shippingQuoteZones: syntheticGate.required
+                ? { EU: false, UK: false, US: false, CA: false }
+                : shippingQuoteZones,
+              shippingQuoteSimulation: syntheticGate.required && shippingQuotesReady,
+              shippingQuoteSimulationZones: syntheticGate.required
+                ? shippingQuoteZones
+                : { EU: false, UK: false, US: false, CA: false },
+              payment: false,
+              reservesValidated: syntheticGate.required ? false : reservesReady,
+              syntheticReservesReady: syntheticGate.required && reservesReady,
+              orderCreation: syntheticGate.required ? false : testCheckoutReady,
+              orderSimulation: syntheticGate.required && testCheckoutReady,
+              paymentTestSimulation: testCheckoutReady,
+              emailCaptureSimulation: testCheckoutReady,
+              emailDelivery: false,
+              carrier: false,
+              stockSimulation: syntheticGate.required,
+              shippingSimulation: syntheticGate.required,
+              deliveryConnectorReady: deliveryProviderClosed.connectorReady,
+              deliveryProviderConnected: deliveryProviderClosed.providerConnected,
+              realShippingRates: deliveryProviderClosed.realRates,
+              realShippingLabels: deliveryProviderClosed.realLabels,
+              deliveryLive: deliveryProviderClosed.live,
+              launchReadiness: false,
+            },
+            latestMigration,
+            stockProjection: stock.results.map((position: {
+              variant_id: string;
+              available_to_sell: number;
+            }) => ({
+              variantId: position.variant_id,
+              state: position.available_to_sell <= 0
+                  ? "sold-out"
+                  : position.available_to_sell <= 5
+                    ? "low-stock"
+                    : "available",
+            })),
+            syntheticDataset: {
+              active: true,
+              reason: "ready",
+              fixtureVersion: SYNTHETIC_DEMO_FIXTURE_VERSION,
+              expiresAt: syntheticGate.expiresAt,
+            },
+          },
+          { status: 200 },
+        );
+      } catch {
+        return unavailable(latestMigration, "readiness-query-failed");
+      }
+    })();
+  }
+
+  if (syntheticGate.required && !syntheticGate.ready) {
+    if (
+      url.pathname === PREPROD_CART_PATH ||
+      PREPROD_CART_LINE_PATTERN.test(url.pathname)
+    ) {
+      logPreprodUnavailable(
+        "preprod_cart_gate_unavailable",
+        request,
+        syntheticGate.reason,
+        syntheticGate.latestMigration,
+      );
+    }
+    return cartErrorResponse(
+      "SYNTHETIC_DEMO_UNAVAILABLE",
+      "La démonstration privée est fermée.",
+      503,
+      { "Retry-After": "60" },
+    );
+  }
+
+  const accountResponse = await handleOwnerAccountApi(
+    request,
+    env,
+    url,
+    prevalidatedOwner,
   );
+  if (accountResponse) return accountResponse;
+
+  const orderPaymentResponse = await handleOrderPaymentApi(
+    request,
+    env,
+    url,
+    prevalidatedOwner,
+  );
+  if (orderPaymentResponse) return orderPaymentResponse;
+
+  const deliveryOptionMutationResponse = await handleDeliveryOptionMutationApi(
+    request,
+    env,
+    url,
+  );
+  if (deliveryOptionMutationResponse) return deliveryOptionMutationResponse;
+
+  const shippingQuoteResponse = await handleShippingQuoteApi(request, env, url);
+  if (shippingQuoteResponse) return shippingQuoteResponse;
+
+  const cartResponse = await handleCartApi(request, env, url);
+  if (cartResponse) return cartResponse;
+
+  return jsonResponse({ error: "not-found" }, { status: 404 });
 }
 
 function withSecurityHeaders(
