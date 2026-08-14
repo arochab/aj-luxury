@@ -24,6 +24,7 @@ const expectedSourceBranches = [
   "codex/lot2-preprod-owner-account-tracking-20260813",
   "codex/ajl-ship-profiles-20260813",
   "codex/ajl-private-preview-final-20260813",
+  "codex/ajl-multicarrier-fulfillment-20260813",
 ];
 const releaseBuildEpoch = 1786622400000;
 const frozenMigrationHash =
@@ -58,10 +59,10 @@ const syntheticMigration = journal.entries.find(
 assert.ok(syntheticMigration);
 assert.equal(syntheticMigration.when, releaseBuildEpoch);
 const terminalMigration = journal.entries.at(-1);
-assert.equal(terminalMigration.tag, "0009_shipping_quote_parcel_snapshots");
+assert.equal(terminalMigration.tag, "0010_multicarrier_delivery_foundation");
 assert.ok(
   terminalMigration.when > releaseBuildEpoch,
-  "the additive parcel migration must follow the frozen synthetic release",
+  "the additive multicarrier migration must follow the frozen synthetic release",
 );
 
 if (

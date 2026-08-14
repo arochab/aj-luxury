@@ -73,6 +73,10 @@ export default function AccountClient() {
     }
   }
 
+  function printPreparationSheet() {
+    window.print();
+  }
+
   const order = account?.orders[0] ?? null;
   const currentStage = order?.delivery.stage ?? "paid";
   const currentIndex = deliveryStages.indexOf(currentStage);
@@ -158,10 +162,38 @@ export default function AccountClient() {
               ))}
             </ol>
             <p>{t("account.noCarrierNoParcel")}</p>
+            <p><strong>{t("account.deliveryMethod")}</strong> {order.delivery.method}</p>
             {order.delivery.trackingReference && (
               <p>{t("account.simulatedReference")} {order.delivery.trackingReference}</p>
             )}
           </div>
+
+          <section className={styles.preparationSheet} aria-labelledby="preparation-title">
+            <h3 id="preparation-title">{t("account.preparationTitle")}</h3>
+            <p>{t("account.preparationWarning")}</p>
+            <p><strong>{t("account.latestOrder")}</strong> {order.orderNumber}</p>
+            <p><strong>{t("account.deliveryMethod")}</strong> {order.delivery.method}</p>
+            <ul className={styles.preparationLines}>
+              {order.lines.map((line, index) => (
+                <li key={`${line.productName}-${line.colorName}-${line.size}-${index}`}>
+                  {line.productName} · {line.colorName} · {line.size} × {line.quantity}
+                </li>
+              ))}
+            </ul>
+            <ol>
+              <li>{t("account.preparationPack")}</li>
+              <li>{t("account.preparationLabelClosed")}</li>
+              <li>{t("account.preparationDropoff")}</li>
+              <li>{t("account.preparationTracking")}</li>
+            </ol>
+            <button
+              className={styles.secondaryButton}
+              type="button"
+              onClick={printPreparationSheet}
+            >
+              {t("account.printPreparation")}
+            </button>
+          </section>
 
           {order.status === "paid" && order.delivery.stage !== "delivered" && (
             <button

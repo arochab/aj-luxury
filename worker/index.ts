@@ -12,6 +12,12 @@ import { CommerceError } from "../lib/commerce/backend-domain.ts";
 import { D1CommerceStore } from "../lib/commerce/d1-commerce-store.ts";
 import type { PublicCartSnapshot } from "../lib/commerce/d1-commerce-store.ts";
 import {
+  D1DeliveryOptionsStore,
+  DeliveryOptionStoreError,
+  type DeliveryOptionSnapshotRow,
+} from "../lib/commerce/d1-delivery-options-store.ts";
+import { deliveryProviderClosed } from "../lib/commerce/delivery-provider.ts";
+import {
   D1FulfillmentStore,
   type ShippingQuoteParcelSnapshotRow,
 } from "../lib/commerce/d1-fulfillment-store.ts";
@@ -114,6 +120,12 @@ const PREPROD_CART_PATH = `${PREPROD_API_PREFIX}cart`;
 const PREPROD_CART_LINE_PATTERN = /^\/api\/preprod\/cart\/lines\/([^/]+)$/;
 const PREPROD_SHIPPING_QUOTE_PATH =
   `${PREPROD_API_PREFIX}checkout/shipping-quote`;
+const PREPROD_DELIVERY_OPTIONS_PATH =
+  `${PREPROD_API_PREFIX}checkout/delivery-options`;
+const PREPROD_DELIVERY_SERVICE_POINTS_PATH =
+  `${PREPROD_API_PREFIX}checkout/service-points`;
+const PREPROD_DELIVERY_SELECT_PATH =
+  `${PREPROD_API_PREFIX}checkout/delivery-options/select`;
 const PREPROD_ORDER_PATH = `${PREPROD_API_PREFIX}checkout/order`;
 const PREPROD_CURRENT_ORDER_PATH = `${PREPROD_API_PREFIX}orders/current`;
 const PREPROD_TEST_PAYMENT_PATH = `${PREPROD_API_PREFIX}checkout/test-payment`;
@@ -174,6 +186,25 @@ const SHIPPING_PARCEL_TRIGGER_INVENTORY = Object.freeze([
 
 const SHIPPING_PARCEL_TABLE_INVENTORY = Object.freeze([
   "shipping_quote_parcel_snapshots",
+] as const);
+
+const MULTICARRIER_FOUNDATION_MIGRATION =
+  "0010_multicarrier_delivery_foundation.sql" as const;
+const MULTICARRIER_TABLE_INVENTORY = Object.freeze([
+  "delivery_option_snapshots",
+  "delivery_service_point_snapshots",
+  "shipping_document_metadata",
+] as const);
+const MULTICARRIER_TRIGGER_INVENTORY = Object.freeze([
+  "trg_delivery_order_requires_selected_option",
+  "trg_delivery_option_retain",
+  "trg_delivery_option_select_once",
+  "trg_delivery_option_validate_insert",
+  "trg_delivery_service_point_immutable",
+  "trg_delivery_service_point_retain",
+  "trg_delivery_service_point_validate_insert",
+  "trg_shipping_document_immutable",
+  "trg_shipping_document_retain",
 ] as const);
 
 function constantTimeTextEqual(left: string, right: string): boolean {
@@ -304,15 +335,24 @@ async function readSyntheticDemoGate(
   try {
     // Sites does not expose its internal migration ledger to the Worker.
     // Prove 0008 from its immutable sentinel plus its exhaustive guard
-    // inventory, then prove 0009 from its exact table and trigger inventory.
+    // inventory, then prove 0009 and 0010 from exact table/trigger inventories.
     // Any missing, renamed or prefix-colliding object keeps the runtime closed.
     const installed = await env.DB.prepare(
       `SELECT type, name FROM sqlite_master
       WHERE (type = 'trigger' AND (
           name LIKE 'trg_preprod_demo_%'
           OR name LIKE 'trg_shipping_quote_parcel_snapshot_%'
+          OR name LIKE 'trg_delivery_option_%'
+          OR name LIKE 'trg_delivery_order_%'
+          OR name LIKE 'trg_delivery_service_point_%'
+          OR name LIKE 'trg_shipping_document_%'
         ))
-        OR (type = 'table' AND name LIKE 'shipping_quote_parcel_snapshot%')
+        OR (type = 'table' AND (
+          name LIKE 'shipping_quote_parcel_snapshot%'
+          OR name LIKE 'delivery_option_snapshot%'
+          OR name LIKE 'delivery_service_point_snapshot%'
+          OR name LIKE 'shipping_document_metadata%'
+        ))
       ORDER BY type, name`,
     ).all<{ type: string; name: string }>();
     const syntheticTriggerNames = installed.results
@@ -356,11 +396,47 @@ async function readSyntheticDemoGate(
         expiresAt: sentinel.expires_at,
       });
     }
+    const multicarrierTableNames = installed.results
+      .filter((row) => row.type === "table" && (
+        row.name.startsWith("delivery_option_snapshot") ||
+        row.name.startsWith("delivery_service_point_snapshot") ||
+        row.name.startsWith("shipping_document_metadata")
+      ))
+      .map((row) => row.name)
+      .sort();
+    const multicarrierTriggerNames = installed.results
+      .filter((row) => row.type === "trigger" && (
+        row.name.startsWith("trg_delivery_option_") ||
+        row.name.startsWith("trg_delivery_order_") ||
+        row.name.startsWith("trg_delivery_service_point_") ||
+        row.name.startsWith("trg_shipping_document_")
+      ))
+      .map((row) => row.name)
+      .sort();
+    if (
+      multicarrierTableNames.length !== MULTICARRIER_TABLE_INVENTORY.length ||
+      multicarrierTableNames.some(
+        (name, index) => name !== [...MULTICARRIER_TABLE_INVENTORY].sort()[index],
+      ) ||
+      multicarrierTriggerNames.length !== MULTICARRIER_TRIGGER_INVENTORY.length ||
+      multicarrierTriggerNames.some(
+        (name, index) =>
+          name !== [...MULTICARRIER_TRIGGER_INVENTORY].sort()[index],
+      )
+    ) {
+      return Object.freeze({
+        required: true,
+        ready: false,
+        reason: "installation-proof-invalid",
+        latestMigration: CLIENT_VALIDATED_PARCEL_MIGRATION,
+        expiresAt: sentinel.expires_at,
+      });
+    }
     return Object.freeze({
       required: true,
       ready: true,
       reason: "ready",
-      latestMigration: CLIENT_VALIDATED_PARCEL_MIGRATION,
+      latestMigration: MULTICARRIER_FOUNDATION_MIGRATION,
       expiresAt: sentinel.expires_at,
     });
   } catch {
@@ -926,12 +1002,42 @@ function publicShippingQuoteResponse(
   });
 }
 
+function publicDeliveryOption(
+  option: DeliveryOptionSnapshotRow,
+  zone: "EU" | "UK" | "US" | "CA",
+) {
+  return Object.freeze({
+    optionId: option.id,
+    quoteId: option.shipping_quote_id,
+    simulation: option.proof_kind === "synthetic_demo",
+    providerConnected: false,
+    provider: option.provider_code === "synthetic_demo"
+      ? "not-connected"
+      : option.provider_code,
+    carrierCode: option.carrier_code,
+    serviceCode: option.service_code,
+    displayName: option.display_name,
+    deliveryMode: option.delivery_mode,
+    zone,
+    amountCents: option.amount_cents,
+    currency: option.currency,
+    estimatedDaysMin: option.estimated_days_min,
+    estimatedDaysMax: option.estimated_days_max,
+    dutiesTerms: option.duties_terms,
+    expiresAt: option.expires_at,
+    selected: option.selected_at !== null,
+  });
+}
+
 async function handleShippingQuoteApi(
   request: Request,
   env: Env,
   url: URL,
 ): Promise<Response | null> {
-  if (url.pathname !== PREPROD_SHIPPING_QUOTE_PATH) return null;
+  const deliveryOptionsRequest = url.pathname === PREPROD_DELIVERY_OPTIONS_PATH;
+  if (url.pathname !== PREPROD_SHIPPING_QUOTE_PATH && !deliveryOptionsRequest) {
+    return null;
+  }
   if (request.method !== "POST") {
     return shippingQuoteErrorResponse(
       "METHOD_NOT_ALLOWED",
@@ -1132,14 +1238,148 @@ async function handleShippingQuoteApi(
         409,
       );
     }
-    return publicShippingQuoteResponse(
+    const option = await new D1DeliveryOptionsStore(env.DB).recordSyntheticOption({
+      optionId: `option_${quote.id.slice("quote_".length)}`,
+      cartId: session.cartId,
+      quoteId: quote.id,
+      cartRevision: quote.cart_revision,
+      addressFingerprint: quote.shipping_address_fingerprint,
+      amountCents: quote.amount_cents,
+      estimatedDaysMin: quote.estimated_days_min,
+      estimatedDaysMax: quote.estimated_days_max,
+      dutiesTerms: quote.duties_terms,
+      quotedAt: quote.created_at,
+      expiresAt: quote.expires_at,
+    });
+    if (!deliveryOptionsRequest) {
+      return publicShippingQuoteResponse(
+        quote,
+        normalizedAddress.zone,
+        verifiedCart,
+        parcelSnapshot,
+      );
+    }
+    const legacy = await publicShippingQuoteResponse(
       quote,
       normalizedAddress.zone,
       verifiedCart,
       parcelSnapshot,
-    );
+    ).json() as { data: { cart: unknown; parcel: unknown } };
+    return jsonResponse({
+      data: {
+        simulation: true,
+        connectorReady: deliveryProviderClosed.connectorReady,
+        providerConnected: false,
+        options: [publicDeliveryOption(option, normalizedAddress.zone)],
+        parcel: legacy.data.parcel,
+        cart: legacy.data.cart,
+      },
+    });
   } catch (error) {
     return mapShippingQuoteError(error);
+  }
+}
+
+async function parseExactJsonBody(
+  request: Request,
+  keys: readonly string[],
+): Promise<Record<string, unknown> | null> {
+  const contentType = request.headers.get("Content-Type")?.split(";", 1)[0]
+    .trim().toLowerCase();
+  if (contentType !== "application/json") return null;
+  const bytes = await readBoundedBody(request, SHIPPING_QUOTE_BODY_MAX_BYTES);
+  if (!bytes) return null;
+  let body: unknown;
+  try {
+    body = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+  } catch {
+    return null;
+  }
+  if (!exactObjectKeys(body, new Set(keys)) || Object.keys(body).length !== keys.length) {
+    return null;
+  }
+  return body;
+}
+
+function mapDeliveryOptionError(error: unknown): Response {
+  if (error instanceof DeliveryOptionStoreError) {
+    const status = error.code === "OPTION_NOT_FOUND" ? 404 : 409;
+    return cartErrorResponse(error.code, "Cette option de livraison n'est plus disponible.", status);
+  }
+  if (error instanceof FulfillmentError) return mapShippingQuoteError(error);
+  return cartErrorResponse(
+    "DELIVERY_OPTION_UNAVAILABLE",
+    "Les options de livraison sont momentanément indisponibles.",
+    503,
+  );
+}
+
+async function handleDeliveryOptionMutationApi(
+  request: Request,
+  env: Env,
+  url: URL,
+): Promise<Response | null> {
+  const isSelect = url.pathname === PREPROD_DELIVERY_SELECT_PATH;
+  const isServicePoints = url.pathname === PREPROD_DELIVERY_SERVICE_POINTS_PATH;
+  if (!isSelect && !isServicePoints) return null;
+  if (request.method !== "POST") {
+    return cartErrorResponse("METHOD_NOT_ALLOWED", "Méthode non autorisée.", 405, { Allow: "POST" });
+  }
+  const authorized = await requireCheckoutMutation(request, env);
+  if (authorized instanceof Response) return authorized;
+  const idempotencyKey = request.headers.get("Idempotency-Key");
+  if (!idempotencyKey || !SHIPPING_QUOTE_IDEMPOTENCY_PATTERN.test(idempotencyKey)) {
+    return cartErrorResponse("IDEMPOTENCY_CONFLICT", "Une clé de tentative valide est requise.", 409);
+  }
+  const body = await parseExactJsonBody(
+    request,
+    isSelect ? ["address", "optionId"] : ["optionId"],
+  );
+  if (!body || typeof body.optionId !== "string") {
+    return cartErrorResponse("INVALID_BODY", "Le choix de livraison est invalide.", 400);
+  }
+  const store = new D1DeliveryOptionsStore(env.DB);
+  try {
+    const now = new Date().toISOString();
+    if (isServicePoints) {
+      return jsonResponse({
+        data: {
+          optionId: body.optionId,
+          servicePoints: await store.servicePoints(
+            body.optionId,
+            authorized.cartId,
+            now,
+          ),
+        },
+      });
+    }
+    const normalized = await normalizeShippingAddress(body.address as ShippingAddressInput);
+    if (
+      env.PREPROD_DEMO_DATASET === SYNTHETIC_DEMO_FIXTURE_VERSION &&
+      !isExactSyntheticDemoAddress(normalized.zone, normalized.canonicalJson)
+    ) {
+      return cartErrorResponse("INVALID_ADDRESS", "L'adresse de livraison a changé.", 400);
+    }
+    const addressFingerprint = await hmacSha256Hex(
+      authorized.addressProofKey,
+      normalized.canonicalJson,
+    );
+    const selected = await store.selectOption({
+      optionId: body.optionId,
+      cartId: authorized.cartId,
+      addressFingerprint,
+      now,
+    });
+    return jsonResponse({
+      data: {
+        optionId: selected.id,
+        quoteId: selected.shipping_quote_id,
+        validated: true,
+        expiresAt: selected.expires_at,
+      },
+    });
+  } catch (error) {
+    return mapDeliveryOptionError(error);
   }
 }
 
@@ -1874,6 +2114,11 @@ export async function preprodApiResponse(
             carrier: false,
             stockSimulation: false,
             shippingSimulation: false,
+            deliveryConnectorReady: false,
+            deliveryProviderConnected: false,
+            realShippingRates: false,
+            realShippingLabels: false,
+            deliveryLive: false,
             launchReadiness: false,
           },
           latestMigration,
@@ -1892,7 +2137,7 @@ export async function preprodApiResponse(
       }
       if (
         !syntheticGate.ready ||
-        latestMigration !== CLIENT_VALIDATED_PARCEL_MIGRATION
+        latestMigration !== MULTICARRIER_FOUNDATION_MIGRATION
       ) {
         return unavailable(latestMigration, "installation-proof-invalid");
       }
@@ -1972,6 +2217,11 @@ export async function preprodApiResponse(
               carrier: false,
               stockSimulation: syntheticGate.required,
               shippingSimulation: syntheticGate.required,
+              deliveryConnectorReady: deliveryProviderClosed.connectorReady,
+              deliveryProviderConnected: deliveryProviderClosed.providerConnected,
+              realShippingRates: deliveryProviderClosed.realRates,
+              realShippingLabels: deliveryProviderClosed.realLabels,
+              deliveryLive: deliveryProviderClosed.live,
               launchReadiness: false,
             },
             latestMigration,
@@ -2036,6 +2286,13 @@ export async function preprodApiResponse(
     prevalidatedOwner,
   );
   if (orderPaymentResponse) return orderPaymentResponse;
+
+  const deliveryOptionMutationResponse = await handleDeliveryOptionMutationApi(
+    request,
+    env,
+    url,
+  );
+  if (deliveryOptionMutationResponse) return deliveryOptionMutationResponse;
 
   const shippingQuoteResponse = await handleShippingQuoteApi(request, env, url);
   if (shippingQuoteResponse) return shippingQuoteResponse;

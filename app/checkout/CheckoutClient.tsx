@@ -10,9 +10,12 @@ import {
 } from "react";
 import { getCart, type PublicCartSnapshot } from "../../lib/commerce/preprod-cart-client";
 import {
-  requestShippingQuote,
+  requestDeliveryOptions,
+  selectDeliveryOption,
   shippingQuoteAttemptCanReplay,
   ShippingQuoteApiError,
+  type PublicDeliveryOptions,
+  type PublicDeliveryOption,
   type PublicShippingQuote,
   type ShippingAddress,
 } from "../../lib/commerce/preprod-shipping-client";
@@ -43,6 +46,7 @@ export default function CheckoutClient() {
   const { t } = useI18n();
   const [cart, setCart] = useState<PublicCartSnapshot | null>(null);
   const [fixtureZone, setFixtureZone] = useState<SyntheticDemoZone>("EU");
+  const [deliveryOptions, setDeliveryOptions] = useState<PublicDeliveryOptions | null>(null);
   const [quote, setQuote] = useState<PublicShippingQuote | null>(null);
   const [order, setOrder] = useState<PublicPreprodOrder | null>(null);
   const [legalAccepted, setLegalAccepted] = useState(false);
@@ -53,6 +57,7 @@ export default function CheckoutClient() {
   const errorRef = useRef<HTMLDivElement>(null);
   const orderRef = useRef<HTMLDivElement>(null);
   const attemptRef = useRef<{ fingerprint: string; key: string } | null>(null);
+  const selectionAttemptRef = useRef<{ optionId: string; key: string } | null>(null);
   const orderAttemptRef = useRef<string | null>(null);
   const paymentAttemptRef = useRef<string | null>(null);
   const selectedFixture = SYNTHETIC_DEMO_ADDRESS_FIXTURES.find(
@@ -65,6 +70,8 @@ export default function CheckoutClient() {
     // An explicit cart refresh starts a new semantic attempt. Network retries
     // without a refresh keep their key in submit(), preserving idempotency.
     attemptRef.current = null;
+    selectionAttemptRef.current = null;
+    setDeliveryOptions(null);
     setQuote(null);
     setLoading(true);
     setErrorCode(null);
@@ -114,8 +121,11 @@ export default function CheckoutClient() {
   function chooseFixture(value: string) {
     if (!(["EU", "UK", "US", "CA"] as const).includes(value as SyntheticDemoZone)) return;
     setFixtureZone(value as SyntheticDemoZone);
+    setDeliveryOptions(null);
     setQuote(null);
     setOrder(null);
+    attemptRef.current = null;
+    selectionAttemptRef.current = null;
     orderAttemptRef.current = null;
     paymentAttemptRef.current = null;
     setErrorCode(null);
@@ -173,13 +183,57 @@ export default function CheckoutClient() {
     orderAttemptRef.current = null;
     paymentAttemptRef.current = null;
     try {
-      const nextQuote = await requestShippingQuote(candidate, key);
-      setQuote(nextQuote);
+      setDeliveryOptions(await requestDeliveryOptions(candidate, key));
     } catch (error) {
       const code = error instanceof ShippingQuoteApiError
         ? error.code
         : "SHIPPING_QUOTE_UNAVAILABLE";
       if (!shippingQuoteAttemptCanReplay(code)) attemptRef.current = null;
+      setErrorCode(code);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function chooseDeliveryOption(option: PublicDeliveryOption) {
+    if (submitting || !deliveryOptions || option.selected) return;
+    const previous = selectionAttemptRef.current;
+    const key = previous?.optionId === option.optionId
+      ? previous.key
+      : crypto.randomUUID();
+    selectionAttemptRef.current = { optionId: option.optionId, key };
+    setSubmitting(true);
+    setErrorCode(null);
+    try {
+      const selected = await selectDeliveryOption(option.optionId, address, key);
+      if (selected.quoteId !== option.quoteId) {
+        throw new ShippingQuoteApiError("MALFORMED_RESPONSE");
+      }
+      setDeliveryOptions(Object.freeze({
+        ...deliveryOptions,
+        options: Object.freeze(deliveryOptions.options.map((candidate) =>
+          Object.freeze({ ...candidate, selected: candidate.optionId === option.optionId })
+        )),
+      }));
+      setQuote(Object.freeze({
+        quoteId: option.quoteId,
+        simulation: true,
+        carrierConnected: false,
+        zone: option.zone,
+        amountCents: option.amountCents,
+        currency: "EUR",
+        estimatedDaysMin: option.estimatedDaysMin,
+        estimatedDaysMax: option.estimatedDaysMax,
+        dutiesTerms: option.dutiesTerms,
+        expiresAt: option.expiresAt,
+        parcel: deliveryOptions.parcel,
+        cart: deliveryOptions.cart,
+      }));
+    } catch (error) {
+      const code = error instanceof ShippingQuoteApiError
+        ? error.code
+        : "SHIPPING_QUOTE_UNAVAILABLE";
+      if (!shippingQuoteAttemptCanReplay(code)) selectionAttemptRef.current = null;
       setErrorCode(code);
     } finally {
       setSubmitting(false);
@@ -317,6 +371,32 @@ export default function CheckoutClient() {
                   : t("checkout.dapDuties")}
               </p>
             </div>
+          )}
+          {deliveryOptions && !quote && (
+            <fieldset className={styles.deliveryOptions}>
+              <legend>{t("checkout.chooseDelivery")}</legend>
+              <p>{t("checkout.deliveryDeterministic")}</p>
+              {deliveryOptions.options.map((option) => (
+                <button
+                  className={styles.deliveryOption}
+                  type="button"
+                  key={option.optionId}
+                  disabled={submitting}
+                  onClick={() => void chooseDeliveryOption(option)}
+                >
+                  <span>
+                    <strong>{option.displayName}</strong>
+                    <small>
+                      {option.deliveryMode === "home"
+                        ? t("checkout.homeDelivery")
+                        : t("checkout.servicePointDelivery")}
+                      {" · "}{option.estimatedDaysMin}–{option.estimatedDaysMax} {t("checkout.days")}
+                    </small>
+                  </span>
+                  <LocalizedPrice amountCents={option.amountCents} />
+                </button>
+              ))}
+            </fieldset>
           )}
           {quote && !order && (
             <div className={styles.testCheckout}>

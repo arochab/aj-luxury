@@ -132,6 +132,10 @@
   "checkout.fixtureCA": "Canada",
   "checkout.usState": "État américain (2 lettres)",
   "checkout.calculateShipping": "Calculer la livraison",
+  "checkout.chooseDelivery": "Choisissez votre livraison",
+  "checkout.deliveryDeterministic": "Simulation du mécanisme : aucun transporteur ni tarif réel n’est interrogé. En production, seules les offres confirmées seront proposées.",
+  "checkout.homeDelivery": "À domicile",
+  "checkout.servicePointDelivery": "En point relais",
   "checkout.calculatingShipping": "Calcul en cours…",
   "checkout.loadingCart": "Chargement du panier…",
   "checkout.emptyTitle": "Votre panier est vide.",
@@ -279,5 +283,13 @@
   "account.stageLabelReady": "Étiquette fictive prête",
   "account.stageHandedOver": "Remise simulée",
   "account.stageInTransit": "Transit simulé",
-  "account.stageDelivered": "Livraison simulée terminée"
+  "account.stageDelivered": "Livraison simulée terminée",
+  "account.deliveryMethod": "Mode choisi :",
+  "account.preparationTitle": "Fiche de préparation",
+  "account.preparationWarning": "Simulation uniquement : cette fiche ne contient ni bordereau, ni code-barres, ni ordre d’expédition réel.",
+  "account.preparationPack": "Vérifier les articles, tailles et quantités, puis fermer le colis.",
+  "account.preparationLabelClosed": "Créer le bordereau uniquement quand le compte transporteur et le service réel seront activés.",
+  "account.preparationDropoff": "Déposer le colis au lieu correspondant au choix du client.",
+  "account.preparationTracking": "Contrôler que le suivi réel remonte avant de classer la commande.",
+  "account.printPreparation": "Imprimer la fiche de préparation"
 }

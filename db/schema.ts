@@ -1308,6 +1308,72 @@ export const shippingQuoteParcelSnapshots = sqliteTable(
   ],
 );
 
+export const deliveryOptionSnapshots = sqliteTable(
+  "delivery_option_snapshots",
+  {
+    id: text("id").primaryKey(),
+    cartId: text("cart_id").notNull().references(() => carts.id, { onDelete: "restrict" }),
+    cartRevision: integer("cart_revision").notNull(),
+    shippingQuoteId: text("shipping_quote_id").notNull().references(
+      () => shippingQuotes.id,
+      { onDelete: "restrict" },
+    ),
+    shippingAddressFingerprint: text("shipping_address_fingerprint").notNull(),
+    providerCode: text("provider_code").notNull(),
+    carrierCode: text("carrier_code").notNull(),
+    serviceCode: text("service_code").notNull(),
+    displayName: text("display_name").notNull(),
+    deliveryMode: text("delivery_mode", { enum: ["home", "service_point"] }).notNull(),
+    amountCents: integer("amount_cents").notNull(),
+    currency: text("currency", { enum: ["EUR"] }).notNull().default("EUR"),
+    estimatedDaysMin: integer("estimated_days_min").notNull(),
+    estimatedDaysMax: integer("estimated_days_max").notNull(),
+    dutiesTerms: text("duties_terms", { enum: ["EU_INCLUDED", "DAP", "DDP"] }).notNull(),
+    proofKind: text("proof_kind", { enum: ["synthetic_demo", "provider_api_response"] }).notNull(),
+    providerQuoteReferenceHash: text("provider_quote_reference_hash"),
+    providerReceiptFingerprint: text("provider_receipt_fingerprint"),
+    quotedAt: text("quoted_at").notNull(),
+    expiresAt: text("expires_at").notNull(),
+    selectedAt: text("selected_at"),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("ux_delivery_options_quote").on(table.shippingQuoteId),
+    uniqueIndex("ux_delivery_options_selected_cart")
+      .on(table.cartId)
+      .where(sql`${table.selectedAt} IS NOT NULL`),
+    index("idx_delivery_options_cart_expiry").on(table.cartId, table.expiresAt),
+  ],
+);
+
+export const deliveryServicePointSnapshots = sqliteTable(
+  "delivery_service_point_snapshots",
+  {
+    id: text("id").primaryKey(),
+    deliveryOptionId: text("delivery_option_id").notNull().references(
+      () => deliveryOptionSnapshots.id,
+      { onDelete: "restrict" },
+    ),
+    providerPointReferenceHash: text("provider_point_reference_hash").notNull(),
+    displayName: text("display_name").notNull(),
+    postalCode: text("postal_code").notNull(),
+    city: text("city").notNull(),
+    countryCode: text("country_code").notNull(),
+    openingHoursSummary: text("opening_hours_summary"),
+    expiresAt: text("expires_at").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("ux_delivery_service_point_provider_ref").on(
+      table.deliveryOptionId,
+      table.providerPointReferenceHash,
+    ),
+    index("idx_delivery_service_points_option_expiry").on(
+      table.deliveryOptionId,
+      table.expiresAt,
+    ),
+  ],
+);
 export const shipments = sqliteTable(
   "shipments",
   {
@@ -1379,6 +1445,34 @@ export const shipments = sqliteTable(
         OR (length(${table.providerReceiptFingerprint}) = 64
           AND ${table.providerReceiptFingerprint} = lower(${table.providerReceiptFingerprint})
           AND ${table.providerReceiptFingerprint} NOT GLOB '*[^0-9a-f]*')`,
+    ),
+  ],
+);
+
+export const shippingDocumentMetadata = sqliteTable(
+  "shipping_document_metadata",
+  {
+    id: text("id").primaryKey(),
+    shipmentId: text("shipment_id").notNull().references(
+      () => shipments.id,
+      { onDelete: "restrict" },
+    ),
+    documentKind: text("document_kind", {
+      enum: ["label", "customs", "return_label"],
+    }).notNull(),
+    mediaType: text("media_type", {
+      enum: ["application/pdf", "image/png", "application/zpl"],
+    }).notNull(),
+    providerDocumentReferenceHash: text("provider_document_reference_hash").notNull(),
+    contentSha256: text("content_sha256").notNull(),
+    byteLength: integer("byte_length").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("ux_shipping_document_reference").on(
+      table.shipmentId,
+      table.documentKind,
+      table.providerDocumentReferenceHash,
     ),
   ],
 );
