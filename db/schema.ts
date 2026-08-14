@@ -1343,6 +1343,61 @@ export const deliveryOptionSnapshots = sqliteTable(
       .on(table.cartId)
       .where(sql`${table.selectedAt} IS NOT NULL`),
     index("idx_delivery_options_cart_expiry").on(table.cartId, table.expiresAt),
+    check(
+      "ck_delivery_options_cart_revision",
+      sql`${table.cartRevision} >= 0`,
+    ),
+    check(
+      "ck_delivery_options_mode",
+      sql`${table.deliveryMode} IN ('home','service_point')`,
+    ),
+    check(
+      "ck_delivery_options_amount",
+      sql`${table.amountCents} >= 0 AND ${table.currency} = 'EUR'`,
+    ),
+    check(
+      "ck_delivery_options_eta",
+      sql`${table.estimatedDaysMin} > 0
+        AND ${table.estimatedDaysMax} >= ${table.estimatedDaysMin}`,
+    ),
+    check(
+      "ck_delivery_options_duties",
+      sql`${table.dutiesTerms} IN ('EU_INCLUDED','DAP','DDP')`,
+    ),
+    check(
+      "ck_delivery_options_proof",
+      sql`${table.proofKind} IN ('synthetic_demo','provider_api_response')`,
+    ),
+    check(
+      "ck_delivery_options_fingerprints",
+      sql`length(${table.shippingAddressFingerprint}) = 64
+        AND ${table.shippingAddressFingerprint} = lower(${table.shippingAddressFingerprint})
+        AND ${table.shippingAddressFingerprint} NOT GLOB '*[^0-9a-f]*'
+        AND (${table.providerQuoteReferenceHash} IS NULL OR (
+          length(${table.providerQuoteReferenceHash}) = 64
+          AND ${table.providerQuoteReferenceHash} = lower(${table.providerQuoteReferenceHash})
+          AND ${table.providerQuoteReferenceHash} NOT GLOB '*[^0-9a-f]*'
+        ))
+        AND (${table.providerReceiptFingerprint} IS NULL OR (
+          length(${table.providerReceiptFingerprint}) = 64
+          AND ${table.providerReceiptFingerprint} = lower(${table.providerReceiptFingerprint})
+          AND ${table.providerReceiptFingerprint} NOT GLOB '*[^0-9a-f]*'
+        ))`,
+    ),
+    check(
+      "ck_delivery_options_timestamps",
+      sql`strftime('%Y-%m-%dT%H:%M:%fZ',${table.quotedAt}) IS ${table.quotedAt}
+        AND strftime('%Y-%m-%dT%H:%M:%fZ',${table.expiresAt}) IS ${table.expiresAt}
+        AND strftime('%Y-%m-%dT%H:%M:%fZ',${table.createdAt}) IS ${table.createdAt}
+        AND (${table.selectedAt} IS NULL
+          OR strftime('%Y-%m-%dT%H:%M:%fZ',${table.selectedAt}) IS ${table.selectedAt})
+        AND ${table.expiresAt} > ${table.quotedAt}
+        AND julianday(${table.expiresAt}) - julianday(${table.quotedAt}) <= (1.0 / 24.0)
+        AND (${table.selectedAt} IS NULL OR (
+          ${table.selectedAt} >= ${table.quotedAt}
+          AND ${table.selectedAt} < ${table.expiresAt}
+        ))`,
+    ),
   ],
 );
 
@@ -1371,6 +1426,23 @@ export const deliveryServicePointSnapshots = sqliteTable(
     index("idx_delivery_service_points_option_expiry").on(
       table.deliveryOptionId,
       table.expiresAt,
+    ),
+    check(
+      "ck_delivery_service_point_hash",
+      sql`length(${table.providerPointReferenceHash}) = 64
+        AND ${table.providerPointReferenceHash} = lower(${table.providerPointReferenceHash})
+        AND ${table.providerPointReferenceHash} NOT GLOB '*[^0-9a-f]*'`,
+    ),
+    check(
+      "ck_delivery_service_point_country",
+      sql`length(${table.countryCode}) = 2
+        AND ${table.countryCode} = upper(${table.countryCode})`,
+    ),
+    check(
+      "ck_delivery_service_point_timestamps",
+      sql`strftime('%Y-%m-%dT%H:%M:%fZ',${table.expiresAt}) IS ${table.expiresAt}
+        AND strftime('%Y-%m-%dT%H:%M:%fZ',${table.createdAt}) IS ${table.createdAt}
+        AND ${table.expiresAt} > ${table.createdAt}`,
     ),
   ],
 );
@@ -1473,6 +1545,31 @@ export const shippingDocumentMetadata = sqliteTable(
       table.shipmentId,
       table.documentKind,
       table.providerDocumentReferenceHash,
+    ),
+    check(
+      "ck_shipping_document_kind",
+      sql`${table.documentKind} IN ('label','customs','return_label')`,
+    ),
+    check(
+      "ck_shipping_document_media",
+      sql`${table.mediaType} IN ('application/pdf','image/png','application/zpl')`,
+    ),
+    check(
+      "ck_shipping_document_hashes",
+      sql`length(${table.providerDocumentReferenceHash}) = 64
+        AND ${table.providerDocumentReferenceHash} = lower(${table.providerDocumentReferenceHash})
+        AND ${table.providerDocumentReferenceHash} NOT GLOB '*[^0-9a-f]*'
+        AND length(${table.contentSha256}) = 64
+        AND ${table.contentSha256} = lower(${table.contentSha256})
+        AND ${table.contentSha256} NOT GLOB '*[^0-9a-f]*'`,
+    ),
+    check(
+      "ck_shipping_document_length",
+      sql`${table.byteLength} > 0`,
+    ),
+    check(
+      "ck_shipping_document_timestamp",
+      sql`strftime('%Y-%m-%dT%H:%M:%fZ',${table.createdAt}) IS ${table.createdAt}`,
     ),
   ],
 );

@@ -49,3 +49,76 @@ test("0010 is additive and 0000 through 0009 stay byte-identical to git", () => 
   assert.match(migration, /OLD\.`provider_quote_reference_hash` IS NOT NEW\.`provider_quote_reference_hash`/);
   assert.match(migration, /OLD\.`provider_receipt_fingerprint` IS NOT NEW\.`provider_receipt_fingerprint`/);
 });
+
+test("0010 has a terminal Drizzle snapshot chained to exact 0009 metadata", () => {
+  const previous = JSON.parse(readFileSync(
+    new URL("drizzle/meta/0009_snapshot.json", root),
+    "utf8",
+  ));
+  const snapshot = JSON.parse(readFileSync(
+    new URL("drizzle/meta/0010_snapshot.json", root),
+    "utf8",
+  ));
+  const journal = JSON.parse(readFileSync(
+    new URL("drizzle/meta/_journal.json", root),
+    "utf8",
+  ));
+  const migration = readFileSync(
+    new URL("drizzle/0010_multicarrier_delivery_foundation.sql", root),
+    "utf8",
+  );
+
+  assert.equal(snapshot.version, "6");
+  assert.equal(snapshot.dialect, "sqlite");
+  assert.equal(snapshot.prevId, previous.id);
+  assert.notEqual(snapshot.id, previous.id);
+  assert.equal(Object.keys(snapshot.tables).length, Object.keys(previous.tables).length + 3);
+  for (const [tableName, table] of Object.entries(previous.tables)) {
+    assert.deepEqual(snapshot.tables[tableName], table, `${tableName}: 0009 metadata changed`);
+  }
+
+  const expectedChecks = {
+    delivery_option_snapshots: [
+      "ck_delivery_options_amount",
+      "ck_delivery_options_cart_revision",
+      "ck_delivery_options_duties",
+      "ck_delivery_options_eta",
+      "ck_delivery_options_fingerprints",
+      "ck_delivery_options_mode",
+      "ck_delivery_options_proof",
+      "ck_delivery_options_timestamps",
+    ],
+    delivery_service_point_snapshots: [
+      "ck_delivery_service_point_country",
+      "ck_delivery_service_point_hash",
+      "ck_delivery_service_point_timestamps",
+    ],
+    shipping_document_metadata: [
+      "ck_shipping_document_hashes",
+      "ck_shipping_document_kind",
+      "ck_shipping_document_length",
+      "ck_shipping_document_media",
+      "ck_shipping_document_timestamp",
+    ],
+  };
+  for (const [tableName, checks] of Object.entries(expectedChecks)) {
+    const table = snapshot.tables[tableName];
+    assert.ok(table, `${tableName}: missing from 0010 snapshot`);
+    assert.deepEqual(Object.keys(table.checkConstraints).sort(), checks);
+    for (const checkName of checks) {
+      assert.match(
+        migration,
+        new RegExp("CONSTRAINT `" + checkName + "` CHECK"),
+        `${checkName}: snapshot check missing from SQL 0010`,
+      );
+    }
+  }
+
+  assert.deepEqual(journal.entries.at(-1), {
+    idx: 10,
+    version: "6",
+    when: 1786651200000,
+    tag: "0010_multicarrier_delivery_foundation",
+    breakpoints: true,
+  });
+});

@@ -40,7 +40,7 @@ export type ServicePointRequest = Readonly<{
   countryCode: string;
   postalCode: string;
   carrierCode: string;
-}>; 
+}>;
 
 export type DeliveryServicePoint = Readonly<{
   providerPointReference: string;
