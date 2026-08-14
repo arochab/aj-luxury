@@ -1,4 +1,5 @@
 import { isCanonicalUtcTimestamp } from "./account-security.ts";
+import type { TransactionalEmailDeliveryReadiness } from "./email-outbox-dispatcher.ts";
 import type { CommerceD1Database, CommerceD1Result } from "./d1-port.ts";
 
 export const transactionalEmailProviderClosed = Object.freeze({
@@ -153,6 +154,12 @@ export class D1EmailOutbox {
   ) {
     this.database = database;
     this.provider = provider;
+  }
+
+  deliveryReadiness(): TransactionalEmailDeliveryReadiness {
+    return this.provider
+      ? Object.freeze({ available: true } as const)
+      : transactionalEmailProviderClosed;
   }
 
   async enqueue(candidate: Readonly<{
