@@ -1,0 +1,104 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import {
+  ResendEmailProvider,
+  ResendEmailProviderError,
+} from "../lib/commerce/resend-email-provider.ts";
+
+function delivery(payload = { subject: "Paiement confirmé AJ-1", text: "Merci." }) {
+  return Object.freeze({
+    idempotencyKey: "payment_confirmation:order_12345678",
+    message: Object.freeze({
+      id: "outbox_12345678",
+      kind: "payment_confirmation",
+      sourceEventId: "event_12345678",
+      recipientEmail: "client@example.com",
+      orderId: "order_12345678",
+      locale: "fr",
+      templateVersion: "payment-v1",
+      payloadJson: JSON.stringify(payload),
+      attempts: 1,
+      maxAttempts: 5,
+      leaseTokenHash: "a".repeat(64),
+      providerIdempotencyKey: "payment_confirmation:order_12345678",
+    }),
+  });
+}
+
+function provider(fetchImpl) {
+  return new ResendEmailProvider({
+    apiKey: "re_redacted",
+    fromEmail: "commandes@ajluxurystore.com",
+    fromName: "AJ Luxury",
+    replyTo: "contact@ajluxurystore.com",
+    fetchImpl,
+  });
+}
+
+test("Resend receives one bounded text-only email with the durable idempotency key", async () => {
+  let call;
+  const adapter = provider(async (url, init) => {
+    call = { url, init };
+    return Response.json({ id: "email_123" }, { status: 200 });
+  });
+  const receipt = await adapter.deliver(delivery());
+  assert.equal(receipt.idempotencyKey, "payment_confirmation:order_12345678");
+  assert.equal(call.url, "https://api.resend.com/emails");
+  assert.equal(call.init.headers["Idempotency-Key"], receipt.idempotencyKey);
+  assert.match(call.init.headers.Authorization, /^Bearer re_/);
+  const body = JSON.parse(call.init.body);
+  assert.deepEqual(body.to, ["client@example.com"]);
+  assert.equal(body.from, "AJ Luxury <commandes@ajluxurystore.com>");
+  assert.equal(body.html, undefined);
+  assert.equal(body.text, "Merci.");
+});
+
+test("invalid or expanded payloads are rejected before network access", async () => {
+  let calls = 0;
+  const adapter = provider(async () => {
+    calls += 1;
+    return Response.json({ id: "never" });
+  });
+  await assert.rejects(
+    adapter.deliver(delivery({ subject: "Hi", text: "Body", html: "<b>x</b>" })),
+    ResendEmailProviderError,
+  );
+  await assert.rejects(
+    adapter.deliver(delivery({ subject: "Bad\r\nBcc: x@y.z", text: "Body" })),
+    ResendEmailProviderError,
+  );
+  assert.equal(calls, 0);
+});
+
+test("provider conflicts, throttling and invalid receipts stay ambiguous", async () => {
+  for (const response of [
+    Response.json({ message: "conflict" }, { status: 409 }),
+    Response.json({ message: "slow" }, { status: 429 }),
+    Response.json({ ok: true }, { status: 200 }),
+  ]) {
+    const adapter = provider(async () => response);
+    await assert.rejects(
+      adapter.deliver(delivery()),
+      (error) => error instanceof ResendEmailProviderError && error.outcome === "ambiguous",
+    );
+  }
+});
+
+test("configuration never accepts non-Resend keys or an unverified sender shape", () => {
+  assert.throws(
+    () => new ResendEmailProvider({
+      apiKey: "secret",
+      fromEmail: "commandes@ajluxurystore.com",
+      fromName: "AJ Luxury",
+    }),
+    ResendEmailProviderError,
+  );
+  assert.throws(
+    () => new ResendEmailProvider({
+      apiKey: "re_redacted",
+      fromEmail: "bad address",
+      fromName: "AJ Luxury",
+    }),
+    ResendEmailProviderError,
+  );
+});

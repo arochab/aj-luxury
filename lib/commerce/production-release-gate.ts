@@ -26,7 +26,8 @@ export type ProductionCommerceEnvironment = Readonly<{
   SENDCLOUD_PUBLIC_KEY?: string;
   SENDCLOUD_SECRET_KEY?: string;
   EMAIL_PROVIDER?: string;
-  BREVO_API_KEY?: string;
+  RESEND_API_KEY?: string;
+  RESEND_WEBHOOK_SECRET?: string;
   TRANSACTIONAL_FROM_EMAIL?: string;
   SELLER_LEGAL_IDENTITY_APPROVED?: string;
   TAX_DUTY_POLICY_APPROVED?: string;
@@ -120,7 +121,9 @@ function deliveryIsReady(env: ProductionCommerceEnvironment): boolean {
 }
 
 function emailIsReady(env: ProductionCommerceEnvironment): boolean {
-  return env.EMAIL_PROVIDER === "brevo" && Boolean(env.BREVO_API_KEY?.trim()) &&
+  return env.EMAIL_PROVIDER === "resend" &&
+    env.RESEND_API_KEY?.startsWith("re_") === true &&
+    env.RESEND_WEBHOOK_SECRET?.startsWith("whsec_") === true &&
     AJ_EMAIL_PATTERN.test(env.TRANSACTIONAL_FROM_EMAIL ?? "");
 }
 
