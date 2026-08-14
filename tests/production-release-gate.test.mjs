@@ -42,26 +42,30 @@ test("an empty environment is closed and exposes no capability", () => {
   assert.ok(gate.blockers.includes("stock-manifest-approval-missing"));
 });
 
-test("sandbox can be ready without enabling real or public commerce", () => {
+test("complete sandbox evidence remains closed until the router is wired", () => {
   const gate = evaluateProductionReleaseGate(base);
-  assert.equal(gate.ready, true);
+  assert.equal(gate.ready, false);
+  assert.equal(gate.evidenceComplete, true);
+  assert.deepEqual(gate.blockers, ["commerce-router-not-wired"]);
   assert.deepEqual(gate.launchZones, ["EU", "UK", "US", "CA"]);
-  assert.equal(gate.capabilities.sandboxCheckout, true);
+  assert.equal(gate.capabilities.sandboxCheckout, false);
   assert.equal(gate.capabilities.realPayment, false);
   assert.equal(gate.capabilities.realDelivery, false);
   assert.equal(gate.capabilities.publicCommerce, false);
 });
 
-test("controlled live keys allow one controlled order but never public sales", () => {
+test("controlled live evidence cannot enable an absent router", () => {
   const gate = evaluateProductionReleaseGate({
     ...base,
     COMMERCE_MODE: "controlled",
     STRIPE_SECRET_KEY: "sk_live_redacted",
   });
-  assert.equal(gate.ready, true);
-  assert.equal(gate.capabilities.realPayment, true);
-  assert.equal(gate.capabilities.realDelivery, true);
-  assert.equal(gate.capabilities.controlledOrder, true);
+  assert.equal(gate.ready, false);
+  assert.equal(gate.evidenceComplete, true);
+  assert.deepEqual(gate.blockers, ["commerce-router-not-wired"]);
+  assert.equal(gate.capabilities.realPayment, false);
+  assert.equal(gate.capabilities.realDelivery, false);
+  assert.equal(gate.capabilities.controlledOrder, false);
   assert.equal(gate.capabilities.publicCommerce, false);
 });
 
@@ -74,14 +78,16 @@ test("public live remains closed until a controlled order proof is recorded", ()
   assert.equal(missingProof.ready, false);
   assert.ok(missingProof.blockers.includes("controlled-order-proof-missing"));
 
-  const ready = evaluateProductionReleaseGate({
+  const configured = evaluateProductionReleaseGate({
     ...base,
     COMMERCE_MODE: "live",
     STRIPE_SECRET_KEY: "sk_live_redacted",
     COMMERCE_CONTROLLED_ORDER_PROOF_ID: "proof-controlled-order-0001",
   });
-  assert.equal(ready.ready, true);
-  assert.equal(ready.capabilities.publicCommerce, true);
+  assert.equal(configured.ready, false);
+  assert.equal(configured.evidenceComplete, true);
+  assert.deepEqual(configured.blockers, ["commerce-router-not-wired"]);
+  assert.equal(configured.capabilities.publicCommerce, false);
 });
 
 test("approvals and exact origin are bound to the release", () => {

@@ -54,10 +54,12 @@ export type ProductionReleaseBlocker =
   | "returns-policy-unapproved"
   | "backup-restore-drill-unapproved"
   | "monitoring-alerts-unapproved"
-  | "controlled-order-proof-missing";
+  | "controlled-order-proof-missing"
+  | "commerce-router-not-wired";
 
 export type ProductionReleaseGate = Readonly<{
   ready: boolean;
+  evidenceComplete: boolean;
   mode: ProductionCommerceMode;
   releaseSha: string | null;
   origin: string | null;
@@ -197,9 +199,17 @@ export function evaluateProductionReleaseGate(
     blockers.push("controlled-order-proof-missing");
   }
 
-  const ready = blockers.length === 0;
+  // This branch intentionally exposes health only. Keep every commerce mode
+  // fail-closed until a separately reviewed production router is present in
+  // the Worker; configuration alone must never make sales appear available.
+  blockers.push("commerce-router-not-wired");
+
+  const evidenceComplete = blockers.length === 1 &&
+    blockers[0] === "commerce-router-not-wired";
+  const ready = false;
   return Object.freeze({
     ready,
+    evidenceComplete,
     mode,
     releaseSha,
     origin,
