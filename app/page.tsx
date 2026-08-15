@@ -7,6 +7,7 @@ import StoreFooter from "./components/StoreFooter";
 import StoreHeader from "./components/StoreHeader";
 import ClientCopyText from "./components/ClientCopyText";
 import ApollonHorizontalRail from "./components/ApollonHorizontalRail";
+import ExperienceMotionLayer from "./components/ExperienceMotionLayer";
 import { T } from "../lib/i18n/TranslatedText";
 import { getProducts } from "../lib/products";
 import { editorialMoodboardImages } from "../lib/editorial-moodboard";
@@ -58,6 +59,7 @@ export default function Home() {
 
   return (
     <main className="aj-home">
+      <ExperienceMotionLayer />
       <section className="aj-film" id="accueil" aria-label="AJ Luxury">
         <StoreHeader />
         <h1 className="aj-film__portrait--sr">AJ Luxury — Reveal Your Inner Beauty</h1>
@@ -107,7 +109,6 @@ export default function Home() {
               </div>
               <div>
                 <h2><T id="home.apollonStatement" /></h2>
-                <p><T id="story.definitionP1" /></p>
               </div>
             </header>
 
@@ -155,7 +156,6 @@ export default function Home() {
         <header className="aj-featured__bridge">
           <p><T id="home.incarnationEyebrow" /></p>
           <h2><T id="home.incarnationTitle" /></h2>
-          <p><T id="home.incarnationBody" /></p>
         </header>
         <div
           className="aj-featured__editorial"
@@ -224,7 +224,12 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="aj-moodboard" aria-label="AJ Luxury — Jérémy, Alex">
+      <section
+        className="aj-moodboard"
+        aria-label="Galerie de campagne AJ Luxury"
+        aria-roledescription="carrousel"
+        tabIndex={0}
+      >
         <div className="aj-moodboard__track">
           {editorialMoodboardImages.map((image) => (
             <figure

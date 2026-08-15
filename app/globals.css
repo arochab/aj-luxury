@@ -1375,22 +1375,10 @@ footer:not([class]) > p {
 }
 
 /* Private Apollon candidate: one compact vertical-to-horizontal chapter. */
-@keyframes aj-apollon-rail-travel {
-  from {
-    transform: translateX(0);
-  }
-
-  to {
-    transform: translateX(calc(-100% + 100vw));
-  }
-}
-
 @media (min-width: 761px) {
   .aj-apollon-myth {
     min-height: 180svh;
     padding: 0;
-    view-timeline-axis: block;
-    view-timeline-name: --aj-apollon-rail;
   }
 
   .aj-apollon-myth__sticky {
@@ -1510,7 +1498,7 @@ footer:not([class]) > p {
   right: var(--aj-gutter);
   left: var(--aj-gutter);
   display: grid;
-  grid-template-columns: minmax(130px, 0.35fr) minmax(320px, 0.9fr) minmax(260px, 0.65fr);
+  grid-template-columns: minmax(130px, 0.35fr) minmax(320px, 1.65fr);
   align-items: end;
   gap: clamp(24px, 4vw, 70px);
   color: #f5f3ef;
@@ -3480,7 +3468,7 @@ footer:not([class]) > p {
 .aj-featured__glow {
   z-index: -2;
   background:
-    radial-gradient(circle at 52% 44%, rgba(255, 255, 255, 0.2), transparent 28%),
+    radial-gradient(circle at var(--aj-spot-x, 52%) var(--aj-spot-y, 44%), rgba(255, 255, 255, 0.24), transparent 30%),
     linear-gradient(0deg, rgba(5, 5, 7, 0.72), transparent 48%, rgba(5, 5, 7, 0.3));
 }
 
@@ -5102,5 +5090,32 @@ footer:not([class]) > p {
     animation: none !important;
     clip-path: none !important;
     transform: none !important;
+  }
+}
+
+@media (min-width: 761px) {
+  .aj-moodboard {
+    overflow-x: auto;
+    cursor: grab;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+
+  .aj-moodboard::-webkit-scrollbar {
+    display: none;
+  }
+
+  .aj-moodboard.is-dragging {
+    cursor: grabbing;
+    user-select: none;
+  }
+
+  .aj-moodboard__track {
+    width: max-content;
+    grid-template-columns: 31vw 46vw 29vw;
+  }
+
+  .aj-moodboard__item img {
+    pointer-events: none;
   }
 }
