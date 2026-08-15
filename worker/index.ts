@@ -65,6 +65,7 @@ import {
 } from "../lib/preprod/synthetic-demo.ts";
 import { productionCommerceApiResponse } from "./production-commerce-api.ts";
 import { productionShippingLabelAdminResponse } from "./production-shipping-label-admin-api.ts";
+import { productionCommerceRateLimitResponse } from "./production-rate-limit.ts";
 
 interface Fetcher {
   fetch(request: Request): Promise<Response>;
@@ -2741,6 +2742,15 @@ const worker = {
     ctx: ExecutionContext,
   ): Promise<Response> {
     const url = new URL(request.url);
+
+    const productionRateLimitResponse = await productionCommerceRateLimitResponse(request, env);
+    if (productionRateLimitResponse) {
+      return withSecurityHeaders(
+        productionRateLimitResponse,
+        url.pathname,
+        env?.APP_ENV,
+      );
+    }
 
     const productionShippingResponse = await productionShippingLabelAdminResponse(request, env);
     if (productionShippingResponse) {

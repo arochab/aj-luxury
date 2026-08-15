@@ -14,6 +14,10 @@ import { evaluateWiredProductionReleaseGate, type ProductionCommerceEnvironment 
 import { createSendcloudProviderPorts } from "../lib/commerce/sendcloud-provider.ts";
 import { createStripePaymentProviderPorts } from "../lib/commerce/stripe-payment-provider.ts";
 import { LEGAL_VERSION } from "../lib/legal.ts";
+import {
+  productionRateLimitBindingsReady,
+  type ProductionRateLimitEnvironment,
+} from "./production-rate-limit.ts";
 
 const PREFIX = "/api/commerce/";
 const routes = Object.freeze({
@@ -30,7 +34,8 @@ const known = new Set<string>(Object.values(routes));
 const IDEMPOTENCY = /^[A-Za-z0-9][A-Za-z0-9_.:-]{7,127}$/;
 const CART_TTL = 7 * 24 * 60 * 60;
 
-export type ProductionCommerceRuntimeEnvironment = ProductionCommerceEnvironment & Readonly<{
+export type ProductionCommerceRuntimeEnvironment = ProductionCommerceEnvironment &
+  ProductionRateLimitEnvironment & Readonly<{
   DB?: CommerceD1Database;
   COMMERCE_CART_HMAC_SECRET?: string;
   COMMERCE_CONTROLLED_OWNER_EMAIL?: string;
@@ -230,6 +235,7 @@ function runtimeBlockers(env: ProductionCommerceRuntimeEnvironment, mode: string
     ...(!env.DB ? ["database-binding-missing"] : []),
     ...(!secret(env) ? ["cart-session-secret-missing"] : []),
     ...(!deliveryVault(env) ? ["delivery-reference-vault-not-configured"] : []),
+    ...(!productionRateLimitBindingsReady(env) ? ["production-rate-limits-not-configured"] : []),
     ...(mode !== "live" && !controlledAuthConfigured(env)
       ? ["controlled-auth-hmac-not-configured"] : []),
     ...(settlementMode(env) !== expectedSettlement ? ["stripe-settlement-mode-mismatch"] : []),
