@@ -275,6 +275,11 @@ const adminEnv = Object.freeze({
   APP_ENV: "production",
   COMMERCE_MODE: "controlled",
   COMMERCE_RELEASE_SHA: releaseSha,
+  CF_VERSION_METADATA: {
+    id: "018f47ce-24bd-7b16-a1ea-4b3fc2d66b75",
+    tag: releaseSha,
+    timestamp: "2026-08-15T01:00:00.000Z",
+  },
   COMMERCE_ORIGIN: "https://ajluxurystore.com",
   COMMERCE_ADAM_APPROVAL_SHA: releaseSha,
   COMMERCE_JEREMY_APPROVAL_SHA: releaseSha,

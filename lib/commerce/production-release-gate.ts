@@ -34,12 +34,19 @@ export type ProductionCommerceEnvironment = Readonly<{
   RETURNS_POLICY_APPROVED?: string;
   BACKUP_RESTORE_DRILL_APPROVED?: string;
   MONITORING_ALERTS_APPROVED?: string;
+  CF_VERSION_METADATA?: Readonly<{
+    id?: string;
+    tag?: string;
+    timestamp?: string;
+  }>;
 }>;
 
 export type ProductionReleaseBlocker =
   | "environment-not-production"
   | "commerce-mode-invalid"
   | "release-sha-invalid"
+  | "runtime-version-metadata-missing"
+  | "runtime-version-release-mismatch"
   | "commerce-origin-invalid"
   | "adam-release-approval-missing"
   | "jeremy-release-approval-missing"
@@ -77,6 +84,7 @@ export type ProductionReleaseGate = Readonly<{
 
 const SHA_1_PATTERN = /^[a-f0-9]{40}$/;
 const SHA_256_PATTERN = /^[a-f0-9]{64}$/;
+const WORKER_VERSION_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SAFE_REFERENCE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.:-]{7,127}$/;
 const AJ_EMAIL_PATTERN = /^[^@\s]+@ajluxurystore\.com$/i;
 const launchZones = Object.freeze(["EU", "UK", "US", "CA"] as const);
@@ -155,6 +163,14 @@ function evaluateProductionReleaseGateInternal(
     blockers.push("commerce-mode-invalid");
   }
   if (!releaseSha) blockers.push("release-sha-invalid");
+  const versionMetadata = env.CF_VERSION_METADATA;
+  if (!versionMetadata || !WORKER_VERSION_ID_PATTERN.test(versionMetadata.id ?? "") ||
+    typeof versionMetadata.timestamp !== "string" ||
+    !Number.isFinite(Date.parse(versionMetadata.timestamp))) {
+    blockers.push("runtime-version-metadata-missing");
+  } else if (!releaseSha || versionMetadata.tag !== releaseSha) {
+    blockers.push("runtime-version-release-mismatch");
+  }
   if (!origin) blockers.push("commerce-origin-invalid");
   if (!releaseSha || env.COMMERCE_ADAM_APPROVAL_SHA !== releaseSha) {
     blockers.push("adam-release-approval-missing");
