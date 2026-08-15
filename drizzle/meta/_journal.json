@@ -92,6 +92,13 @@
       "when": 1786759000000,
       "tag": "0012_provider_priced_delivery_quotes",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1786760000000,
+      "tag": "0013_provider_priced_delivery_orders",
+      "breakpoints": true
     }
   ]
 }

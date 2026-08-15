@@ -15,7 +15,7 @@ import {
 
 const drizzle = fileURLToPath(new URL("../drizzle/", import.meta.url));
 const migrations = readdirSync(drizzle)
-  .filter((name) => /^(?:000[0-7]|0009|0010|0011|0012)_.+\.sql$/.test(name))
+  .filter((name) => /^(?:000[0-7]|0009|0010|0011|0012|0013)_.+\.sql$/.test(name))
   .sort();
 const KEY_BASE64 = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=";
 const HASH = "a".repeat(64);
@@ -255,6 +255,7 @@ test("production relay quotes and point snapshots are atomically replayable with
   const pointReference = "sendcloud-point-raw-987654";
   const commerce = new D1CommerceStore(d1);
   await commerce.seedLaunchCatalog("2099-01-01T00:00:00.000Z");
+  sqlite.exec("UPDATE inventory SET reserves_validated=1");
   await commerce.createCart({
     id: "cart_production_relay",
     customerId: null,
@@ -382,6 +383,53 @@ test("production relay quotes and point snapshots are atomically replayable with
     now,
   });
   assert.equal(selected.optionId, options[0].optionId);
+  const addressFingerprint = sqlite.prepare(`SELECT shipping_address_fingerprint
+    FROM delivery_option_snapshots WHERE id=?`).get(options[0].optionId)
+    .shipping_address_fingerprint;
+  const prepared = await new D1DeliveryOptionsStore(d1).prepareOrderSelection({
+    cartId: "cart_production_relay",
+    optionId: options[0].optionId,
+    servicePointId: points[0].servicePointId,
+    addressFingerprint,
+    now: "2099-01-01T00:00:03.000Z",
+  });
+  await d1.batch([
+    d1.prepare(`UPDATE shipping_quotes SET selected_at=?
+      WHERE id=? AND cart_id=? AND selected_at IS NULL AND expires_at>?`)
+      .bind("2099-01-01T00:00:03.000Z", options[0].quoteId,
+        "cart_production_relay", "2099-01-01T00:00:03.000Z"),
+    prepared.statement,
+    d1.prepare(`INSERT INTO orders (
+      id,order_number,cart_id,customer_id,email,status,currency,subtotal_cents,
+      shipping_cents,tax_cents,total_cents,shipping_country_code,
+      shipping_address_json,shipping_address_fingerprint,billing_address_json,
+      shipping_quote_id,terms_version,privacy_version,paid_at,created_at,updated_at
+    ) VALUES (?,?,?,?,?,'pending_payment','EUR',0,875,0,875,'FR',?,?,?,?,
+      '2026-08-15','2026-08-15',NULL,?,?)`).bind(
+      "order_production_relay",
+      "AJ-PRODUCTION-RELAY",
+      "cart_production_relay",
+      null,
+      "ada@example.com",
+      JSON.stringify(address),
+      addressFingerprint,
+      JSON.stringify(address),
+      options[0].quoteId,
+      "2099-01-01T00:00:03.000Z",
+      "2099-01-01T00:00:03.000Z",
+    ),
+  ]);
+  assert.equal(sqlite.prepare(
+    "SELECT shipping_cents FROM orders WHERE id='order_production_relay'",
+  ).get().shipping_cents, 875);
+  assert.deepEqual(
+    { ...sqlite.prepare(`SELECT selected_at, selected_service_point_id
+      FROM delivery_option_snapshots WHERE id=?`).get(options[0].optionId) },
+    {
+      selected_at: "2099-01-01T00:00:03.000Z",
+      selected_service_point_id: points[0].servicePointId,
+    },
+  );
   const persisted = JSON.stringify({
     quotes: sqlite.prepare("SELECT provider_quote_reference FROM shipping_quotes").all(),
     vault: sqlite.prepare("SELECT * FROM delivery_provider_reference_vault").all(),
@@ -405,10 +453,11 @@ test("0011 fails closed for a missing, foreign, expired or unsealed service poin
   assert.doesNotMatch(migration, /provider_reference` text|raw_reference|api[_-]?key|secret[_-]?key/i);
 });
 
-test("0011 remains additive and 0012 is a metadata-only pricing-contract successor", () => {
+test("0011 remains additive and 0012/0013 are metadata-only pricing-contract successors", () => {
   const previous = JSON.parse(readFileSync(`${drizzle}meta/0010_snapshot.json`, "utf8"));
   const snapshot = JSON.parse(readFileSync(`${drizzle}meta/0011_snapshot.json`, "utf8"));
   const pricingSnapshot = JSON.parse(readFileSync(`${drizzle}meta/0012_snapshot.json`, "utf8"));
+  const orderPricingSnapshot = JSON.parse(readFileSync(`${drizzle}meta/0013_snapshot.json`, "utf8"));
   const journal = JSON.parse(readFileSync(`${drizzle}meta/_journal.json`, "utf8"));
   assert.equal(snapshot.version, "6");
   assert.equal(snapshot.dialect, "sqlite");
@@ -435,13 +484,27 @@ test("0011 remains additive and 0012 is a metadata-only pricing-contract success
   assert.equal(pricingSnapshot.prevId, snapshot.id);
   assert.notEqual(pricingSnapshot.id, snapshot.id);
   assert.deepEqual(pricingSnapshot.tables, snapshot.tables);
+  assert.equal(orderPricingSnapshot.prevId, pricingSnapshot.id);
+  assert.notEqual(orderPricingSnapshot.id, pricingSnapshot.id);
+  assert.deepEqual(orderPricingSnapshot.tables, pricingSnapshot.tables);
   assert.deepEqual(journal.entries.at(-1), {
-    idx: 12,
+    idx: 13,
     version: "6",
-    when: 1786759000000,
-    tag: "0012_provider_priced_delivery_quotes",
+    when: 1786760000000,
+    tag: "0013_provider_priced_delivery_orders",
     breakpoints: true,
   });
+});
+
+test("0013 accepts only an exact selected provider quote with encrypted replay proof", () => {
+  const migration = readFileSync(`${drizzle}0013_provider_priced_delivery_orders.sql`, "utf8");
+  assert.match(migration, /provider_receipt_fingerprint` IS NULL[\s\S]+configuration\.`price_cents` = NEW\.`shipping_cents/);
+  assert.match(migration, /provider_receipt_fingerprint` IS NOT NULL/);
+  assert.match(migration, /provider_quote_reference` IS NULL/);
+  assert.match(migration, /delivery_provider_reference_vault/);
+  assert.match(migration, /option\.`selected_at` = quote\.`selected_at`/);
+  assert.match(migration, /trg_orders_provider_pricing_contract/);
+  assert.doesNotMatch(migration, /700|900|1200|fixture/i);
 });
 
 test("0012 accepts provider price/ETA while retaining legacy and no-raw-reference guards", () => {
