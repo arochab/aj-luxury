@@ -34,9 +34,11 @@ export type ProductionCommerceRuntimeEnvironment = ProductionCommerceEnvironment
   DB?: CommerceD1Database;
   COMMERCE_CART_HMAC_SECRET?: string;
   COMMERCE_CONTROLLED_OWNER_EMAIL?: string;
+  COMMERCE_CONTROLLED_AUTH_HMAC_SECRET?: string;
   STRIPE_SETTLEMENT_MODE?: string;
   DELIVERY_REFERENCE_ENCRYPTION_KEY_BASE64?: string;
   DELIVERY_REFERENCE_KEY_VERSION?: string;
+  DELIVERY_REFERENCE_DECRYPTION_KEYS_JSON?: string;
 }>;
 export type ProductionCommerceRouterDependencies = Readonly<{
   deliveryProvider?: DeliveryProviderPorts;
@@ -93,14 +95,61 @@ function originOk(request: Request, origin: string): boolean {
 function mutationOk(request: Request, origin: string, current: CartSession): boolean {
   return authorizeBrowserMutation({ method: request.method, origin: request.headers.get("Origin"), secFetchSite: request.headers.get("Sec-Fetch-Site"), allowedOrigins: [origin], csrfCookieToken: current.csrf, csrfHeaderToken: request.headers.get("X-CSRF-Token") });
 }
-function ownerOk(request: Request, env: ProductionCommerceRuntimeEnvironment): boolean {
+const CONTROLLED_AUTH_WINDOW_SECONDS = 300;
+const CONTROLLED_SIGNATURE = /^t=(\d{10}),v1=([0-9a-f]{64})$/;
+
+async function hmacHex(secretValue: string, value: string): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    "raw", new TextEncoder().encode(secretValue),
+    { name: "HMAC", hash: "SHA-256" }, false, ["sign"],
+  );
+  const signature = new Uint8Array(await crypto.subtle.sign(
+    "HMAC", key, new TextEncoder().encode(value),
+  ));
+  return Array.from(signature, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function exactText(left: string, right: string): boolean {
+  if (left.length !== right.length) return false;
+  let diff = 0;
+  for (let index = 0; index < left.length; index += 1) {
+    diff |= left.charCodeAt(index) ^ right.charCodeAt(index);
+  }
+  return diff === 0;
+}
+
+export async function controlledRequestAuthorization(
+  secretValue: string,
+  input: Readonly<{ method: string; pathname: string; ownerEmail: string; timestamp: number }>,
+): Promise<string> {
+  if (secretValue.length < 32 || secretValue.length > 512 ||
+    !Number.isSafeInteger(input.timestamp) || input.timestamp < 1_000_000_000 ||
+    !/^[A-Z]+$/.test(input.method) || !input.pathname.startsWith("/api/commerce/")) {
+    throw new TypeError("Controlled authorization input is invalid.");
+  }
+  const canonical = `ajl-controlled-v1\n${input.timestamp}\n${input.method}\n${input.pathname}\n${input.ownerEmail.toLowerCase()}`;
+  return `t=${input.timestamp},v1=${await hmacHex(secretValue, canonical)}`;
+}
+
+async function ownerOk(request: Request, env: ProductionCommerceRuntimeEnvironment): Promise<boolean> {
   const expected = env.COMMERCE_CONTROLLED_OWNER_EMAIL?.trim().toLowerCase();
   const actual = request.headers.get("oai-authenticated-user-email")?.trim().toLowerCase();
   const userId = request.headers.get("oai-authenticated-user-id")?.trim();
-  if (!expected || !actual || !userId || userId.length > 512 || expected.length !== actual.length) return false;
-  let diff = 0;
-  for (let index = 0; index < expected.length; index += 1) diff |= expected.charCodeAt(index) ^ actual.charCodeAt(index);
-  return diff === 0;
+  const secretValue = env.COMMERCE_CONTROLLED_AUTH_HMAC_SECRET ?? "";
+  const authorization = request.headers.get("X-AJ-Controlled-Authorization") ?? "";
+  const parsed = CONTROLLED_SIGNATURE.exec(authorization);
+  if (!expected || !actual || !userId || userId.length > 512 ||
+    !exactText(expected, actual) || secretValue.length < 32 || secretValue.length > 512 || !parsed) return false;
+  const timestamp = Number(parsed[1]);
+  const current = Math.floor(Date.now() / 1000);
+  if (!Number.isSafeInteger(timestamp) || Math.abs(current - timestamp) > CONTROLLED_AUTH_WINDOW_SECONDS) return false;
+  const wanted = await controlledRequestAuthorization(secretValue, {
+    method: request.method,
+    pathname: new URL(request.url).pathname,
+    ownerEmail: expected,
+    timestamp,
+  });
+  return exactText(wanted, authorization);
 }
 async function bytes(request: Request, maximum: number): Promise<Uint8Array | null> {
   const encoding = request.headers.get("Content-Encoding");
@@ -152,11 +201,21 @@ function settlementMode(env: ProductionCommerceRuntimeEnvironment): "test" | "li
     ? env.STRIPE_SETTLEMENT_MODE
     : null;
 }
+function controlledAuthConfigured(env: ProductionCommerceRuntimeEnvironment): boolean {
+  const value = env.COMMERCE_CONTROLLED_AUTH_HMAC_SECRET ?? "";
+  return value.length >= 32 && value.length <= 512 && !/[\u0000-\u001f\u007f]/.test(value);
+}
 function deliveryVault(env: ProductionCommerceRuntimeEnvironment): DeliveryReferenceVault | null {
   try {
+    const parsed: unknown = env.DELIVERY_REFERENCE_DECRYPTION_KEYS_JSON
+      ? JSON.parse(env.DELIVERY_REFERENCE_DECRYPTION_KEYS_JSON)
+      : {};
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed) ||
+      Object.values(parsed).some((value) => typeof value !== "string")) return null;
     return new DeliveryReferenceVault({
       encryptionKeyBase64: env.DELIVERY_REFERENCE_ENCRYPTION_KEY_BASE64,
       keyVersion: env.DELIVERY_REFERENCE_KEY_VERSION,
+      decryptionKeysBase64: parsed as Record<string, string>,
     });
   } catch {
     return null;
@@ -168,6 +227,8 @@ function runtimeBlockers(env: ProductionCommerceRuntimeEnvironment, mode: string
     ...(!env.DB ? ["database-binding-missing"] : []),
     ...(!secret(env) ? ["cart-session-secret-missing"] : []),
     ...(!deliveryVault(env) ? ["delivery-reference-vault-not-configured"] : []),
+    ...(mode !== "live" && !controlledAuthConfigured(env)
+      ? ["controlled-auth-hmac-not-configured"] : []),
     ...(settlementMode(env) !== expectedSettlement ? ["stripe-settlement-mode-mismatch"] : []),
     ...(["controlled", "live"].includes(mode)
       ? ["late-payment-compensation-not-activated", "outbound-shipment-creation-not-activated"]
@@ -317,7 +378,7 @@ export async function productionCommerceApiResponse(
   if (!gate.ready || !gate.origin || url.origin !== gate.origin) return fail("COMMERCE_CLOSED", 503);
   if (!env.DB) return fail("DATABASE_UNAVAILABLE", 503);
   if (gate.mode === "live" && blockers.length) return fail("COMMERCE_CLOSED", 503);
-  if (gate.mode !== "live" && !ownerOk(request, env)) return fail("CONTROLLED_ACCESS_REQUIRED", 403);
+  if (gate.mode !== "live" && !await ownerOk(request, env)) return fail("CONTROLLED_ACCESS_REQUIRED", 403);
   let current: CartSession | null;
   try { current = await session(request); } catch {
     const headers = new Headers(); headers.append("Set-Cookie", clearSessionCookie("cart")); headers.append("Set-Cookie", clearCsrfCookie("cart"));

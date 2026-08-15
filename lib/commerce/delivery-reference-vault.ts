@@ -27,6 +27,8 @@ export type DeliveryReferenceVaultConfiguration = Readonly<{
   /** Standard padded Base64 encoding of exactly 32 random bytes. */
   encryptionKeyBase64?: string;
   keyVersion?: string | number;
+  /** Previous version -> padded Base64 key. Retain until every referenced order is terminal. */
+  decryptionKeysBase64?: Readonly<Record<string, string>>;
 }>;
 
 export class DeliveryReferenceVaultError extends Error {
@@ -145,6 +147,7 @@ function fixedTimeEqual(left: CryptoBytes, right: CryptoBytes): boolean {
 
 export class DeliveryReferenceVault {
   readonly #key: Promise<CryptoKey>;
+  readonly #keys: ReadonlyMap<number, Promise<CryptoKey>>;
   readonly #keyVersion: number;
 
   constructor(configuration: DeliveryReferenceVaultConfiguration) {
@@ -157,13 +160,38 @@ export class DeliveryReferenceVault {
       throw new DeliveryReferenceVaultError("NOT_CONFIGURED", "Provider reference encryption is not configured.");
     }
     this.#keyVersion = assertVersion(configuration.keyVersion);
-    this.#key = crypto.subtle.importKey(
-      "raw",
-      keyBytes,
-      { name: "AES-GCM" },
-      false,
-      ["encrypt", "decrypt"],
-    ).finally(() => keyBytes.fill(0));
+    const keys = new Map<number, Promise<CryptoKey>>();
+    const importKey = (encoded: string): Promise<CryptoKey> => {
+      if (!BASE64_KEY.test(encoded)) {
+        throw new DeliveryReferenceVaultError("NOT_CONFIGURED", "Provider reference encryption is not configured.");
+      }
+      const bytes = base64ToBytes(encoded);
+      if (bytes.byteLength !== KEY_BYTES || bytesToBase64(bytes) !== encoded) {
+        bytes.fill(0);
+        throw new DeliveryReferenceVaultError("NOT_CONFIGURED", "Provider reference encryption is not configured.");
+      }
+      return crypto.subtle.importKey(
+        "raw", bytes, { name: "AES-GCM" }, false, ["encrypt", "decrypt"],
+      ).finally(() => bytes.fill(0));
+    };
+    keys.set(this.#keyVersion, crypto.subtle.importKey(
+      "raw", keyBytes, { name: "AES-GCM" }, false, ["encrypt", "decrypt"],
+    ).finally(() => keyBytes.fill(0)));
+    for (const [rawVersion, encoded] of Object.entries(configuration.decryptionKeysBase64 ?? {})) {
+      const version = assertVersion(rawVersion);
+      if (version === this.#keyVersion) {
+        if (encoded !== encodedKey) {
+          throw new DeliveryReferenceVaultError("NOT_CONFIGURED", "Provider reference encryption is not configured.");
+        }
+        continue;
+      }
+      if (keys.has(version)) {
+        throw new DeliveryReferenceVaultError("NOT_CONFIGURED", "Provider reference encryption is not configured.");
+      }
+      keys.set(version, importKey(encoded));
+    }
+    this.#keys = keys;
+    this.#key = keys.get(this.#keyVersion)!;
   }
 
   async seal(input: Readonly<{
@@ -207,7 +235,8 @@ export class DeliveryReferenceVault {
 
   async open(record: SealedDeliveryProviderReference): Promise<string> {
     assertSealed(record);
-    if (record.keyVersion !== this.#keyVersion) {
+    const decryptionKey = this.#keys.get(record.keyVersion);
+    if (!decryptionKey) {
       throw new DeliveryReferenceVaultError("AUTHENTICATION_FAILED", "Provider reference could not be authenticated.");
     }
     const expectedId = await deterministicId(
@@ -228,7 +257,7 @@ export class DeliveryReferenceVault {
     try {
       plaintext = new Uint8Array(await crypto.subtle.decrypt(
         { name: "AES-GCM", iv, additionalData: aad(record), tagLength: 128 },
-        await this.#key,
+        await decryptionKey,
         ciphertext,
       ));
     } catch {

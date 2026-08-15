@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { productionCommerceApiResponse, productionDeliveryRuntimeInstalled, productionStockRuntimeAttested } from "../worker/production-commerce-api.ts";
+import { controlledRequestAuthorization, productionCommerceApiResponse, productionDeliveryRuntimeInstalled, productionStockRuntimeAttested } from "../worker/production-commerce-api.ts";
 
 const releaseSha = "a".repeat(40);
+const controlledSecret = "controlled-auth-secret-value-0001";
 const controlled = Object.freeze({
   APP_ENV: "production",
   COMMERCE_MODE: "controlled",
@@ -32,6 +33,7 @@ const controlled = Object.freeze({
   MONITORING_ALERTS_APPROVED: "true",
   COMMERCE_CART_HMAC_SECRET: "x".repeat(32),
   COMMERCE_CONTROLLED_OWNER_EMAIL: "owner@example.com",
+  COMMERCE_CONTROLLED_AUTH_HMAC_SECRET: controlledSecret,
   DB: {},
 });
 
@@ -39,6 +41,17 @@ const ownerHeaders = Object.freeze({
   "oai-authenticated-user-email": "owner@example.com",
   "oai-authenticated-user-id": "owner-1",
 });
+
+async function authenticatedOwnerHeaders(method, pathname) {
+  const timestamp = Math.floor(Date.now() / 1000);
+  return {
+    ...ownerHeaders,
+    "X-AJ-Controlled-Authorization": await controlledRequestAuthorization(
+      controlledSecret,
+      { method, pathname, ownerEmail: "owner@example.com", timestamp },
+    ),
+  };
+}
 
 test("the production namespace is invisible outside production", async () => {
   const response = await productionCommerceApiResponse(
@@ -89,10 +102,11 @@ test("controlled routes require the authenticated owner before touching D1", asy
 });
 
 test("cart creation rejects a missing exact origin before touching D1", async () => {
+  const headers = await authenticatedOwnerHeaders("POST", "/api/commerce/cart");
   const response = await productionCommerceApiResponse(
     new Request("https://ajluxurystore.com/api/commerce/cart", {
       method: "POST",
-      headers: { ...ownerHeaders, "Idempotency-Key": "cart-create-0001" },
+      headers: { ...headers, "Idempotency-Key": "cart-create-0001" },
     }),
     controlled,
   );
@@ -103,11 +117,12 @@ test("cart creation rejects a missing exact origin before touching D1", async ()
 test("service-point purchase remains 503 until exact 0013 schema is installed", async () => {
   const cartToken = "A".repeat(43);
   const csrfToken = "B".repeat(43);
+  const headers = await authenticatedOwnerHeaders("POST", "/api/commerce/checkout/service-points");
   const response = await productionCommerceApiResponse(
     new Request("https://ajluxurystore.com/api/commerce/checkout/service-points", {
       method: "POST",
       headers: {
-        ...ownerHeaders,
+        ...headers,
         Cookie: `__Host-aj_cart=${cartToken}; __Host-aj_cart_csrf=${csrfToken}`,
         Origin: "https://ajluxurystore.com",
         "Sec-Fetch-Site": "same-origin",
@@ -161,11 +176,12 @@ test("live stock attestation requires exact D1 inventory and two distinct bound 
 test("controlled payment session stays closed until late-payment compensation is activated", async () => {
   const cartToken = "A".repeat(43);
   const csrfToken = "B".repeat(43);
+  const headers = await authenticatedOwnerHeaders("POST", "/api/commerce/checkout/payment-session");
   const response = await productionCommerceApiResponse(
     new Request("https://ajluxurystore.com/api/commerce/checkout/payment-session", {
       method: "POST",
       headers: {
-        ...ownerHeaders,
+        ...headers,
         Cookie: `__Host-aj_cart=${cartToken}; __Host-aj_cart_csrf=${csrfToken}`,
         Origin: "https://ajluxurystore.com",
         "Sec-Fetch-Site": "same-origin",

@@ -110,6 +110,54 @@ test("AES-256-GCM seals provider references with random IV and authenticated own
   );
 });
 
+test("AES key rotation opens retained versions while new records use only the active key", async () => {
+  const previous = vault();
+  const oldRecord = await previous.seal({
+    providerCode: "sendcloud",
+    referenceKind: "delivery_quote",
+    ownerId: "option_before_rotation",
+    rawReference: "sendcloud-option-before-rotation",
+  });
+  const nextKey = Buffer.alloc(32, 9).toString("base64");
+  const rotated = new DeliveryReferenceVault({
+    encryptionKeyBase64: nextKey,
+    keyVersion: 2,
+    decryptionKeysBase64: { "1": KEY_BASE64 },
+  });
+  assert.equal(await rotated.open(oldRecord), "sendcloud-option-before-rotation");
+  const newRecord = await rotated.seal({
+    providerCode: "sendcloud",
+    referenceKind: "service_point",
+    ownerId: "point_after_rotation",
+    rawReference: "sendcloud-point-after-rotation",
+  });
+  assert.equal(newRecord.keyVersion, 2);
+  assert.equal(await rotated.open(newRecord), "sendcloud-point-after-rotation");
+  await assert.rejects(
+    () => previous.open(newRecord),
+    (error) => error instanceof DeliveryReferenceVaultError &&
+      error.code === "AUTHENTICATION_FAILED",
+  );
+  const withoutHistory = new DeliveryReferenceVault({
+    encryptionKeyBase64: nextKey,
+    keyVersion: 2,
+  });
+  await assert.rejects(
+    () => withoutHistory.open(oldRecord),
+    (error) => error instanceof DeliveryReferenceVaultError &&
+      error.code === "AUTHENTICATION_FAILED",
+  );
+  assert.throws(
+    () => new DeliveryReferenceVault({
+      encryptionKeyBase64: nextKey,
+      keyVersion: 2,
+      decryptionKeysBase64: { "2": KEY_BASE64 },
+    }),
+    (error) => error instanceof DeliveryReferenceVaultError &&
+      error.code === "NOT_CONFIGURED",
+  );
+});
+
 test("0011 persists only ciphertext and binds an exact service point to the order atomically", async () => {
   const sqlite = database();
   const d1 = new D1(sqlite);
