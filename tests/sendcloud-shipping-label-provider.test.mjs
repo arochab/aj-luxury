@@ -172,7 +172,7 @@ test("Sendcloud v3 announces one EU parcel with exact external id and proves one
   assert.equal("to_service_point" in captured.body, false);
   assert.equal("customs_information" in captured.body, false);
   assert.equal(result.providerCode, "sendcloud");
-  assert.equal(result.providerShipmentReference, "sendcloud-shipment-1");
+  assert.equal(result.providerShipmentReference, "383707309");
   assert.equal(result.trackingReference, "3S123456789");
   assert.match(result.receiptFingerprint, /^[0-9a-f]{64}$/);
   assert.doesNotMatch(JSON.stringify(result), /documents\/label|panel\.sendcloud/);
@@ -365,4 +365,49 @@ test("operator route hard-stops an already claimed shipment for manual reconcili
   assert.equal(response.status, 409);
   assert.equal((await response.json()).error.code, "MANUAL_RECONCILIATION_REQUIRED");
   assert.equal(providerCalls, 0);
+});
+
+test("an idempotent label-ready replay returns the exact printable A6 PDF", async () => {
+  const DB = new Database(null, []);
+  DB.existing = {
+    id: "shipment_test_1",
+    order_id: "order_test_1",
+    status: "label_ready",
+    attempts: 1,
+    provider_shipment_reference: "383707309",
+    tracking_reference: "3S123456789",
+  };
+  const pdf = new Blob([new Uint8Array([0x25, 0x50, 0x44, 0x46])], {
+    type: "application/pdf",
+  });
+  let requestInput;
+  const response = await productionShippingLabelAdminResponse(
+    await adminRequest(),
+    { ...adminEnv, DB },
+    {
+      authorizeOwner: async () => true,
+      shippingDocuments: {
+        async document(input) {
+          requestInput = input;
+          return {
+            providerDocumentReference: "sendcloud:parcel:383707309:document:label",
+            mediaType: "application/pdf",
+            contentSha256: "c".repeat(64),
+            byteLength: pdf.size,
+            content: pdf,
+          };
+        },
+      },
+    },
+  );
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("Content-Type"), "application/pdf");
+  assert.equal(response.headers.get("Content-Disposition"), 'attachment; filename="AJL-order_test_1-A6.pdf"');
+  assert.equal(response.headers.get("X-AJ-Document-SHA256"), "c".repeat(64));
+  assert.deepEqual(requestInput, {
+    requestId: "shipment_test_1",
+    providerParcelReference: "383707309",
+    documentKind: "label",
+  });
+  assert.deepEqual(new Uint8Array(await response.arrayBuffer()), new Uint8Array([0x25, 0x50, 0x44, 0x46]));
 });

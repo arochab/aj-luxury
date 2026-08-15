@@ -2,12 +2,14 @@ import { D1FulfillmentStore } from "../lib/commerce/d1-fulfillment-store.ts";
 import { resolveD1MutationActor } from "../lib/commerce/d1-actor-authorization.ts";
 import type { CommerceD1Database } from "../lib/commerce/d1-port.ts";
 import { FulfillmentError, sha256Hex, type ShippingLabelProviderPort } from "../lib/commerce/fulfillment-domain.ts";
+import type { ShippingDocumentProviderPort } from "../lib/commerce/delivery-provider.ts";
 import { authorizeBrowserMutation } from "../lib/commerce/identity-access-policy.ts";
 import {
   evaluateWiredProductionReleaseGate,
   type ProductionCommerceEnvironment,
 } from "../lib/commerce/production-release-gate.ts";
 import { createSendcloudShippingLabelProvider } from "../lib/commerce/sendcloud-shipping-label-provider.ts";
+import { createSendcloudProviderPorts } from "../lib/commerce/sendcloud-provider.ts";
 import { controlledOwnerRequestAuthenticated } from "./production-commerce-api.ts";
 
 const ROUTE = /^\/api\/commerce\/admin\/orders\/([^/]+)\/shipping-label$/;
@@ -22,19 +24,81 @@ export type ProductionShippingLabelEnvironment = ProductionCommerceEnvironment &
   SENDCLOUD_SECRET_KEY?: string;
   SENDCLOUD_SENDER_ADDRESS_ID?: string;
   SENDCLOUD_SENDER_ADDRESS_ATTESTATION?: string;
-  SENDCLOUD_REFERENCE_KEY_BASE64?: string;
-  SENDCLOUD_REFERENCE_KEY_VERSION?: string;
-}>;
+  DELIVERY_REFERENCE_ENCRYPTION_KEY_BASE64?: string;
+  DELIVERY_REFERENCE_KEY_VERSION?: string;
+  DELIVERY_REFERENCE_DECRYPTION_KEYS_JSON?: string;
+}>; 
 
 export type ProductionShippingLabelDependencies = Readonly<{
   shippingLabelProvider?: ShippingLabelProviderPort;
+  shippingDocuments?: ShippingDocumentProviderPort;
   authorizeOwner?: (
     request: Request,
     database: CommerceD1Database,
     now: string,
     origin: string,
   ) => Promise<boolean>;
-}>;
+}>; 
+
+function referenceVaultConfiguration(env: ProductionShippingLabelEnvironment): Readonly<{
+  encryptionKeyBase64?: string;
+  keyVersion?: string;
+  decryptionKeysBase64: Record<string, string>;
+}> {
+  const candidate: unknown = env.DELIVERY_REFERENCE_DECRYPTION_KEYS_JSON
+    ? JSON.parse(env.DELIVERY_REFERENCE_DECRYPTION_KEYS_JSON)
+    : {};
+  if (typeof candidate !== "object" || candidate === null || Array.isArray(candidate) ||
+    Object.values(candidate).some((value) => typeof value !== "string")) {
+    throw new TypeError("The delivery reference keyring is invalid.");
+  }
+  return Object.freeze({
+    encryptionKeyBase64: env.DELIVERY_REFERENCE_ENCRYPTION_KEY_BASE64,
+    keyVersion: env.DELIVERY_REFERENCE_KEY_VERSION,
+    decryptionKeysBase64: candidate as Record<string, string>,
+  });
+}
+
+async function printableLabelResponse(
+  env: ProductionShippingLabelEnvironment,
+  dependencies: ProductionShippingLabelDependencies,
+  shipment: ExistingShipment,
+  status: 200 | 201,
+): Promise<Response> {
+  if (!shipment.provider_shipment_reference || !/^[1-9]\d{0,18}$/.test(shipment.provider_shipment_reference)) {
+    return fail("SHIPPING_DOCUMENT_UNAVAILABLE", 503);
+  }
+  try {
+    const documents = dependencies.shippingDocuments ?? createSendcloudProviderPorts({
+      publicKey: env.SENDCLOUD_PUBLIC_KEY,
+      secretKey: env.SENDCLOUD_SECRET_KEY,
+    }).documents;
+    const document = await documents.document({
+      requestId: shipment.id,
+      providerParcelReference: shipment.provider_shipment_reference,
+      documentKind: "label",
+    });
+    if (document.mediaType !== "application/pdf" || document.byteLength !== document.content.size) {
+      return fail("SHIPPING_DOCUMENT_UNAVAILABLE", 503);
+    }
+    return new Response(document.content, {
+      status,
+      headers: {
+        "Cache-Control": "no-store",
+        "Content-Disposition": `attachment; filename="AJL-${shipment.order_id}-A6.pdf"`,
+        "Content-Length": String(document.byteLength),
+        "Content-Type": "application/pdf",
+        "X-AJ-Document-SHA256": document.contentSha256,
+        "X-AJ-Shipment-Id": shipment.id,
+        "X-AJ-Tracking-Reference": shipment.tracking_reference ?? "",
+        "X-Content-Type-Options": "nosniff",
+        "X-Robots-Tag": "noindex, nofollow",
+      },
+    });
+  } catch {
+    return fail("SHIPPING_DOCUMENT_UNAVAILABLE", 503);
+  }
+}
 
 type ExistingShipment = Readonly<{
   id: string;
@@ -204,14 +268,7 @@ export async function productionShippingLabelAdminResponse(
     return fail("IDEMPOTENCY_CONFLICT", 409);
   }
   if (existing?.status === "label_ready") {
-    return json({
-      data: {
-        shipmentId: existing.id,
-        status: existing.status,
-        provider: "sendcloud",
-        trackingReference: existing.tracking_reference,
-      },
-    });
+    return printableLabelResponse(env, dependencies, existing, 200);
   }
   if (existing && existing.status !== "label_pending") {
     return fail(
@@ -231,8 +288,7 @@ export async function productionShippingLabelAdminResponse(
         senderAddressId: env.SENDCLOUD_SENDER_ADDRESS_ID,
         originAddressAttestation: env.SENDCLOUD_SENDER_ADDRESS_ATTESTATION,
         referenceVault: {
-          encryptionKeyBase64: env.SENDCLOUD_REFERENCE_KEY_BASE64,
-          keyVersion: env.SENDCLOUD_REFERENCE_KEY_VERSION,
+          ...referenceVaultConfiguration(env),
         },
       },
     );
@@ -250,14 +306,7 @@ export async function productionShippingLabelAdminResponse(
       leaseExpiresAt: new Date(Date.parse(now) + 120_000).toISOString(),
       now,
     });
-    return json({
-      data: {
-        shipmentId: shipment.id,
-        status: shipment.status,
-        provider: shipment.tracking_provider_code,
-        trackingReference: shipment.tracking_reference,
-      },
-    }, 201);
+    return printableLabelResponse(env, dependencies, shipment, 201);
   } catch (cause) {
     if (cause instanceof FulfillmentError) {
       if (cause.code === "PROVIDER_OUTCOME_UNKNOWN") {

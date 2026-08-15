@@ -388,7 +388,10 @@ export async function parseSendcloudShipmentReceipt(
   ) {
     throw new FulfillmentProviderError("ambiguous", "Sendcloud label metadata is malformed.");
   }
-  const providerShipmentReference = String(data.id);
+  // Persist the parcel reference because Sendcloud's printable-document API is
+  // parcel-scoped. The parent shipment id remains covered by the immutable
+  // receipt fingerprint and the external idempotency reference.
+  const providerShipmentReference = String(parcel.id);
   const trackingReference = String(parcel.tracking_number);
   return Object.freeze({
     shipmentId: request.shipmentId,
@@ -402,6 +405,7 @@ export async function parseSendcloudShipmentReceipt(
       externalReferenceId: request.idempotencyKey,
       label: { dpi: 72, mediaType: "application/pdf", size: "a6" },
       parcelId: Number(parcel.id),
+      sendcloudShipmentId: String(data.id),
       providerShipmentReference,
       status: "READY_TO_SEND",
       trackingReference,
