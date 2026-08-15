@@ -1,4 +1,5 @@
 import type { ClientValidatedParcelProfile } from "./parcel-profiles.ts";
+import type { ReturnShipmentProviderPort } from "./return-provider.ts";
 
 export type DeliveryMode = "home" | "service_point";
 export type DeliveryDutiesTerms = "EU_INCLUDED" | "DAP" | "DDP";
@@ -39,6 +40,7 @@ export type ServicePointRequest = Readonly<{
   providerQuoteReference: string;
   countryCode: string;
   postalCode: string;
+  city: string;
   carrierCode: string;
 }>;
 
@@ -53,7 +55,8 @@ export type DeliveryServicePoint = Readonly<{
 
 export type ShippingDocumentRequest = Readonly<{
   requestId: string;
-  providerShipmentReference: string;
+  /** Sendcloud parcel id, not its parent shipment/return id. */
+  providerParcelReference: string;
   documentKind: "label" | "customs" | "return_label";
 }>;
 
@@ -62,6 +65,8 @@ export type ShippingDocumentReceipt = Readonly<{
   mediaType: "application/pdf" | "image/png" | "application/zpl";
   contentSha256: string;
   byteLength: number;
+  /** Immutable binary payload returned by the provider, ready for storage/printing. */
+  content: Blob;
 }>;
 
 export interface DeliveryQuoteProviderPort {
@@ -82,6 +87,7 @@ export type DeliveryProviderPorts = Readonly<{
   quotes: DeliveryQuoteProviderPort;
   servicePoints: DeliveryServicePointProviderPort;
   documents: ShippingDocumentProviderPort;
+  returns: ReturnShipmentProviderPort;
 }>;
 
 export class DeliveryProviderError extends Error {
