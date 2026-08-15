@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { productionCommerceApiResponse } from "../worker/production-commerce-api.ts";
+import { productionCommerceApiResponse, productionStockRuntimeAttested } from "../worker/production-commerce-api.ts";
 
 const releaseSha = "a".repeat(40);
 const controlled = Object.freeze({
@@ -100,16 +100,46 @@ test("cart creation rejects a missing exact origin before touching D1", async ()
   assert.equal((await response.json()).error.code, "ORIGIN_REJECTED");
 });
 
-test("service-point purchase is an explicit 503 and never reaches a provider", async () => {
+test("service-point purchase remains 503 until provider pricing 0012 is active", async () => {
+  const cartToken = "A".repeat(43);
+  const csrfToken = "B".repeat(43);
   const response = await productionCommerceApiResponse(
     new Request("https://ajluxurystore.com/api/commerce/checkout/service-points", {
       method: "POST",
-      headers: ownerHeaders,
+      headers: {
+        ...ownerHeaders,
+        Cookie: `__Host-aj_cart=${cartToken}; __Host-aj_cart_csrf=${csrfToken}`,
+        Origin: "https://ajluxurystore.com",
+        "Sec-Fetch-Site": "same-origin",
+        "X-CSRF-Token": csrfToken,
+        "Idempotency-Key": "service-points-0001",
+      },
     }),
     controlled,
   );
   assert.equal(response.status, 503);
-  assert.equal((await response.json()).error.code, "SERVICE_POINT_NOT_ACTIVATED");
+  assert.equal((await response.json()).error.code, "DELIVERY_PRICING_NOT_ACTIVATED");
+});
+
+function stockProofDatabase(stock, approvals) {
+  return {
+    prepare(query) {
+      return {
+        bind() { return this; },
+        async first() { return query.includes("FROM inventory") ? stock : approvals; },
+      };
+    },
+  };
+}
+
+test("live stock attestation requires exact D1 inventory and two distinct bound approvals", async () => {
+  const exactStock = { variant_count: 12, physical_quantity: 756, validated_count: 12, invalid_count: 0 };
+  const twoApprovals = { approval_count: 2, signer_count: 2, stock_owner_count: 1, release_owner_count: 1 };
+  const env = { DB: stockProofDatabase(exactStock, twoApprovals), STOCK_MANIFEST_ID: "stock-launch-20260815", STOCK_MANIFEST_SHA256: "b".repeat(64) };
+  assert.equal(await productionStockRuntimeAttested(env), true);
+  assert.equal(await productionStockRuntimeAttested({ ...env, DB: stockProofDatabase(exactStock, { ...twoApprovals, signer_count: 1 }) }), false);
+  assert.equal(await productionStockRuntimeAttested({ ...env, DB: stockProofDatabase({ ...exactStock, invalid_count: 1 }, twoApprovals) }), false);
+  assert.equal(await productionStockRuntimeAttested({ ...env, STOCK_MANIFEST_SHA256: "c".repeat(64), DB: { prepare() { throw new Error("unbound-proof"); } } }), false);
 });
 
 test("controlled payment session stays closed until late-payment compensation is activated", async () => {

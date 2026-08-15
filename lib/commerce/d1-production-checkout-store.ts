@@ -15,6 +15,7 @@ import {
   sha256Hex,
   type ShippingAddressInput,
 } from "./fulfillment-domain.ts";
+import { prepareProductionDeliveryOrderSelection } from "./production-delivery-order-selection.ts";
 
 export type ProductionCheckoutErrorCode =
   | "INVALID_INPUT"
@@ -94,6 +95,7 @@ type DeliveryOptionRow = Readonly<{
   amount_cents: number;
   expires_at: string;
   selected_at: string | null;
+  selected_service_point_id: string | null;
 }>;
 
 type PaymentRow = Readonly<{
@@ -127,6 +129,7 @@ export type CreateProductionOrderInput = Readonly<{
   cartId: string;
   quoteId: string;
   optionId: string;
+  servicePointId?: string | null;
   address: ShippingAddressInput;
   email: string;
   customerId?: string | null;
@@ -204,6 +207,9 @@ export class D1ProductionCheckoutStore {
     assertFulfillmentIdentifier(input.cartId, "cartId");
     assertFulfillmentIdentifier(input.quoteId, "quoteId");
     assertFulfillmentIdentifier(input.optionId, "optionId");
+    if (input.servicePointId !== undefined && input.servicePointId !== null) {
+      assertFulfillmentIdentifier(input.servicePointId, "servicePointId");
+    }
     assertFulfillmentIdentifier(input.idempotencyKey, "idempotencyKey");
     assertFulfillmentTimestamp(input.now, "now");
     assertLegalVersion(input.termsVersion, "termsVersion");
@@ -230,7 +236,7 @@ export class D1ProductionCheckoutStore {
       this.#database.prepare(
         `SELECT id, shipping_quote_id, cart_id, cart_revision,
           shipping_address_fingerprint, delivery_mode, display_name,
-          amount_cents, expires_at, selected_at
+          amount_cents, expires_at, selected_at, selected_service_point_id
         FROM delivery_option_snapshots WHERE id = ? AND shipping_quote_id = ?
           AND cart_id = ?`,
       ).bind(input.optionId, input.quoteId, input.cartId).first<DeliveryOptionRow>(),
@@ -257,7 +263,9 @@ export class D1ProductionCheckoutStore {
       quote.currency !== "EUR" || quote.cart_revision !== quote.fulfillment_revision ||
       quote.shipping_address_fingerprint !== address.fingerprint ||
       option.shipping_address_fingerprint !== address.fingerprint ||
-      option.cart_revision !== quote.cart_revision || option.delivery_mode !== "home" ||
+      option.cart_revision !== quote.cart_revision ||
+      (option.delivery_mode === "home" && input.servicePointId != null) ||
+      (option.delivery_mode === "service_point" && !input.servicePointId) ||
       option.amount_cents !== quote.amount_cents || option.expires_at !== quote.expires_at ||
       quote.expires_at <= input.now || quote.cart_expires_at <= input.now
     ) {
@@ -272,6 +280,7 @@ export class D1ProductionCheckoutStore {
       email,
       lines,
       optionId: input.optionId,
+      servicePointId: input.servicePointId ?? null,
       privacyVersion: input.privacyVersion,
       quoteId: input.quoteId,
       termsVersion: input.termsVersion,
@@ -285,7 +294,8 @@ export class D1ProductionCheckoutStore {
       if (
         existing.id !== orderId || existing.shipping_quote_id !== input.quoteId ||
         existing.shipping_address_fingerprint !== address.fingerprint ||
-        existing.email !== email || existing.total_cents !== subtotalCents + quote.amount_cents
+        existing.email !== email || existing.total_cents !== subtotalCents + quote.amount_cents ||
+        option.selected_service_point_id !== (input.servicePointId ?? null)
       ) {
         throw new ProductionCheckoutError(
           "ORDER_CONFLICT",
@@ -295,16 +305,32 @@ export class D1ProductionCheckoutStore {
       return this.#snapshot(existing);
     }
 
+    const preparedDelivery = await prepareProductionDeliveryOrderSelection(
+      this.#database,
+      {
+        cartId: input.cartId,
+        quoteId: input.quoteId,
+        optionId: input.optionId,
+        addressFingerprint: address.fingerprint,
+        servicePointId: input.servicePointId,
+        now: input.now,
+      },
+    );
+    if (
+      preparedDelivery.option.amount_cents !== quote.amount_cents ||
+      preparedDelivery.option.expires_at !== quote.expires_at
+    ) {
+      throw new ProductionCheckoutError(
+        "CHECKOUT_UNAVAILABLE",
+        "Delivery selection does not match the current quote.",
+      );
+    }
     const statements: CommerceD1PreparedStatement[] = [
       this.#database.prepare(
         `UPDATE shipping_quotes SET selected_at = ?
         WHERE id = ? AND cart_id = ? AND selected_at IS NULL AND expires_at > ?`,
       ).bind(input.now, input.quoteId, input.cartId, input.now),
-      this.#database.prepare(
-        `UPDATE delivery_option_snapshots SET selected_at = ?
-        WHERE id = ? AND shipping_quote_id = ? AND cart_id = ?
-          AND delivery_mode = 'home' AND selected_at IS NULL AND expires_at > ?`,
-      ).bind(input.now, input.optionId, input.quoteId, input.cartId, input.now),
+      preparedDelivery.statement,
       this.#database.prepare(
         `INSERT INTO orders (
           id, order_number, cart_id, customer_id, email, status, currency,
