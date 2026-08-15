@@ -28,6 +28,30 @@ const featuredEditorialImages = [
   },
 ];
 
+const apollonEditorialImages = [
+  {
+    src: "/images/editorial/isabelle-apollon/apollon-rose-lyre-v1.webp",
+    alt: "Apollon Rose Velours dans un décor de marbre, lyre, arc et flèches",
+    name: "Rose Velours",
+    number: "01",
+    position: "rose",
+  },
+  {
+    src: "/images/editorial/isabelle-apollon/apollon-lilas-lyre-v1.webp",
+    alt: "Apollon Lilas Céleste dans un décor de marbre, lyre, arc et flèches",
+    name: "Lilas Céleste",
+    number: "02",
+    position: "lilas",
+  },
+  {
+    src: "/images/editorial/isabelle-apollon/apollon-pourpre-lyre-v1.webp",
+    alt: "Apollon Pourpre Impérial dans un décor de marbre, lyre, arc et flèches",
+    name: "Pourpre Impérial",
+    number: "03",
+    position: "pourpre",
+  },
+];
+
 export default function Home() {
   const products = getProducts();
 
@@ -37,6 +61,24 @@ export default function Home() {
         <StoreHeader />
         <HeroComposition />
         <div className="aj-film__grade" aria-hidden="true" />
+
+        <div className="aj-film__message">
+          <p className="aj-film__eyebrow">AJ Luxury · Apollon 01</p>
+          <h1>
+            <T id="story.quote" />
+          </h1>
+          <p className="aj-film__promise">
+            <T id="story.definitionP2" />
+          </p>
+          <div className="aj-film__message-actions">
+            <a href="#collection">
+              <T id="story.discoverCollection" />
+            </a>
+            <Link href="/notre-histoire">
+              <T id="home.discoverStory" />
+            </Link>
+          </div>
+        </div>
 
         <div className="aj-film__signature">
           <p>Reveal Your Inner Beauty</p>
@@ -48,7 +90,79 @@ export default function Home() {
 
       <div className="aj-section-break" aria-hidden="true" />
 
-      <section className="aj-featured" id="apollon">
+      <section className="aj-proof" aria-labelledby="apollon-proof-title">
+        <p id="apollon-proof-title">Apollon 01</p>
+        <dl>
+          <div>
+            <dt>94 %</dt>
+            <dd><T id="home.materialModal" /></dd>
+          </div>
+          <div>
+            <dt>6 %</dt>
+            <dd><T id="home.materialElastane" /></dd>
+          </div>
+          <div>
+            <dt>03</dt>
+            <dd><T id="home.colors" /></dd>
+          </div>
+          <div>
+            <dt>S—XL</dt>
+            <dd><T id="home.sizes" /></dd>
+          </div>
+        </dl>
+      </section>
+
+      <section className="aj-apollon-myth" id="apollon">
+        <header className="aj-apollon-myth__intro">
+          <div>
+            <p><T id="home.apollonEyebrow" /></p>
+            <span aria-hidden="true">A</span>
+          </div>
+          <div>
+            <h2><T id="home.apollonStatement" /></h2>
+            <p>
+              <T id="story.definitionP1" />
+            </p>
+          </div>
+        </header>
+
+        <div className="aj-apollon-myth__gallery">
+          {apollonEditorialImages.map((image) => (
+            <figure
+              className={`aj-apollon-myth__card aj-apollon-myth__card--${image.position}`}
+              key={image.src}
+            >
+              <div className="aj-apollon-myth__frame">
+                <img
+                  src={image.src}
+                  alt={image.alt}
+                  width={1024}
+                  height={1536}
+                  loading="lazy"
+                  fetchPriority="low"
+                  decoding="async"
+                  sizes="(max-width: 760px) 82vw, 31vw"
+                />
+              </div>
+              <figcaption>
+                <span>{image.number}</span>
+                <strong>{image.name}</strong>
+              </figcaption>
+            </figure>
+          ))}
+        </div>
+
+        <footer className="aj-apollon-myth__footer">
+          <p>
+            <T id="product.feature.2" />
+          </p>
+          <Link href="/shop">
+            <T id="story.discoverCollection" /> <span aria-hidden="true">↗</span>
+          </Link>
+        </footer>
+      </section>
+
+      <section className="aj-featured" id="campagne">
         <div className="aj-featured__metal" aria-hidden="true">
           <DeferredMetallicField motion="still" variant="silver" />
         </div>
@@ -79,6 +193,23 @@ export default function Home() {
         </div>
       </section>
 
+      <section className="aj-manifesto" aria-labelledby="aj-manifesto-title">
+        <p className="aj-manifesto__index"><T id="home.firstGarment" /></p>
+        <div className="aj-manifesto__statement">
+          <h2 id="aj-manifesto-title">
+            <T id="story.definitionTitle" />
+          </h2>
+          <div>
+            <p>
+              <T id="story.originP1" />
+            </p>
+            <Link href="/notre-histoire">
+              <T id="home.discoverStory" /> <span aria-hidden="true">↗</span>
+            </Link>
+          </div>
+        </div>
+      </section>
+
       <section className="aj-shop" id="collection">
         <div className="aj-shop__heading">
           <h2>Apollon</h2>
@@ -90,7 +221,11 @@ export default function Home() {
         <div className="aj-shop__rail">
           {products.map((product) => (
             <article className="aj-product-card" key={product.slug}>
-              <Link className="aj-product-card__image" href={`/products/${product.slug}`}>
+              <Link
+                aria-label={`${product.model} ${product.name}`}
+                className="aj-product-card__image"
+                href={`/products/${product.slug}`}
+              >
                 <img
                   src={product.image}
                   alt={`${product.model} ${product.name}`}

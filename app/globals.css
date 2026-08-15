@@ -4267,3 +4267,624 @@ footer:not([class]) > p {
     inset: 62px 12px 72px;
   }
 }
+
+/* AJ Luxury private Awwwards candidate — cinematic message and Apollon mythology */
+
+.aj-film__message {
+  position: absolute;
+  z-index: 3;
+  top: 50%;
+  left: var(--aj-gutter);
+  width: min(470px, 38vw);
+  padding: clamp(22px, 2.2vw, 34px);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: linear-gradient(135deg, rgba(7, 7, 10, 0.68), rgba(7, 7, 10, 0.18));
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.18);
+  backdrop-filter: blur(14px) saturate(0.82);
+  transform: translateY(-48%);
+}
+
+.aj-film__eyebrow,
+.aj-film__promise {
+  margin: 0;
+}
+
+.aj-film__eyebrow {
+  color: rgba(255, 255, 255, 0.66);
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.aj-film__message h1 {
+  max-width: 440px;
+  margin: clamp(22px, 2.6vw, 36px) 0 20px;
+  font-size: clamp(38px, 4.15vw, 68px);
+  font-weight: 310;
+  letter-spacing: -0.07em;
+  line-height: 0.94;
+  text-wrap: balance;
+}
+
+.aj-film__promise {
+  max-width: 330px;
+  color: rgba(255, 255, 255, 0.74);
+  font-size: clamp(12px, 1vw, 15px);
+  line-height: 1.6;
+}
+
+.aj-film__message-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px clamp(22px, 2.4vw, 36px);
+  margin-top: clamp(24px, 3vw, 42px);
+}
+
+.aj-film__message-actions a {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.72);
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.aj-proof {
+  display: grid;
+  grid-template-columns: minmax(160px, 0.7fr) minmax(0, 3.3fr);
+  align-items: stretch;
+  border-bottom: 1px solid rgba(17, 17, 18, 0.18);
+  background: #f3f2ef;
+  color: #111112;
+}
+
+.aj-proof > p {
+  display: flex;
+  min-height: 112px;
+  align-items: center;
+  margin: 0;
+  padding: 0 var(--aj-gutter);
+  border-right: 1px solid rgba(17, 17, 18, 0.18);
+  color: #6b6e74;
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.aj-proof dl {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0;
+}
+
+.aj-proof dl > div {
+  display: grid;
+  min-width: 0;
+  align-content: center;
+  gap: 7px;
+  padding: 24px clamp(16px, 2.4vw, 38px);
+  border-right: 1px solid rgba(17, 17, 18, 0.14);
+}
+
+.aj-proof dl > div:last-child {
+  border-right: 0;
+}
+
+.aj-proof dt {
+  font-size: clamp(22px, 2.2vw, 34px);
+  font-weight: 360;
+  letter-spacing: -0.055em;
+}
+
+.aj-proof dd {
+  margin: 0;
+  color: #69696d;
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.aj-apollon-myth {
+  position: relative;
+  overflow: hidden;
+  padding: clamp(76px, 9vw, 142px) 0 clamp(64px, 8vw, 120px);
+  border-bottom: 1px solid rgba(17, 17, 18, 0.18);
+  background:
+    radial-gradient(circle at 50% 16%, rgba(255, 255, 255, 0.9), transparent 34%),
+    #e7e2dc;
+  color: #151416;
+}
+
+.aj-apollon-myth::before {
+  position: absolute;
+  top: -12vw;
+  left: 50%;
+  color: rgba(121, 105, 95, 0.07);
+  content: "APOLLON";
+  font-size: clamp(110px, 23vw, 410px);
+  font-weight: 280;
+  letter-spacing: -0.095em;
+  line-height: 1;
+  pointer-events: none;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.aj-apollon-myth__intro {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: min(1320px, calc(100% - (2 * var(--aj-gutter))));
+  grid-template-columns: minmax(200px, 0.7fr) minmax(420px, 1.3fr);
+  gap: clamp(42px, 9vw, 160px);
+  margin: 0 auto clamp(58px, 7vw, 104px);
+  padding-top: 20px;
+  border-top: 1px solid rgba(17, 17, 18, 0.24);
+}
+
+.aj-apollon-myth__intro > div:first-child {
+  display: flex;
+  min-height: 150px;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.aj-apollon-myth__intro > div:first-child p,
+.aj-apollon-myth__intro > div:last-child > p {
+  margin: 0;
+}
+
+.aj-apollon-myth__intro > div:first-child p {
+  color: #6f6c69;
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.aj-apollon-myth__intro > div:first-child span {
+  color: #8b7770;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(56px, 7vw, 104px);
+  font-style: italic;
+  line-height: 0.7;
+}
+
+.aj-apollon-myth__intro h2 {
+  max-width: 800px;
+  margin: 0;
+  font-size: clamp(46px, 6.7vw, 104px);
+  font-weight: 310;
+  letter-spacing: -0.075em;
+  line-height: 0.9;
+  text-wrap: balance;
+}
+
+.aj-apollon-myth__intro > div:last-child > p {
+  max-width: 610px;
+  margin-top: clamp(28px, 4vw, 54px);
+  color: #62605e;
+  font-size: clamp(13px, 1.15vw, 16px);
+  line-height: 1.7;
+}
+
+.aj-apollon-myth__gallery {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: min(1440px, 100%);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
+  gap: clamp(14px, 2vw, 30px);
+  margin: 0 auto;
+  padding: 0 var(--aj-gutter);
+}
+
+.aj-apollon-myth__card {
+  min-width: 0;
+  margin: 0;
+}
+
+.aj-apollon-myth__card--rose {
+  margin-top: clamp(38px, 6vw, 92px);
+}
+
+.aj-apollon-myth__card--pourpre {
+  margin-top: clamp(24px, 3.2vw, 52px);
+}
+
+.aj-apollon-myth__frame {
+  position: relative;
+  aspect-ratio: 2 / 3;
+  overflow: hidden;
+  background: #bbb2ac;
+  box-shadow: 0 30px 90px rgba(47, 36, 34, 0.14);
+}
+
+.aj-apollon-myth__frame::after {
+  position: absolute;
+  inset: 0;
+  border: 1px solid rgba(255, 255, 255, 0.38);
+  box-shadow: inset 0 0 0 1px rgba(24, 20, 18, 0.08);
+  content: "";
+  pointer-events: none;
+}
+
+.aj-apollon-myth__frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition:
+    filter 800ms ease,
+    transform 1100ms cubic-bezier(0.2, 0.75, 0.2, 1);
+}
+
+.aj-apollon-myth__card:hover .aj-apollon-myth__frame img {
+  filter: saturate(1.035) contrast(1.015);
+  transform: scale(1.018);
+}
+
+.aj-apollon-myth__card figcaption {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 16px;
+  padding-top: 16px;
+  font-size: 9px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.aj-apollon-myth__card figcaption span {
+  color: #8a8580;
+}
+
+.aj-apollon-myth__card figcaption strong {
+  font-weight: 650;
+}
+
+.aj-apollon-myth__footer {
+  display: flex;
+  width: min(1320px, calc(100% - (2 * var(--aj-gutter))));
+  align-items: center;
+  justify-content: space-between;
+  gap: 30px;
+  margin: clamp(54px, 7vw, 102px) auto 0;
+  padding-top: 20px;
+  border-top: 1px solid rgba(17, 17, 18, 0.24);
+}
+
+.aj-apollon-myth__footer p {
+  margin: 0;
+  color: #696661;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+
+.aj-apollon-myth__footer a,
+.aj-manifesto__statement a {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 14px;
+  border-bottom: 1px solid currentColor;
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.aj-manifesto {
+  display: grid;
+  min-height: min(920px, 95svh);
+  align-content: space-between;
+  padding: clamp(72px, 8vw, 126px) var(--aj-gutter);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.18);
+  background:
+    radial-gradient(circle at 78% 72%, rgba(109, 91, 131, 0.22), transparent 32%),
+    #09090b;
+  color: #f4f3f0;
+}
+
+.aj-manifesto__index {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.aj-manifesto__statement {
+  display: grid;
+  grid-template-columns: minmax(0, 1.48fr) minmax(280px, 0.52fr);
+  align-items: end;
+  gap: clamp(54px, 8vw, 140px);
+  padding-top: 44px;
+  border-top: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.aj-manifesto__statement h2 {
+  max-width: 980px;
+  margin: 0;
+  font-size: clamp(64px, 10vw, 168px);
+  font-weight: 280;
+  letter-spacing: -0.09em;
+  line-height: 0.8;
+  text-wrap: balance;
+}
+
+.aj-manifesto__statement > div {
+  display: grid;
+  gap: 34px;
+}
+
+.aj-manifesto__statement p {
+  max-width: 440px;
+  margin: 0;
+  color: rgba(255, 255, 255, 0.68);
+  font-size: clamp(13px, 1.1vw, 16px);
+  line-height: 1.72;
+}
+
+@keyframes aj-hero-message-in {
+  from {
+    opacity: 0;
+    transform: translateY(calc(-48% + 20px));
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(-48%);
+  }
+}
+
+@keyframes aj-editorial-unveil {
+  from {
+    clip-path: inset(0 0 100% 0);
+    filter: saturate(0.72);
+    transform: scale(1.035);
+  }
+
+  to {
+    clip-path: inset(0);
+    filter: saturate(1);
+    transform: scale(1);
+  }
+}
+
+@keyframes aj-hero-message-in-compact {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .aj-film__message {
+    animation: aj-hero-message-in 1100ms 360ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  @supports (animation-timeline: view()) {
+    .aj-apollon-myth__frame img {
+      animation: aj-editorial-unveil linear both;
+      animation-range: entry 0 entry 44%;
+      animation-timeline: view();
+    }
+
+    .aj-manifesto__statement h2 {
+      animation: aj-section-arrival linear both;
+      animation-range: entry 2% entry 34%;
+      animation-timeline: view();
+    }
+  }
+}
+
+@media (max-width: 999px) {
+  .aj-film__message {
+    animation-name: aj-hero-message-in-compact;
+    top: auto;
+    right: auto;
+    bottom: 126px;
+    width: min(440px, calc(100% - (2 * var(--aj-gutter))));
+    padding: 22px;
+    transform: none;
+  }
+
+  .aj-film__message h1 {
+    margin: 18px 0 14px;
+    font-size: clamp(34px, 6.8vw, 54px);
+  }
+
+  .aj-film__promise {
+    max-width: 300px;
+  }
+
+  .aj-film__message-actions {
+    margin-top: 20px;
+  }
+
+  .aj-apollon-myth__intro,
+  .aj-manifesto__statement {
+    grid-template-columns: 1fr;
+  }
+
+  .aj-apollon-myth__intro {
+    gap: 42px;
+  }
+
+  .aj-apollon-myth__intro > div:first-child {
+    min-height: 100px;
+  }
+
+  .aj-manifesto__statement {
+    gap: 54px;
+  }
+
+  .aj-manifesto__statement h2 {
+    max-width: 760px;
+  }
+}
+
+@media (min-width: 761px) and (max-width: 999px) and (max-height: 620px) {
+  .aj-film__message {
+    top: 148px;
+    bottom: auto;
+    width: min(430px, 55vw);
+    padding: 18px 22px;
+  }
+
+  .aj-film__message h1 {
+    margin: 10px 0 10px;
+    font-size: clamp(38px, 5.2vw, 44px);
+  }
+
+  .aj-film__promise {
+    font-size: 11px;
+    line-height: 1.45;
+  }
+
+  .aj-film__message-actions {
+    margin-top: 12px;
+  }
+
+  .aj-film__message-actions a {
+    min-height: 36px;
+  }
+}
+
+@media (max-width: 760px) {
+  .aj-film__message {
+    right: 64px;
+    bottom: 128px;
+    left: 16px;
+    width: auto;
+    padding: 16px;
+    background: linear-gradient(135deg, rgba(7, 7, 10, 0.74), rgba(7, 7, 10, 0.35));
+    backdrop-filter: blur(10px) saturate(0.78);
+  }
+
+  .aj-film__message h1 {
+    max-width: 300px;
+    margin: 13px 0 0;
+    font-size: clamp(27px, 8vw, 38px);
+    line-height: 0.96;
+  }
+
+  .aj-film__promise,
+  .aj-film__message-actions {
+    display: none;
+  }
+
+  .aj-proof {
+    grid-template-columns: 1fr;
+  }
+
+  .aj-proof > p {
+    min-height: 52px;
+    border-right: 0;
+    border-bottom: 1px solid rgba(17, 17, 18, 0.14);
+  }
+
+  .aj-proof dl {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .aj-proof dl > div {
+    min-height: 92px;
+    padding: 18px 16px;
+    border-bottom: 1px solid rgba(17, 17, 18, 0.14);
+  }
+
+  .aj-proof dl > div:nth-child(2n) {
+    border-right: 0;
+  }
+
+  .aj-apollon-myth {
+    padding: 72px 0 62px;
+  }
+
+  .aj-apollon-myth::before {
+    top: 4px;
+    font-size: 31vw;
+  }
+
+  .aj-apollon-myth__intro {
+    width: calc(100% - 32px);
+    grid-template-columns: 1fr;
+    gap: 34px;
+    margin-bottom: 44px;
+  }
+
+  .aj-apollon-myth__intro > div:first-child {
+    min-height: 78px;
+  }
+
+  .aj-apollon-myth__intro h2 {
+    font-size: clamp(44px, 14vw, 64px);
+  }
+
+  .aj-apollon-myth__gallery {
+    grid-auto-columns: 82vw;
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    gap: 14px;
+    overflow-x: auto;
+    padding: 0 16px 12px;
+    scroll-padding-inline: 16px;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+  }
+
+  .aj-apollon-myth__gallery::-webkit-scrollbar {
+    display: none;
+  }
+
+  .aj-apollon-myth__card,
+  .aj-apollon-myth__card--rose,
+  .aj-apollon-myth__card--pourpre {
+    margin-top: 0;
+    scroll-snap-align: start;
+  }
+
+  .aj-apollon-myth__footer {
+    width: calc(100% - 32px);
+    align-items: flex-start;
+    flex-direction: column;
+    margin-top: 42px;
+  }
+
+  .aj-manifesto {
+    min-height: 760px;
+    padding: 64px 16px;
+  }
+
+  .aj-manifesto__statement {
+    grid-template-columns: 1fr;
+    gap: 42px;
+    padding-top: 28px;
+  }
+
+  .aj-manifesto__statement h2 {
+    font-size: clamp(58px, 19vw, 86px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aj-film__message,
+  .aj-apollon-myth__frame img,
+  .aj-manifesto__statement h2 {
+    animation: none !important;
+    clip-path: none !important;
+    transform: none !important;
+  }
+}

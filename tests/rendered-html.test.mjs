@@ -609,8 +609,12 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
   assert.match(html, /href="\/"[^>]*aria-current="page"[^>]*>Accueil</);
   assert.match(html, />Notre histoire</);
   assert.match(html, /href="\/shop"[^>]*>Découvrir la collection</);
-  assert.doesNotMatch(html, /94\s*%\s*modal/i);
-  assert.doesNotMatch(html, /6\s*%\s*élasthanne/i);
+  assert.match(html, /94\s*%[\s\S]*modal/i);
+  assert.match(html, /6\s*%[\s\S]*élasthanne/i);
+  assert.match(
+    html,
+    /apollon-rose-lyre-v1\.webp[\s\S]*apollon-lilas-lyre-v1\.webp[\s\S]*apollon-pourpre-lyre-v1\.webp/,
+  );
   assert.doesNotMatch(html, /Un modèle décliné en trois coloris/i);
   assert.doesNotMatch(html, /data-hero-fusion/);
   assert.doesNotMatch(html, /href="\/#collection"/);
