@@ -21,6 +21,7 @@ import {
   productionRateLimitBindingsReady,
   type ProductionRateLimitEnvironment,
 } from "./production-rate-limit.ts";
+import { productionOperationsRuntimeInstalled } from "./production-operations-runtime.ts";
 
 const PREFIX = "/api/commerce/";
 const routes = Object.freeze({
@@ -51,6 +52,7 @@ export type ProductionCommerceRuntimeEnvironment = ProductionCommerceEnvironment
   OPERATOR_ADMIN_MFA_ENABLED?: string;
   TRANSACTIONAL_EMAIL_DISPATCH_ENABLED?: string;
   RETURNS_WORKFLOW_ENABLED?: string;
+  RESERVATION_EXPIRY_ENABLED?: string;
   DELIVERY_REFERENCE_ENCRYPTION_KEY_BASE64?: string;
   DELIVERY_REFERENCE_KEY_VERSION?: string;
   DELIVERY_REFERENCE_DECRYPTION_KEYS_JSON?: string;
@@ -269,6 +271,9 @@ function runtimeBlockers(env: ProductionCommerceRuntimeEnvironment, mode: string
         ...(env.RETURNS_WORKFLOW_ENABLED === "true"
           ? []
           : ["returns-workflow-not-activated"]),
+        ...(env.RESERVATION_EXPIRY_ENABLED === "true"
+          ? []
+          : ["reservation-expiry-not-activated"]),
       ]
       : []),
   ];
@@ -647,6 +652,10 @@ export async function productionCommerceApiResponse(
       blockers.push("production-release-schema-0015-not-installed");
     }
     if (["controlled", "live"].includes(gate.mode) &&
+      !await productionOperationsRuntimeInstalled(env.DB)) {
+      blockers.push("production-operations-schema-0016-not-installed");
+    }
+    if (["controlled", "live"].includes(gate.mode) &&
       !await productionStockManifestRuntimeAttested(env)) {
       blockers.push("stock-manifest-runtime-not-attested");
     }
@@ -671,6 +680,10 @@ export async function productionCommerceApiResponse(
   if (["controlled", "live"].includes(gate.mode) &&
     !await productionReleaseSchemaInstalled(env.DB)) {
     blockers.push("production-release-schema-0015-not-installed");
+  }
+  if (["controlled", "live"].includes(gate.mode) &&
+    !await productionOperationsRuntimeInstalled(env.DB)) {
+    blockers.push("production-operations-schema-0016-not-installed");
   }
   if (["controlled", "live"].includes(gate.mode) &&
     !await productionStockManifestRuntimeAttested(env)) {
@@ -805,6 +818,7 @@ export async function productionCommerceApiResponse(
       env.OPERATOR_ADMIN_MFA_ENABLED !== "true" ||
       env.TRANSACTIONAL_EMAIL_DISPATCH_ENABLED !== "true" ||
       env.RETURNS_WORKFLOW_ENABLED !== "true" ||
+      env.RESERVATION_EXPIRY_ENABLED !== "true" ||
       env.LATE_PAYMENT_REFUND_DISPATCH_ENABLED !== "true" ||
       blockers.includes("late-payment-refund-schema-or-operations-not-ready") ||
       blockers.includes("production-release-schema-0015-not-installed") ||

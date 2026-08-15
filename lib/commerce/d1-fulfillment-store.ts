@@ -1607,6 +1607,86 @@ export class D1FulfillmentStore {
     return request;
   }
 
+  async approveReturnRequest(input: Readonly<{
+    requestId: string;
+    actor: D1MutationActor;
+    now: string;
+  }>): Promise<ReturnRequestRow> {
+    assertFulfillmentIdentifier(input.requestId, "requestId");
+    assertFulfillmentTimestamp(input.now, "now");
+    const actor = await resolveD1MutationActor(this.#database, input.actor, input.now);
+    if (!actor || actor.kind !== "admin" || !canCreateRefund(actor.role)) {
+      throw new FulfillmentError(
+        "SESSION_REQUIRED",
+        "An authorized owner session is required.",
+      );
+    }
+    const current = await this.#getReturnRequest(input.requestId);
+    if (!current) {
+      throw new FulfillmentError("INVALID_TRANSITION", "Return request is unavailable.");
+    }
+    if (current.status !== "received" && current.status !== "approved") {
+      throw new FulfillmentError("INVALID_TRANSITION", "Return request cannot be approved.");
+    }
+    try {
+      await this.#database.batch([
+        this.#database
+          .prepare(
+            `INSERT OR IGNORE INTO audit_log (
+              id, actor_type, actor_id, action, entity_type, entity_id,
+              idempotency_key, metadata_json, created_at
+            ) VALUES (?, 'admin', ?, 'return_request_approved',
+              'return_request', ?, ?, '{}', ?)`,
+          )
+          .bind(
+            `audit_return_approval_${input.requestId}`,
+            actor.administratorId,
+            input.requestId,
+            `audit:return_approved:${input.requestId}`,
+            input.now,
+          ),
+        this.#database
+          .prepare(
+            `UPDATE return_requests SET status = 'approved', updated_at = ?
+            WHERE id = ? AND status = 'received'`,
+          )
+          .bind(input.now, input.requestId),
+      ]);
+    } catch (error) {
+      mapDatabaseError(error);
+    }
+    const [approved, audit] = await Promise.all([
+      this.#getReturnRequest(input.requestId),
+      this.#database
+        .prepare(
+          `SELECT actor_type, actor_id, action, entity_type, entity_id,
+            idempotency_key FROM audit_log WHERE id = ?`,
+        )
+        .bind(`audit_return_approval_${input.requestId}`)
+        .first<{
+          actor_type: string;
+          actor_id: string | null;
+          action: string;
+          entity_type: string;
+          entity_id: string;
+          idempotency_key: string;
+        }>(),
+    ]);
+    if (
+      approved?.status !== "approved" || audit?.actor_type !== "admin" ||
+      audit.actor_id !== actor.administratorId ||
+      audit.action !== "return_request_approved" ||
+      audit.entity_type !== "return_request" || audit.entity_id !== input.requestId ||
+      audit.idempotency_key !== `audit:return_approved:${input.requestId}`
+    ) {
+      throw new FulfillmentError(
+        "PERSISTENCE_FAILURE",
+        "Return approval evidence is missing or crossed.",
+      );
+    }
+    return approved;
+  }
+
   async completeReturnInspection(input: Readonly<{
     requestId: string;
     lines: readonly Readonly<{
@@ -1624,6 +1704,44 @@ export class D1FulfillmentStore {
     const actor = await resolveD1MutationActor(this.#database, input.actor, input.now);
     if (!actor || actor.kind !== "admin") {
       throw new FulfillmentError("SESSION_REQUIRED", "An administrator session is required.");
+    }
+    const [currentRequest, approvalAudit] = await Promise.all([
+      this.#getReturnRequest(input.requestId),
+      this.#database
+        .prepare(
+          `SELECT actor_type, action, entity_type, entity_id, idempotency_key
+          FROM audit_log WHERE id = ?`,
+        )
+        .bind(`audit_return_approval_${input.requestId}`)
+        .first<{
+          actor_type: string;
+          action: string;
+          entity_type: string;
+          entity_id: string;
+          idempotency_key: string;
+        }>(),
+    ]);
+    if (!currentRequest) {
+      throw new FulfillmentError("INSPECTION_INCOMPLETE", "Return request is unavailable.");
+    }
+    const alreadyInspected = currentRequest.status === "inspected";
+    if (!alreadyInspected && currentRequest.status !== "approved") {
+      throw new FulfillmentError(
+        "INVALID_TRANSITION",
+        "An approved return request is required before inspection.",
+      );
+    }
+    if (
+      approvalAudit?.actor_type !== "admin" ||
+      approvalAudit.action !== "return_request_approved" ||
+      approvalAudit.entity_type !== "return_request" ||
+      approvalAudit.entity_id !== input.requestId ||
+      approvalAudit.idempotency_key !== `audit:return_approved:${input.requestId}`
+    ) {
+      throw new FulfillmentError(
+        "INVALID_TRANSITION",
+        "Durable return approval evidence is required before inspection.",
+      );
     }
     const persisted = await this.#database
       .prepare(
@@ -1684,7 +1802,14 @@ export class D1FulfillmentStore {
         throw new FulfillmentError("INVALID_TRANSITION", "A completed inspection is immutable.");
       }
     }
-    const statements = persisted.results.map((current) => {
+    const statements = [
+      this.#database
+        .prepare(
+          `UPDATE return_requests SET status = 'goods_received', updated_at = ?
+          WHERE id = ? AND status = 'approved'`,
+        )
+        .bind(input.now, input.requestId),
+      ...persisted.results.map((current) => {
       const line = proposed.get(current.id)!;
       return this.#database
         .prepare(
@@ -1702,12 +1827,13 @@ export class D1FulfillmentStore {
           current.id,
           input.requestId,
         );
-    });
+      }),
+    ];
     statements.push(
       this.#database
         .prepare(
           `UPDATE return_requests SET status = 'inspected', updated_at = ?
-          WHERE id = ? AND status IN ('received', 'approved', 'goods_received')
+          WHERE id = ? AND status = 'goods_received'
             AND NOT EXISTS (
               SELECT 1 FROM return_lines
               WHERE return_request_id = ? AND inspection_result <> 'complete'

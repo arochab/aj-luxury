@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   productionCommerceRateLimitResponse,
   productionRateLimitBindingsReady,
+  productionScheduledRateLimit,
 } from "../worker/production-rate-limit.ts";
 
 const allow = Object.freeze({ async limit() { return { success: true }; } });
@@ -92,6 +93,10 @@ test("cart, provider, webhook and operator traffic use separate bindings", async
     "/api/commerce/webhooks/stripe",
     "/api/commerce/admin/orders/order_1/shipping-label",
     "/api/commerce/admin/late-payment-refunds/dispatch",
+    "/api/commerce/returns",
+    "/api/commerce/admin/reporting",
+    "/api/commerce/admin/returns/return_1/approve",
+    "/api/commerce/admin/returns/return_1/inspect",
   ]) {
     assert.equal(await productionCommerceRateLimitResponse(
       new Request(`https://ajluxurystore.com${pathname}`, {
@@ -99,5 +104,41 @@ test("cart, provider, webhook and operator traffic use separate bindings", async
       }), env,
     ), null);
   }
-  assert.deepEqual(calls, ["commerce", "provider", "webhook", "operator", "operator"]);
+  assert.deepEqual(calls, [
+    "commerce",
+    "provider",
+    "webhook",
+    "operator",
+    "operator",
+    "commerce",
+    "operator",
+    "operator",
+    "operator",
+  ]);
+});
+
+test("scheduled stock and email jobs share a bounded operator counter before costs", async () => {
+  assert.equal(await productionScheduledRateLimit(
+    { APP_ENV: "production" },
+    "reservation-expiry",
+  ), "unavailable");
+  const keys = [];
+  const env = {
+    APP_ENV: "production",
+    OPERATOR_RATE_LIMITER: {
+      async limit({ key }) {
+        keys.push(key);
+        return { success: keys.length === 1 };
+      },
+    },
+  };
+  assert.equal(await productionScheduledRateLimit(env, "reservation-expiry"), "allowed");
+  assert.equal(
+    await productionScheduledRateLimit(env, "transactional-email-dispatch"),
+    "limited",
+  );
+  assert.equal(keys.length, 2);
+  assert.match(keys[0], /^operator:[0-9a-f]{64}$/);
+  assert.match(keys[1], /^operator:[0-9a-f]{64}$/);
+  assert.notEqual(keys[0], keys[1]);
 });

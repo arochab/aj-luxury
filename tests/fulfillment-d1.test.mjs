@@ -23,7 +23,7 @@ import { verifyTestPaymentEvent } from "./support/test-payment-event.ts";
 
 const drizzleDirectory = fileURLToPath(new URL("../drizzle/", import.meta.url));
 const migrations = readdirSync(drizzleDirectory)
-  .filter((name) => /^000(?:[0-5]|9)_.+\.sql$/.test(name))
+  .filter((name) => /^(?:000(?:[0-5]|9)|0016)_.+\.sql$/.test(name))
   .sort()
   .map((name) => `${drizzleDirectory}${name}`);
 const liveClockBase = Date.now();
@@ -839,7 +839,7 @@ test("raw D1 vetoes zero-line refunds, false withdrawals and return-id contamina
   assert.throws(() => context.database.prepare(`UPDATE return_requests
     SET status='inspected', updated_at=? WHERE id='return_zero'`).run(
     "2026-08-11T12:11:01.000Z",
-  ), /fulfillment_inspection_incomplete/);
+  ), /fulfillment_(inspection_incomplete|invalid_transition)/);
   assert.throws(() => context.database.prepare(`INSERT INTO refunds (
     id, payment_id, return_request_id, reason, amount_cents, currency, status,
     idempotency_key, attempts, max_attempts, created_at, updated_at
@@ -942,6 +942,11 @@ test("raw D1 vetoes zero-line refunds, false withdrawals and return-id contamina
   });
   const racedLine = context.database.prepare(`SELECT id FROM return_lines
     WHERE return_request_id=?`).get(racedReturn.id);
+  await context.fulfillment.approveReturnRequest({
+    requestId: racedReturn.id,
+    actor: admin,
+    now: "2026-08-11T12:12:33.500Z",
+  });
   const inspectionBase = {
     requestId: racedReturn.id,
     actor: admin,
@@ -1632,6 +1637,11 @@ test("full fulfillment flow is leased, append-only, mixed-unit safe and keeps pa
   });
   const returnLines = context.database.prepare(`SELECT id, order_line_id
     FROM return_lines WHERE return_request_id=? ORDER BY order_line_id`).all(withdrawal.id);
+  await context.fulfillment.approveReturnRequest({
+    requestId: withdrawal.id,
+    actor: admin,
+    now: "2026-08-11T12:17:30.000Z",
+  });
   await rejectsCode(() => context.fulfillment.completeReturnInspection({
     requestId: withdrawal.id,
     lines: [{
