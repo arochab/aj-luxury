@@ -4,9 +4,10 @@ import { D1CommerceStore } from "../lib/commerce/d1-commerce-store.ts";
 import type { CommerceD1Database } from "../lib/commerce/d1-port.ts";
 import { D1ProductionCheckoutStore, ProductionCheckoutError } from "../lib/commerce/d1-production-checkout-store.ts";
 import { D1ProductionDeliveryStore, ProductionDeliveryError } from "../lib/commerce/d1-production-delivery-store.ts";
+import { D1StripePaymentEffectsStore, StripePaymentEffectsError } from "../lib/commerce/d1-stripe-payment-effects.ts";
 import type { DeliveryProviderPorts } from "../lib/commerce/delivery-provider.ts";
 import { authorizeBrowserMutation, buildCsrfCookie, buildSessionCookie, clearCsrfCookie, clearSessionCookie, isTrustedMutationOrigin } from "../lib/commerce/identity-access-policy.ts";
-import type { PaymentProviderPorts } from "../lib/commerce/payment-provider.ts";
+import { PaymentProviderError, verifyAndDeliverPaymentWebhook, type PaymentProviderPorts } from "../lib/commerce/payment-provider.ts";
 import { evaluateWiredProductionReleaseGate, type ProductionCommerceEnvironment } from "../lib/commerce/production-release-gate.ts";
 import { createSendcloudProviderPorts } from "../lib/commerce/sendcloud-provider.ts";
 import { createStripePaymentProviderPorts } from "../lib/commerce/stripe-payment-provider.ts";
@@ -141,7 +142,7 @@ function map(cause: unknown): Response {
   return fail("COMMERCE_UNAVAILABLE", 503);
 }
 function runtimeBlockers(env: ProductionCommerceRuntimeEnvironment): string[] {
-  return [...(!env.DB ? ["database-binding-missing"] : []), ...(!secret(env) ? ["cart-session-secret-missing"] : []), "service-point-not-activated", "payment-webhook-effects-not-activated", "outbound-shipment-creation-not-activated"];
+  return [...(!env.DB ? ["database-binding-missing"] : []), ...(!secret(env) ? ["cart-session-secret-missing"] : []), "service-point-not-activated", "outbound-shipment-creation-not-activated"];
 }
 
 export async function productionCommerceApiResponse(
@@ -159,23 +160,31 @@ export async function productionCommerceApiResponse(
   if (url.pathname === routes.health) {
     if (request.method !== "GET") return fail("METHOD_NOT_ALLOWED", 405);
     const ready = gate.ready && blockers.length === 0;
-    return json({ status: ready ? "ready" : "closed", environment: "production", mode: gate.mode, releaseSha: gate.releaseSha, origin: gate.origin, launchZones: gate.launchZones, blockers: [...gate.blockers, ...blockers], capabilities: { sandboxCheckout: false, realPayment: false, realDelivery: false, transactionalEmail: false, controlledOrder: false, publicCommerce: false }, routes: { cart: "wired", homeDelivery: "wired", order: "wired", paymentSession: "blocked-by-webhook-effects", servicePoint: "blocked-by-0011", stripeWebhook: "verify-only-no-ack" } }, ready ? 200 : 503);
+    return json({ status: ready ? "ready" : "closed", environment: "production", mode: gate.mode, releaseSha: gate.releaseSha, origin: gate.origin, launchZones: gate.launchZones, blockers: [...gate.blockers, ...blockers], capabilities: { sandboxCheckout: ready && gate.mode === "sandbox", realPayment: ready && ["controlled", "live"].includes(gate.mode), realDelivery: ready && ["controlled", "live"].includes(gate.mode), transactionalEmail: ready, controlledOrder: ready && gate.mode === "controlled", publicCommerce: ready && gate.mode === "live" }, routes: { cart: "wired", homeDelivery: "wired", order: "wired", paymentSession: "wired", servicePoint: "blocked-by-0011", stripeWebhook: "atomic-d1-effects" } }, ready ? 200 : 503);
   }
   if (!gate.ready || !gate.origin || url.origin !== gate.origin) return fail("COMMERCE_CLOSED", 503);
-  if (gate.mode === "live" && blockers.length) return fail("COMMERCE_CLOSED", 503);
-  if (gate.mode !== "live" && !ownerOk(request, env)) return fail("CONTROLLED_ACCESS_REQUIRED", 403);
   if (!env.DB) return fail("DATABASE_UNAVAILABLE", 503);
-  if (url.pathname === routes.points) return fail("SERVICE_POINT_NOT_ACTIVATED", 503);
   if (url.pathname === routes.webhook) {
     if (request.method !== "POST") return fail("METHOD_NOT_ALLOWED", 405);
     const raw = await bytes(request, 64 * 1024); const signature = request.headers.get("Stripe-Signature");
     if (!raw || !signature) return fail("INVALID_WEBHOOK", 400);
     try {
       const provider = dependencies.paymentProvider ?? createStripePaymentProviderPorts({ apiKey: env.STRIPE_SECRET_KEY, webhookSecret: env.STRIPE_WEBHOOK_SECRET, mode: gate.mode === "sandbox" ? "test" : "live" });
-      await provider.webhooks.verify({ rawBody: raw, stripeSignature: signature, receivedAtEpochSeconds: Math.floor(Date.now() / 1000) });
-      return fail("PAYMENT_EFFECTS_NOT_ACTIVATED", 503);
-    } catch { return fail("INVALID_WEBHOOK", 400); }
+      const delivered = await verifyAndDeliverPaymentWebhook(
+        provider.webhooks,
+        { rawBody: raw, stripeSignature: signature, receivedAtEpochSeconds: Math.floor(Date.now() / 1000) },
+        new D1StripePaymentEffectsStore(env.DB),
+      );
+      return json({ received: true, disposition: delivered.disposition });
+    } catch (cause) {
+      if (cause instanceof PaymentProviderError) return fail("INVALID_WEBHOOK", 400);
+      if (cause instanceof StripePaymentEffectsError) return fail("PAYMENT_EFFECTS_UNAVAILABLE", 503);
+      return fail("PAYMENT_EFFECTS_UNAVAILABLE", 503);
+    }
   }
+  if (gate.mode === "live" && blockers.length) return fail("COMMERCE_CLOSED", 503);
+  if (gate.mode !== "live" && !ownerOk(request, env)) return fail("CONTROLLED_ACCESS_REQUIRED", 403);
+  if (url.pathname === routes.points) return fail("SERVICE_POINT_NOT_ACTIVATED", 503);
   let current: CartSession | null;
   try { current = await session(request); } catch {
     const headers = new Headers(); headers.append("Set-Cookie", clearSessionCookie("cart")); headers.append("Set-Cookie", clearCsrfCookie("cart"));
@@ -244,7 +253,20 @@ export async function productionCommerceApiResponse(
     if (!parsed || !exact(parsed, wanted) || typeof parsed.email !== "string" || typeof parsed.optionId !== "string" || typeof parsed.quoteId !== "string" || parsed.termsAccepted !== true || parsed.privacyAccepted !== true) return fail("INVALID_BODY", 400);
     try { return json({ data: await new D1ProductionCheckoutStore(env.DB).createOrder({ cartId: current.cartId, quoteId: parsed.quoteId, optionId: parsed.optionId, address: parsed.address as never, email: parsed.email, idempotencyKey: key(request)!, termsVersion: LEGAL_VERSION, privacyVersion: LEGAL_VERSION, now: now() }) }, 201); } catch (cause) { return map(cause); }
   }
-  if (url.pathname === routes.payment) return fail("PAYMENT_WEBHOOK_EFFECTS_NOT_ACTIVATED", 503);
+  if (url.pathname === routes.payment) {
+    const empty = await bytes(request, 1); if (!empty || empty.length) return fail("INVALID_BODY", 400);
+    try {
+      const checkout = new D1ProductionCheckoutStore(env.DB);
+      const prepared = await checkout.prepareCheckoutSession({ cartId: current.cartId, idempotencyKey: key(request)!, origin: gate.origin, locale: "fr", now: now() });
+      const provider = dependencies.paymentProvider ?? createStripePaymentProviderPorts({ apiKey: env.STRIPE_SECRET_KEY, webhookSecret: env.STRIPE_WEBHOOK_SECRET, mode: gate.mode === "sandbox" ? "test" : "live" });
+      const receipt = await provider.checkout.createSession(prepared);
+      await checkout.recordCheckoutSession(prepared, receipt, now());
+      return json({ data: { url: receipt.checkoutUrl } }, 201);
+    } catch (cause) {
+      if (cause instanceof PaymentProviderError && ["INVALID_REQUEST", "REJECTED"].includes(cause.code)) return fail("PAYMENT_REJECTED", 409);
+      return map(cause);
+    }
+  }
   if (url.pathname === routes.account || url.pathname === routes.adminHealth) return fail("IDENTITY_ROUTE_NOT_ACTIVATED", 503);
   return fail("METHOD_NOT_ALLOWED", 405);
 }
