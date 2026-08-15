@@ -48,6 +48,14 @@ export type RefundRequest = Readonly<{
   reason: RefundReason;
 }>;
 
+export type RefundReconciliationRequest = Readonly<{
+  orderId: string;
+  providerPaymentId: string;
+  providerRefundId: string;
+  amountCents: number;
+  currency: PaymentCurrency;
+}>;
+
 export type RefundReceipt = Readonly<{
   provider: "stripe";
   providerRefundId: string;
@@ -126,6 +134,7 @@ export interface CheckoutPaymentProviderPort {
 
 export interface RefundPaymentProviderPort {
   createRefund(request: RefundRequest): Promise<RefundReceipt>;
+  retrieveRefund(request: RefundReconciliationRequest): Promise<RefundReceipt>;
 }
 
 export interface PaymentWebhookVerifierPort {
