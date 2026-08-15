@@ -538,8 +538,14 @@ class D1SendcloudShippingLabelProvider implements ShippingLabelProviderPort {
     }
     if (response.status !== 201) {
       await response.body?.cancel();
-      if (response.status === 409 || response.status >= 500) {
-        throw new FulfillmentProviderError("ambiguous", "The Sendcloud shipment outcome requires manual reconciliation.");
+      // Only documented validation/auth/not-found classes are proven rejected.
+      // A 202, timeout-class, throttling, conflict or server response may have
+      // crossed the mutation boundary and therefore cannot be auto-retried.
+      if (![400, 401, 403, 404, 422].includes(response.status)) {
+        throw new FulfillmentProviderError(
+          "ambiguous",
+          "The Sendcloud shipment outcome requires manual reconciliation.",
+        );
       }
       throw new FulfillmentProviderError("rejected", "Sendcloud rejected the shipment before a usable receipt.");
     }
