@@ -11,7 +11,7 @@ import { DeliveryReferenceVault } from "../lib/commerce/delivery-reference-vault
 import { D1StripePaymentEffectsStore, StripePaymentEffectsError } from "../lib/commerce/d1-stripe-payment-effects.ts";
 
 const directory = fileURLToPath(new URL("../drizzle/", import.meta.url));
-const migrations = readdirSync(directory).filter((name) => /^(?:000[0-7]|0009|0010|0011)_.+\.sql$/.test(name)).sort();
+const migrations = readdirSync(directory).filter((name) => /^(?:000[0-7]|0009|0010|0011|0012|0013)_.+\.sql$/.test(name)).sort();
 class Statement {
   constructor(database, query, values = []) { this.database = database; this.query = query; this.values = values; }
   bind(...values) { return new Statement(this.database, this.query, values); }
@@ -55,14 +55,14 @@ async function fixture(failEffectsAt = null, livemode = true) {
   await commerce.setCartLineQuantity({ cartId: "cart_prod", variantId: "variant_boxer_pourpre_m", quantity: 1, now: iso(base, 40) });
   const address = { recipient: "Ada Test", line1: "1 rue du Test", postalCode: "75001", city: "Paris", countryCode: "FR" };
   const expiry = iso(base, 900_000);
-  const delivery = new D1ProductionDeliveryActivationStore(d1, { quotes: { async quote() { return [{ providerCode: "sendcloud", providerQuoteReference: "provider-ref-home", carrierCode: "colissimo", serviceCode: "home", displayName: "Livraison domicile", deliveryMode: "home", amountCents: 700, currency: "EUR", estimatedDaysMin: 2, estimatedDaysMax: 5, dutiesTerms: "EU_INCLUDED", expiresAt: expiry, responseFingerprint: "c".repeat(64) }]; } }, servicePoints: { async servicePoints() { return []; } }, documents: { async document() { throw new Error("closed"); } }, returns: { async validate() { throw new Error("closed"); }, async create() { throw new Error("closed"); } } }, new DeliveryReferenceVault({ encryptionKeyBase64: Buffer.alloc(32, 7).toString("base64"), keyVersion: 1 }));
+  const delivery = new D1ProductionDeliveryActivationStore(d1, { quotes: { async quote() { return [{ providerCode: "sendcloud", providerQuoteReference: "provider-ref-home", carrierCode: "colissimo", serviceCode: "home", displayName: "Livraison domicile", deliveryMode: "home", amountCents: 900, currency: "EUR", estimatedDaysMin: 2, estimatedDaysMax: 5, dutiesTerms: "EU_INCLUDED", expiresAt: expiry, responseFingerprint: "c".repeat(64) }]; } }, servicePoints: { async servicePoints() { return []; } }, documents: { async document() { throw new Error("closed"); } }, returns: { async validate() { throw new Error("closed"); }, async create() { throw new Error("closed"); } } }, new DeliveryReferenceVault({ encryptionKeyBase64: Buffer.alloc(32, 7).toString("base64"), keyVersion: 1 }));
   const [option] = await delivery.quoteOptions({ cartId: "cart_prod", address, idempotencyKey: "delivery-idem-0001", now: iso(base, 50) });
   const checkout = new D1ProductionCheckoutStore(d1);
   await checkout.createOrder({ cartId: "cart_prod", quoteId: option.quoteId, optionId: option.optionId, address, email: "ada@example.com", idempotencyKey: "order-idem-0001", termsVersion: "2026-07-30", privacyVersion: "2026-07-30", now: iso(base, 60) });
   const request = await checkout.prepareCheckoutSession({ cartId: "cart_prod", idempotencyKey: "payment-idem-0001", origin: "https://ajluxurystore.com", locale: "fr", now: iso(base, 70) });
   const sessionId = livemode ? "cs_live_fixture_001" : "cs_test_fixture_001";
-  await checkout.recordCheckoutSession(request, { provider: "stripe", providerSessionId: sessionId, providerPaymentId: null, checkoutUrl: "https://checkout.stripe.com/c/pay/test", state: "open", amountTotalCents: 3699, currency: "EUR", livemode, providerRequestId: "req_fixture" }, iso(base, 80));
-  const event = Object.freeze({ provider: "stripe", providerEventId: "evt_fixture_paid_001", eventType: "checkout.session.completed", occurredAt: iso(base, 90), livemode, kind: "payment", orderId: request.orderId, providerPaymentId: "pi_fixture_001", providerCheckoutSessionId: sessionId, state: "paid", amountCents: 3699, currency: "EUR", providerFailureCode: null, semanticKey: "stripe:payment:pi_fixture_001:paid" });
+  await checkout.recordCheckoutSession(request, { provider: "stripe", providerSessionId: sessionId, providerPaymentId: null, checkoutUrl: "https://checkout.stripe.com/c/pay/test", state: "open", amountTotalCents: 3899, currency: "EUR", livemode, providerRequestId: "req_fixture" }, iso(base, 80));
+  const event = Object.freeze({ provider: "stripe", providerEventId: "evt_fixture_paid_001", eventType: "checkout.session.completed", occurredAt: iso(base, 90), livemode, kind: "payment", orderId: request.orderId, providerPaymentId: "pi_fixture_001", providerCheckoutSessionId: sessionId, state: "paid", amountCents: 3899, currency: "EUR", providerFailureCode: null, semanticKey: "stripe:payment:pi_fixture_001:paid" });
   return { sqlite, d1, event, expiry, effects: new D1StripePaymentEffectsStore(failEffectsAt === null ? d1 : new D1(sqlite, failEffectsAt), livemode) };
 }
 
