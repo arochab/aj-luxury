@@ -40,6 +40,7 @@ const migrationNames = [
   "0011_service_point_reference_vault.sql",
   "0012_provider_priced_delivery_quotes.sql",
   "0013_provider_priced_delivery_orders.sql",
+  "0014_late_payment_refund_compensation.sql",
 ];
 const legacyMigrationNames = migrationNames.slice(0, 8);
 // Hosted D1 bootstrap version 1 succeeded with exactly these LF-normalized
@@ -71,7 +72,7 @@ test("the exact Drizzle D1 splitter emits no blank statements", () => {
   assert.equal(migrations.length, migrationNames.length);
   assert.equal(
     migrations.reduce((total, migration) => total + migration.sql.length, 0),
-    445,
+    463,
   );
   for (const [migrationIndex, migration] of migrations.entries()) {
     for (const [statementIndex, statement] of migration.sql.entries()) {

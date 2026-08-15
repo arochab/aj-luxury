@@ -198,6 +198,8 @@ const SHIPPING_PARCEL_TABLE_INVENTORY = Object.freeze({
 
 const PROVIDER_PRICED_DELIVERY_MIGRATION =
   "0013_provider_priced_delivery_orders.sql" as const;
+const LATE_PAYMENT_REFUND_MIGRATION =
+  "0014_late_payment_refund_compensation.sql" as const;
 const MULTICARRIER_TABLE_INVENTORY = Object.freeze({
   delivery_option_snapshots: "delivery_option_snapshots",
   delivery_provider_reference_vault: "delivery_provider_reference_vault",
@@ -234,6 +236,28 @@ const MULTICARRIER_TRIGGER_INVENTORY = Object.freeze({
   trg_shipping_document_retain: "shipping_document_metadata",
   trg_shipping_quote_provider_pricing_contract: "shipping_quotes",
   trg_orders_provider_pricing_contract: "orders",
+} as const);
+const LATE_PAYMENT_REFUND_TABLE_INVENTORY = Object.freeze({
+  late_payment_refund_intents: "late_payment_refund_intents",
+} as const);
+const LATE_PAYMENT_REFUND_INDEX_INVENTORY = Object.freeze({
+  idx_late_payment_refund_dispatch: "late_payment_refund_intents",
+  ux_late_payment_refund_active_lease: "late_payment_refund_intents",
+  ux_late_payment_refund_idempotency: "late_payment_refund_intents",
+  ux_late_payment_refund_order: "late_payment_refund_intents",
+  ux_late_payment_refund_payment: "late_payment_refund_intents",
+  ux_late_payment_refund_provider_refund: "late_payment_refund_intents",
+  ux_late_payment_refund_webhook: "late_payment_refund_intents",
+  ux_payments_order_active_checkout: "payments",
+} as const);
+const LATE_PAYMENT_REFUND_TRIGGER_INVENTORY = Object.freeze({
+  trg_late_payment_refund_lock_identity: "late_payment_refund_intents",
+  trg_late_payment_refund_retain: "late_payment_refund_intents",
+  trg_late_payment_refund_terminal_immutable: "late_payment_refund_intents",
+  trg_late_payment_refund_validate_claim_time: "late_payment_refund_intents",
+  trg_late_payment_refund_validate_insert: "late_payment_refund_intents",
+  trg_late_payment_refund_validate_success: "late_payment_refund_intents",
+  trg_late_payment_refund_validate_transition: "late_payment_refund_intents",
 } as const);
 
 type InstalledSchemaObject = Readonly<{
@@ -388,7 +412,7 @@ async function readSyntheticDemoGate(
   try {
     // Sites does not expose its internal migration ledger to the Worker.
     // Prove 0008 from its immutable sentinel plus its exhaustive guard
-    // inventory, then prove 0009 through 0013 from exact schema inventories.
+    // inventory, then prove 0009 through 0014 from exact schema inventories.
     // Any missing, renamed or prefix-colliding object keeps the runtime closed.
     const installed = await env.DB.prepare(
       `SELECT type, name, tbl_name AS table_name FROM sqlite_master
@@ -400,6 +424,7 @@ async function readSyntheticDemoGate(
           OR lower(name) GLOB 'trg_delivery_reference_*'
           OR lower(name) GLOB 'trg_delivery_service_point_*'
           OR lower(name) GLOB 'trg_shipping_document_*'
+          OR lower(name) GLOB 'trg_late_payment_refund_*'
           OR lower(name) = 'trg_shipping_quote_provider_pricing_contract'
           OR lower(name) = 'trg_orders_provider_pricing_contract'
           OR lower(tbl_name) IN (
@@ -408,7 +433,8 @@ async function readSyntheticDemoGate(
             'delivery_option_snapshots',
             'delivery_provider_reference_vault',
             'delivery_service_point_snapshots',
-            'shipping_document_metadata'
+            'shipping_document_metadata',
+            'late_payment_refund_intents'
           )
         ))
         OR (type = 'table' AND (
@@ -418,16 +444,21 @@ async function readSyntheticDemoGate(
           OR lower(name) GLOB 'delivery_provider_reference_vault*'
           OR lower(name) GLOB 'delivery_service_point_snapshot*'
           OR lower(name) GLOB 'shipping_document_metadata*'
+          OR lower(name) GLOB 'late_payment_refund_intent*'
         ))
         OR (type = 'index' AND lower(name) NOT GLOB 'sqlite_autoindex_*' AND (
           lower(name) GLOB 'idx_delivery_*'
           OR lower(name) GLOB 'ux_delivery_*'
           OR lower(name) GLOB 'ux_shipping_document_*'
+          OR lower(name) GLOB 'idx_late_payment_refund_*'
+          OR lower(name) GLOB 'ux_late_payment_refund_*'
+          OR lower(name) = 'ux_payments_order_active_checkout'
           OR lower(tbl_name) IN (
             'delivery_option_snapshots',
             'delivery_provider_reference_vault',
             'delivery_service_point_snapshots',
-            'shipping_document_metadata'
+            'shipping_document_metadata',
+            'late_payment_refund_intents'
           )
         ))
       ORDER BY type, name`,
@@ -519,7 +550,12 @@ async function readSyntheticDemoGate(
         )
       ));
     const multicarrierIndexes = installed.results
-      .filter((row) => row.type === "index");
+      .filter((row) => row.type === "index" && (
+        row.name.toLowerCase().startsWith("idx_delivery_") ||
+        row.name.toLowerCase().startsWith("ux_delivery_") ||
+        row.name.toLowerCase().startsWith("ux_shipping_document_") ||
+        Object.hasOwn(MULTICARRIER_TABLE_INVENTORY, row.table_name.toLowerCase())
+      ));
     if (
       !matchesExactSchemaInventory(
         multicarrierTables,
@@ -545,11 +581,49 @@ async function readSyntheticDemoGate(
         expiresAt: sentinel.expires_at,
       });
     }
+    const latePaymentRefundTables = installed.results.filter((row) =>
+      row.type === "table" &&
+      row.name.toLowerCase().startsWith("late_payment_refund_intent")
+    );
+    const latePaymentRefundIndexes = installed.results.filter((row) =>
+      row.type === "index" &&
+      (row.name.toLowerCase().includes("late_payment_refund") ||
+        row.name.toLowerCase() === "ux_payments_order_active_checkout")
+    );
+    const latePaymentRefundTriggers = installed.results.filter((row) =>
+      row.type === "trigger" &&
+      row.name.toLowerCase().startsWith("trg_late_payment_refund_")
+    );
+    if (
+      !matchesExactSchemaInventory(
+        latePaymentRefundTables,
+        "table",
+        LATE_PAYMENT_REFUND_TABLE_INVENTORY,
+      ) ||
+      !matchesExactSchemaInventory(
+        latePaymentRefundIndexes,
+        "index",
+        LATE_PAYMENT_REFUND_INDEX_INVENTORY,
+      ) ||
+      !matchesExactSchemaInventory(
+        latePaymentRefundTriggers,
+        "trigger",
+        LATE_PAYMENT_REFUND_TRIGGER_INVENTORY,
+      )
+    ) {
+      return Object.freeze({
+        required: true,
+        ready: false,
+        reason: "installation-proof-invalid",
+        latestMigration: PROVIDER_PRICED_DELIVERY_MIGRATION,
+        expiresAt: sentinel.expires_at,
+      });
+    }
     return Object.freeze({
       required: true,
       ready: true,
       reason: "ready",
-      latestMigration: PROVIDER_PRICED_DELIVERY_MIGRATION,
+      latestMigration: LATE_PAYMENT_REFUND_MIGRATION,
       expiresAt: sentinel.expires_at,
     });
   } catch {
@@ -2250,7 +2324,7 @@ export async function preprodApiResponse(
       }
       if (
         !syntheticGate.ready ||
-        latestMigration !== PROVIDER_PRICED_DELIVERY_MIGRATION
+        latestMigration !== LATE_PAYMENT_REFUND_MIGRATION
       ) {
         return unavailable(latestMigration, "installation-proof-invalid");
       }

@@ -19,12 +19,13 @@ import {
 const ORIGIN = "https://aj-luxury-preprod.example";
 const drizzle = fileURLToPath(new URL("../drizzle/", import.meta.url));
 const migrations = readdirSync(drizzle)
-  .filter((name) => /^(?:000\d|0010|0011|0012|0013)_.+\.sql$/.test(name))
+  .filter((name) => /^(?:000\d|0010|0011|0012|0013|0014)_.+\.sql$/.test(name))
   .sort();
 const MULTICARRIER_FOUNDATION_MIGRATION = "0010_multicarrier_delivery_foundation.sql";
 const SERVICE_POINT_REFERENCE_VAULT_MIGRATION = "0011_service_point_reference_vault.sql";
 const PROVIDER_PRICED_DELIVERY_MIGRATION = "0012_provider_priced_delivery_quotes.sql";
 const PROVIDER_PRICED_ORDER_MIGRATION = "0013_provider_priced_delivery_orders.sql";
+const LATE_PAYMENT_REFUND_MIGRATION = "0014_late_payment_refund_compensation.sql";
 
 class Statement {
   constructor(database, query, values = []) { this.database = database; this.query = query; this.values = values; }
@@ -108,7 +109,7 @@ function recordMigration(sqlite) {
   sqlite.prepare("INSERT INTO d1_migrations(name) VALUES (?)").run(SYNTHETIC_DEMO_MIGRATION);
 }
 
-async function runtime(lastMigration = PROVIDER_PRICED_ORDER_MIGRATION) {
+async function runtime(lastMigration = LATE_PAYMENT_REFUND_MIGRATION) {
   const sqlite = database();
   applyThrough(sqlite, lastMigration);
   recordMigration(sqlite);
@@ -238,7 +239,7 @@ test("synthetic health is honest and missing flag or expiration fails closed wit
   assert.equal(payload.capabilities.syntheticReservesReady, true);
   assert.equal(payload.capabilities.stockSimulation, true);
   assert.equal(payload.syntheticDataset.active, true);
-  assert.equal(payload.latestMigration, PROVIDER_PRICED_ORDER_MIGRATION);
+  assert.equal(payload.latestMigration, LATE_PAYMENT_REFUND_MIGRATION);
   assert.equal(context.d1.queries.some((query) => /d1_migrations/.test(query)), false);
 
   const missingFlagHealth = await invoke(
@@ -273,7 +274,7 @@ test("synthetic health is honest and missing flag or expiration fails closed wit
   context.sqlite.close();
 });
 
-test("health stays closed through 0012 and becomes ready only with exact 0013", async () => {
+test("health stays closed through 0013 and becomes ready only with exact 0014", async () => {
   const migration0008 = await runtime(SYNTHETIC_DEMO_MIGRATION);
   const before = migration0008.sqlite.prepare("SELECT COUNT(*) count FROM carts").get().count;
   const unavailable = await invoke(migration0008, "/api/preprod/health");
@@ -318,29 +319,35 @@ test("health stays closed through 0012 and becomes ready only with exact 0013", 
   assert.equal((await missingOrderContract.json()).latestMigration, CLIENT_VALIDATED_PARCEL_MIGRATION);
   migration0012.sqlite.close();
 
-  const migration0013 = await runtime();
-  const ready = await invoke(migration0013, "/api/preprod/health");
+  const migration0013 = await runtime(PROVIDER_PRICED_ORDER_MIGRATION);
+  const missingRefundContract = await invoke(migration0013, "/api/preprod/health");
+  assert.equal(missingRefundContract.status, 503);
+  assert.equal((await missingRefundContract.json()).latestMigration, PROVIDER_PRICED_ORDER_MIGRATION);
+  migration0013.sqlite.close();
+
+  const migration0014 = await runtime();
+  const ready = await invoke(migration0014, "/api/preprod/health");
   assert.equal(ready.status, 200);
   const readyPayload = await ready.json();
   assert.equal(readyPayload.syntheticDataset.reason, "ready");
-  assert.equal(readyPayload.latestMigration, PROVIDER_PRICED_ORDER_MIGRATION);
+  assert.equal(readyPayload.latestMigration, LATE_PAYMENT_REFUND_MIGRATION);
   assert.equal(readyPayload.capabilities.shippingQuoteSimulation, true);
   assert.equal(readyPayload.capabilities.deliveryConnectorReady, false);
   assert.equal(readyPayload.capabilities.deliveryProviderConnected, false);
   assert.equal(readyPayload.capabilities.realShippingRates, false);
   assert.equal(readyPayload.capabilities.realShippingLabels, false);
   assert.equal(readyPayload.capabilities.deliveryLive, false);
-  migration0013.sqlite.close();
+  migration0014.sqlite.close();
 });
 
-test("hosted-like exact 0013 health never reads the Sites ledger", async () => {
+test("hosted-like exact 0014 health never reads the Sites ledger", async () => {
   const context = await runtime();
   context.d1 = new HostedLikeD1(context.sqlite);
 
   const health = await invoke(context, "/api/preprod/health");
   assert.equal(health.status, 200);
   const payload = await health.json();
-  assert.equal(payload.latestMigration, PROVIDER_PRICED_ORDER_MIGRATION);
+  assert.equal(payload.latestMigration, LATE_PAYMENT_REFUND_MIGRATION);
   assert.equal(payload.syntheticDataset.reason, "ready");
   assert.deepEqual(
     {

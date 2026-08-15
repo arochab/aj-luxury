@@ -453,11 +453,12 @@ test("0011 fails closed for a missing, foreign, expired or unsealed service poin
   assert.doesNotMatch(migration, /provider_reference` text|raw_reference|api[_-]?key|secret[_-]?key/i);
 });
 
-test("0011 remains additive and 0012/0013 are metadata-only pricing-contract successors", () => {
+test("0011 remains additive, 0012/0013 are metadata-only and 0014 adds refund obligations", () => {
   const previous = JSON.parse(readFileSync(`${drizzle}meta/0010_snapshot.json`, "utf8"));
   const snapshot = JSON.parse(readFileSync(`${drizzle}meta/0011_snapshot.json`, "utf8"));
   const pricingSnapshot = JSON.parse(readFileSync(`${drizzle}meta/0012_snapshot.json`, "utf8"));
   const orderPricingSnapshot = JSON.parse(readFileSync(`${drizzle}meta/0013_snapshot.json`, "utf8"));
+  const refundSnapshot = JSON.parse(readFileSync(`${drizzle}meta/0014_snapshot.json`, "utf8"));
   const journal = JSON.parse(readFileSync(`${drizzle}meta/_journal.json`, "utf8"));
   assert.equal(snapshot.version, "6");
   assert.equal(snapshot.dialect, "sqlite");
@@ -487,11 +488,15 @@ test("0011 remains additive and 0012/0013 are metadata-only pricing-contract suc
   assert.equal(orderPricingSnapshot.prevId, pricingSnapshot.id);
   assert.notEqual(orderPricingSnapshot.id, pricingSnapshot.id);
   assert.deepEqual(orderPricingSnapshot.tables, pricingSnapshot.tables);
+  assert.equal(refundSnapshot.prevId, orderPricingSnapshot.id);
+  assert.notEqual(refundSnapshot.id, orderPricingSnapshot.id);
+  assert.equal(Object.keys(refundSnapshot.tables).length, Object.keys(orderPricingSnapshot.tables).length + 1);
+  assert.ok(refundSnapshot.tables.late_payment_refund_intents);
   assert.deepEqual(journal.entries.at(-1), {
-    idx: 13,
+    idx: 14,
     version: "6",
-    when: 1786760000000,
-    tag: "0013_provider_priced_delivery_orders",
+    when: 1786761000000,
+    tag: "0014_late_payment_refund_compensation",
     breakpoints: true,
   });
 });

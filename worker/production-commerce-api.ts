@@ -4,6 +4,7 @@ import { D1CommerceStore } from "../lib/commerce/d1-commerce-store.ts";
 import type { CommerceD1Database } from "../lib/commerce/d1-port.ts";
 import { D1ProductionCheckoutStore, ProductionCheckoutError } from "../lib/commerce/d1-production-checkout-store.ts";
 import { D1ProductionDeliveryActivationStore } from "../lib/commerce/d1-production-delivery-activation-store.ts";
+import { D1LatePaymentRefundDispatcher } from "../lib/commerce/d1-late-payment-refunds.ts";
 import { ProductionDeliveryError } from "../lib/commerce/d1-production-delivery-store.ts";
 import { D1StripePaymentEffectsStore } from "../lib/commerce/d1-stripe-payment-effects.ts";
 import type { DeliveryProviderPorts } from "../lib/commerce/delivery-provider.ts";
@@ -23,6 +24,7 @@ const routes = Object.freeze({
   select: `${PREFIX}checkout/delivery-options/select`,
   order: `${PREFIX}checkout/order`, payment: `${PREFIX}checkout/payment-session`,
   webhook: `${PREFIX}webhooks/stripe`, currentOrder: `${PREFIX}orders/current`,
+  refundDispatch: `${PREFIX}admin/late-payment-refunds/dispatch`,
   account: `${PREFIX}account/current`, adminHealth: `${PREFIX}admin/health`,
 } as const);
 const lineRoute = /^\/api\/commerce\/cart\/lines\/([^/]+)$/;
@@ -35,6 +37,7 @@ export type ProductionCommerceRuntimeEnvironment = ProductionCommerceEnvironment
   COMMERCE_CART_HMAC_SECRET?: string;
   COMMERCE_CONTROLLED_OWNER_EMAIL?: string;
   STRIPE_SETTLEMENT_MODE?: string;
+  LATE_PAYMENT_REFUND_DISPATCH_ENABLED?: string;
   DELIVERY_REFERENCE_ENCRYPTION_KEY_BASE64?: string;
   DELIVERY_REFERENCE_KEY_VERSION?: string;
 }>;
@@ -170,7 +173,12 @@ function runtimeBlockers(env: ProductionCommerceRuntimeEnvironment, mode: string
     ...(!deliveryVault(env) ? ["delivery-reference-vault-not-configured"] : []),
     ...(settlementMode(env) !== expectedSettlement ? ["stripe-settlement-mode-mismatch"] : []),
     ...(["controlled", "live"].includes(mode)
-      ? ["late-payment-compensation-not-activated", "outbound-shipment-creation-not-activated"]
+      ? [
+        ...(env.LATE_PAYMENT_REFUND_DISPATCH_ENABLED === "true"
+          ? []
+          : ["late-payment-refund-dispatch-not-enabled"]),
+        "outbound-shipment-creation-not-activated",
+      ]
       : []),
   ];
 }
@@ -211,6 +219,56 @@ export async function productionDeliveryRuntimeInstalled(
     const actual = installed.results.map((row) => `${row.type}:${row.name}:${row.table_name}`).sort();
     return actual.length === deliverySchemaInventory.length &&
       actual.every((value, index) => value === deliverySchemaInventory[index]);
+  } catch {
+    return false;
+  }
+}
+
+const latePaymentRefundSchemaInventory = Object.freeze([
+  "index:idx_late_payment_refund_dispatch:late_payment_refund_intents",
+  "index:ux_late_payment_refund_active_lease:late_payment_refund_intents",
+  "index:ux_late_payment_refund_idempotency:late_payment_refund_intents",
+  "index:ux_late_payment_refund_order:late_payment_refund_intents",
+  "index:ux_late_payment_refund_payment:late_payment_refund_intents",
+  "index:ux_late_payment_refund_provider_refund:late_payment_refund_intents",
+  "index:ux_late_payment_refund_webhook:late_payment_refund_intents",
+  "index:ux_payments_order_active_checkout:payments",
+  "table:late_payment_refund_intents:late_payment_refund_intents",
+  "trigger:trg_late_payment_refund_lock_identity:late_payment_refund_intents",
+  "trigger:trg_late_payment_refund_retain:late_payment_refund_intents",
+  "trigger:trg_late_payment_refund_terminal_immutable:late_payment_refund_intents",
+  "trigger:trg_late_payment_refund_validate_claim_time:late_payment_refund_intents",
+  "trigger:trg_late_payment_refund_validate_insert:late_payment_refund_intents",
+  "trigger:trg_late_payment_refund_validate_success:late_payment_refund_intents",
+  "trigger:trg_late_payment_refund_validate_transition:late_payment_refund_intents",
+]);
+
+export async function productionLatePaymentRefundRuntimeReady(
+  database: CommerceD1Database | undefined,
+): Promise<boolean> {
+  if (!database) return false;
+  try {
+    const installed = await database.prepare(
+      `SELECT lower(type) AS type, lower(name) AS name,
+        lower(tbl_name) AS table_name FROM sqlite_master
+      WHERE (lower(name) GLOB '*late_payment_refund*'
+        OR lower(name)='ux_payments_order_active_checkout')
+        AND lower(name) NOT GLOB 'sqlite_autoindex_*'
+      ORDER BY type, name`,
+    ).all<InstalledCommerceSchemaObject>();
+    const actual = installed.results
+      .map((row) => `${row.type}:${row.name}:${row.table_name}`)
+      .sort();
+    if (actual.length !== latePaymentRefundSchemaInventory.length ||
+      !actual.every((value, index) => value === latePaymentRefundSchemaInventory[index])) {
+      return false;
+    }
+    const attention = await database.prepare(
+      `SELECT COUNT(*) AS count FROM late_payment_refund_intents
+      WHERE status IN ('rejected','attention_required')
+        OR (status='claimed' AND attempts>=max_attempts)`,
+    ).first<{ count: number }>();
+    return Number(attention?.count ?? -1) === 0;
   } catch {
     return false;
   }
@@ -307,17 +365,49 @@ export async function productionCommerceApiResponse(
   if (gate.mode !== "closed" && !await productionDeliveryRuntimeInstalled(env.DB)) {
     blockers.push("delivery-schema-0013-not-installed");
   }
+  if (["controlled", "live"].includes(gate.mode) &&
+    !await productionLatePaymentRefundRuntimeReady(env.DB)) {
+    blockers.push("late-payment-refund-schema-or-operations-not-ready");
+  }
   if (gate.mode === "live" && !await productionStockRuntimeAttested(env)) {
     blockers.push("stock-runtime-attestation-not-verified");
   }
   if (url.pathname === routes.health) {
     const ready = gate.ready && blockers.length === 0;
-    return json({ status: ready ? "ready" : "closed", environment: "production", mode: gate.mode, releaseSha: gate.releaseSha, origin: gate.origin, launchZones: gate.launchZones, blockers: [...gate.blockers, ...blockers], capabilities: { sandboxCheckout: ready && gate.mode === "sandbox", realPayment: false, realDelivery: false, transactionalEmail: ready, controlledOrder: ready && gate.mode === "controlled", publicCommerce: false }, routes: { cart: "wired", homeDelivery: "wired-provider-priced", order: "wired", paymentSession: "sandbox-only-live-compensation-blocked", servicePoint: "wired-encrypted", stripeWebhook: "atomic-d1-effects" } }, ready ? 200 : 503);
+    return json({ status: ready ? "ready" : "closed", environment: "production", mode: gate.mode, releaseSha: gate.releaseSha, origin: gate.origin, launchZones: gate.launchZones, blockers: [...gate.blockers, ...blockers], capabilities: { sandboxCheckout: ready && gate.mode === "sandbox", realPayment: ready && gate.mode === "controlled", realDelivery: false, transactionalEmail: ready, controlledOrder: ready && gate.mode === "controlled", publicCommerce: false }, routes: { cart: "wired", homeDelivery: "wired-provider-priced", order: "wired", paymentSession: "sandbox-or-controlled-with-durable-refund", servicePoint: "wired-encrypted", stripeWebhook: "atomic-d1-effects-and-late-refund-obligation", lateRefundDispatch: "wired-bounded-owner-only" } }, ready ? 200 : 503);
   }
   if (!gate.ready || !gate.origin || url.origin !== gate.origin) return fail("COMMERCE_CLOSED", 503);
   if (!env.DB) return fail("DATABASE_UNAVAILABLE", 503);
   if (gate.mode === "live" && blockers.length) return fail("COMMERCE_CLOSED", 503);
   if (gate.mode !== "live" && !ownerOk(request, env)) return fail("CONTROLLED_ACCESS_REQUIRED", 403);
+  if (url.pathname === routes.refundDispatch) {
+    if (request.method !== "POST") return fail("METHOD_NOT_ALLOWED", 405);
+    if (!ownerOk(request, env)) return fail("CONTROLLED_ACCESS_REQUIRED", 403);
+    if (!gate.origin || !originOk(request, gate.origin)) return fail("ORIGIN_REJECTED", 403);
+    if (!key(request)) return fail("IDEMPOTENCY_KEY_REQUIRED", 400);
+    if (env.LATE_PAYMENT_REFUND_DISPATCH_ENABLED !== "true" ||
+      blockers.includes("late-payment-refund-schema-or-operations-not-ready")) {
+      return fail("LATE_PAYMENT_REFUND_NOT_READY", 503);
+    }
+    const empty = await bytes(request, 1);
+    if (!empty || empty.length) return fail("INVALID_BODY", 400);
+    try {
+      const mode = settlementMode(env);
+      if (!mode) return fail("SETTLEMENT_UNAVAILABLE", 503);
+      const provider = dependencies.paymentProvider ?? createStripePaymentProviderPorts({
+        apiKey: env.STRIPE_SECRET_KEY,
+        webhookSecret: env.STRIPE_WEBHOOK_SECRET,
+        mode,
+      });
+      const report = await new D1LatePaymentRefundDispatcher(
+        env.DB,
+        provider.refunds,
+      ).dispatch({ now: new Date().toISOString(), limit: 3 });
+      return json({ data: report });
+    } catch {
+      return fail("LATE_PAYMENT_REFUND_DISPATCH_UNAVAILABLE", 503);
+    }
+  }
   let current: CartSession | null;
   try { current = await session(request); } catch {
     const headers = new Headers(); headers.append("Set-Cookie", clearSessionCookie("cart")); headers.append("Set-Cookie", clearCsrfCookie("cart"));
@@ -402,12 +492,20 @@ export async function productionCommerceApiResponse(
     try { return json({ data: await new D1ProductionCheckoutStore(env.DB).createOrder({ cartId: current.cartId, quoteId: parsed.quoteId, optionId: parsed.optionId, servicePointId: typeof parsed.servicePointId === "string" ? parsed.servicePointId : null, address: parsed.address as never, email: parsed.email, idempotencyKey: key(request)!, termsVersion: LEGAL_VERSION, privacyVersion: LEGAL_VERSION, now: now() }) }, 201); } catch (cause) { return map(cause); }
   }
   if (url.pathname === routes.payment) {
-    if (gate.mode !== "sandbox") return fail("LATE_PAYMENT_COMPENSATION_NOT_ACTIVATED", 503);
+    if (!["sandbox", "controlled"].includes(gate.mode)) {
+      return fail("PAYMENT_SESSION_NOT_ACTIVATED", 503);
+    }
+    if (gate.mode === "controlled" && (
+      env.LATE_PAYMENT_REFUND_DISPATCH_ENABLED !== "true" ||
+      blockers.includes("late-payment-refund-schema-or-operations-not-ready")
+    )) return fail("LATE_PAYMENT_REFUND_NOT_READY", 503);
     const empty = await bytes(request, 1); if (!empty || empty.length) return fail("INVALID_BODY", 400);
     try {
       const checkout = new D1ProductionCheckoutStore(env.DB);
       const prepared = await checkout.prepareCheckoutSession({ cartId: current.cartId, idempotencyKey: key(request)!, origin: gate.origin, locale: "fr", now: now() });
-      const provider = dependencies.paymentProvider ?? createStripePaymentProviderPorts({ apiKey: env.STRIPE_SECRET_KEY, webhookSecret: env.STRIPE_WEBHOOK_SECRET, mode: "test" });
+      const mode = settlementMode(env);
+      if (!mode) return fail("SETTLEMENT_UNAVAILABLE", 503);
+      const provider = dependencies.paymentProvider ?? createStripePaymentProviderPorts({ apiKey: env.STRIPE_SECRET_KEY, webhookSecret: env.STRIPE_WEBHOOK_SECRET, mode });
       const receipt = await provider.checkout.createSession(prepared);
       await checkout.recordCheckoutSession(prepared, receipt, now());
       return json({ data: { url: receipt.checkoutUrl } }, 201);
