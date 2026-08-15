@@ -168,12 +168,52 @@ function runtimeBlockers(env: ProductionCommerceRuntimeEnvironment, mode: string
     ...(!env.DB ? ["database-binding-missing"] : []),
     ...(!secret(env) ? ["cart-session-secret-missing"] : []),
     ...(!deliveryVault(env) ? ["delivery-reference-vault-not-configured"] : []),
-    "provider-pricing-0012-not-activated",
     ...(settlementMode(env) !== expectedSettlement ? ["stripe-settlement-mode-mismatch"] : []),
     ...(["controlled", "live"].includes(mode)
       ? ["late-payment-compensation-not-activated", "outbound-shipment-creation-not-activated"]
       : []),
   ];
+}
+
+type InstalledCommerceSchemaObject = Readonly<{ type: string; name: string; table_name: string }>;
+const deliverySchemaInventory = Object.freeze([
+  "column:selected_service_point_id:delivery_option_snapshots",
+  "table:delivery_provider_reference_vault:delivery_provider_reference_vault",
+  "table:delivery_service_point_snapshots:delivery_service_point_snapshots",
+  "trigger:trg_delivery_order_requires_selected_option:orders",
+  "trigger:trg_orders_provider_pricing_contract:orders",
+  "trigger:trg_shipping_quote_provider_pricing_contract:shipping_quotes",
+]);
+
+export async function productionDeliveryRuntimeInstalled(
+  database: CommerceD1Database | undefined,
+): Promise<boolean> {
+  if (!database) return false;
+  try {
+    const installed = await database.prepare(
+      `SELECT lower(type) AS type, lower(name) AS name,
+        lower(tbl_name) AS table_name FROM sqlite_master
+      WHERE (lower(type)='table' AND (
+          lower(name) GLOB 'delivery_provider_reference_vault*'
+          OR lower(name) GLOB 'delivery_service_point_snapshot*'
+        )) OR (lower(type)='trigger' AND lower(name) IN (
+          'trg_delivery_order_requires_selected_option',
+          'trg_orders_provider_pricing_contract',
+          'trg_shipping_quote_provider_pricing_contract'
+        ))
+      UNION ALL
+      SELECT 'column' AS type, lower(name) AS name,
+        'delivery_option_snapshots' AS table_name
+      FROM pragma_table_info('delivery_option_snapshots')
+      WHERE lower(name) GLOB 'selected_service_point_id*'
+      ORDER BY type, name`,
+    ).all<InstalledCommerceSchemaObject>();
+    const actual = installed.results.map((row) => `${row.type}:${row.name}:${row.table_name}`).sort();
+    return actual.length === deliverySchemaInventory.length &&
+      actual.every((value, index) => value === deliverySchemaInventory[index]);
+  } catch {
+    return false;
+  }
 }
 
 export async function productionStockRuntimeAttested(
@@ -195,18 +235,22 @@ export async function productionStockRuntimeAttested(
       env.DB.prepare(
         `SELECT COUNT(*) AS approval_count,
           COUNT(DISTINCT actor_id) AS signer_count,
-          COALESCE(SUM(CASE WHEN json_extract(metadata_json, '$.role')='stock_owner' THEN 1 ELSE 0 END), 0) AS stock_owner_count,
-          COALESCE(SUM(CASE WHEN json_extract(metadata_json, '$.role')='release_owner' THEN 1 ELSE 0 END), 0) AS release_owner_count
+          COALESCE(SUM(CASE WHEN actor_type='admin' AND actor_id IS NOT NULL THEN 1 ELSE 0 END), 0) AS valid_actor_count,
+          COALESCE(SUM(CASE WHEN json_extract(metadata_json, '$.role')='stock_owner'
+            AND json_extract(metadata_json, '$.payloadSha256')=?
+            AND json_extract(metadata_json, '$.attestation')='I_APPROVE_THIS_EXACT_STOCK_IMPORT'
+            THEN 1 ELSE 0 END), 0) AS stock_owner_count,
+          COALESCE(SUM(CASE WHEN json_extract(metadata_json, '$.role')='release_owner'
+            AND json_extract(metadata_json, '$.payloadSha256')=?
+            AND json_extract(metadata_json, '$.attestation')='I_APPROVE_THIS_EXACT_STOCK_IMPORT'
+            THEN 1 ELSE 0 END), 0) AS release_owner_count
         FROM audit_log
         WHERE action='launch_stock_import_approved'
-          AND entity_type='stock_manifest' AND entity_id=?
-          AND actor_type='admin' AND actor_id IS NOT NULL
-          AND json_extract(metadata_json, '$.payloadSha256')=?
-          AND json_extract(metadata_json, '$.attestation')='I_APPROVE_THIS_EXACT_STOCK_IMPORT'
-          AND json_extract(metadata_json, '$.role') IN ('stock_owner','release_owner')`,
-      ).bind(env.STOCK_MANIFEST_ID, env.STOCK_MANIFEST_SHA256).first<{
+          AND entity_type='stock_manifest' AND entity_id=?`,
+      ).bind(env.STOCK_MANIFEST_SHA256, env.STOCK_MANIFEST_SHA256, env.STOCK_MANIFEST_ID).first<{
         approval_count: number;
         signer_count: number;
+        valid_actor_count: number;
         stock_owner_count: number;
         release_owner_count: number;
       }>(),
@@ -215,6 +259,7 @@ export async function productionStockRuntimeAttested(
       Number(stock?.physical_quantity) === 756 &&
       Number(stock?.validated_count) === 12 && Number(stock?.invalid_count) === 0 &&
       Number(approvals?.approval_count) === 2 && Number(approvals?.signer_count) === 2 &&
+      Number(approvals?.valid_actor_count) === 2 &&
       Number(approvals?.stock_owner_count) === 1 && Number(approvals?.release_owner_count) === 1;
   } catch {
     return false;
@@ -249,19 +294,25 @@ export async function productionCommerceApiResponse(
       );
       return json({ received: true, disposition: delivered.disposition });
     } catch (cause) {
-      if (cause instanceof PaymentProviderError) return fail("INVALID_WEBHOOK", 400);
+      if (cause instanceof PaymentProviderError &&
+        ["INVALID_SIGNATURE", "STALE_SIGNATURE"].includes(cause.code)) {
+        return fail("INVALID_WEBHOOK", 400);
+      }
       return fail("PAYMENT_EFFECTS_UNAVAILABLE", 503);
     }
   }
   const gate = evaluateWiredProductionReleaseGate(env);
+  if (url.pathname === routes.health && request.method !== "GET") return fail("METHOD_NOT_ALLOWED", 405);
   const blockers = runtimeBlockers(env, gate.mode);
+  if (gate.mode !== "closed" && !await productionDeliveryRuntimeInstalled(env.DB)) {
+    blockers.push("delivery-schema-0013-not-installed");
+  }
   if (gate.mode === "live" && !await productionStockRuntimeAttested(env)) {
     blockers.push("stock-runtime-attestation-not-verified");
   }
   if (url.pathname === routes.health) {
-    if (request.method !== "GET") return fail("METHOD_NOT_ALLOWED", 405);
     const ready = gate.ready && blockers.length === 0;
-    return json({ status: ready ? "ready" : "closed", environment: "production", mode: gate.mode, releaseSha: gate.releaseSha, origin: gate.origin, launchZones: gate.launchZones, blockers: [...gate.blockers, ...blockers], capabilities: { sandboxCheckout: ready && gate.mode === "sandbox", realPayment: false, realDelivery: false, transactionalEmail: ready, controlledOrder: ready && gate.mode === "controlled", publicCommerce: false }, routes: { cart: "wired", homeDelivery: "blocked-by-provider-pricing-0012", order: "wired", paymentSession: "sandbox-only-live-compensation-blocked", servicePoint: "blocked-by-provider-pricing-0012", stripeWebhook: "atomic-d1-effects" } }, ready ? 200 : 503);
+    return json({ status: ready ? "ready" : "closed", environment: "production", mode: gate.mode, releaseSha: gate.releaseSha, origin: gate.origin, launchZones: gate.launchZones, blockers: [...gate.blockers, ...blockers], capabilities: { sandboxCheckout: ready && gate.mode === "sandbox", realPayment: false, realDelivery: false, transactionalEmail: ready, controlledOrder: ready && gate.mode === "controlled", publicCommerce: false }, routes: { cart: "wired", homeDelivery: "wired-provider-priced", order: "wired", paymentSession: "sandbox-only-live-compensation-blocked", servicePoint: "wired-encrypted", stripeWebhook: "atomic-d1-effects" } }, ready ? 200 : 503);
   }
   if (!gate.ready || !gate.origin || url.origin !== gate.origin) return fail("COMMERCE_CLOSED", 503);
   if (!env.DB) return fail("DATABASE_UNAVAILABLE", 503);
@@ -316,7 +367,7 @@ export async function productionCommerceApiResponse(
     try { return json({ data: await new D1ProductionCheckoutStore(env.DB).currentOrder(current.cartId) }); } catch (cause) { return map(cause); }
   }
   if (url.pathname === routes.delivery) {
-    if (blockers.includes("provider-pricing-0012-not-activated")) return fail("DELIVERY_PRICING_NOT_ACTIVATED", 503);
+    if (blockers.includes("delivery-schema-0013-not-installed")) return fail("DELIVERY_SCHEMA_NOT_READY", 503);
     const parsed = await body(request); if (!parsed || !exact(parsed, ["address"])) return fail("INVALID_BODY", 400);
     try {
       const provider = dependencies.deliveryProvider ?? createSendcloudProviderPorts({ publicKey: env.SENDCLOUD_PUBLIC_KEY, secretKey: env.SENDCLOUD_SECRET_KEY });
@@ -325,7 +376,7 @@ export async function productionCommerceApiResponse(
     } catch (cause) { return map(cause); }
   }
   if (url.pathname === routes.points) {
-    if (blockers.includes("provider-pricing-0012-not-activated")) return fail("DELIVERY_PRICING_NOT_ACTIVATED", 503);
+    if (blockers.includes("delivery-schema-0013-not-installed")) return fail("DELIVERY_SCHEMA_NOT_READY", 503);
     const parsed = await body(request); if (!parsed || !exact(parsed, ["address", "optionId"]) || typeof parsed.optionId !== "string") return fail("INVALID_BODY", 400);
     try {
       const provider = dependencies.deliveryProvider ?? createSendcloudProviderPorts({ publicKey: env.SENDCLOUD_PUBLIC_KEY, secretKey: env.SENDCLOUD_SECRET_KEY });
@@ -334,7 +385,7 @@ export async function productionCommerceApiResponse(
     } catch (cause) { return map(cause); }
   }
   if (url.pathname === routes.select) {
-    if (blockers.includes("provider-pricing-0012-not-activated")) return fail("DELIVERY_PRICING_NOT_ACTIVATED", 503);
+    if (blockers.includes("delivery-schema-0013-not-installed")) return fail("DELIVERY_SCHEMA_NOT_READY", 503);
     const parsed = await body(request); const wanted = parsed && Object.hasOwn(parsed, "servicePointId") ? ["address", "optionId", "servicePointId"] : ["address", "optionId"];
     if (!parsed || !exact(parsed, wanted) || typeof parsed.optionId !== "string" || (Object.hasOwn(parsed, "servicePointId") && typeof parsed.servicePointId !== "string")) return fail("INVALID_BODY", 400);
     try {
@@ -344,7 +395,7 @@ export async function productionCommerceApiResponse(
     } catch (cause) { return map(cause); }
   }
   if (url.pathname === routes.order) {
-    if (blockers.includes("provider-pricing-0012-not-activated")) return fail("DELIVERY_PRICING_NOT_ACTIVATED", 503);
+    if (blockers.includes("delivery-schema-0013-not-installed")) return fail("DELIVERY_SCHEMA_NOT_READY", 503);
     const parsed = await body(request); const wanted = parsed && Object.hasOwn(parsed, "servicePointId") ? ["address", "email", "optionId", "privacyAccepted", "quoteId", "servicePointId", "termsAccepted"] : ["address", "email", "optionId", "privacyAccepted", "quoteId", "termsAccepted"];
     if (!parsed || !exact(parsed, wanted) || typeof parsed.email !== "string" || typeof parsed.optionId !== "string" || typeof parsed.quoteId !== "string" || parsed.termsAccepted !== true || parsed.privacyAccepted !== true) return fail("INVALID_BODY", 400);
     if (Object.hasOwn(parsed, "servicePointId") && typeof parsed.servicePointId !== "string") return fail("INVALID_BODY", 400);

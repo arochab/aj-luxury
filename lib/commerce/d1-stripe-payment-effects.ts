@@ -63,14 +63,26 @@ export class D1StripePaymentEffectsStore implements PaymentWebhookEffectsPort {
     const timing = await this.#database.prepare(
       `SELECT COUNT(*) AS total_count,
         SUM(CASE WHEN status='active' THEN 1 ELSE 0 END) AS active_count,
+        SUM(CASE WHEN status='active' AND EXISTS (
+          SELECT 1 FROM order_lines WHERE order_id=?
+            AND variant_id=stock_reservations.variant_id
+            AND quantity=stock_reservations.quantity
+        ) THEN 1 ELSE 0 END) AS matched_count,
+        (SELECT COUNT(*) FROM order_lines WHERE order_id=?) AS order_line_count,
         MIN(CASE WHEN status='active' THEN expires_at END) AS minimum_active_expires_at
       FROM stock_reservations WHERE cart_id = ?`,
-    ).bind(order.cart_id).first<{
+    ).bind(order.id, order.id, order.cart_id).first<{
       total_count: number;
       active_count: number;
+      matched_count: number;
+      order_line_count: number;
       minimum_active_expires_at: string | null;
     }>();
-    if (!timing || timing.total_count < 1 || timing.active_count < 1 || !timing.minimum_active_expires_at) {
+    if (!timing || timing.total_count < 1 || timing.order_line_count < 1 ||
+      timing.total_count !== timing.order_line_count ||
+      timing.active_count !== timing.order_line_count ||
+      timing.matched_count !== timing.order_line_count ||
+      !timing.minimum_active_expires_at) {
       return await this.#recordLatePaymentDivergence(event, order, verifiedAt, "stock_reservation_inactive_or_missing");
     }
     if (timing.minimum_active_expires_at <= event.occurredAt) {

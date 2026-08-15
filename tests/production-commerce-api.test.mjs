@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { productionCommerceApiResponse, productionStockRuntimeAttested } from "../worker/production-commerce-api.ts";
+import { productionCommerceApiResponse, productionDeliveryRuntimeInstalled, productionStockRuntimeAttested } from "../worker/production-commerce-api.ts";
 
 const releaseSha = "a".repeat(40);
 const controlled = Object.freeze({
@@ -100,7 +100,7 @@ test("cart creation rejects a missing exact origin before touching D1", async ()
   assert.equal((await response.json()).error.code, "ORIGIN_REJECTED");
 });
 
-test("service-point purchase remains 503 until provider pricing 0012 is active", async () => {
+test("service-point purchase remains 503 until exact 0013 schema is installed", async () => {
   const cartToken = "A".repeat(43);
   const csrfToken = "B".repeat(43);
   const response = await productionCommerceApiResponse(
@@ -118,7 +118,22 @@ test("service-point purchase remains 503 until provider pricing 0012 is active",
     controlled,
   );
   assert.equal(response.status, 503);
-  assert.equal((await response.json()).error.code, "DELIVERY_PRICING_NOT_ACTIVATED");
+  assert.equal((await response.json()).error.code, "DELIVERY_SCHEMA_NOT_READY");
+});
+
+test("delivery runtime proof rejects missing and prefix-colliding 0013 objects", async () => {
+  const exact = [
+    { type: "column", name: "selected_service_point_id", table_name: "delivery_option_snapshots" },
+    { type: "table", name: "delivery_provider_reference_vault", table_name: "delivery_provider_reference_vault" },
+    { type: "table", name: "delivery_service_point_snapshots", table_name: "delivery_service_point_snapshots" },
+    { type: "trigger", name: "trg_delivery_order_requires_selected_option", table_name: "orders" },
+    { type: "trigger", name: "trg_orders_provider_pricing_contract", table_name: "orders" },
+    { type: "trigger", name: "trg_shipping_quote_provider_pricing_contract", table_name: "shipping_quotes" },
+  ];
+  const database = (results) => ({ prepare() { return { async all() { return { results }; } }; } });
+  assert.equal(await productionDeliveryRuntimeInstalled(database(exact)), true);
+  assert.equal(await productionDeliveryRuntimeInstalled(database(exact.slice(1))), false);
+  assert.equal(await productionDeliveryRuntimeInstalled(database([...exact, { ...exact[1], name: "delivery_provider_reference_vault_shadow" }])), false);
 });
 
 function stockProofDatabase(stock, approvals) {
@@ -134,10 +149,11 @@ function stockProofDatabase(stock, approvals) {
 
 test("live stock attestation requires exact D1 inventory and two distinct bound approvals", async () => {
   const exactStock = { variant_count: 12, physical_quantity: 756, validated_count: 12, invalid_count: 0 };
-  const twoApprovals = { approval_count: 2, signer_count: 2, stock_owner_count: 1, release_owner_count: 1 };
+  const twoApprovals = { approval_count: 2, signer_count: 2, valid_actor_count: 2, stock_owner_count: 1, release_owner_count: 1 };
   const env = { DB: stockProofDatabase(exactStock, twoApprovals), STOCK_MANIFEST_ID: "stock-launch-20260815", STOCK_MANIFEST_SHA256: "b".repeat(64) };
   assert.equal(await productionStockRuntimeAttested(env), true);
   assert.equal(await productionStockRuntimeAttested({ ...env, DB: stockProofDatabase(exactStock, { ...twoApprovals, signer_count: 1 }) }), false);
+  assert.equal(await productionStockRuntimeAttested({ ...env, DB: stockProofDatabase(exactStock, { ...twoApprovals, approval_count: 3, signer_count: 3, valid_actor_count: 3 }) }), false);
   assert.equal(await productionStockRuntimeAttested({ ...env, DB: stockProofDatabase({ ...exactStock, invalid_count: 1 }, twoApprovals) }), false);
   assert.equal(await productionStockRuntimeAttested({ ...env, STOCK_MANIFEST_SHA256: "c".repeat(64), DB: { prepare() { throw new Error("unbound-proof"); } } }), false);
 });
@@ -195,6 +211,25 @@ test("a verified Stripe webhook is never acknowledged without atomic effects", a
     },
   );
   assert.equal(verifications, 1);
+  assert.equal(response.status, 503);
+  assert.equal((await response.json()).error.code, "PAYMENT_EFFECTS_UNAVAILABLE");
+});
+
+test("webhook provider misconfiguration remains retryable 503", async () => {
+  const response = await productionCommerceApiResponse(
+    new Request("https://ajluxurystore.com/api/commerce/webhooks/stripe", {
+      method: "POST",
+      headers: { "Stripe-Signature": "t=1,v1=" + "a".repeat(64) },
+      body: "{}",
+    }),
+    {
+      APP_ENV: "production",
+      COMMERCE_MODE: "closed",
+      COMMERCE_ORIGIN: "https://ajluxurystore.com",
+      STRIPE_SETTLEMENT_MODE: "live",
+      DB: {},
+    },
+  );
   assert.equal(response.status, 503);
   assert.equal((await response.json()).error.code, "PAYMENT_EFFECTS_UNAVAILABLE");
 });
