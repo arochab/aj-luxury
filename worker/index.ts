@@ -64,6 +64,10 @@ import {
   SYNTHETIC_DEMO_MIGRATION,
 } from "../lib/preprod/synthetic-demo.ts";
 import { productionCommerceApiResponse } from "./production-commerce-api.ts";
+import {
+  productionOperationsApiResponse,
+  runProductionScheduledOperations,
+} from "./production-operations-api.ts";
 import { productionShippingLabelAdminResponse } from "./production-shipping-label-admin-api.ts";
 import { productionCommerceRateLimitResponse } from "./production-rate-limit.ts";
 
@@ -78,6 +82,13 @@ interface Env {
   PREPROD_ORIGIN?: string;
   PREPROD_DEMO_DATASET?: string;
   PREPROD_OWNER_EMAIL?: string;
+  TRANSACTIONAL_EMAIL_DISPATCH_ENABLED?: string;
+  TRANSACTIONAL_EMAIL_DISPATCH_MODE?: string;
+  TRANSACTIONAL_FROM_NAME?: string;
+  TRANSACTIONAL_REPLY_TO?: string;
+  RETURNS_WORKFLOW_ENABLED?: string;
+  RESERVATION_EXPIRY_ENABLED?: string;
+  COMMERCE_REPORTING_ENABLED?: string;
   IMAGES: {
     input(stream: ReadableStream): {
       transform(options: Record<string, unknown>): {
@@ -92,6 +103,10 @@ type RuntimeEnv = Env | undefined;
 interface ExecutionContext {
   waitUntil(promise: Promise<unknown>): void;
   passThroughOnException(): void;
+}
+
+interface ScheduledController {
+  scheduledTime: number;
 }
 
 const STATIC_ASSET_PREFIXES = [
@@ -2810,6 +2825,31 @@ async function serveApplication(
 // const imageConfig: ImageConfig = { dangerouslyAllowSVG: true };
 
 const worker = {
+  scheduled(
+    controller: ScheduledController,
+    env: RuntimeEnv,
+    ctx: ExecutionContext,
+  ): void {
+    const now = Number.isFinite(controller.scheduledTime)
+      ? new Date(controller.scheduledTime).toISOString()
+      : "invalid";
+    ctx.waitUntil(
+      runProductionScheduledOperations(env, { now })
+        .then((result) => {
+          console.log(JSON.stringify({
+            event: "production_scheduled_operations",
+            reservations: result.reservations,
+            email: result.email,
+          }));
+        })
+        .catch(() => {
+          console.error(JSON.stringify({
+            event: "production_scheduled_operations_failed",
+          }));
+        }),
+    );
+  },
+
   async fetch(
     request: Request,
     env: RuntimeEnv,
@@ -2821,6 +2861,15 @@ const worker = {
     if (productionRateLimitResponse) {
       return withSecurityHeaders(
         productionRateLimitResponse,
+        url.pathname,
+        env?.APP_ENV,
+      );
+    }
+
+    const productionOperationsResponse = await productionOperationsApiResponse(request, env);
+    if (productionOperationsResponse) {
+      return withSecurityHeaders(
+        productionOperationsResponse,
         url.pathname,
         env?.APP_ENV,
       );

@@ -501,13 +501,14 @@ test("0011 fails closed for a missing, foreign, expired or unsealed service poin
   assert.doesNotMatch(migration, /provider_reference` text|raw_reference|api[_-]?key|secret[_-]?key/i);
 });
 
-test("0011-0015 remain additive and the journal ends at production release proofs", () => {
+test("0011-0016 remain additive and the journal ends at operations proofs", () => {
   const previous = JSON.parse(readFileSync(`${drizzle}meta/0010_snapshot.json`, "utf8"));
   const snapshot = JSON.parse(readFileSync(`${drizzle}meta/0011_snapshot.json`, "utf8"));
   const pricingSnapshot = JSON.parse(readFileSync(`${drizzle}meta/0012_snapshot.json`, "utf8"));
   const orderPricingSnapshot = JSON.parse(readFileSync(`${drizzle}meta/0013_snapshot.json`, "utf8"));
   const refundSnapshot = JSON.parse(readFileSync(`${drizzle}meta/0014_snapshot.json`, "utf8"));
   const releaseSnapshot = JSON.parse(readFileSync(`${drizzle}meta/0015_snapshot.json`, "utf8"));
+  const operationsSnapshot = JSON.parse(readFileSync(`${drizzle}meta/0016_snapshot.json`, "utf8"));
   const journal = JSON.parse(readFileSync(`${drizzle}meta/_journal.json`, "utf8"));
   assert.equal(snapshot.version, "6");
   assert.equal(snapshot.dialect, "sqlite");
@@ -548,11 +549,28 @@ test("0011-0015 remain additive and the journal ends at production release proof
   assert.ok(releaseSnapshot.tables.production_launch_stock_manifests);
   assert.ok(releaseSnapshot.tables.production_launch_stock_manifest_lines);
   assert.ok(releaseSnapshot.tables.production_release_attestations);
+  assert.deepEqual(
+    journal.entries.find((entry) => entry.tag === "0015_production_release_attestation"),
+    {
+      idx: 15,
+      version: "6",
+      when: 1786762000000,
+      tag: "0015_production_release_attestation",
+      breakpoints: true,
+    },
+  );
+  assert.equal(operationsSnapshot.prevId, releaseSnapshot.id);
+  assert.notEqual(operationsSnapshot.id, releaseSnapshot.id);
+  assert.equal(
+    Object.keys(operationsSnapshot.tables).length,
+    Object.keys(releaseSnapshot.tables).length + 1,
+  );
+  assert.ok(operationsSnapshot.tables.commerce_operations_schema_installations);
   assert.deepEqual(journal.entries.at(-1), {
-    idx: 15,
+    idx: 16,
     version: "6",
-    when: 1786762000000,
-    tag: "0015_production_release_attestation",
+    when: 1786771200000,
+    tag: "0016_return_operator_state_machine",
     breakpoints: true,
   });
 });

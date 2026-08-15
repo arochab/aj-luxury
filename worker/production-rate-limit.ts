@@ -23,16 +23,20 @@ const exactRoutes = new Map<string, LimitClass>([
   ["/api/commerce/webhooks/stripe", "webhook"],
   ["/api/commerce/orders/current", "commerce"],
   ["/api/commerce/account/current", "commerce"],
+  ["/api/commerce/returns", "commerce"],
   ["/api/commerce/admin/health", "operator"],
+  ["/api/commerce/admin/reporting", "operator"],
   ["/api/commerce/admin/late-payment-refunds/dispatch", "operator"],
 ]);
 
 const cartLine = /^\/api\/commerce\/cart\/lines\/[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/;
 const shippingLabel = /^\/api\/commerce\/admin\/orders\/[A-Za-z0-9][A-Za-z0-9_.:-]{0,191}\/shipping-label$/;
+const returnOperator = /^\/api\/commerce\/admin\/returns\/[A-Za-z0-9][A-Za-z0-9_.:-]{0,191}\/(?:approve|inspect)$/;
 
 function routeClass(pathname: string): LimitClass | null {
   if (cartLine.test(pathname)) return "commerce";
   if (shippingLabel.test(pathname)) return "operator";
+  if (returnOperator.test(pathname)) return "operator";
   return exactRoutes.get(pathname) ?? null;
 }
 
@@ -123,5 +127,29 @@ export async function productionCommerceRateLimitResponse(
     return result.success ? null : failure("RATE_LIMIT_EXCEEDED", 429);
   } catch {
     return failure("RATE_LIMIT_UNAVAILABLE", 503);
+  }
+}
+
+export type ScheduledProductionOperation =
+  | "transactional-email-dispatch"
+  | "reservation-expiry";
+
+/**
+ * The scheduled path has no HTTP request, but it shares the same bounded
+ * operator counter before D1 or a provider can be touched.
+ */
+export async function productionScheduledRateLimit(
+  env: ProductionRateLimitEnvironment | undefined,
+  operation: ScheduledProductionOperation,
+): Promise<"allowed" | "limited" | "unavailable"> {
+  if (env?.APP_ENV !== "production" || !env.OPERATOR_RATE_LIMITER?.limit) {
+    return "unavailable";
+  }
+  try {
+    const key = `operator:${await digest(`scheduled:${operation}`)}`;
+    const result = await env.OPERATOR_RATE_LIMITER.limit({ key });
+    return result.success ? "allowed" : "limited";
+  } catch {
+    return "unavailable";
   }
 }

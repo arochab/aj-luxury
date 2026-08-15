@@ -2268,3 +2268,20 @@ export const productionReleaseAttestations = sqliteTable(
     check("ck_production_release_distinct_approvers", sql`${table.adamApproverId} <> ${table.jeremyApproverId}`),
   ],
 );
+
+export const commerceOperationsSchemaInstallations = sqliteTable(
+  "commerce_operations_schema_installations",
+  {
+    version: text("version").primaryKey(),
+    contract: text("contract").notNull(),
+    installedAt: text("installed_at").notNull(),
+  },
+  (table) => [
+    check(
+      "ck_commerce_operations_schema_0016",
+      sql`${table.version} = '0016_return_operator_state_machine'
+        AND ${table.contract} = 'received-approved-goods_received-inspected-v1'
+        AND ${table.installedAt} = '2026-08-15T00:00:00.000Z'`,
+    ),
+  ],
+);
