@@ -404,22 +404,28 @@ export async function productionCommerceApiResponse(
   const gate = evaluateWiredProductionReleaseGate(env);
   if (url.pathname === routes.health && request.method !== "GET") return fail("METHOD_NOT_ALLOWED", 405);
   const blockers = runtimeBlockers(env, gate.mode);
+  if (url.pathname === routes.health) {
+    if (gate.mode !== "closed" && !await productionDeliveryRuntimeInstalled(env.DB)) {
+      blockers.push("delivery-schema-0013-not-installed");
+    }
+    if (gate.mode === "live" && !await productionStockRuntimeAttested(env)) {
+      blockers.push("stock-runtime-attestation-not-verified");
+    }
+    const ready = gate.ready && blockers.length === 0;
+    return json({ status: ready ? "ready" : "closed", environment: "production", mode: gate.mode, releaseSha: gate.releaseSha, origin: gate.origin, launchZones: gate.launchZones, blockers: [...gate.blockers, ...blockers], capabilities: { sandboxCheckout: ready && gate.mode === "sandbox", realPayment: false, realDelivery: false, transactionalEmail: ready, controlledOrder: ready && gate.mode === "controlled", publicCommerce: false }, routes: { cart: "wired", homeDelivery: "wired-provider-priced", order: "wired", paymentSession: "sandbox-only-live-compensation-blocked", servicePoint: "wired-encrypted", stripeWebhook: "atomic-d1-effects" } }, ready ? 200 : 503);
+  }
+  if (!gate.ready || !gate.origin || url.origin !== gate.origin) return fail("COMMERCE_CLOSED", 503);
+  if (gate.mode !== "live" && !await controlledOwnerRequestAuthenticated(request, env)) {
+    return fail("CONTROLLED_ACCESS_REQUIRED", 403);
+  }
+  if (!env.DB) return fail("DATABASE_UNAVAILABLE", 503);
   if (gate.mode !== "closed" && !await productionDeliveryRuntimeInstalled(env.DB)) {
     blockers.push("delivery-schema-0013-not-installed");
   }
   if (gate.mode === "live" && !await productionStockRuntimeAttested(env)) {
     blockers.push("stock-runtime-attestation-not-verified");
   }
-  if (url.pathname === routes.health) {
-    const ready = gate.ready && blockers.length === 0;
-    return json({ status: ready ? "ready" : "closed", environment: "production", mode: gate.mode, releaseSha: gate.releaseSha, origin: gate.origin, launchZones: gate.launchZones, blockers: [...gate.blockers, ...blockers], capabilities: { sandboxCheckout: ready && gate.mode === "sandbox", realPayment: false, realDelivery: false, transactionalEmail: ready, controlledOrder: ready && gate.mode === "controlled", publicCommerce: false }, routes: { cart: "wired", homeDelivery: "wired-provider-priced", order: "wired", paymentSession: "sandbox-only-live-compensation-blocked", servicePoint: "wired-encrypted", stripeWebhook: "atomic-d1-effects" } }, ready ? 200 : 503);
-  }
-  if (!gate.ready || !gate.origin || url.origin !== gate.origin) return fail("COMMERCE_CLOSED", 503);
-  if (!env.DB) return fail("DATABASE_UNAVAILABLE", 503);
   if (gate.mode === "live" && blockers.length) return fail("COMMERCE_CLOSED", 503);
-  if (gate.mode !== "live" && !await controlledOwnerRequestAuthenticated(request, env)) {
-    return fail("CONTROLLED_ACCESS_REQUIRED", 403);
-  }
   let current: CartSession | null;
   try { current = await session(request); } catch {
     const headers = new Headers(); headers.append("Set-Cookie", clearSessionCookie("cart")); headers.append("Set-Cookie", clearCsrfCookie("cart"));
