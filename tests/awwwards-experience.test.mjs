@@ -41,6 +41,10 @@ test("Isabelle Apollon editorials keep exact provenance and a bounded payload", 
 
 test("the private homepage preserves the approved film and the recovered Apollon sequence", async () => {
   const page = await readFile(projectFile("app/page.tsx"), "utf8");
+  const sequence = await readFile(
+    projectFile("app/components/ApollonGuidedSequence.tsx"),
+    "utf8",
+  );
   const heroComposition = await readFile(
     projectFile("app/components/HeroComposition.tsx"),
     "utf8",
@@ -49,24 +53,30 @@ test("the private homepage preserves the approved film and the recovered Apollon
     projectFile("app/components/HeroBackgroundVideo.tsx"),
     "utf8",
   );
-  const rose = page.indexOf("apollon-rose-lyre-v1.webp");
-  const lilas = page.indexOf("apollon-lilas-lyre-v1.webp");
-  const pourpre = page.indexOf("apollon-pourpre-lyre-v1.webp");
+  const rose = sequence.indexOf("apollon-rose-lyre-v1.webp");
+  const lilas = sequence.indexOf("apollon-lilas-lyre-v1.webp");
+  const pourpre = sequence.indexOf("apollon-pourpre-lyre-v1.webp");
 
   assert.ok(rose > -1 && lilas > rose && pourpre > lilas);
   assert.match(page, /<HeroComposition\s*\/>/);
   assert.doesNotMatch(page, /className="aj-film__message"/);
   assert.match(heroComposition, /<HeroBackgroundVideo/);
   assert.match(heroBackgroundVideo, /<HeroIdentityOverlay\s*\/>/);
-  assert.match(page, /<T id="home\.apollonStatement"\s*\/>/);
-  assert.match(page, /<T id="home\.incarnationTitle"\s*\/>/);
+  assert.match(sequence, /<T id="home\.incarnationTitle"\s*\/>/);
+  assert.match(sequence, /role="tablist"/);
+  assert.match(sequence, /tabIndex=\{index === active \? 0 : -1\}/);
+  assert.match(sequence, /event\.key === "ArrowRight"/);
+  assert.match(sequence, /event\.key === "Home"/);
+  assert.match(sequence, /selectFrame\(index, true\)/);
+  assert.match(sequence, /progressRef/);
+  assert.match(sequence, /setPaused/);
   assert.match(page, /aria-label=\{`\$\{product\.model\} \$\{product\.name\}`\}/);
 });
 
 test("the Awwwards layer covers the critical short tablet and reduced-motion states", async () => {
   const css = await readFile(projectFile("app/globals.css"), "utf8");
-  const rail = await readFile(
-    projectFile("app/components/ApollonHorizontalRail.tsx"),
+  const sequence = await readFile(
+    projectFile("app/components/ApollonGuidedSequence.tsx"),
     "utf8",
   );
 
@@ -75,10 +85,12 @@ test("the Awwwards layer covers the critical short tablet and reduced-motion sta
     /@media \(min-width: 761px\) and \(max-width: 999px\) and \(max-height: 620px\)/,
   );
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
-  assert.match(css, /\.aj-apollon-myth__frame img,[\s\S]*animation: none !important/);
+  assert.match(css, /\.aj-sequence__frame,[\s\S]*transition: none !important/);
   assert.match(css, /scroll-snap-type: x mandatory/);
-  assert.match(rail, /window\.scrollY - start/);
-  assert.match(rail, /prefers-reduced-motion: reduce/);
+  assert.match(sequence, /requestAnimationFrame/);
+  assert.match(sequence, /IntersectionObserver/);
+  assert.match(sequence, /document\.visibilityState === "visible"/);
+  assert.match(sequence, /prefers-reduced-motion: reduce/);
 });
 
 test("new editorial messages are localized in every supported locale", async () => {
@@ -93,6 +105,14 @@ test("new editorial messages are localized in every supported locale", async () 
     "home.materialElastane",
     "home.colors",
     "home.sizes",
+    "sequence.color.rose",
+    "sequence.color.lilac",
+    "sequence.color.purple",
+    "sequence.pause",
+    "sequence.resume",
+    "sequence.tablist",
+    "sequence.stillAlt",
+    "sequence.bodyAlt",
   ];
 
   for (const locale of ["fr", "en", "es", "de", "it"]) {
