@@ -2720,7 +2720,7 @@ const worker = {
   ): Promise<Response> {
     const url = new URL(request.url);
 
-    const productionCommerceResponse = productionCommerceApiResponse(request, env);
+    const productionCommerceResponse = await productionCommerceApiResponse(request, env);
     if (productionCommerceResponse) {
       return withSecurityHeaders(
         productionCommerceResponse,
