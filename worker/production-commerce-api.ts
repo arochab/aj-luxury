@@ -248,11 +248,36 @@ function runtimeBlockers(env: ProductionCommerceRuntimeEnvironment, mode: string
 type InstalledCommerceSchemaObject = Readonly<{ type: string; name: string; table_name: string }>;
 const deliverySchemaInventory = Object.freeze([
   "column:selected_service_point_id:delivery_option_snapshots",
+  "index:idx_delivery_options_cart_expiry:delivery_option_snapshots",
+  "index:idx_delivery_reference_key_version:delivery_provider_reference_vault",
+  "index:idx_delivery_service_points_option_expiry:delivery_service_point_snapshots",
+  "index:ux_delivery_options_quote:delivery_option_snapshots",
+  "index:ux_delivery_options_selected_cart:delivery_option_snapshots",
+  "index:ux_delivery_reference_owner:delivery_provider_reference_vault",
+  "index:ux_delivery_service_point_provider_ref:delivery_service_point_snapshots",
+  "index:ux_shipping_document_reference:shipping_document_metadata",
+  "table:delivery_option_snapshots:delivery_option_snapshots",
   "table:delivery_provider_reference_vault:delivery_provider_reference_vault",
   "table:delivery_service_point_snapshots:delivery_service_point_snapshots",
+  "table:shipping_document_metadata:shipping_document_metadata",
+  "trigger:trg_delivery_option_initially_unselected:delivery_option_snapshots",
+  "trigger:trg_delivery_option_retain:delivery_option_snapshots",
+  "trigger:trg_delivery_option_select_once:delivery_option_snapshots",
+  "trigger:trg_delivery_option_validate_insert:delivery_option_snapshots",
   "trigger:trg_delivery_order_requires_selected_option:orders",
+  "trigger:trg_delivery_reference_immutable:delivery_provider_reference_vault",
+  "trigger:trg_delivery_reference_replay_guard:delivery_provider_reference_vault",
+  "trigger:trg_delivery_reference_retain:delivery_provider_reference_vault",
+  "trigger:trg_delivery_reference_validate_insert:delivery_provider_reference_vault",
+  "trigger:trg_delivery_service_point_immutable:delivery_service_point_snapshots",
+  "trigger:trg_delivery_service_point_retain:delivery_service_point_snapshots",
+  "trigger:trg_delivery_service_point_validate_insert:delivery_service_point_snapshots",
   "trigger:trg_orders_provider_pricing_contract:orders",
+  "trigger:trg_orders_require_shipping_snapshot_insert:orders",
+  "trigger:trg_shipping_document_immutable:shipping_document_metadata",
+  "trigger:trg_shipping_document_retain:shipping_document_metadata",
   "trigger:trg_shipping_quote_provider_pricing_contract:shipping_quotes",
+  "trigger:trg_shipping_quote_validate_insert:shipping_quotes",
 ]);
 
 export async function productionDeliveryRuntimeInstalled(
@@ -263,14 +288,19 @@ export async function productionDeliveryRuntimeInstalled(
     const installed = await database.prepare(
       `SELECT lower(type) AS type, lower(name) AS name,
         lower(tbl_name) AS table_name FROM sqlite_master
-      WHERE (lower(type)='table' AND (
-          lower(name) GLOB 'delivery_provider_reference_vault*'
-          OR lower(name) GLOB 'delivery_service_point_snapshot*'
-        )) OR (lower(type)='trigger' AND lower(name) IN (
+      WHERE lower(name) NOT GLOB 'sqlite_autoindex_*' AND (
+        lower(tbl_name) IN (
+          'delivery_option_snapshots',
+          'delivery_provider_reference_vault',
+          'delivery_service_point_snapshots',
+          'shipping_document_metadata'
+        ) OR (lower(type)='trigger' AND lower(name) IN (
           'trg_delivery_order_requires_selected_option',
+          'trg_orders_require_shipping_snapshot_insert',
           'trg_orders_provider_pricing_contract',
+          'trg_shipping_quote_validate_insert',
           'trg_shipping_quote_provider_pricing_contract'
-        ))
+        )))
       UNION ALL
       SELECT 'column' AS type, lower(name) AS name,
         'delivery_option_snapshots' AS table_name
