@@ -64,6 +64,7 @@ import {
   SYNTHETIC_DEMO_MIGRATION,
 } from "../lib/preprod/synthetic-demo.ts";
 import { productionCommerceApiResponse } from "./production-commerce-api.ts";
+import { productionShippingLabelAdminResponse } from "./production-shipping-label-admin-api.ts";
 
 interface Fetcher {
   fetch(request: Request): Promise<Response>;
@@ -2740,6 +2741,15 @@ const worker = {
     ctx: ExecutionContext,
   ): Promise<Response> {
     const url = new URL(request.url);
+
+    const productionShippingResponse = await productionShippingLabelAdminResponse(request, env);
+    if (productionShippingResponse) {
+      return withSecurityHeaders(
+        productionShippingResponse,
+        url.pathname,
+        env?.APP_ENV,
+      );
+    }
 
     const productionCommerceResponse = await productionCommerceApiResponse(request, env);
     if (productionCommerceResponse) {

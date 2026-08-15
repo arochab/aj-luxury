@@ -7,6 +7,7 @@ import {
 } from "../lib/commerce/fulfillment-domain.ts";
 import { createSendcloudShippingLabelProvider } from "../lib/commerce/sendcloud-shipping-label-provider.ts";
 import { productionShippingLabelAdminResponse } from "../worker/production-shipping-label-admin-api.ts";
+import { controlledRequestAuthorization } from "../worker/production-commerce-api.ts";
 
 const request = Object.freeze({
   shipmentId: "shipment_test_1",
@@ -269,6 +270,7 @@ test("timeout, 5xx, unparsed 409 and malformed success all require manual reconc
 });
 
 const releaseSha = "a".repeat(40);
+const controlledSecret = "shipping-operator-auth-secret-0001";
 const adminEnv = Object.freeze({
   APP_ENV: "production",
   COMMERCE_MODE: "controlled",
@@ -296,11 +298,14 @@ const adminEnv = Object.freeze({
   BACKUP_RESTORE_DRILL_APPROVED: "true",
   MONITORING_ALERTS_APPROVED: "true",
   COMMERCE_CONTROLLED_OWNER_EMAIL: "adam@example.com",
+  COMMERCE_CONTROLLED_AUTH_HMAC_SECRET: controlledSecret,
 });
 
-function adminRequest(headers = {}) {
+async function adminRequest(headers = {}) {
+  const pathname = "/api/commerce/admin/orders/order_test_1/shipping-label";
+  const timestamp = Math.floor(Date.now() / 1000);
   return new Request(
-    "https://ajluxurystore.com/api/commerce/admin/orders/order_test_1/shipping-label",
+    `https://ajluxurystore.com${pathname}`,
     {
       method: "POST",
       headers: {
@@ -309,6 +314,10 @@ function adminRequest(headers = {}) {
         "Idempotency-Key": "shipment:test:0001",
         "oai-authenticated-user-email": "adam@example.com",
         "oai-authenticated-user-id": "owner-1",
+        "X-AJ-Controlled-Authorization": await controlledRequestAuthorization(
+          controlledSecret,
+          { method: "POST", pathname, ownerEmail: "adam@example.com", timestamp },
+        ),
         ...headers,
       },
     },
@@ -318,7 +327,7 @@ function adminRequest(headers = {}) {
 test("operator route is owner-only and never touches D1 for an unauthenticated caller", async () => {
   const DB = { prepare() { throw new Error("D1 must not be touched"); }, batch() { throw new Error("D1 must not be touched"); } };
   const response = await productionShippingLabelAdminResponse(
-    adminRequest({ "oai-authenticated-user-email": "intruder@example.com" }),
+    await adminRequest({ "oai-authenticated-user-email": "intruder@example.com" }),
     { ...adminEnv, DB },
   );
   assert.equal(response.status, 403);
@@ -327,7 +336,7 @@ test("operator route is owner-only and never touches D1 for an unauthenticated c
 test("platform owner headers alone cannot bypass the durable owner session and CSRF gate", async () => {
   const DB = { prepare() { throw new Error("D1 must not be touched without cookies"); }, batch() { throw new Error("D1 must not be touched"); } };
   const response = await productionShippingLabelAdminResponse(
-    adminRequest(),
+    await adminRequest(),
     { ...adminEnv, DB },
   );
   assert.equal(response.status, 403);
@@ -346,7 +355,7 @@ test("operator route hard-stops an already claimed shipment for manual reconcili
   };
   let providerCalls = 0;
   const response = await productionShippingLabelAdminResponse(
-    adminRequest(),
+    await adminRequest(),
     { ...adminEnv, DB },
     {
       authorizeOwner: async () => true,

@@ -8,6 +8,7 @@ import {
   type ProductionCommerceEnvironment,
 } from "../lib/commerce/production-release-gate.ts";
 import { createSendcloudShippingLabelProvider } from "../lib/commerce/sendcloud-shipping-label-provider.ts";
+import { controlledOwnerRequestAuthenticated } from "./production-commerce-api.ts";
 
 const ROUTE = /^\/api\/commerce\/admin\/orders\/([^/]+)\/shipping-label$/;
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,191}$/;
@@ -16,6 +17,7 @@ const IDEMPOTENCY = /^[A-Za-z0-9][A-Za-z0-9_.:-]{7,127}$/;
 export type ProductionShippingLabelEnvironment = ProductionCommerceEnvironment & Readonly<{
   DB?: CommerceD1Database;
   COMMERCE_CONTROLLED_OWNER_EMAIL?: string;
+  COMMERCE_CONTROLLED_AUTH_HMAC_SECRET?: string;
   SENDCLOUD_PUBLIC_KEY?: string;
   SENDCLOUD_SECRET_KEY?: string;
   SENDCLOUD_SENDER_ADDRESS_ID?: string;
@@ -165,6 +167,9 @@ export async function productionShippingLabelAdminResponse(
     return fail("COMMERCE_CLOSED", 503);
   }
   if (!ownerAuthenticated(request, env)) return fail("OWNER_ACCESS_REQUIRED", 403);
+  if (!await controlledOwnerRequestAuthenticated(request, env)) {
+    return fail("CONTROLLED_ACCESS_REQUIRED", 403);
+  }
   if (!env.DB) return fail("DATABASE_UNAVAILABLE", 503);
   const now = new Date().toISOString();
   try {

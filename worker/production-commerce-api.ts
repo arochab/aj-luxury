@@ -131,7 +131,10 @@ export async function controlledRequestAuthorization(
   return `t=${input.timestamp},v1=${await hmacHex(secretValue, canonical)}`;
 }
 
-async function ownerOk(request: Request, env: ProductionCommerceRuntimeEnvironment): Promise<boolean> {
+export async function controlledOwnerRequestAuthenticated(
+  request: Request,
+  env: ProductionCommerceRuntimeEnvironment,
+): Promise<boolean> {
   const expected = env.COMMERCE_CONTROLLED_OWNER_EMAIL?.trim().toLowerCase();
   const actual = request.headers.get("oai-authenticated-user-email")?.trim().toLowerCase();
   const userId = request.headers.get("oai-authenticated-user-id")?.trim();
@@ -378,7 +381,9 @@ export async function productionCommerceApiResponse(
   if (!gate.ready || !gate.origin || url.origin !== gate.origin) return fail("COMMERCE_CLOSED", 503);
   if (!env.DB) return fail("DATABASE_UNAVAILABLE", 503);
   if (gate.mode === "live" && blockers.length) return fail("COMMERCE_CLOSED", 503);
-  if (gate.mode !== "live" && !await ownerOk(request, env)) return fail("CONTROLLED_ACCESS_REQUIRED", 403);
+  if (gate.mode !== "live" && !await controlledOwnerRequestAuthenticated(request, env)) {
+    return fail("CONTROLLED_ACCESS_REQUIRED", 403);
+  }
   let current: CartSession | null;
   try { current = await session(request); } catch {
     const headers = new Headers(); headers.append("Set-Cookie", clearSessionCookie("cart")); headers.append("Set-Cookie", clearCsrfCookie("cart"));
