@@ -501,12 +501,13 @@ test("0011 fails closed for a missing, foreign, expired or unsealed service poin
   assert.doesNotMatch(migration, /provider_reference` text|raw_reference|api[_-]?key|secret[_-]?key/i);
 });
 
-test("0011 remains additive, 0012/0013 are metadata-only and 0014 adds refund obligations", () => {
+test("0011-0015 remain additive and the journal ends at production release proofs", () => {
   const previous = JSON.parse(readFileSync(`${drizzle}meta/0010_snapshot.json`, "utf8"));
   const snapshot = JSON.parse(readFileSync(`${drizzle}meta/0011_snapshot.json`, "utf8"));
   const pricingSnapshot = JSON.parse(readFileSync(`${drizzle}meta/0012_snapshot.json`, "utf8"));
   const orderPricingSnapshot = JSON.parse(readFileSync(`${drizzle}meta/0013_snapshot.json`, "utf8"));
   const refundSnapshot = JSON.parse(readFileSync(`${drizzle}meta/0014_snapshot.json`, "utf8"));
+  const releaseSnapshot = JSON.parse(readFileSync(`${drizzle}meta/0015_snapshot.json`, "utf8"));
   const journal = JSON.parse(readFileSync(`${drizzle}meta/_journal.json`, "utf8"));
   assert.equal(snapshot.version, "6");
   assert.equal(snapshot.dialect, "sqlite");
@@ -540,11 +541,18 @@ test("0011 remains additive, 0012/0013 are metadata-only and 0014 adds refund ob
   assert.notEqual(refundSnapshot.id, orderPricingSnapshot.id);
   assert.equal(Object.keys(refundSnapshot.tables).length, Object.keys(orderPricingSnapshot.tables).length + 1);
   assert.ok(refundSnapshot.tables.late_payment_refund_intents);
+  assert.equal(releaseSnapshot.prevId, refundSnapshot.id);
+  assert.notEqual(releaseSnapshot.id, refundSnapshot.id);
+  assert.equal(Object.keys(releaseSnapshot.tables).length, Object.keys(refundSnapshot.tables).length + 4);
+  assert.ok(releaseSnapshot.tables.production_runtime_schema_proofs);
+  assert.ok(releaseSnapshot.tables.production_launch_stock_manifests);
+  assert.ok(releaseSnapshot.tables.production_launch_stock_manifest_lines);
+  assert.ok(releaseSnapshot.tables.production_release_attestations);
   assert.deepEqual(journal.entries.at(-1), {
-    idx: 14,
+    idx: 15,
     version: "6",
-    when: 1786761000000,
-    tag: "0014_late_payment_refund_compensation",
+    when: 1786762000000,
+    tag: "0015_production_release_attestation",
     breakpoints: true,
   });
 });

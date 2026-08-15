@@ -8,10 +8,11 @@
   "scripts": {
     "dev": "vinext dev",
     "check:preprod-demo-boundary": "node --experimental-strip-types scripts/check-preprod-demo-boundary.mjs",
+    "check:production-migration-boundary": "node scripts/check-production-migration-boundary.mjs",
     "check:analytics-boundary": "node --experimental-strip-types scripts/check-analytics-client-boundary.mjs",
     "check:analytics-artifacts": "node --experimental-strip-types scripts/check-analytics-client-boundary.mjs --artifacts",
     "test:analytics-build-canaries": "node scripts/check-analytics-build-canaries.mjs",
-    "prebuild": "npm run check:analytics-boundary && npm run check:preprod-demo-boundary",
+    "prebuild": "npm run check:analytics-boundary && npm run check:preprod-demo-boundary && npm run check:production-migration-boundary",
     "build": "vinext build",
     "postbuild": "npm run check:analytics-artifacts",
     "start": "vinext start",
