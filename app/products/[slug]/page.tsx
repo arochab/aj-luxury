@@ -11,6 +11,7 @@ import styles from "../../components/ProductPage.module.css";
 import { getPublicStockBySize } from "../../../lib/commerce/internal-stock";
 import { getProduct, getProducts } from "../../../lib/products";
 import { T } from "../../../lib/i18n/TranslatedText";
+import { getServerCommerceRuntimeMode } from "../../../lib/commerce/commerce-runtime.server";
 
 type ProductPageProps = {
   params: Promise<{ slug: string }>;
@@ -45,6 +46,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
   if (!product) notFound();
 
   const availability = getPublicStockBySize(product.slug);
+  const runtimeMode = getServerCommerceRuntimeMode();
   const otherProducts = products.filter((item) => item.slug !== product.slug);
 
   return (
@@ -70,6 +72,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
           product={product}
           products={products}
           availability={availability}
+          runtimeMode={runtimeMode}
         />
       </section>
 

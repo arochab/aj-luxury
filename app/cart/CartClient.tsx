@@ -13,6 +13,7 @@ import {
   type PublicCartSnapshot,
 } from "../../lib/commerce/preprod-cart-client";
 import styles from "./CommerceShell.module.css";
+import type { CommerceRuntimeMode } from "../../lib/commerce/commerce-runtime";
 
 function interpolate(
   value: string,
@@ -25,7 +26,9 @@ function interpolate(
   );
 }
 
-export default function CartClient() {
+export default function CartClient({
+  runtimeMode,
+}: Readonly<{ runtimeMode: CommerceRuntimeMode }>) {
   const { t } = useI18n();
   const [cart, setCart] = useState<PublicCartSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
@@ -33,12 +36,17 @@ export default function CartClient() {
   const [errorCode, setErrorCode] = useState<string | null>(null);
   const errorRef = useRef<HTMLDivElement>(null);
   const mutationInFlight = useRef(false);
+  const mutationAttempt = useRef<{
+    fingerprint: string;
+    key: string;
+  } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setErrorCode(null);
     try {
-      setCart(await getCart());
+      if (runtimeMode === "closed") throw new CartApiError("CART_UNAVAILABLE");
+      setCart(await getCart(runtimeMode));
     } catch (error) {
       setCart(null);
       setErrorCode(
@@ -47,11 +55,21 @@ export default function CartClient() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [runtimeMode]);
 
   useEffect(() => {
     let active = true;
-    void getCart()
+    if (runtimeMode === "closed") {
+      queueMicrotask(() => {
+        if (!active) return;
+        setErrorCode("CART_UNAVAILABLE");
+        setLoading(false);
+      });
+      return () => {
+        active = false;
+      };
+    }
+    void getCart(runtimeMode)
       .then((snapshot) => {
         if (!active) return;
         setCart(snapshot);
@@ -70,7 +88,7 @@ export default function CartClient() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [runtimeMode]);
 
   useEffect(() => {
     if (!errorCode) return;
@@ -79,11 +97,37 @@ export default function CartClient() {
 
   async function updateQuantity(variantId: string, quantity: number) {
     if (mutationInFlight.current || quantity < 1 || quantity > 5) return;
+    const currentQuantity = cart?.lines.find(
+      (line) => line.variantId === variantId,
+    )?.quantity ?? 0;
+    if (
+      runtimeMode === "production" &&
+      (cart?.itemCount ?? 0) - currentQuantity + quantity > 3
+    ) {
+      setErrorCode("MAX_QUANTITY");
+      return;
+    }
     mutationInFlight.current = true;
     setBusyVariant(variantId);
     setErrorCode(null);
     try {
-      setCart(await setCartLineQuantity(variantId, quantity));
+      if (runtimeMode === "closed") throw new CartApiError("CART_UNAVAILABLE");
+      const fingerprint = `set:${variantId}:${quantity}`;
+      const key = runtimeMode === "production"
+        ? mutationAttempt.current?.fingerprint === fingerprint
+          ? mutationAttempt.current.key
+          : crypto.randomUUID()
+        : undefined;
+      if (runtimeMode === "production" && key) {
+        mutationAttempt.current = { fingerprint, key };
+      }
+      setCart(await setCartLineQuantity(
+        variantId,
+        quantity,
+        runtimeMode,
+        key,
+      ));
+      mutationAttempt.current = null;
     } catch (error) {
       setErrorCode(
         error instanceof CartApiError ? error.code : "CART_UNAVAILABLE",
@@ -100,7 +144,18 @@ export default function CartClient() {
     setBusyVariant(variantId);
     setErrorCode(null);
     try {
-      setCart(await removeCartLine(variantId));
+      if (runtimeMode === "closed") throw new CartApiError("CART_UNAVAILABLE");
+      const fingerprint = `remove:${variantId}`;
+      const key = runtimeMode === "production"
+        ? mutationAttempt.current?.fingerprint === fingerprint
+          ? mutationAttempt.current.key
+          : crypto.randomUUID()
+        : undefined;
+      if (runtimeMode === "production" && key) {
+        mutationAttempt.current = { fingerprint, key };
+      }
+      setCart(await removeCartLine(variantId, runtimeMode, key));
+      mutationAttempt.current = null;
     } catch (error) {
       setErrorCode(
         error instanceof CartApiError ? error.code : "CART_UNAVAILABLE",
@@ -114,6 +169,10 @@ export default function CartClient() {
   const errorMessage =
     errorCode === "OUT_OF_STOCK"
       ? t("cart.outOfStockError")
+      : errorCode === "MAX_QUANTITY"
+        ? runtimeMode === "production"
+          ? t("checkout.parcelUnavailable")
+          : t("product.cartMaxQuantity")
       : t("cart.unavailableError");
   const itemCount = cart?.itemCount ?? 0;
   const cartMutating = busyVariant !== null;
@@ -186,10 +245,16 @@ export default function CartClient() {
                   Apollon · {t("product.size")} {line.size}
                   <br />
                   {line.stockState === "sold-out"
-                    ? t("product.soldOut")
+                    ? runtimeMode === "preproduction"
+                      ? t("product.soldOut")
+                      : t("product.soldOutLive")
                     : line.stockState === "low-stock"
-                      ? t("cart.lowStock")
-                      : t("cart.stockSimulated")}
+                      ? runtimeMode === "preproduction"
+                        ? t("cart.lowStock")
+                        : t("cart.stockVerified")
+                      : runtimeMode === "preproduction"
+                        ? t("cart.stockSimulated")
+                        : t("cart.stockVerified")}
                 </p>
                 <div
                   className={styles.quantityControl}
@@ -214,6 +279,7 @@ export default function CartClient() {
                     disabled={
                       cartMutating ||
                       line.quantity >= 5 ||
+                      (runtimeMode === "production" && itemCount >= 3) ||
                       line.stockState === "sold-out"
                     }
                     onClick={() =>
@@ -235,7 +301,9 @@ export default function CartClient() {
               </div>
               <strong>
                 <LocalizedPrice amountCents={line.lineTotalCents} />{" "}
-                <small>({t("cart.syntheticQualifier")})</small>
+                {runtimeMode === "preproduction" && (
+                  <small>({t("cart.syntheticQualifier")})</small>
+                )}
               </strong>
             </article>
           );
@@ -250,14 +318,18 @@ export default function CartClient() {
             <span>{t("cart.subtotal")}</span>
             <span>
               <LocalizedPrice amountCents={cart.subtotalCents} />{" "}
-              <small>({t("cart.syntheticQualifier")})</small>
+              {runtimeMode === "preproduction" && (
+                <small>({t("cart.syntheticQualifier")})</small>
+              )}
             </span>
           </div>
           <div className={`${styles.row} ${styles.total}`}>
             <span>{t("cart.provisionalTotal")}</span>
             <span>
               <LocalizedPrice amountCents={cart.subtotalCents} />{" "}
-              <small>({t("cart.syntheticQualifier")})</small>
+              {runtimeMode === "preproduction" && (
+                <small>({t("cart.syntheticQualifier")})</small>
+              )}
             </span>
           </div>
           <Link className={styles.button} href="/checkout">
@@ -266,7 +338,11 @@ export default function CartClient() {
           <Link className={styles.secondary} href="/shop">
             {t("cart.continueShopping")}
           </Link>
-          <p className={styles.muted}>{t("cart.conditionsPending")}</p>
+          <p className={styles.muted}>
+            {runtimeMode === "preproduction"
+              ? t("cart.conditionsPending")
+              : t("checkout.securityNote")}
+          </p>
         </aside>
       )}
     </div>
