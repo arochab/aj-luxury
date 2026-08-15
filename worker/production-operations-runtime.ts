@@ -13,6 +13,47 @@ const expectedOperationsSchema = Object.freeze([
   "trigger:trg_return_requests_transition:return_requests",
 ] as const);
 
+const AJ_TRANSACTIONAL_MAILBOX = /^[^@\s]+@ajluxurystore\.com$/i;
+const SAFE_TRANSACTIONAL_REPLY_TO = /^[\x21-\x7e]+@[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$/;
+const SAFE_TRANSACTIONAL_FROM_NAME = /^[^\r\n<>]{1,80}$/;
+
+export type ProductionEmailDispatchRuntimeEnvironment = Readonly<{
+  APP_ENV?: string;
+  COMMERCE_MODE?: string;
+  EMAIL_PROVIDER?: string;
+  RESEND_API_KEY?: string;
+  TRANSACTIONAL_FROM_EMAIL?: string;
+  TRANSACTIONAL_FROM_NAME?: string;
+  TRANSACTIONAL_REPLY_TO?: string;
+  TRANSACTIONAL_EMAIL_DISPATCH_ENABLED?: string;
+  TRANSACTIONAL_EMAIL_DISPATCH_MODE?: string;
+}>;
+
+/**
+ * One pure configuration proof shared by health and the scheduled dispatcher.
+ * Closed mode may drain an already-created outbox only when explicitly allowed.
+ */
+export function productionEmailDispatchRuntimeConfigured(
+  env: ProductionEmailDispatchRuntimeEnvironment | undefined,
+  allowClosedDrain = false,
+): boolean {
+  if (!env || env.APP_ENV !== "production" ||
+    env.TRANSACTIONAL_EMAIL_DISPATCH_ENABLED !== "true" ||
+    env.EMAIL_PROVIDER !== "resend" ||
+    env.RESEND_API_KEY?.startsWith("re_") !== true ||
+    !AJ_TRANSACTIONAL_MAILBOX.test(env.TRANSACTIONAL_FROM_EMAIL ?? "") ||
+    !SAFE_TRANSACTIONAL_FROM_NAME.test(env.TRANSACTIONAL_FROM_NAME?.trim() ?? "") ||
+    (env.TRANSACTIONAL_REPLY_TO !== undefined &&
+      (env.TRANSACTIONAL_REPLY_TO.length > 254 ||
+        !SAFE_TRANSACTIONAL_REPLY_TO.test(env.TRANSACTIONAL_REPLY_TO)))) {
+    return false;
+  }
+  const dispatchMode = env.TRANSACTIONAL_EMAIL_DISPATCH_MODE;
+  if (dispatchMode !== "controlled" && dispatchMode !== "live") return false;
+  if (env.COMMERCE_MODE === "closed") return allowClosedDrain;
+  return env.COMMERCE_MODE === dispatchMode;
+}
+
 /** Exact hosted D1 proof for the return operator state machine. */
 export async function productionOperationsRuntimeInstalled(
   database: CommerceD1Database | undefined,

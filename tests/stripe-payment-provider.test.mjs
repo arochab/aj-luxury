@@ -29,7 +29,7 @@ function checkoutRequest() {
     idempotencyKey: "checkout-order-aj-00000001",
     orderId: "order_aj_00000001",
     customerEmail: "client@example.com",
-    successUrl: "https://ajluxurystore.com/checkout/success?session_id={CHECKOUT_SESSION_ID}",
+    successUrl: "https://ajluxurystore.com/checkout/success",
     cancelUrl: "https://ajluxurystore.com/checkout",
     locale: "fr",
     currency: "EUR",

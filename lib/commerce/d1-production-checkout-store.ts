@@ -493,7 +493,9 @@ export class D1ProductionCheckoutStore {
       idempotencyKey: `stripe-checkout:${paymentHash}`,
       orderId: order.id,
       customerEmail: order.email,
-      successUrl: `${origin.origin}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
+      // The browser never needs the Stripe session id: the HttpOnly cart
+      // session and D1 remain the sole authority on the success page.
+      successUrl: `${origin.origin}/checkout/success`,
       cancelUrl: `${origin.origin}/checkout`,
       locale: input.locale,
       currency: "EUR",

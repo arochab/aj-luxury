@@ -21,7 +21,11 @@ import {
   productionRateLimitBindingsReady,
   type ProductionRateLimitEnvironment,
 } from "./production-rate-limit.ts";
-import { productionOperationsRuntimeInstalled } from "./production-operations-runtime.ts";
+import {
+  productionEmailDispatchRuntimeConfigured,
+  productionOperationsRuntimeInstalled,
+} from "./production-operations-runtime.ts";
+import { productionOutboundShippingRuntimeConfigured } from "./production-shipping-runtime.ts";
 
 const PREFIX = "/api/commerce/";
 const routes = Object.freeze({
@@ -49,8 +53,12 @@ export type ProductionCommerceRuntimeEnvironment = ProductionCommerceEnvironment
   LATE_PAYMENT_REFUND_DISPATCH_ENABLED?: string;
   CONTROLLED_PAYMENT_SESSION_ENABLED?: string;
   OUTBOUND_SHIPMENT_CREATION_ENABLED?: string;
+  SENDCLOUD_SENDER_ADDRESS_ID?: string;
+  SENDCLOUD_SENDER_ADDRESS_ATTESTATION?: string;
   OPERATOR_ADMIN_MFA_ENABLED?: string;
   TRANSACTIONAL_EMAIL_DISPATCH_ENABLED?: string;
+  TRANSACTIONAL_EMAIL_DISPATCH_MODE?: string;
+  TRANSACTIONAL_FROM_NAME?: string;
   RETURNS_WORKFLOW_ENABLED?: string;
   RESERVATION_EXPIRY_ENABLED?: string;
   DELIVERY_REFERENCE_ENCRYPTION_KEY_BASE64?: string;
@@ -262,15 +270,19 @@ function runtimeBlockers(env: ProductionCommerceRuntimeEnvironment, mode: string
         ...(env.OUTBOUND_SHIPMENT_CREATION_ENABLED === "true"
           ? []
           : ["outbound-shipment-creation-not-enabled"]),
+        ...(productionOutboundShippingRuntimeConfigured(env)
+          ? []
+          : ["outbound-shipping-runtime-not-configured"]),
         ...(env.OPERATOR_ADMIN_MFA_ENABLED === "true"
           ? []
           : ["operator-admin-mfa-not-enabled"]),
-        ...(env.TRANSACTIONAL_EMAIL_DISPATCH_ENABLED === "true"
+        ...(productionEmailDispatchRuntimeConfigured(env)
           ? []
           : ["transactional-email-dispatch-not-enabled"]),
         ...(env.RETURNS_WORKFLOW_ENABLED === "true"
           ? []
           : ["returns-workflow-not-activated"]),
+        ...(mode === "live" ? ["returns-label-and-refund-not-activated"] : []),
         ...(env.RESERVATION_EXPIRY_ENABLED === "true"
           ? []
           : ["reservation-expiry-not-activated"]),
@@ -663,7 +675,7 @@ export async function productionCommerceApiResponse(
       blockers.push("stock-runtime-attestation-not-verified");
     }
     const ready = gate.ready && blockers.length === 0;
-    return json({ status: ready ? "ready" : "closed", environment: "production", mode: gate.mode, releaseSha: gate.releaseSha, origin: gate.origin, launchZones: gate.launchZones, blockers: [...gate.blockers, ...blockers], capabilities: { sandboxCheckout: ready && gate.mode === "sandbox", realPayment: ready && gate.mode === "controlled", realDelivery: ready && gate.mode === "controlled", transactionalEmail: ready && env.TRANSACTIONAL_EMAIL_DISPATCH_ENABLED === "true", controlledOrder: ready && gate.mode === "controlled", publicCommerce: false }, routes: { cart: "wired", homeDelivery: "wired-provider-priced", order: "wired", paymentSession: "sandbox-or-controlled-with-durable-refund", servicePoint: "wired-encrypted", stripeWebhook: "atomic-d1-effects-and-late-refund-obligation", lateRefundDispatch: "wired-bounded-owner-only" } }, ready ? 200 : 503);
+    return json({ status: ready ? "ready" : "closed", environment: "production", mode: gate.mode, releaseSha: gate.releaseSha, origin: gate.origin, launchZones: gate.launchZones, blockers: [...gate.blockers, ...blockers], capabilities: { sandboxCheckout: ready && gate.mode === "sandbox", realPayment: ready && gate.mode === "controlled", realDelivery: ready && gate.mode === "controlled", transactionalEmail: ready && productionEmailDispatchRuntimeConfigured(env), returns: false, controlledOrder: ready && gate.mode === "controlled", publicCommerce: false }, routes: { cart: "wired", homeDelivery: "wired-provider-priced", order: "wired", paymentSession: "sandbox-or-controlled-with-durable-refund", servicePoint: "wired-encrypted", stripeWebhook: "atomic-d1-effects-and-late-refund-obligation", lateRefundDispatch: "wired-bounded-owner-only", returns: "partial-no-label-no-refund" } }, ready ? 200 : 503);
   }
   if (!gate.ready || !gate.origin || url.origin !== gate.origin) return fail("COMMERCE_CLOSED", 503);
   if (gate.mode !== "live" && !await controlledOwnerRequestAuthenticated(request, env)) {
@@ -812,18 +824,9 @@ export async function productionCommerceApiResponse(
     if (!["sandbox", "controlled"].includes(gate.mode)) {
       return fail("PAYMENT_SESSION_NOT_ACTIVATED", 503);
     }
-    if (gate.mode === "controlled" && (
-      env.CONTROLLED_PAYMENT_SESSION_ENABLED !== "true" ||
-      env.OUTBOUND_SHIPMENT_CREATION_ENABLED !== "true" ||
-      env.OPERATOR_ADMIN_MFA_ENABLED !== "true" ||
-      env.TRANSACTIONAL_EMAIL_DISPATCH_ENABLED !== "true" ||
-      env.RETURNS_WORKFLOW_ENABLED !== "true" ||
-      env.RESERVATION_EXPIRY_ENABLED !== "true" ||
-      env.LATE_PAYMENT_REFUND_DISPATCH_ENABLED !== "true" ||
-      blockers.includes("late-payment-refund-schema-or-operations-not-ready") ||
-      blockers.includes("production-release-schema-0015-not-installed") ||
-      blockers.includes("stock-manifest-runtime-not-attested")
-    )) return fail("LATE_PAYMENT_REFUND_NOT_READY", 503);
+    if (gate.mode === "controlled" && blockers.length > 0) {
+      return fail("CONTROLLED_PAYMENT_RUNTIME_NOT_READY", 503);
+    }
     const empty = await bytes(request, 1); if (!empty || empty.length) return fail("INVALID_BODY", 400);
     try {
       const checkout = new D1ProductionCheckoutStore(env.DB);

@@ -11,9 +11,11 @@ import { CommerceError } from "../lib/commerce/backend-domain.ts";
 import { D1CommerceStore } from "../lib/commerce/d1-commerce-store.ts";
 import { D1FulfillmentStore } from "../lib/commerce/d1-fulfillment-store.ts";
 import type { CommerceD1Database } from "../lib/commerce/d1-port.ts";
+import { D1LatePaymentRefundDispatcher } from "../lib/commerce/d1-late-payment-refunds.ts";
 import { D1EmailOutbox } from "../lib/commerce/email-outbox.ts";
 import { dispatchTransactionalEmailBatch } from "../lib/commerce/email-outbox-dispatcher.ts";
 import type { TransactionalEmailProviderPort } from "../lib/commerce/email-outbox.ts";
+import type { RefundPaymentProviderPort } from "../lib/commerce/payment-provider.ts";
 import { FulfillmentError, sha256Hex } from "../lib/commerce/fulfillment-domain.ts";
 import {
   authorizeBrowserMutation,
@@ -22,8 +24,15 @@ import {
 } from "../lib/commerce/identity-access-policy.ts";
 import type { ProductionCommerceEnvironment } from "../lib/commerce/production-release-gate.ts";
 import { ResendEmailProvider } from "../lib/commerce/resend-email-provider.ts";
-import { controlledOwnerRequestAuthenticated } from "./production-commerce-api.ts";
-import { productionOperationsRuntimeInstalled } from "./production-operations-runtime.ts";
+import { createStripePaymentProviderPorts } from "../lib/commerce/stripe-payment-provider.ts";
+import {
+  controlledOwnerRequestAuthenticated,
+  productionLatePaymentRefundSchemaInstalled,
+} from "./production-commerce-api.ts";
+import {
+  productionEmailDispatchRuntimeConfigured,
+  productionOperationsRuntimeInstalled,
+} from "./production-operations-runtime.ts";
 import {
   productionScheduledRateLimit,
   type ProductionRateLimitEnvironment,
@@ -52,6 +61,8 @@ export type ProductionOperationsEnvironment = ProductionCommerceEnvironment &
   TRANSACTIONAL_EMAIL_DISPATCH_MODE?: string;
   TRANSACTIONAL_FROM_NAME?: string;
   TRANSACTIONAL_REPLY_TO?: string;
+  LATE_PAYMENT_REFUND_DISPATCH_ENABLED?: string;
+  STRIPE_SETTLEMENT_MODE?: string;
 }>;
 
 type ReturnRequestResult = Readonly<{
@@ -104,6 +115,11 @@ export type ProductionOperationsDependencies = Readonly<{
 export type ProductionEmailDispatchDependencies = Readonly<{
   provider?: TransactionalEmailProviderPort;
 }>;
+
+export type ProductionScheduledOperationsDependencies =
+  ProductionEmailDispatchDependencies & Readonly<{
+    refundProvider?: RefundPaymentProviderPort;
+  }>;
 
 type ExpiredReservationCandidate = Readonly<{ id: string }>;
 
@@ -786,12 +802,7 @@ export async function dispatchProductionTransactionalEmails(
     });
   }
   const configuration = exactProductionOperationsConfiguration(env);
-  if (
-    !configuration || env.TRANSACTIONAL_EMAIL_DISPATCH_ENABLED !== "true" ||
-    !["controlled", "live"].includes(env.TRANSACTIONAL_EMAIL_DISPATCH_MODE ?? "") ||
-    (configuration.mode !== "closed" &&
-      env.TRANSACTIONAL_EMAIL_DISPATCH_MODE !== configuration.mode)
-  ) {
+  if (!configuration || !productionEmailDispatchRuntimeConfigured(env, true)) {
     return Object.freeze({
       closed: true,
       reason: "transactional-email-dispatch-not-activated",
@@ -859,15 +870,82 @@ export async function dispatchProductionTransactionalEmails(
   return Object.freeze({ staleLeasesRecovered, ...dispatched });
 }
 
+export async function dispatchProductionLatePaymentRefunds(
+  env: ProductionOperationsEnvironment | undefined,
+  input: Readonly<{ now: string }>,
+  dependencies: Readonly<{ refundProvider?: RefundPaymentProviderPort }> = {},
+): Promise<Readonly<{
+  closed: boolean;
+  reason: string | null;
+  claimed: number;
+  succeeded: number;
+  rejected: number;
+  unknown: number;
+  attentionRequired: number;
+}>> {
+  const closed = (reason: string) => Object.freeze({
+    closed: true,
+    reason,
+    claimed: 0,
+    succeeded: 0,
+    rejected: 0,
+    unknown: 0,
+    attentionRequired: 0,
+  });
+  const configuration = env ? exactProductionOperationsConfiguration(env) : null;
+  if (!env || !env.DB || !configuration) {
+    return closed("production-late-refund-runtime-not-configured");
+  }
+  const expectedSettlement = configuration.mode === "sandbox" ? "test" : "live";
+  if (env.LATE_PAYMENT_REFUND_DISPATCH_ENABLED !== "true" ||
+    env.STRIPE_SETTLEMENT_MODE !== expectedSettlement ||
+    !isCanonicalUtcTimestamp(input.now)) {
+    return closed("production-late-refund-dispatch-not-activated");
+  }
+  const rateLimit = await productionScheduledRateLimit(env, "late-payment-refund-dispatch");
+  if (rateLimit !== "allowed") {
+    return closed(`production-late-refund-rate-limit-${rateLimit}`);
+  }
+  if (!await productionLatePaymentRefundSchemaInstalled(env.DB)) {
+    return closed("production-late-refund-schema-not-installed");
+  }
+  try {
+    const provider = dependencies.refundProvider ?? createStripePaymentProviderPorts({
+      apiKey: env.STRIPE_SECRET_KEY,
+      webhookSecret: env.STRIPE_WEBHOOK_SECRET,
+      mode: env.STRIPE_SETTLEMENT_MODE as "test" | "live",
+    }).refunds;
+    const report = await new D1LatePaymentRefundDispatcher(env.DB, provider)
+      .dispatch({ now: input.now, limit: 3 });
+    return Object.freeze({ closed: false, reason: null, ...report });
+  } catch {
+    return closed("production-late-refund-dispatch-unavailable");
+  }
+}
+
 export async function runProductionScheduledOperations(
   env: ProductionOperationsEnvironment | undefined,
   input: Readonly<{ now: string }>,
-  dependencies: ProductionEmailDispatchDependencies = {},
+  dependencies: ProductionScheduledOperationsDependencies = {},
 ): Promise<Readonly<{
   reservations: Awaited<ReturnType<typeof expireProductionReservations>>;
   email: Awaited<ReturnType<typeof dispatchProductionTransactionalEmails>>;
+  lateRefunds: Awaited<ReturnType<typeof dispatchProductionLatePaymentRefunds>>;
 }>> {
-  const reservations = await expireProductionReservations(env, input);
-  const email = await dispatchProductionTransactionalEmails(env, input, dependencies);
-  return Object.freeze({ reservations, email });
+  const [lateRefunds, reservations, email] = await Promise.all([
+    dispatchProductionLatePaymentRefunds(env, input, dependencies).catch(() => Object.freeze({
+      closed: true, reason: "production-late-refund-dispatch-unavailable",
+      claimed: 0, succeeded: 0, rejected: 0, unknown: 0, attentionRequired: 0,
+    })),
+    expireProductionReservations(env, input).catch(() => Object.freeze({
+      closed: true, reason: "production-reservation-dispatch-unavailable",
+      candidates: 0, expired: 0, raced: 0, queueDrained: false,
+    })),
+    dispatchProductionTransactionalEmails(env, input, dependencies).catch(() => Object.freeze({
+      closed: true, reason: "production-email-dispatch-unavailable",
+      staleLeasesRecovered: 0, claimed: 0, sent: 0,
+      retryScheduled: 0, failed: 0, queueDrained: false,
+    })),
+  ]);
+  return Object.freeze({ reservations, email, lateRefunds });
 }

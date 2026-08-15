@@ -117,7 +117,7 @@ test("cart, provider, webhook and operator traffic use separate bindings", async
   ]);
 });
 
-test("scheduled stock and email jobs share a bounded operator counter before costs", async () => {
+test("scheduled stock, email and refund jobs share a bounded operator counter before costs", async () => {
   assert.equal(await productionScheduledRateLimit(
     { APP_ENV: "production" },
     "reservation-expiry",
@@ -137,8 +137,14 @@ test("scheduled stock and email jobs share a bounded operator counter before cos
     await productionScheduledRateLimit(env, "transactional-email-dispatch"),
     "limited",
   );
-  assert.equal(keys.length, 2);
+  assert.equal(
+    await productionScheduledRateLimit(env, "late-payment-refund-dispatch"),
+    "limited",
+  );
+  assert.equal(keys.length, 3);
   assert.match(keys[0], /^operator:[0-9a-f]{64}$/);
   assert.match(keys[1], /^operator:[0-9a-f]{64}$/);
+  assert.match(keys[2], /^operator:[0-9a-f]{64}$/);
   assert.notEqual(keys[0], keys[1]);
+  assert.notEqual(keys[1], keys[2]);
 });

@@ -2518,6 +2518,9 @@ function withSecurityHeaders(
   headers.set("X-Frame-Options", "DENY");
   headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()");
   headers.set("Cross-Origin-Opener-Policy", "same-origin");
+  if (environment === "production") {
+    headers.set("Strict-Transport-Security", "max-age=31536000");
+  }
   if (environment === "preproduction") {
     headers.set("X-Robots-Tag", "noindex, nofollow");
   }
@@ -2840,6 +2843,7 @@ const worker = {
             event: "production_scheduled_operations",
             reservations: result.reservations,
             email: result.email,
+            lateRefunds: result.lateRefunds,
           }));
         })
         .catch(() => {

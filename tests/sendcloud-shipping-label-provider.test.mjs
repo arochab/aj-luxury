@@ -7,6 +7,7 @@ import {
 } from "../lib/commerce/fulfillment-domain.ts";
 import { createSendcloudShippingLabelProvider } from "../lib/commerce/sendcloud-shipping-label-provider.ts";
 import { productionShippingLabelAdminResponse } from "../worker/production-shipping-label-admin-api.ts";
+import { productionOutboundShippingRuntimeConfigured } from "../worker/production-shipping-runtime.ts";
 import { controlledRequestAuthorization } from "../worker/production-commerce-api.ts";
 
 const request = Object.freeze({
@@ -306,6 +307,18 @@ const adminEnv = Object.freeze({
   COMMERCE_CONTROLLED_AUTH_HMAC_SECRET: controlledSecret,
   OUTBOUND_SHIPMENT_CREATION_ENABLED: "true",
   OPERATOR_ADMIN_MFA_ENABLED: "true",
+  SENDCLOUD_SENDER_ADDRESS_ID: "12345",
+  SENDCLOUD_SENDER_ADDRESS_ATTESTATION: "3 A rue Principale|67130|Belmont|FR",
+  DELIVERY_REFERENCE_ENCRYPTION_KEY_BASE64: Buffer.alloc(32, 7).toString("base64"),
+  DELIVERY_REFERENCE_KEY_VERSION: "1",
+  DELIVERY_REFERENCE_DECRYPTION_KEYS_JSON: "{}",
+});
+
+test("health and label routing share the exact outbound Sendcloud runtime", () => {
+  assert.equal(productionOutboundShippingRuntimeConfigured(adminEnv), true);
+  assert.equal(productionOutboundShippingRuntimeConfigured({ ...adminEnv, SENDCLOUD_SENDER_ADDRESS_ID: "0" }), false);
+  assert.equal(productionOutboundShippingRuntimeConfigured({ ...adminEnv, SENDCLOUD_SENDER_ADDRESS_ATTESTATION: "Belmont" }), false);
+  assert.equal(productionOutboundShippingRuntimeConfigured({ ...adminEnv, DELIVERY_REFERENCE_ENCRYPTION_KEY_BASE64: "invalid" }), false);
 });
 
 async function adminRequest(headers = {}) {
@@ -397,7 +410,7 @@ test("an idempotent label-ready replay returns the exact printable A6 PDF", asyn
     provider_shipment_reference: "383707309",
     tracking_reference: "3S123456789",
   };
-  const pdf = new Blob([new Uint8Array([0x25, 0x50, 0x44, 0x46])], {
+  const pdf = new Blob([new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x37])], {
     type: "application/pdf",
   });
   let requestInput;
@@ -429,5 +442,8 @@ test("an idempotent label-ready replay returns the exact printable A6 PDF", asyn
     providerParcelReference: "383707309",
     documentKind: "label",
   });
-  assert.deepEqual(new Uint8Array(await response.arrayBuffer()), new Uint8Array([0x25, 0x50, 0x44, 0x46]));
+  assert.deepEqual(
+    new Uint8Array(await response.arrayBuffer()),
+    new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x37]),
+  );
 });

@@ -7,10 +7,14 @@ import { fileURLToPath } from "node:url";
 import { D1CommerceStore } from "../lib/commerce/d1-commerce-store.ts";
 import {
   dispatchProductionTransactionalEmails,
+  dispatchProductionLatePaymentRefunds,
   expireProductionReservations,
   productionOperationsApiResponse,
 } from "../worker/production-operations-api.ts";
-import { productionOperationsRuntimeInstalled } from "../worker/production-operations-runtime.ts";
+import {
+  productionEmailDispatchRuntimeConfigured,
+  productionOperationsRuntimeInstalled,
+} from "../worker/production-operations-runtime.ts";
 import {
   controlledRequestAuthorization,
 } from "../worker/production-commerce-api.ts";
@@ -228,6 +232,21 @@ test("operations schema proof rejects missing, altered and prefix-colliding sent
     return { async first() { return { ...sentinel, contract: "weaker-contract" }; } };
   };
   assert.equal(await productionOperationsRuntimeInstalled(wrongSentinel), false);
+});
+
+test("email readiness matches the scheduled dispatcher configuration exactly", () => {
+  const active = {
+    ...controlledEnv(),
+    TRANSACTIONAL_EMAIL_DISPATCH_ENABLED: "true",
+    TRANSACTIONAL_EMAIL_DISPATCH_MODE: "controlled",
+  };
+  assert.equal(productionEmailDispatchRuntimeConfigured(active), true);
+  assert.equal(productionEmailDispatchRuntimeConfigured({ ...active, TRANSACTIONAL_FROM_NAME: "" }), false);
+  assert.equal(productionEmailDispatchRuntimeConfigured({ ...active, TRANSACTIONAL_EMAIL_DISPATCH_MODE: "live" }), false);
+  assert.equal(productionEmailDispatchRuntimeConfigured({ ...active, TRANSACTIONAL_FROM_EMAIL: "orders@example.com" }), false);
+  assert.equal(productionEmailDispatchRuntimeConfigured({ ...active, TRANSACTIONAL_REPLY_TO: "invalid mailbox" }), false);
+  assert.equal(productionEmailDispatchRuntimeConfigured({ ...active, COMMERCE_MODE: "closed" }), false);
+  assert.equal(productionEmailDispatchRuntimeConfigured({ ...active, COMMERCE_MODE: "closed" }, true), true);
 });
 
 test("customer return is bound to an exact guest session, paid delivery and idempotency key", async () => {
@@ -490,6 +509,24 @@ test("scheduled email dispatch remains closed before activation without touching
     retryScheduled: 0,
     failed: 0,
     queueDrained: false,
+  });
+  assert.equal(db.queries.length, 0);
+});
+
+test("scheduled late-refund recovery stays closed before activation without touching D1", async () => {
+  const db = database();
+  const result = await dispatchProductionLatePaymentRefunds(
+    controlledEnv(db),
+    { now: "2026-08-15T09:00:00.000Z" },
+  );
+  assert.deepEqual(result, {
+    closed: true,
+    reason: "production-late-refund-dispatch-not-activated",
+    claimed: 0,
+    succeeded: 0,
+    rejected: 0,
+    unknown: 0,
+    attentionRequired: 0,
   });
   assert.equal(db.queries.length, 0);
 });

@@ -11,6 +11,7 @@ import {
 import { createSendcloudShippingLabelProvider } from "../lib/commerce/sendcloud-shipping-label-provider.ts";
 import { createSendcloudProviderPorts } from "../lib/commerce/sendcloud-provider.ts";
 import { controlledOwnerRequestAuthenticated } from "./production-commerce-api.ts";
+import { productionOutboundShippingRuntimeConfigured } from "./production-shipping-runtime.ts";
 
 const ROUTE = /^\/api\/commerce\/admin\/orders\/([^/]+)\/shipping-label$/;
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,191}$/;
@@ -81,6 +82,11 @@ async function printableLabelResponse(
       documentKind: "label",
     });
     if (document.mediaType !== "application/pdf" || document.byteLength !== document.content.size) {
+      return fail("SHIPPING_DOCUMENT_UNAVAILABLE", 503);
+    }
+    const signature = new Uint8Array(await document.content.slice(0, 5).arrayBuffer());
+    if (signature.length !== 5 || signature[0] !== 0x25 || signature[1] !== 0x50 ||
+      signature[2] !== 0x44 || signature[3] !== 0x46 || signature[4] !== 0x2d) {
       return fail("SHIPPING_DOCUMENT_UNAVAILABLE", 503);
     }
     return new Response(document.content, {
@@ -239,6 +245,9 @@ export async function productionShippingLabelAdminResponse(
   if (env.OUTBOUND_SHIPMENT_CREATION_ENABLED !== "true" ||
     env.OPERATOR_ADMIN_MFA_ENABLED !== "true") {
     return fail("OUTBOUND_SHIPPING_NOT_ENABLED", 503);
+  }
+  if (!productionOutboundShippingRuntimeConfigured(env)) {
+    return fail("SHIPPING_PROVIDER_UNAVAILABLE", 503);
   }
   if (!env.DB) return fail("DATABASE_UNAVAILABLE", 503);
   const now = new Date().toISOString();

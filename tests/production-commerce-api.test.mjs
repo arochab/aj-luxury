@@ -299,7 +299,7 @@ test("controlled payment session stays closed until refund schema and dispatcher
     controlled,
   );
   assert.equal(response.status, 503);
-  assert.equal((await response.json()).error.code, "LATE_PAYMENT_REFUND_NOT_READY");
+  assert.equal((await response.json()).error.code, "CONTROLLED_PAYMENT_RUNTIME_NOT_READY");
 });
 
 test("late-refund runtime proof rejects terminal debt and prefix-colliding 0014 objects", async () => {

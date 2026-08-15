@@ -131,6 +131,7 @@ export async function productionCommerceRateLimitResponse(
 }
 
 export type ScheduledProductionOperation =
+  | "late-payment-refund-dispatch"
   | "transactional-email-dispatch"
   | "reservation-expiry";
 
