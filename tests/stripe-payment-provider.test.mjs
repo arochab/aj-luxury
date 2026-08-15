@@ -114,6 +114,35 @@ function paymentIntentEvent({
   };
 }
 
+function checkoutEvent({
+  eventId,
+  eventType,
+  created,
+  paymentStatus = "paid",
+  paymentId = "pi_payment123456789",
+  sessionId = "cs_test_checkout123456789",
+}) {
+  return {
+    id: eventId,
+    object: "event",
+    type: eventType,
+    created,
+    livemode: false,
+    data: {
+      object: {
+        id: sessionId,
+        object: "checkout.session",
+        amount_total: 2_999,
+        currency: "eur",
+        client_reference_id: "order_aj_00000001",
+        metadata: { order_id: "order_aj_00000001" },
+        payment_intent: paymentId,
+        payment_status: paymentStatus,
+      },
+    },
+  };
+}
+
 async function webhookInput(payload, timestamp = RECEIVED_AT) {
   const rawBody = new TextEncoder().encode(JSON.stringify(payload));
   return {
@@ -202,12 +231,10 @@ test("Checkout rejects a mismatched amount, mode or oversized response", async (
 });
 
 test("a valid raw-body signature delivers a paid event exactly after verification", async () => {
-  const event = paymentIntentEvent({
+  const event = checkoutEvent({
     eventId: "evt_paid123456789",
-    eventType: "payment_intent.succeeded",
+    eventType: "checkout.session.completed",
     created: RECEIVED_AT - 2,
-    status: "succeeded",
-    amountReceived: 2_999,
   });
   const input = await webhookInput(event);
   const multipleSignatures = {
@@ -292,15 +319,15 @@ test("invalid, stale or reserialized signatures have a zero-effect contract", as
   assert.equal(effects.calls, 0);
 });
 
-test("3DS action and refusal states map without exposing provider messages", async () => {
+test("Checkout-only settlement acknowledges PaymentIntent events without effects", async () => {
   const action = await ports().webhooks.verify(await webhookInput(paymentIntentEvent({
     eventId: "evt_action123456789",
     eventType: "payment_intent.requires_action",
     created: RECEIVED_AT - 3,
     status: "requires_action",
   })));
-  assert.equal(action.kind, "payment");
-  assert.equal(action.state, "action_required");
+  assert.equal(action.kind, "ignored");
+  assert.equal(action.reason, "event-type-not-required");
 
   const refused = await ports().webhooks.verify(await webhookInput(paymentIntentEvent({
     eventId: "evt_refused123456789",
@@ -313,9 +340,8 @@ test("3DS action and refusal states map without exposing provider messages", asy
       message: "Never expose this provider message.",
     },
   })));
-  assert.equal(refused.kind, "payment");
-  assert.equal(refused.state, "failed");
-  assert.equal(refused.providerFailureCode, "do_not_honor");
+  assert.equal(refused.kind, "ignored");
+  assert.equal(refused.reason, "event-type-not-required");
   assert.doesNotMatch(JSON.stringify(refused), /Never expose/);
 });
 
@@ -342,25 +368,21 @@ test("event keys plus monotonic classification handle duplicates and out-of-orde
       return "applied";
     },
   };
-  const paid = paymentIntentEvent({
+  const paid = checkoutEvent({
     eventId: "evt_order_paid123456789",
-    eventType: "payment_intent.succeeded",
+    eventType: "checkout.session.completed",
     created: RECEIVED_AT - 10,
-    status: "succeeded",
-    amountReceived: 2_999,
   });
-  const sameTransition = paymentIntentEvent({
+  const sameTransition = checkoutEvent({
     eventId: "evt_order_paid_duplicate123",
-    eventType: "payment_intent.succeeded",
+    eventType: "checkout.session.completed",
     created: RECEIVED_AT - 9,
-    status: "succeeded",
-    amountReceived: 2_999,
   });
-  const earlierProcessing = paymentIntentEvent({
+  const earlierProcessing = checkoutEvent({
     eventId: "evt_order_processing12345",
-    eventType: "payment_intent.processing",
+    eventType: "checkout.session.expired",
     created: RECEIVED_AT - 20,
-    status: "processing",
+    paymentStatus: "unpaid",
   });
 
   const first = await verifyAndDeliverPaymentWebhook(ports().webhooks, await webhookInput(paid), effects);

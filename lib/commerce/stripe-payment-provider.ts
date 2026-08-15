@@ -440,63 +440,6 @@ function ignoredEvent(
   return Object.freeze({ ...base, kind: "ignored", reason });
 }
 
-function paymentState(value: unknown): PaymentState | null {
-  switch (value) {
-    case "requires_payment_method": return "failed";
-    case "requires_action": return "action_required";
-    case "requires_confirmation":
-    case "processing":
-    case "requires_capture": return "pending";
-    case "succeeded": return "paid";
-    case "canceled": return "canceled";
-    default: return null;
-  }
-}
-
-function failureCode(value: Record<string, unknown>): string | null {
-  if (!record(value.last_payment_error)) return null;
-  for (const key of ["decline_code", "code"] as const) {
-    const candidate = value.last_payment_error[key];
-    if (safeString(candidate, 80) && /^[a-z0-9_]+$/.test(candidate)) return candidate;
-  }
-  return null;
-}
-
-function parsePaymentIntentEvent(
-  object: Record<string, unknown>,
-  base: Omit<VerifiedPaymentProviderEvent, "kind" | "orderId" | "providerPaymentId" |
-    "providerCheckoutSessionId" | "state" | "amountCents" | "currency" |
-    "providerFailureCode" | "semanticKey">,
-): VerifiedPaymentProviderEvent | VerifiedIgnoredProviderEvent {
-  if (object.object !== "payment_intent" || object.currency !== "eur" ||
-    !safeInteger(object.amount, 1, 100_000_000)) {
-    throw new PaymentProviderError("MALFORMED_RESPONSE", "Stripe PaymentIntent event is invalid.");
-  }
-  const providerPaymentId = providerId(object.id, "pi", "Stripe payment id");
-  const state = paymentState(object.status);
-  if (!state) return ignoredEvent(base, "provider-state-not-actionable");
-  const orderId = metadataOrderId(object);
-  let amountCents = object.amount;
-  if (state === "paid") {
-    if (!safeInteger(object.amount_received, 1, 100_000_000)) {
-      throw new PaymentProviderError("MALFORMED_RESPONSE", "Stripe captured amount is invalid.");
-    }
-    amountCents = object.amount_received;
-  }
-  return Object.freeze({
-    ...base,
-    kind: "payment",
-    orderId,
-    providerPaymentId,
-    providerCheckoutSessionId: null,
-    state,
-    amountCents,
-    currency: "EUR",
-    providerFailureCode: state === "failed" ? failureCode(object) : null,
-    semanticKey: `stripe:payment:${providerPaymentId}:${state}`,
-  });
-}
-
 function checkoutOrderId(object: Record<string, unknown>): string {
   const orderId = metadataOrderId(object);
   if (object.client_reference_id !== orderId) {
@@ -601,7 +544,11 @@ function parseVerifiedWebhook(
     livemode: runtime.livemode,
   });
   if (value.type.startsWith("payment_intent.")) {
-    return parsePaymentIntentEvent(value.data.object, base);
+    // AJ Luxury settles exclusively from Checkout Session events, which carry
+    // the exact durable session binding. A standalone PaymentIntent event has
+    // no Checkout Session id and must therefore be acknowledged as ignored,
+    // never sent to the D1 effects port for endless retries.
+    return ignoredEvent(base, "event-type-not-required");
   }
   if (value.type.startsWith("checkout.session.")) {
     return parseCheckoutEvent(value.data.object, base);
