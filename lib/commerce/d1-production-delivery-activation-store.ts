@@ -27,10 +27,7 @@ type CartLineRow = Readonly<{
 
 type ConfigurationRow = Readonly<{
   id: string;
-  price_cents: number;
   currency: "EUR";
-  estimated_days_min: number;
-  estimated_days_max: number;
   duties_terms: "EU_INCLUDED" | "DAP" | "DDP";
 }>;
 
@@ -174,8 +171,7 @@ export class D1ProductionDeliveryActivationStore {
         WHERE cart_id = ? ORDER BY variant_id`,
       ).bind(input.cartId).all<CartLineRow>(),
       this.#database.prepare(
-        `SELECT id, price_cents, currency, estimated_days_min,
-          estimated_days_max, duties_terms FROM shipping_zone_configurations
+        `SELECT id, currency, duties_terms FROM shipping_zone_configurations
         WHERE zone = ? AND status = 'active' LIMIT 1`,
       ).bind(address.zone).first<ConfigurationRow>(),
     ]);
@@ -216,14 +212,12 @@ export class D1ProductionDeliveryActivationStore {
         { cause: error },
       );
     }
-    // The D1 configuration is the commercial price/ETA authority. Provider
-    // offers may only activate an option that matches that reviewed contract.
+    // The provider response is the price/ETA authority. D1 continues to govern
+    // launch zone, currency, duties policy and the validated parcel profile;
+    // no synthetic/demo amount is ever promoted into a commercial quote.
     const acceptedOffers = offers.filter((offer) =>
       (offer.deliveryMode === "home" || offer.deliveryMode === "service_point") &&
       offer.currency === "EUR" && offer.dutiesTerms === expectedDuties &&
-      offer.amountCents === configuration.price_cents &&
-      offer.estimatedDaysMin === configuration.estimated_days_min &&
-      offer.estimatedDaysMax === configuration.estimated_days_max &&
       offer.expiresAt > input.now && offer.expiresAt <= cart.expires_at
     ).slice(0, 20);
     if (acceptedOffers.length < 1) {
