@@ -1,4 +1,7 @@
-import type { CommerceD1Database } from "./d1-port.ts";
+import type {
+  CommerceD1Database,
+  CommerceD1PreparedStatement,
+} from "./d1-port.ts";
 import type {
   DeliveryDutiesTerms,
   DeliveryMode,
@@ -32,6 +35,8 @@ export type DeliveryOptionSnapshotRow = Readonly<{
 
 export type DeliveryServicePointSnapshotRow = Readonly<{
   id: string;
+  delivery_option_id: string;
+  provider_point_reference_hash: string;
   display_name: string;
   postal_code: string;
   city: string;
@@ -51,6 +56,7 @@ export class DeliveryOptionStoreError extends Error {
     | "OPTION_EXPIRED"
     | "OPTION_MISMATCH"
     | "SERVICE_POINT_REQUIRED"
+    | "SERVICE_POINT_NOT_FOUND"
     | "OPTION_ALREADY_SELECTED"
     | "PERSISTENCE_FAILURE";
 
@@ -60,6 +66,7 @@ export class DeliveryOptionStoreError extends Error {
       | "OPTION_EXPIRED"
       | "OPTION_MISMATCH"
       | "SERVICE_POINT_REQUIRED"
+      | "SERVICE_POINT_NOT_FOUND"
       | "OPTION_ALREADY_SELECTED"
       | "PERSISTENCE_FAILURE",
     message: string,
@@ -181,6 +188,7 @@ export class D1DeliveryOptionsStore {
     cartId: string;
     addressFingerprint: string;
     now: string;
+    servicePointId?: string | null;
   }>): Promise<DeliveryOptionSnapshotRow> {
     assertFulfillmentIdentifier(input.optionId, "optionId");
     assertFulfillmentIdentifier(input.cartId, "cartId");
@@ -202,15 +210,81 @@ export class D1DeliveryOptionsStore {
     ) {
       throw new DeliveryOptionStoreError("OPTION_EXPIRED", "Delivery option has expired or the cart changed.");
     }
-    if (existing.delivery_mode === "service_point") {
+    if (existing.selected_at !== null) {
+      throw new DeliveryOptionStoreError(
+        "OPTION_ALREADY_SELECTED",
+        "Delivery option has already been selected.",
+      );
+    }
+    if (existing.delivery_mode === "home" && input.servicePointId != null) {
+      throw new DeliveryOptionStoreError(
+        "OPTION_MISMATCH",
+        "Home delivery cannot select a service point.",
+      );
+    }
+    if (existing.delivery_mode === "service_point" && !input.servicePointId) {
       throw new DeliveryOptionStoreError(
         "SERVICE_POINT_REQUIRED",
-        "Service-point delivery stays closed until a provider reference can be stored safely.",
+        "A current service point is required for this delivery option.",
       );
+    }
+    if (input.servicePointId) {
+      assertFulfillmentIdentifier(input.servicePointId, "servicePointId");
+      const point = await this.database.prepare(
+        `SELECT id FROM delivery_service_point_snapshots
+        WHERE id = ? AND delivery_option_id = ? AND expires_at = ?
+          AND expires_at > ?`,
+      ).bind(
+        input.servicePointId,
+        existing.id,
+        existing.expires_at,
+        input.now,
+      ).first<{ id: string }>();
+      if (!point) {
+        throw new DeliveryOptionStoreError(
+          "SERVICE_POINT_NOT_FOUND",
+          "Service point does not belong to the current delivery option.",
+        );
+      }
     }
     // Validation only. The chosen option is persisted atomically with the
     // order, so an abandoned/expired checkout cannot lock the cart forever.
     return existing;
+  }
+
+  /**
+   * Builds the guarded selection statement that the order writer must include
+   * in the same D1 batch as shipping-quote selection and order insertion.
+   */
+  async prepareOrderSelection(input: Readonly<{
+    optionId: string;
+    cartId: string;
+    addressFingerprint: string;
+    now: string;
+    servicePointId?: string | null;
+  }>): Promise<Readonly<{
+    option: DeliveryOptionSnapshotRow;
+    statement: CommerceD1PreparedStatement;
+  }>> {
+    const option = await this.selectOption(input);
+    const servicePointId = input.servicePointId ?? null;
+    return Object.freeze({
+      option,
+      statement: this.database.prepare(
+        `UPDATE delivery_option_snapshots
+        SET selected_at = ?, selected_service_point_id = ?
+        WHERE id = ? AND cart_id = ? AND shipping_address_fingerprint = ?
+          AND selected_at IS NULL AND selected_service_point_id IS NULL
+          AND expires_at > ?`,
+      ).bind(
+        input.now,
+        servicePointId,
+        option.id,
+        input.cartId,
+        input.addressFingerprint,
+        input.now,
+      ),
+    });
   }
 
   async servicePoints(
@@ -230,7 +304,8 @@ export class D1DeliveryOptionsStore {
     }
     if (option.delivery_mode !== "service_point") return Object.freeze([]);
     const result = await this.database.prepare(
-      `SELECT id, display_name, postal_code, city, country_code,
+      `SELECT id, delivery_option_id, provider_point_reference_hash,
+        display_name, postal_code, city, country_code,
         opening_hours_summary, expires_at
       FROM delivery_service_point_snapshots
       WHERE delivery_option_id = ? AND expires_at > ?
