@@ -15,7 +15,7 @@ import {
 
 const drizzle = fileURLToPath(new URL("../drizzle/", import.meta.url));
 const migrations = readdirSync(drizzle)
-  .filter((name) => /^(?:000[0-7]|0009|0010|0011)_.+\.sql$/.test(name))
+  .filter((name) => /^(?:000[0-7]|0009|0010|0011|0012)_.+\.sql$/.test(name))
   .sort();
 const KEY_BASE64 = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=";
 const HASH = "a".repeat(64);
@@ -293,10 +293,10 @@ test("production relay quotes and point snapshots are atomically replayable with
         serviceCode: "relay-reviewed",
         displayName: "Point relais",
         deliveryMode: "service_point",
-        amountCents: 700,
+        amountCents: 875,
         currency: "EUR",
-        estimatedDaysMin: 2,
-        estimatedDaysMax: 4,
+        estimatedDaysMin: 1,
+        estimatedDaysMax: 3,
         dutiesTerms: "EU_INCLUDED",
         expiresAt,
         responseFingerprint: "b".repeat(64),
@@ -333,6 +333,9 @@ test("production relay quotes and point snapshots are atomically replayable with
   });
   assert.equal(options.length, 1);
   assert.equal(options[0].deliveryMode, "service_point");
+  assert.equal(options[0].amountCents, 875);
+  assert.equal(options[0].estimatedDaysMin, 1);
+  assert.equal(options[0].estimatedDaysMax, 3);
   assert.equal("providerQuoteReference" in options[0], false);
   assert.equal(quoteCalls, 1);
   assert.deepEqual(await store.quoteOptions({
@@ -402,9 +405,10 @@ test("0011 fails closed for a missing, foreign, expired or unsealed service poin
   assert.doesNotMatch(migration, /provider_reference` text|raw_reference|api[_-]?key|secret[_-]?key/i);
 });
 
-test("0011 metadata is terminal, additive and chained to the exact 0010 snapshot", () => {
+test("0011 remains additive and 0012 is a metadata-only pricing-contract successor", () => {
   const previous = JSON.parse(readFileSync(`${drizzle}meta/0010_snapshot.json`, "utf8"));
   const snapshot = JSON.parse(readFileSync(`${drizzle}meta/0011_snapshot.json`, "utf8"));
+  const pricingSnapshot = JSON.parse(readFileSync(`${drizzle}meta/0012_snapshot.json`, "utf8"));
   const journal = JSON.parse(readFileSync(`${drizzle}meta/_journal.json`, "utf8"));
   assert.equal(snapshot.version, "6");
   assert.equal(snapshot.dialect, "sqlite");
@@ -428,11 +432,24 @@ test("0011 metadata is terminal, additive and chained to the exact 0010 snapshot
       "ck_delivery_reference_timestamp",
     ],
   );
+  assert.equal(pricingSnapshot.prevId, snapshot.id);
+  assert.notEqual(pricingSnapshot.id, snapshot.id);
+  assert.deepEqual(pricingSnapshot.tables, snapshot.tables);
   assert.deepEqual(journal.entries.at(-1), {
-    idx: 11,
+    idx: 12,
     version: "6",
-    when: 1786753681203,
-    tag: "0011_service_point_reference_vault",
+    when: 1786759000000,
+    tag: "0012_provider_priced_delivery_quotes",
     breakpoints: true,
   });
+});
+
+test("0012 accepts provider price/ETA while retaining legacy and no-raw-reference guards", () => {
+  const migration = readFileSync(`${drizzle}0012_provider_priced_delivery_quotes.sql`, "utf8");
+  assert.match(migration, /provider_receipt_fingerprint` IS NOT NULL/);
+  assert.match(migration, /provider_quote_reference` IS NULL/);
+  assert.match(migration, /provider_receipt_fingerprint` IS NULL[\s\S]+amount_cents` = configuration\.`price_cents/);
+  assert.match(migration, /trg_shipping_quote_provider_pricing_contract/);
+  assert.match(migration, /delivery_provider_raw_reference_forbidden/);
+  assert.doesNotMatch(migration, /700|900|1200|fixture|synthetic_demo/i);
 });
