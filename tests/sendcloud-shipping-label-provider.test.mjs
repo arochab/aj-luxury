@@ -242,6 +242,8 @@ test("timeout, 5xx, unparsed 409 and malformed success all require manual reconc
   for (const [name, fetchImpl] of [
     ["timeout", async () => { throw new DOMException("timeout", "TimeoutError"); }],
     ["5xx", async () => Response.json({ error: "temporary" }, { status: 503 })],
+    ["throttled", async () => Response.json({ error: "rate-limited" }, { status: 429 })],
+    ["unexpected-async", async () => Response.json({ data: { status: "queued" } }, { status: 202 })],
     ["409", async () => Response.json(receipt(), { status: 409 })],
     ["malformed-success", async () => Response.json(receipt({ data: { errors: [{ code: "x" }] } }), { status: 201 })],
     ["non-a6", async () => {
