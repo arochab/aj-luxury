@@ -196,28 +196,36 @@ const SHIPPING_PARCEL_TABLE_INVENTORY = Object.freeze({
   shipping_quote_parcel_snapshots: "shipping_quote_parcel_snapshots",
 } as const);
 
-const MULTICARRIER_FOUNDATION_MIGRATION =
-  "0010_multicarrier_delivery_foundation.sql" as const;
+const SERVICE_POINT_REFERENCE_VAULT_MIGRATION =
+  "0011_service_point_reference_vault.sql" as const;
 const MULTICARRIER_TABLE_INVENTORY = Object.freeze({
   delivery_option_snapshots: "delivery_option_snapshots",
+  delivery_provider_reference_vault: "delivery_provider_reference_vault",
   delivery_service_point_snapshots: "delivery_service_point_snapshots",
   shipping_document_metadata: "shipping_document_metadata",
 } as const);
 const MULTICARRIER_INDEX_INVENTORY = Object.freeze({
   idx_delivery_options_cart_expiry: "delivery_option_snapshots",
+  idx_delivery_reference_key_version: "delivery_provider_reference_vault",
   idx_delivery_service_points_option_expiry:
     "delivery_service_point_snapshots",
   ux_delivery_options_quote: "delivery_option_snapshots",
   ux_delivery_options_selected_cart: "delivery_option_snapshots",
+  ux_delivery_reference_owner: "delivery_provider_reference_vault",
   ux_delivery_service_point_provider_ref:
     "delivery_service_point_snapshots",
   ux_shipping_document_reference: "shipping_document_metadata",
 } as const);
 const MULTICARRIER_TRIGGER_INVENTORY = Object.freeze({
   trg_delivery_order_requires_selected_option: "orders",
+  trg_delivery_option_initially_unselected: "delivery_option_snapshots",
   trg_delivery_option_retain: "delivery_option_snapshots",
   trg_delivery_option_select_once: "delivery_option_snapshots",
   trg_delivery_option_validate_insert: "delivery_option_snapshots",
+  trg_delivery_reference_immutable: "delivery_provider_reference_vault",
+  trg_delivery_reference_replay_guard: "delivery_provider_reference_vault",
+  trg_delivery_reference_retain: "delivery_provider_reference_vault",
+  trg_delivery_reference_validate_insert: "delivery_provider_reference_vault",
   trg_delivery_service_point_immutable: "delivery_service_point_snapshots",
   trg_delivery_service_point_retain: "delivery_service_point_snapshots",
   trg_delivery_service_point_validate_insert:
@@ -378,7 +386,7 @@ async function readSyntheticDemoGate(
   try {
     // Sites does not expose its internal migration ledger to the Worker.
     // Prove 0008 from its immutable sentinel plus its exhaustive guard
-    // inventory, then prove 0009 and 0010 from exact schema inventories.
+    // inventory, then prove 0009 through 0011 from exact schema inventories.
     // Any missing, renamed or prefix-colliding object keeps the runtime closed.
     const installed = await env.DB.prepare(
       `SELECT type, name, tbl_name AS table_name FROM sqlite_master
@@ -387,12 +395,14 @@ async function readSyntheticDemoGate(
           OR lower(name) GLOB 'trg_shipping_quote_parcel_snapshot_*'
           OR lower(name) GLOB 'trg_delivery_option_*'
           OR lower(name) GLOB 'trg_delivery_order_*'
+          OR lower(name) GLOB 'trg_delivery_reference_*'
           OR lower(name) GLOB 'trg_delivery_service_point_*'
           OR lower(name) GLOB 'trg_shipping_document_*'
           OR lower(tbl_name) IN (
             'preprod_demo_dataset',
             'shipping_quote_parcel_snapshots',
             'delivery_option_snapshots',
+            'delivery_provider_reference_vault',
             'delivery_service_point_snapshots',
             'shipping_document_metadata'
           )
@@ -401,6 +411,7 @@ async function readSyntheticDemoGate(
           lower(name) GLOB 'preprod_demo_dataset*'
           OR lower(name) GLOB 'shipping_quote_parcel_snapshot*'
           OR lower(name) GLOB 'delivery_option_snapshot*'
+          OR lower(name) GLOB 'delivery_provider_reference_vault*'
           OR lower(name) GLOB 'delivery_service_point_snapshot*'
           OR lower(name) GLOB 'shipping_document_metadata*'
         ))
@@ -410,6 +421,7 @@ async function readSyntheticDemoGate(
           OR lower(name) GLOB 'ux_shipping_document_*'
           OR lower(tbl_name) IN (
             'delivery_option_snapshots',
+            'delivery_provider_reference_vault',
             'delivery_service_point_snapshots',
             'shipping_document_metadata'
           )
@@ -483,6 +495,7 @@ async function readSyntheticDemoGate(
     const multicarrierTables = installed.results
       .filter((row) => row.type === "table" && (
         row.name.toLowerCase().startsWith("delivery_option_snapshot") ||
+        row.name.toLowerCase().startsWith("delivery_provider_reference_vault") ||
         row.name.toLowerCase().startsWith("delivery_service_point_snapshot") ||
         row.name.toLowerCase().startsWith("shipping_document_metadata")
       ));
@@ -490,6 +503,7 @@ async function readSyntheticDemoGate(
       .filter((row) => row.type === "trigger" && (
         row.name.toLowerCase().startsWith("trg_delivery_option_") ||
         row.name.toLowerCase().startsWith("trg_delivery_order_") ||
+        row.name.toLowerCase().startsWith("trg_delivery_reference_") ||
         row.name.toLowerCase().startsWith("trg_delivery_service_point_") ||
         row.name.toLowerCase().startsWith("trg_shipping_document_") ||
         Object.hasOwn(
@@ -528,7 +542,7 @@ async function readSyntheticDemoGate(
       required: true,
       ready: true,
       reason: "ready",
-      latestMigration: MULTICARRIER_FOUNDATION_MIGRATION,
+      latestMigration: SERVICE_POINT_REFERENCE_VAULT_MIGRATION,
       expiresAt: sentinel.expires_at,
     });
   } catch {
@@ -2229,7 +2243,7 @@ export async function preprodApiResponse(
       }
       if (
         !syntheticGate.ready ||
-        latestMigration !== MULTICARRIER_FOUNDATION_MIGRATION
+        latestMigration !== SERVICE_POINT_REFERENCE_VAULT_MIGRATION
       ) {
         return unavailable(latestMigration, "installation-proof-invalid");
       }

@@ -114,7 +114,7 @@ test("0010 has a terminal Drizzle snapshot chained to exact 0009 metadata", () =
     }
   }
 
-  assert.deepEqual(journal.entries.at(-1), {
+  assert.deepEqual(journal.entries.at(-2), {
     idx: 10,
     version: "6",
     when: 1786651200000,
