@@ -1,4 +1,4 @@
-import type { CommerceD1Database } from "./d1-port.ts";
+import type { CommerceD1Database, CommerceD1PreparedStatement } from "./d1-port.ts";
 import {
   DeliveryReferenceVault,
   type DeliveryProviderReferenceKind,
@@ -64,25 +64,32 @@ export class D1DeliveryReferenceStore {
     this.#vault = vault;
   }
 
+  preparePut(
+    record: SealedDeliveryProviderReference,
+    createdAt: string,
+  ): CommerceD1PreparedStatement {
+    return this.#database.prepare(
+      `INSERT OR IGNORE INTO delivery_provider_reference_vault (
+        id, algorithm, key_version, provider_code, reference_kind, owner_id,
+        reference_sha256, iv_base64, ciphertext_base64, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(
+      record.id,
+      record.algorithm,
+      record.keyVersion,
+      record.providerCode,
+      record.referenceKind,
+      record.ownerId,
+      record.referenceSha256,
+      record.ivBase64,
+      record.ciphertextBase64,
+      createdAt,
+    );
+  }
+
   async put(record: SealedDeliveryProviderReference, createdAt: string): Promise<void> {
     try {
-      await this.#database.prepare(
-        `INSERT OR IGNORE INTO delivery_provider_reference_vault (
-          id, algorithm, key_version, provider_code, reference_kind, owner_id,
-          reference_sha256, iv_base64, ciphertext_base64, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).bind(
-        record.id,
-        record.algorithm,
-        record.keyVersion,
-        record.providerCode,
-        record.referenceKind,
-        record.ownerId,
-        record.referenceSha256,
-        record.ivBase64,
-        record.ciphertextBase64,
-        createdAt,
-      ).run();
+      await this.preparePut(record, createdAt).run();
     } catch (error) {
       throw new D1DeliveryReferenceStoreError(
         "PERSISTENCE_FAILURE",

@@ -6,6 +6,8 @@ import { fileURLToPath } from "node:url";
 
 import { D1DeliveryOptionsStore } from "../lib/commerce/d1-delivery-options-store.ts";
 import { D1DeliveryReferenceStore } from "../lib/commerce/d1-delivery-reference-store.ts";
+import { D1CommerceStore } from "../lib/commerce/d1-commerce-store.ts";
+import { D1ProductionDeliveryActivationStore } from "../lib/commerce/d1-production-delivery-activation-store.ts";
 import {
   DeliveryReferenceVault,
   DeliveryReferenceVaultError,
@@ -241,6 +243,151 @@ test("0011 persists only ciphertext and binds an exact service point to the orde
     () => sqlite.exec("DELETE FROM delivery_provider_reference_vault"),
     /delivery_provider_reference_retain/,
   );
+  sqlite.close();
+});
+
+test("production relay quotes and point snapshots are atomically replayable without raw references", async () => {
+  const sqlite = database();
+  const d1 = new D1(sqlite);
+  const now = "2099-01-01T00:00:02.000Z";
+  const expiresAt = "2099-01-01T00:15:02.000Z";
+  const quoteReference = '["sendcloud-config","method-42","colissimo","point"]';
+  const pointReference = "sendcloud-point-raw-987654";
+  const commerce = new D1CommerceStore(d1);
+  await commerce.seedLaunchCatalog("2099-01-01T00:00:00.000Z");
+  await commerce.createCart({
+    id: "cart_production_relay",
+    customerId: null,
+    email: null,
+    expiresAt: "2099-01-01T01:00:00.000Z",
+    now: "2099-01-01T00:00:01.000Z",
+  });
+  sqlite.prepare(`INSERT INTO cart_lines (
+    id,cart_id,variant_id,quantity,unit_price_cents,created_at,updated_at
+  ) VALUES ('line_production_relay','cart_production_relay',?,1,2999,?,?)`)
+    .run("variant_boxer_pourpre_m", now, now);
+  sqlite.exec(`
+    INSERT INTO shipping_zone_configurations (
+      id,zone,version,status,created_at,updated_at
+    ) VALUES ('config_production_relay','EU',1,'draft',
+      '2099-01-01T00:00:00.000Z','2099-01-01T00:00:00.000Z');
+    UPDATE shipping_zone_configurations SET status='active',
+      service_code='sendcloud-reviewed',price_cents=700,
+      estimated_days_min=2,estimated_days_max=4,duties_terms='EU_INCLUDED',
+      parcel_code='AJL_ENVELOPE_1_ITEM_V1',parcel_weight_grams=150,
+      parcel_length_mm=400,parcel_width_mm=320,parcel_height_mm=40,
+      origin_country_code='FR',customs_hs_code='610711',
+      activated_at='2099-01-01T00:00:01.000Z',
+      updated_at='2099-01-01T00:00:01.000Z'
+    WHERE id='config_production_relay';
+  `);
+  let quoteCalls = 0;
+  let pointCalls = 0;
+  const provider = {
+    quotes: { async quote() {
+      quoteCalls += 1;
+      return [{
+        providerCode: "sendcloud",
+        providerQuoteReference: quoteReference,
+        carrierCode: "colissimo",
+        serviceCode: "relay-reviewed",
+        displayName: "Point relais",
+        deliveryMode: "service_point",
+        amountCents: 700,
+        currency: "EUR",
+        estimatedDaysMin: 2,
+        estimatedDaysMax: 4,
+        dutiesTerms: "EU_INCLUDED",
+        expiresAt,
+        responseFingerprint: "b".repeat(64),
+      }];
+    } },
+    servicePoints: { async servicePoints(request) {
+      pointCalls += 1;
+      assert.equal(request.providerQuoteReference, quoteReference);
+      return [{
+        providerPointReference: pointReference,
+        displayName: "Maison de la Presse",
+        postalCode: "75001",
+        city: "Paris",
+        countryCode: "FR",
+        openingHoursSummary: "Lun-Sam 09:00-19:00",
+      }];
+    } },
+    documents: { async document() { throw new Error("not-called"); } },
+    returns: {},
+  };
+  const store = new D1ProductionDeliveryActivationStore(d1, provider, vault());
+  const address = {
+    recipient: "Ada Test",
+    line1: "1 rue du Test",
+    postalCode: "75001",
+    city: "Paris",
+    countryCode: "FR",
+  };
+  const options = await store.quoteOptions({
+    cartId: "cart_production_relay",
+    address,
+    idempotencyKey: "quote-production-relay-0001",
+    now,
+  });
+  assert.equal(options.length, 1);
+  assert.equal(options[0].deliveryMode, "service_point");
+  assert.equal("providerQuoteReference" in options[0], false);
+  assert.equal(quoteCalls, 1);
+  assert.deepEqual(await store.quoteOptions({
+    cartId: "cart_production_relay",
+    address,
+    idempotencyKey: "quote-production-relay-0001",
+    now,
+  }), options);
+  assert.equal(quoteCalls, 1);
+
+  const points = await store.servicePoints({
+    cartId: "cart_production_relay",
+    optionId: options[0].optionId,
+    address,
+    idempotencyKey: "points-production-relay-0001",
+    now,
+  });
+  assert.equal(points.length, 1);
+  assert.equal(points[0].optionId, options[0].optionId);
+  assert.equal("providerPointReference" in points[0], false);
+  assert.equal("providerPointReferenceHash" in points[0], false);
+  assert.equal(pointCalls, 1);
+  assert.deepEqual(await store.servicePoints({
+    cartId: "cart_production_relay",
+    optionId: options[0].optionId,
+    address,
+    idempotencyKey: "points-production-relay-0001",
+    now,
+  }), points);
+  assert.equal(pointCalls, 1);
+
+  await assert.rejects(() => store.selectOption({
+    cartId: "cart_production_relay",
+    optionId: options[0].optionId,
+    servicePointId: "point_foreign",
+    address,
+    now,
+  }), (error) => error.code === "SERVICE_POINT_NOT_FOUND");
+  const selected = await store.selectOption({
+    cartId: "cart_production_relay",
+    optionId: options[0].optionId,
+    servicePointId: points[0].servicePointId,
+    address,
+    now,
+  });
+  assert.equal(selected.optionId, options[0].optionId);
+  const persisted = JSON.stringify({
+    quotes: sqlite.prepare("SELECT provider_quote_reference FROM shipping_quotes").all(),
+    vault: sqlite.prepare("SELECT * FROM delivery_provider_reference_vault").all(),
+    points: sqlite.prepare("SELECT * FROM delivery_service_point_snapshots").all(),
+  });
+  assert.doesNotMatch(persisted, /sendcloud-config|method-42|point-raw-987654/);
+  assert.equal(sqlite.prepare(
+    "SELECT COUNT(*) count FROM delivery_provider_reference_vault",
+  ).get().count, 2);
   sqlite.close();
 });
 
