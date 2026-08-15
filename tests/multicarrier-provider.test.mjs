@@ -29,6 +29,44 @@ function offer(overrides = {}) {
   };
 }
 
+function servicePoint(overrides = {}) {
+  const openingTimes = {
+    monday: [{ start_time: "09:00", end_time: "18:00" }],
+    tuesday: [{ start_time: "09:00", end_time: "18:00" }],
+    wednesday: [{ start_time: "09:00", end_time: "18:00" }],
+    thursday: [{ start_time: "09:00", end_time: "18:00" }],
+    friday: [{ start_time: "09:00", end_time: "18:00" }],
+    saturday: null,
+    sunday: null,
+  };
+  return {
+    id: 123,
+    name: "Bureau de poste démo",
+    carrier: { code: "colissimo", name: "Colissimo", logo_url: "https://example.test/logo", icon_url: "https://example.test/icon" },
+    carrier_service_point_id: "FR-123",
+    carrier_shop_type: "post_office",
+    general_shop_type: "post_office",
+    address: { street: "Rue de Rivoli", house_number: "1", postal_code: "75001", city: "Paris", country_code: "FR" },
+    position: { latitude: 48.8566, longitude: 2.3522 },
+    contact: { email: "", phone: "" },
+    opening_times: openingTimes,
+    is_open_tomorrow: true,
+    next_open_at: "2099-08-15T09:00:00+02:00",
+    is_expired: false,
+    distance: 85,
+    ...overrides,
+  };
+}
+
+function servicePointEnvelope(results) {
+  return {
+    data: {
+      results,
+      geocoding: { status: "matched", precision: "postal_code", formatted_address: "75001 Paris, France" },
+    },
+  };
+}
+
 test("Sendcloud delivery parser accepts only the documented V3 option shape", async () => {
   const parsed = await parseSendcloudDeliveryOptions({
     configuration_id: "configuration_1",
@@ -122,24 +160,19 @@ test("Sendcloud provider references distinguish carriers sharing one delivery-me
 });
 
 test("Sendcloud service-point parser rejects malformed responses", () => {
-  const points = parseSendcloudServicePoints([{
-    id: 123,
-    name: "Bureau de poste démo",
-    postal_code: "75001",
-    city: "Paris",
-    country: "FR",
-    formatted_opening_times: { monday: "09:00-18:00" },
-  }]);
+  const points = parseSendcloudServicePoints(servicePointEnvelope([servicePoint()]));
   assert.equal(points[0].countryCode, "FR");
+  assert.deepEqual(
+    parseSendcloudServicePoints(servicePointEnvelope([servicePoint({ is_expired: true })])),
+    [],
+  );
   assert.throws(
     () => parseSendcloudServicePoints([{ name: "missing id" }]),
     DeliveryProviderError,
   );
   for (const id of [Number.NaN, Number.POSITIVE_INFINITY, 1.5]) {
     assert.throws(
-      () => parseSendcloudServicePoints([{
-        id, name: "Point", postal_code: "75001", city: "Paris", country: "FR",
-      }]),
+      () => parseSendcloudServicePoints(servicePointEnvelope([servicePoint({ id })])),
       DeliveryProviderError,
     );
   }
@@ -158,6 +191,7 @@ test("Sendcloud cancels an oversized declared response before reading", async ()
     providerQuoteReference: "rate_123",
     countryCode: "FR",
     postalCode: "75001",
+    city: "Paris",
     carrierCode: "colissimo",
   }), (error) => error instanceof DeliveryProviderError && error.code === "MALFORMED_RESPONSE");
   assert.equal(cancelled, true);
@@ -175,13 +209,13 @@ test("real Sendcloud ports fail before network when credentials are absent", () 
   assert.equal(called, false);
 });
 
-test("Sendcloud service points use stable v2 and never follow redirects", async () => {
+test("Sendcloud service points use current V3 and never follow redirects", async () => {
   let call;
   const ports = createSendcloudProviderPorts(
     { publicKey: "public_key", secretKey: "x".repeat(32) },
     async (url, init) => {
       call = { url, init };
-      return Response.json([]);
+      return Response.json(servicePointEnvelope([]));
     },
   );
   await ports.servicePoints.servicePoints({
@@ -189,11 +223,15 @@ test("Sendcloud service points use stable v2 and never follow redirects", async 
     providerQuoteReference: "rate_123",
     countryCode: "FR",
     postalCode: "75001",
+    city: "Paris",
     carrierCode: "colissimo",
   });
-  assert.match(call.url, /^https:\/\/servicepoints\.sendcloud\.sc\/api\/v2\/service-points\?/);
-  assert.match(call.url, /country=FR/);
-  assert.match(call.url, /carrier=colissimo/);
+  assert.match(call.url, /^https:\/\/panel\.sendcloud\.sc\/api\/v3\/service-points\?/);
+  assert.match(call.url, /country_code=FR/);
+  assert.match(call.url, /carrier_code=colissimo/);
+  assert.match(call.url, /address_postal_code=75001/);
+  assert.match(call.url, /address_city=Paris/);
+  assert.match(call.url, /limit=25/);
   assert.equal(call.init.method, "GET");
   assert.equal(call.init.redirect, "error");
   assert.equal(call.init.credentials, undefined);
@@ -235,6 +273,7 @@ test("Sendcloud quote request matches the documented V3 request contract", async
     to_address: { country_code: "DE", postal_code: "10115" },
     parcel_dimensions: { length: "40", width: "32", height: "4", unit: "cm" },
   });
+  assert.equal(call.init.headers["Idempotency-Key"], undefined);
 });
 
 test("Sendcloud response streaming cancels above the byte limit without Content-Length", async () => {

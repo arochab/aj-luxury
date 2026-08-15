@@ -6,15 +6,22 @@ import {
   type DeliveryQuoteRequest,
   type DeliveryServicePoint,
   type ServicePointRequest,
+  type ShippingDocumentRequest,
   type ShippingDocumentReceipt,
 } from "./delivery-provider.ts";
 import { sha256Hex } from "./fulfillment-domain.ts";
+import {
+  type ReadyReturnShipmentRequest,
+  type ReturnProviderAddress,
+  type ReturnShipmentReceipt,
+} from "./return-provider.ts";
 
 const PANEL_ORIGIN = "https://panel.sendcloud.sc";
-const SERVICE_POINTS_ORIGIN = "https://servicepoints.sendcloud.sc";
 const MAX_RESPONSE_BYTES = 256 * 1024;
+const MAX_DOCUMENT_BYTES = 8 * 1024 * 1024;
 const REQUEST_TIMEOUT_MS = 8_000;
 const SAFE_CODE = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/;
+const SAFE_PARCEL_ID = /^[1-9]\d{0,18}$/;
 const LEAD_TIME_KEYS = Object.freeze([
   "p10", "p20", "p30", "p40", "p50", "p60", "p70", "p80", "p90", "p95",
 ] as const);
@@ -221,30 +228,85 @@ export async function parseSendcloudDeliveryOptions(
   return Object.freeze(parsed.filter((option): option is DeliveryQuoteOffer => option !== null));
 }
 
-/** Strict subset of the documented Service Points V2 list response. */
+const WEEKDAYS = Object.freeze([
+  "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
+] as const);
+
+function validOpeningTimes(value: unknown): value is Record<string, unknown> {
+  if (!record(value) || !exactKeys(value, WEEKDAYS)) return false;
+  return WEEKDAYS.every((day) => {
+    const slots = value[day];
+    return slots === null || (Array.isArray(slots) && slots.length <= 4 && slots.every((slot) =>
+      record(slot) && exactKeys(slot, ["end_time", "start_time"]) &&
+      typeof slot.start_time === "string" && /^\d{2}:\d{2}$/.test(slot.start_time) &&
+      typeof slot.end_time === "string" && /^\d{2}:\d{2}$/.test(slot.end_time)
+    ));
+  });
+}
+
+/** Strict parser for Sendcloud's current Service Points API V3 envelope. */
 export function parseSendcloudServicePoints(value: unknown): readonly DeliveryServicePoint[] {
-  if (!Array.isArray(value) || value.length > 100) {
+  if (
+    !record(value) || !exactKeys(value, ["data"]) || !record(value.data) ||
+    !exactKeys(value.data, ["geocoding", "results"]) || !Array.isArray(value.data.results) ||
+    value.data.results.length > 100 || !record(value.data.geocoding) ||
+    !exactKeys(value.data.geocoding, ["formatted_address", "precision", "status"]) ||
+    !["matched", "partially_matched", "not_found"].includes(String(value.data.geocoding.status)) ||
+    !(value.data.geocoding.precision === null || safeString(value.data.geocoding.precision)) ||
+    !(value.data.geocoding.formatted_address === null ||
+      safeString(value.data.geocoding.formatted_address, 500))
+  ) {
     throw new DeliveryProviderError("MALFORMED_RESPONSE", "Service-points response is invalid.");
   }
-  return Object.freeze(value.map((candidate) => {
-    if (!record(candidate) ||
-      !((Number.isSafeInteger(candidate.id) && (candidate.id as number) >= 0) || safeString(candidate.id)) ||
-      !safeString(candidate.name) || !safeString(candidate.postal_code, 32) ||
-      !safeString(candidate.city, 100) || !safeString(candidate.country, 2) ||
-      !/^[A-Z]{2}$/.test(candidate.country)) {
+  const points = value.data.results.flatMap((candidate): DeliveryServicePoint[] => {
+    const candidateKeys = [
+      "address", "carrier", "carrier_service_point_id", "carrier_shop_type", "contact",
+      "distance", "general_shop_type", "id", "is_expired", "is_open_tomorrow", "name",
+      "next_open_at", "opening_times", "position",
+    ];
+    if (
+      !record(candidate) || !exactKeys(candidate, candidateKeys) ||
+      !Number.isSafeInteger(candidate.id) || (candidate.id as number) < 1 ||
+      !safeString(candidate.name) || !record(candidate.carrier) ||
+      !exactKeys(candidate.carrier, ["code", "icon_url", "logo_url", "name"]) ||
+      !safeString(candidate.carrier.code, 80) || !SAFE_CODE.test(candidate.carrier.code) ||
+      !safeString(candidate.carrier.name) || !safeString(candidate.carrier_service_point_id) ||
+      !safeString(candidate.carrier_shop_type) ||
+      !["servicepoint", "locker", "post_office", "carrier_depot"].includes(
+        String(candidate.general_shop_type),
+      ) ||
+      !record(candidate.address) ||
+      !exactKeys(candidate.address, ["city", "country_code", "house_number", "postal_code", "street"]) ||
+      !safeString(candidate.address.street) || !safeString(candidate.address.house_number, 32) ||
+      !safeString(candidate.address.postal_code, 32) || !safeString(candidate.address.city, 100) ||
+      !safeString(candidate.address.country_code, 2) || !/^[A-Z]{2}$/.test(candidate.address.country_code) ||
+      !record(candidate.position) || !exactKeys(candidate.position, ["latitude", "longitude"]) ||
+      typeof candidate.position.latitude !== "number" ||
+      !Number.isFinite(candidate.position.latitude) || Math.abs(candidate.position.latitude) > 90 ||
+      typeof candidate.position.longitude !== "number" ||
+      !Number.isFinite(candidate.position.longitude) || Math.abs(candidate.position.longitude) > 180 ||
+      !record(candidate.contact) || !exactKeys(candidate.contact, ["email", "phone"]) ||
+      typeof candidate.contact.email !== "string" || candidate.contact.email.length > 254 ||
+      typeof candidate.contact.phone !== "string" || candidate.contact.phone.length > 32 ||
+      !validOpeningTimes(candidate.opening_times) ||
+      typeof candidate.is_open_tomorrow !== "boolean" || typeof candidate.is_expired !== "boolean" ||
+      !(candidate.next_open_at === null ||
+        (safeString(candidate.next_open_at) && Number.isFinite(Date.parse(candidate.next_open_at)))) ||
+      typeof candidate.distance !== "number" || !Number.isFinite(candidate.distance) || candidate.distance < 0
+    ) {
       throw new DeliveryProviderError("MALFORMED_RESPONSE", "Service-point shape is invalid.");
     }
-    return Object.freeze({
+    if (candidate.is_expired) return [];
+    return [Object.freeze({
       providerPointReference: String(candidate.id),
       displayName: candidate.name,
-      postalCode: candidate.postal_code,
-      city: candidate.city,
-      countryCode: candidate.country,
-      openingHoursSummary: record(candidate.formatted_opening_times)
-        ? JSON.stringify(candidate.formatted_opening_times)
-        : null,
-    });
-  }));
+      postalCode: candidate.address.postal_code,
+      city: candidate.address.city,
+      countryCode: candidate.address.country_code,
+      openingHoursSummary: JSON.stringify(candidate.opening_times),
+    })];
+  });
+  return Object.freeze(points);
 }
 
 function credentials(configuration: SendcloudConfiguration): Readonly<{ publicKey: string; secretKey: string }> {
@@ -263,12 +325,13 @@ function basic(publicKey: string, secretKey: string): string {
   return `Basic ${btoa(binary)}`;
 }
 
-async function providerJson(
+async function providerResponse(
   fetchImpl: FetchLike,
   auth: Readonly<{ publicKey: string; secretKey: string }>,
   url: string,
   init: RequestInit,
-): Promise<unknown> {
+  mutation = false,
+): Promise<Response> {
   let response: Response;
   try {
     response = await fetchImpl(url, {
@@ -283,13 +346,172 @@ async function providerJson(
     });
   } catch (error) {
     const timeout = error instanceof DOMException && error.name === "TimeoutError";
-    throw new DeliveryProviderError(timeout ? "TIMEOUT" : "OUTCOME_UNKNOWN", "Provider call failed.", { cause: error });
+    // Never attach the transport error: custom clients may include request
+    // bodies, credentials or customer PII in their error messages.
+    throw new DeliveryProviderError(timeout ? "TIMEOUT" : "OUTCOME_UNKNOWN", "Provider call failed.");
   }
   if (!response.ok) {
     await response.body?.cancel();
-    throw new DeliveryProviderError(response.status >= 500 ? "OUTCOME_UNKNOWN" : "REJECTED", "Provider rejected request.");
+    throw new DeliveryProviderError(
+      mutation || response.status >= 500 ? "OUTCOME_UNKNOWN" : "REJECTED",
+      "Provider rejected request.",
+    );
   }
-  return boundedJson(response);
+  return response;
+}
+
+async function providerJson(
+  fetchImpl: FetchLike,
+  auth: Readonly<{ publicKey: string; secretKey: string }>,
+  url: string,
+  init: RequestInit,
+  mutation = false,
+): Promise<unknown> {
+  return boundedJson(await providerResponse(fetchImpl, auth, url, init, mutation));
+}
+
+function bytesToHex(bytes: Uint8Array): string {
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function boundedDocument(response: Response): Promise<Readonly<{
+  content: Blob;
+  mediaType: "application/pdf" | "image/png" | "application/zpl";
+  contentSha256: string;
+  byteLength: number;
+}>> {
+  const declared = response.headers.get("Content-Length");
+  if (declared && (!/^\d+$/.test(declared) || Number(declared) > MAX_DOCUMENT_BYTES)) {
+    await response.body?.cancel();
+    throw new DeliveryProviderError("MALFORMED_RESPONSE", "Provider document is too large.");
+  }
+  const mediaType = response.headers.get("Content-Type")?.split(";", 1)[0].trim().toLowerCase();
+  if (mediaType !== "application/pdf" && mediaType !== "image/png" && mediaType !== "application/zpl") {
+    await response.body?.cancel();
+    throw new DeliveryProviderError("MALFORMED_RESPONSE", "Provider document type is invalid.");
+  }
+  const reader = response.body?.getReader();
+  if (!reader) throw new DeliveryProviderError("MALFORMED_RESPONSE", "Provider document is empty.");
+  const chunks: Uint8Array[] = [];
+  let byteLength = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      byteLength += value.byteLength;
+      if (byteLength > MAX_DOCUMENT_BYTES) {
+        await reader.cancel();
+        throw new DeliveryProviderError("MALFORMED_RESPONSE", "Provider document is too large.");
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  if (byteLength < 1) {
+    throw new DeliveryProviderError("MALFORMED_RESPONSE", "Provider document is empty.");
+  }
+  const bytes = new Uint8Array(byteLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Object.freeze({
+    content: new Blob([bytes], { type: mediaType }),
+    mediaType,
+    contentSha256: bytesToHex(new Uint8Array(digest)),
+    byteLength,
+  });
+}
+
+function sendcloudAddress(address: ReturnProviderAddress): Record<string, string> {
+  return {
+    name: address.name,
+    ...(address.companyName ? { company_name: address.companyName } : {}),
+    address_line_1: address.addressLine1,
+    ...(address.addressLine2 ? { address_line_2: address.addressLine2 } : {}),
+    ...(address.houseNumber ? { house_number: address.houseNumber } : {}),
+    postal_code: address.postalCode,
+    city: address.city,
+    ...(address.stateProvinceCode ? { state_province_code: address.stateProvinceCode } : {}),
+    country_code: address.countryCode,
+    ...(address.phoneNumber ? { phone_number: address.phoneNumber } : {}),
+    ...(address.email ? { email: address.email } : {}),
+  };
+}
+
+/** Exact API V3 payload; never enables Sendcloud emails or return rules. */
+export function buildSendcloudReturnPayload(request: ReadyReturnShipmentRequest): Record<string, unknown> {
+  const totalOrderCents = request.items.reduce(
+    (total, item) => total + item.unitPriceCents * item.quantity,
+    0,
+  );
+  return {
+    from_address: sendcloudAddress(request.fromAddress),
+    to_address: sendcloudAddress(request.toAddress),
+    ship_with: {
+      type: "shipping_option_code",
+      shipping_option_code: request.shippingOptionCode,
+    },
+    dimensions: {
+      length: request.parcel.lengthMm / 10,
+      width: request.parcel.widthMm / 10,
+      height: request.parcel.heightMm / 10,
+      unit: "cm",
+    },
+    weight: { value: request.parcel.weightGrams, unit: "g" },
+    collo_count: 1,
+    parcel_items: request.items.map((item) => ({
+      item_id: item.orderLineId,
+      description: item.description,
+      quantity: item.quantity,
+      weight: { value: item.netWeightGrams, unit: "g" },
+      price: { value: (item.unitPriceCents / 100).toFixed(2), currency: "EUR" },
+      ...(item.hsCode ? { hs_code: item.hsCode } : {}),
+      ...(item.originCountryCode ? { origin_country: item.originCountryCode } : {}),
+      sku: item.sku,
+      product_id: item.productId,
+      ...(item.returnReasonId ? { return_reason_id: item.returnReasonId } : {}),
+      ...(item.returnMessage ? { return_message: item.returnMessage } : {}),
+    })),
+    send_tracking_emails: false,
+    order_number: request.orderNumber,
+    total_order_value: { value: (totalOrderCents / 100).toFixed(2), currency: "EUR" },
+    external_reference: request.idempotencyKey,
+    ...(request.customsInvoiceNumber
+      ? { customs_invoice_nr: request.customsInvoiceNumber }
+      : {}),
+    delivery_option: "drop_off_point",
+    apply_rules: false,
+  };
+}
+
+export async function parseSendcloudReturnReceipt(
+  value: unknown,
+  request: ReadyReturnShipmentRequest,
+): Promise<ReturnShipmentReceipt> {
+  if (
+    !record(value) || !exactKeys(value, ["multi_collo_ids", "parcel_id", "return_id"]) ||
+    !Number.isSafeInteger(value.return_id) || (value.return_id as number) < 1 ||
+    !Number.isSafeInteger(value.parcel_id) || (value.parcel_id as number) < 1 ||
+    !Array.isArray(value.multi_collo_ids) || value.multi_collo_ids.length !== 0
+  ) {
+    throw new DeliveryProviderError("MALFORMED_RESPONSE", "Return receipt is invalid.");
+  }
+  const canonical = JSON.stringify({
+    idempotencyKey: request.idempotencyKey,
+    parcelId: value.parcel_id,
+    returnId: value.return_id,
+  });
+  return Object.freeze({
+    providerCode: "sendcloud",
+    providerReturnReference: String(value.return_id),
+    providerParcelReference: String(value.parcel_id),
+    idempotencyKey: request.idempotencyKey,
+    receiptFingerprint: await sha256Hex(canonical),
+  });
 }
 
 export function createSendcloudProviderPorts(
@@ -308,7 +530,6 @@ export function createSendcloudProviderPorts(
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              "Idempotency-Key": request.requestId,
             },
             body: JSON.stringify({
               total_weight: { value: String(request.parcel.weightGrams), unit: "g" },
@@ -336,10 +557,12 @@ export function createSendcloudProviderPorts(
     }),
     servicePoints: Object.freeze({
       async servicePoints(request: ServicePointRequest) {
-        const url = new URL(`${SERVICE_POINTS_ORIGIN}/api/v2/service-points`);
-        url.searchParams.set("country", request.countryCode);
-        url.searchParams.set("postal_code", request.postalCode);
-        url.searchParams.set("carrier", request.carrierCode);
+        const url = new URL(`${PANEL_ORIGIN}/api/v3/service-points`);
+        url.searchParams.set("country_code", request.countryCode);
+        url.searchParams.set("carrier_code", request.carrierCode);
+        url.searchParams.set("address_postal_code", request.postalCode);
+        url.searchParams.set("address_city", request.city);
+        url.searchParams.set("limit", "25");
         return parseSendcloudServicePoints(await providerJson(
           fetchImpl,
           auth,
@@ -348,11 +571,70 @@ export function createSendcloudProviderPorts(
         ));
       },
     }),
-    // Label/document creation stays closed until a reviewed official contract,
-    // sender identity and enabled shipping method exist. No fictional endpoint.
     documents: Object.freeze({
-      async document(): Promise<ShippingDocumentReceipt> {
-        throw new DeliveryProviderError("NOT_CONFIGURED", "Sendcloud shipping documents are not enabled.");
+      async document(request: ShippingDocumentRequest): Promise<ShippingDocumentReceipt> {
+        if (
+          !SAFE_CODE.test(request.requestId) || !SAFE_PARCEL_ID.test(request.providerParcelReference) ||
+          !["label", "customs", "return_label"].includes(String(request.documentKind))
+        ) {
+          throw new DeliveryProviderError("REJECTED", "Shipping document request is invalid.");
+        }
+        const providerKind = request.documentKind === "customs"
+          ? "customs-declaration"
+          : "label";
+        const url = new URL(
+          `${PANEL_ORIGIN}/api/v3/parcels/${request.providerParcelReference}/documents/${providerKind}`,
+        );
+        url.searchParams.set("dpi", "72");
+        url.searchParams.set("paper_size", request.documentKind === "customs" ? "A4" : "A6");
+        const file = await boundedDocument(await providerResponse(
+          fetchImpl,
+          auth,
+          url.href,
+          { method: "GET", headers: { Accept: "application/pdf" } },
+        ));
+        return Object.freeze({
+          providerDocumentReference:
+            `sendcloud:parcel:${request.providerParcelReference}:document:${providerKind}`,
+          ...file,
+        });
+      },
+    }),
+    returns: Object.freeze({
+      async validate(request: ReadyReturnShipmentRequest): Promise<void> {
+        const response = await providerJson(
+          fetchImpl,
+          auth,
+          `${PANEL_ORIGIN}/api/v3/returns/validate`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(buildSendcloudReturnPayload(request)),
+          },
+        );
+        // The documented validation response echoes addresses and other PII.
+        // Verify its minimum envelope and discard it immediately.
+        if (
+          !record(response) || !record(response.from_address) ||
+          !record(response.to_address) || !record(response.ship_with) ||
+          !(typeof response.weight === "number" || record(response.weight))
+        ) {
+          throw new DeliveryProviderError("MALFORMED_RESPONSE", "Return validation response is invalid.");
+        }
+      },
+      async create(request: ReadyReturnShipmentRequest): Promise<ReturnShipmentReceipt> {
+        const response = await providerJson(
+          fetchImpl,
+          auth,
+          `${PANEL_ORIGIN}/api/v3/returns`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(buildSendcloudReturnPayload(request)),
+          },
+          true,
+        );
+        return parseSendcloudReturnReceipt(response, request);
       },
     }),
   });
