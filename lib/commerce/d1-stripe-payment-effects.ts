@@ -9,7 +9,7 @@ import { assertFulfillmentTimestamp, sha256Hex } from "./fulfillment-domain.ts";
 import { buildTransactionalEmail } from "./transactional-email.ts";
 
 export class StripePaymentEffectsError extends Error {
-  readonly code: "MISMATCH" | "PERSISTENCE_FAILURE";
+  readonly code: "MISMATCH" | "PERSISTENCE_FAILURE" | "LATE_PAYMENT_COMPENSATION_REQUIRED";
   constructor(code: StripePaymentEffectsError["code"], message: string, options?: ErrorOptions) {
     super(message, options);
     this.name = "StripePaymentEffectsError";
@@ -34,14 +34,18 @@ type OrderPaymentRow = Readonly<{
 
 export class D1StripePaymentEffectsStore implements PaymentWebhookEffectsPort {
   readonly #database: CommerceD1Database;
-  constructor(database: CommerceD1Database) { this.#database = database; }
+  readonly #expectedLivemode: boolean;
+  constructor(database: CommerceD1Database, expectedLivemode: boolean) {
+    this.#database = database;
+    this.#expectedLivemode = expectedLivemode;
+  }
 
   async applyVerified(
     event: VerifiedPaymentProviderEvent | VerifiedRefundProviderEvent,
   ): Promise<PaymentWebhookApplyDisposition> {
     if (event.kind !== "payment" || event.state !== "paid") return "stale";
-    if (!event.livemode || !event.providerCheckoutSessionId) {
-      throw new StripePaymentEffectsError("MISMATCH", "Paid event lacks a live Checkout session.");
+    if (event.livemode !== this.#expectedLivemode || !event.providerCheckoutSessionId) {
+      throw new StripePaymentEffectsError("MISMATCH", "Paid event mode or Checkout session is invalid.");
     }
     assertFulfillmentTimestamp(event.occurredAt, "occurredAt");
     const verifiedAt = new Date().toISOString();
@@ -57,11 +61,20 @@ export class D1StripePaymentEffectsStore implements PaymentWebhookEffectsPort {
       order.checkout_currency !== "EUR" || order.succeeded_payment_id !== null
     ) throw new StripePaymentEffectsError("MISMATCH", "Stripe payment does not match the server order.");
     const timing = await this.#database.prepare(
-      `SELECT COUNT(*) AS count, MIN(expires_at) AS minimum_expires_at
-      FROM stock_reservations WHERE cart_id = ? AND status = 'active'`,
-    ).bind(order.cart_id).first<{ count: number; minimum_expires_at: string | null }>();
-    if (!timing || timing.count < 1 || !timing.minimum_expires_at || timing.minimum_expires_at <= event.occurredAt) {
-      throw new StripePaymentEffectsError("MISMATCH", "Stock reservation is missing or expired.");
+      `SELECT COUNT(*) AS total_count,
+        SUM(CASE WHEN status='active' THEN 1 ELSE 0 END) AS active_count,
+        MIN(CASE WHEN status='active' THEN expires_at END) AS minimum_active_expires_at
+      FROM stock_reservations WHERE cart_id = ?`,
+    ).bind(order.cart_id).first<{
+      total_count: number;
+      active_count: number;
+      minimum_active_expires_at: string | null;
+    }>();
+    if (!timing || timing.total_count < 1 || timing.active_count < 1 || !timing.minimum_active_expires_at) {
+      return await this.#recordLatePaymentDivergence(event, order, verifiedAt, "stock_reservation_inactive_or_missing");
+    }
+    if (timing.minimum_active_expires_at <= event.occurredAt) {
+      return await this.#recordLatePaymentDivergence(event, order, verifiedAt, "stock_reservation_expired_at_payment");
     }
     const semanticHash = await sha256Hex(event.semanticKey);
     const eventHash = await sha256Hex(event.providerEventId);
@@ -169,6 +182,84 @@ export class D1StripePaymentEffectsStore implements PaymentWebhookEffectsPort {
         AND succeeded.provider='stripe' AND succeeded.status='succeeded'
       WHERE customer_order.id=? LIMIT 1`,
     ).bind(orderId).first<OrderPaymentRow>();
+  }
+
+  async #recordLatePaymentDivergence(
+    event: VerifiedPaymentProviderEvent,
+    order: OrderPaymentRow,
+    recordedAt: string,
+    reason: "stock_reservation_inactive_or_missing" | "stock_reservation_expired_at_payment",
+  ): Promise<never> {
+    const semanticHash = await sha256Hex(event.semanticKey);
+    const eventHash = await sha256Hex(event.providerEventId);
+    try {
+      await this.#database.batch([
+        this.#database.prepare(
+          `INSERT INTO webhook_events (
+            id, provider, provider_event_id, event_type, payload_fingerprint,
+            verification_method, verified_at, order_id, provider_payment_id,
+            amount_cents, currency, status, attempts, received_at
+          ) VALUES (?, 'stripe', ?, 'payment.succeeded', ?, 'stripe_signature',
+            ?, ?, ?, ?, 'EUR', 'verified', 0, ?)`,
+        ).bind(`webhook_stripe_late_${eventHash}`, event.providerEventId, semanticHash, recordedAt, order.id, event.providerPaymentId, order.total_cents, event.occurredAt),
+        this.#database.prepare(
+          `INSERT INTO audit_log (
+            id, actor_type, actor_id, action, entity_type, entity_id,
+            idempotency_key, metadata_json, created_at
+          ) VALUES (?, 'system', NULL, 'late_payment_compensation_required',
+            'order', ?, ?, ?, ?)`,
+        ).bind(
+          `audit_stripe_late_${semanticHash}`,
+          order.id,
+          `stripe-late-payment:${semanticHash}`,
+          JSON.stringify({
+            checkoutSessionId: event.providerCheckoutSessionId,
+            eventId: event.providerEventId,
+            paymentId: event.providerPaymentId,
+            reason,
+          }),
+          recordedAt,
+        ),
+      ]);
+    } catch (cause) {
+      const recorded = await this.#latePaymentRecorded(event, semanticHash);
+      if (!recorded) {
+        throw new StripePaymentEffectsError(
+          "PERSISTENCE_FAILURE",
+          "Late-payment divergence could not be recorded.",
+          { cause },
+        );
+      }
+    }
+    throw new StripePaymentEffectsError(
+      "LATE_PAYMENT_COMPENSATION_REQUIRED",
+      "Late payment requires an idempotent refund or cancellation workflow.",
+    );
+  }
+
+  async #latePaymentRecorded(
+    event: VerifiedPaymentProviderEvent,
+    semanticHash: string,
+  ): Promise<boolean> {
+    const row = await this.#database.prepare(
+      `SELECT COUNT(*) AS count FROM webhook_events
+      INNER JOIN audit_log ON audit_log.entity_id=webhook_events.order_id
+        AND audit_log.idempotency_key=?
+      INNER JOIN orders ON orders.id=webhook_events.order_id
+      INNER JOIN carts ON carts.id=orders.cart_id
+      WHERE webhook_events.provider='stripe'
+        AND webhook_events.provider_event_id=?
+        AND webhook_events.provider_payment_id=?
+        AND webhook_events.payload_fingerprint=?
+        AND webhook_events.status='verified'
+        AND orders.id=? AND orders.status='pending_payment'
+        AND carts.status='open'
+        AND NOT EXISTS (SELECT 1 FROM payments WHERE order_id=orders.id
+          AND provider='stripe' AND status='succeeded')
+        AND NOT EXISTS (SELECT 1 FROM inventory_movements
+          WHERE reference_type='order' AND reference_id=orders.id AND kind='sale')`,
+    ).bind(`stripe-late-payment:${semanticHash}`, event.providerEventId, event.providerPaymentId, semanticHash, event.orderId).first<{ count: number }>();
+    return Number(row?.count ?? 0) === 1;
   }
 
   async #complete(event: VerifiedPaymentProviderEvent): Promise<boolean> {

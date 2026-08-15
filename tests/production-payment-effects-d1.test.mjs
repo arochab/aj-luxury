@@ -38,7 +38,7 @@ class D1 {
 }
 const iso = (base, offset) => new Date(base + offset).toISOString();
 
-async function fixture(failEffectsAt = null) {
+async function fixture(failEffectsAt = null, livemode = true) {
   const sqlite = new DatabaseSync(":memory:"); sqlite.exec("PRAGMA foreign_keys=ON");
   for (const name of migrations) for (const sql of readFileSync(`${directory}${name}`, "utf8").split("--> statement-breakpoint")) if (sql.trim()) sqlite.exec(sql);
   const base = Date.now() - 60_000; const d1 = new D1(sqlite); const commerce = new D1CommerceStore(d1);
@@ -58,9 +58,10 @@ async function fixture(failEffectsAt = null) {
   const checkout = new D1ProductionCheckoutStore(d1);
   await checkout.createOrder({ cartId: "cart_prod", quoteId: option.quoteId, optionId: option.optionId, address, email: "ada@example.com", idempotencyKey: "order-idem-0001", termsVersion: "2026-07-30", privacyVersion: "2026-07-30", now: iso(base, 60) });
   const request = await checkout.prepareCheckoutSession({ cartId: "cart_prod", idempotencyKey: "payment-idem-0001", origin: "https://ajluxurystore.com", locale: "fr", now: iso(base, 70) });
-  await checkout.recordCheckoutSession(request, { provider: "stripe", providerSessionId: "cs_live_fixture_001", providerPaymentId: null, checkoutUrl: "https://checkout.stripe.com/c/pay/test", state: "open", amountTotalCents: 3699, currency: "EUR", livemode: true, providerRequestId: "req_fixture" }, iso(base, 80));
-  const event = Object.freeze({ provider: "stripe", providerEventId: "evt_fixture_paid_001", eventType: "checkout.session.completed", occurredAt: iso(base, 90), livemode: true, kind: "payment", orderId: request.orderId, providerPaymentId: "pi_fixture_001", providerCheckoutSessionId: "cs_live_fixture_001", state: "paid", amountCents: 3699, currency: "EUR", providerFailureCode: null, semanticKey: "stripe:payment:pi_fixture_001:paid" });
-  return { sqlite, d1, event, effects: new D1StripePaymentEffectsStore(failEffectsAt === null ? d1 : new D1(sqlite, failEffectsAt)) };
+  const sessionId = livemode ? "cs_live_fixture_001" : "cs_test_fixture_001";
+  await checkout.recordCheckoutSession(request, { provider: "stripe", providerSessionId: sessionId, providerPaymentId: null, checkoutUrl: "https://checkout.stripe.com/c/pay/test", state: "open", amountTotalCents: 3699, currency: "EUR", livemode, providerRequestId: "req_fixture" }, iso(base, 80));
+  const event = Object.freeze({ provider: "stripe", providerEventId: "evt_fixture_paid_001", eventType: "checkout.session.completed", occurredAt: iso(base, 90), livemode, kind: "payment", orderId: request.orderId, providerPaymentId: "pi_fixture_001", providerCheckoutSessionId: sessionId, state: "paid", amountCents: 3699, currency: "EUR", providerFailureCode: null, semanticKey: "stripe:payment:pi_fixture_001:paid" });
+  return { sqlite, d1, event, expiry, effects: new D1StripePaymentEffectsStore(failEffectsAt === null ? d1 : new D1(sqlite, failEffectsAt), livemode) };
 }
 
 test("paid Checkout event atomically pays, sells stock, closes cart and enqueues bounded copy", async () => {
@@ -78,12 +79,53 @@ test("paid Checkout event atomically pays, sells stock, closes cart and enqueues
 });
 
 test("wrong amount, currency or Checkout session has zero effects", async () => {
-  for (const patch of [{ amountCents: 1 }, { currency: "USD" }, { providerCheckoutSessionId: "cs_live_other" }]) {
+  for (const patch of [{ amountCents: 1 }, { currency: "USD" }, { providerCheckoutSessionId: "cs_live_other" }, { livemode: false }]) {
     const { sqlite, effects, event } = await fixture();
     await assert.rejects(() => effects.applyVerified({ ...event, ...patch }), StripePaymentEffectsError);
     assert.equal(sqlite.prepare("SELECT status FROM orders WHERE id=?").get(event.orderId).status, "pending_payment");
     assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM webhook_events").get().n, 0);
   }
+});
+
+test("sandbox mode accepts a signed test event but rejects cross-mode events", async () => {
+  const sandbox = await fixture(null, false);
+  assert.equal(await sandbox.effects.applyVerified(sandbox.event), "applied");
+  const live = await fixture();
+  await assert.rejects(() => live.effects.applyVerified({ ...live.event, livemode: false }), StripePaymentEffectsError);
+});
+
+test("late paid event is durably flagged without selling or marking paid", async () => {
+  const { sqlite, effects, event, expiry } = await fixture();
+  const late = { ...event, occurredAt: expiry };
+  await assert.rejects(
+    () => effects.applyVerified(late),
+    (error) => error instanceof StripePaymentEffectsError && error.code === "LATE_PAYMENT_COMPENSATION_REQUIRED",
+  );
+  assert.equal(sqlite.prepare("SELECT status FROM orders WHERE id=?").get(event.orderId).status, "pending_payment");
+  assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM payments WHERE status='succeeded'").get().n, 0);
+  assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM inventory_movements WHERE kind='sale'").get().n, 0);
+  assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM webhook_events WHERE status='verified'").get().n, 1);
+  assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action='late_payment_compensation_required'").get().n, 1);
+  await assert.rejects(() => effects.applyVerified(late), StripePaymentEffectsError);
+  assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM webhook_events").get().n, 1);
+});
+
+test("paid event after reservations became inactive is durably flagged", async () => {
+  const { sqlite, d1, effects, event, expiry } = await fixture();
+  const reservationId = sqlite.prepare("SELECT id FROM stock_reservations WHERE cart_id='cart_prod'").get().id;
+  await new D1CommerceStore(d1).expireReservation({
+    reservationId,
+    idempotencyKey: "expire-before-webhook-0001",
+    now: new Date(Date.parse(expiry) + 1).toISOString(),
+  });
+  await assert.rejects(
+    () => effects.applyVerified(event),
+    (error) => error instanceof StripePaymentEffectsError && error.code === "LATE_PAYMENT_COMPENSATION_REQUIRED",
+  );
+  assert.equal(sqlite.prepare("SELECT status FROM orders WHERE id=?").get(event.orderId).status, "pending_payment");
+  assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM payments WHERE status='succeeded'").get().n, 0);
+  assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM inventory_movements WHERE kind='sale'").get().n, 0);
+  assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action='late_payment_compensation_required'").get().n, 1);
 });
 
 test("non-paid/out-of-order events are stale and do not mutate D1", async () => {

@@ -4,10 +4,10 @@ import { D1CommerceStore } from "../lib/commerce/d1-commerce-store.ts";
 import type { CommerceD1Database } from "../lib/commerce/d1-port.ts";
 import { D1ProductionCheckoutStore, ProductionCheckoutError } from "../lib/commerce/d1-production-checkout-store.ts";
 import { D1ProductionDeliveryStore, ProductionDeliveryError } from "../lib/commerce/d1-production-delivery-store.ts";
-import { D1StripePaymentEffectsStore, StripePaymentEffectsError } from "../lib/commerce/d1-stripe-payment-effects.ts";
+import { D1StripePaymentEffectsStore } from "../lib/commerce/d1-stripe-payment-effects.ts";
 import type { DeliveryProviderPorts } from "../lib/commerce/delivery-provider.ts";
 import { authorizeBrowserMutation, buildCsrfCookie, buildSessionCookie, clearCsrfCookie, clearSessionCookie, isTrustedMutationOrigin } from "../lib/commerce/identity-access-policy.ts";
-import { PaymentProviderError, verifyAndDeliverPaymentWebhook, type PaymentProviderPorts } from "../lib/commerce/payment-provider.ts";
+import { PaymentProviderError, verifyAndDeliverPaymentWebhook, type PaymentProviderPorts, type PaymentWebhookEffectsPort } from "../lib/commerce/payment-provider.ts";
 import { evaluateWiredProductionReleaseGate, type ProductionCommerceEnvironment } from "../lib/commerce/production-release-gate.ts";
 import { createSendcloudProviderPorts } from "../lib/commerce/sendcloud-provider.ts";
 import { createStripePaymentProviderPorts } from "../lib/commerce/stripe-payment-provider.ts";
@@ -32,10 +32,12 @@ export type ProductionCommerceRuntimeEnvironment = ProductionCommerceEnvironment
   DB?: CommerceD1Database;
   COMMERCE_CART_HMAC_SECRET?: string;
   COMMERCE_CONTROLLED_OWNER_EMAIL?: string;
+  STRIPE_SETTLEMENT_MODE?: string;
 }>;
 export type ProductionCommerceRouterDependencies = Readonly<{
   deliveryProvider?: DeliveryProviderPorts;
   paymentProvider?: PaymentProviderPorts;
+  paymentEffects?: PaymentWebhookEffectsPort;
 }>;
 type CartSession = Readonly<{ cartId: string; csrf: string }>;
 
@@ -141,8 +143,22 @@ function map(cause: unknown): Response {
   if (cause instanceof ProductionDeliveryError) return fail(cause.code === "SERVICE_POINT_NOT_ACTIVATED" ? "SERVICE_POINT_NOT_ACTIVATED" : "DELIVERY_UNAVAILABLE", 503);
   return fail("COMMERCE_UNAVAILABLE", 503);
 }
-function runtimeBlockers(env: ProductionCommerceRuntimeEnvironment): string[] {
-  return [...(!env.DB ? ["database-binding-missing"] : []), ...(!secret(env) ? ["cart-session-secret-missing"] : []), "service-point-not-activated", "outbound-shipment-creation-not-activated"];
+function settlementMode(env: ProductionCommerceRuntimeEnvironment): "test" | "live" | null {
+  return env.STRIPE_SETTLEMENT_MODE === "test" || env.STRIPE_SETTLEMENT_MODE === "live"
+    ? env.STRIPE_SETTLEMENT_MODE
+    : null;
+}
+function runtimeBlockers(env: ProductionCommerceRuntimeEnvironment, mode: string): string[] {
+  const expectedSettlement = mode === "sandbox" ? "test" : "live";
+  return [
+    ...(!env.DB ? ["database-binding-missing"] : []),
+    ...(!secret(env) ? ["cart-session-secret-missing"] : []),
+    ...(settlementMode(env) !== expectedSettlement ? ["stripe-settlement-mode-mismatch"] : []),
+    ...(["controlled", "live"].includes(mode)
+      ? ["service-point-not-activated", "late-payment-compensation-not-activated", "outbound-shipment-creation-not-activated"]
+      : []),
+    ...(mode === "live" ? ["stock-runtime-attestation-not-activated"] : []),
+  ];
 }
 
 export async function productionCommerceApiResponse(
@@ -155,33 +171,37 @@ export async function productionCommerceApiResponse(
   if (env?.APP_ENV !== "production") return json({ error: "not-found" }, 404);
   const line = lineRoute.exec(url.pathname);
   if (!known.has(url.pathname) && !line) return json({ error: "not-found" }, 404);
-  const gate = evaluateWiredProductionReleaseGate(env);
-  const blockers = runtimeBlockers(env);
-  if (url.pathname === routes.health) {
-    if (request.method !== "GET") return fail("METHOD_NOT_ALLOWED", 405);
-    const ready = gate.ready && blockers.length === 0;
-    return json({ status: ready ? "ready" : "closed", environment: "production", mode: gate.mode, releaseSha: gate.releaseSha, origin: gate.origin, launchZones: gate.launchZones, blockers: [...gate.blockers, ...blockers], capabilities: { sandboxCheckout: ready && gate.mode === "sandbox", realPayment: ready && ["controlled", "live"].includes(gate.mode), realDelivery: ready && ["controlled", "live"].includes(gate.mode), transactionalEmail: ready, controlledOrder: ready && gate.mode === "controlled", publicCommerce: ready && gate.mode === "live" }, routes: { cart: "wired", homeDelivery: "wired", order: "wired", paymentSession: "wired", servicePoint: "blocked-by-0011", stripeWebhook: "atomic-d1-effects" } }, ready ? 200 : 503);
-  }
-  if (!gate.ready || !gate.origin || url.origin !== gate.origin) return fail("COMMERCE_CLOSED", 503);
-  if (!env.DB) return fail("DATABASE_UNAVAILABLE", 503);
   if (url.pathname === routes.webhook) {
     if (request.method !== "POST") return fail("METHOD_NOT_ALLOWED", 405);
+    const configuredOrigin = env.COMMERCE_ORIGIN;
+    const mode = settlementMode(env);
+    if (!env.DB || !mode || typeof configuredOrigin !== "string" || url.origin !== configuredOrigin) {
+      return fail("SETTLEMENT_UNAVAILABLE", 503);
+    }
     const raw = await bytes(request, 64 * 1024); const signature = request.headers.get("Stripe-Signature");
     if (!raw || !signature) return fail("INVALID_WEBHOOK", 400);
     try {
-      const provider = dependencies.paymentProvider ?? createStripePaymentProviderPorts({ apiKey: env.STRIPE_SECRET_KEY, webhookSecret: env.STRIPE_WEBHOOK_SECRET, mode: gate.mode === "sandbox" ? "test" : "live" });
+      const provider = dependencies.paymentProvider ?? createStripePaymentProviderPorts({ apiKey: env.STRIPE_SECRET_KEY, webhookSecret: env.STRIPE_WEBHOOK_SECRET, mode });
       const delivered = await verifyAndDeliverPaymentWebhook(
         provider.webhooks,
         { rawBody: raw, stripeSignature: signature, receivedAtEpochSeconds: Math.floor(Date.now() / 1000) },
-        new D1StripePaymentEffectsStore(env.DB),
+        dependencies.paymentEffects ?? new D1StripePaymentEffectsStore(env.DB, mode === "live"),
       );
       return json({ received: true, disposition: delivered.disposition });
     } catch (cause) {
       if (cause instanceof PaymentProviderError) return fail("INVALID_WEBHOOK", 400);
-      if (cause instanceof StripePaymentEffectsError) return fail("PAYMENT_EFFECTS_UNAVAILABLE", 503);
       return fail("PAYMENT_EFFECTS_UNAVAILABLE", 503);
     }
   }
+  const gate = evaluateWiredProductionReleaseGate(env);
+  const blockers = runtimeBlockers(env, gate.mode);
+  if (url.pathname === routes.health) {
+    if (request.method !== "GET") return fail("METHOD_NOT_ALLOWED", 405);
+    const ready = gate.ready && blockers.length === 0;
+    return json({ status: ready ? "ready" : "closed", environment: "production", mode: gate.mode, releaseSha: gate.releaseSha, origin: gate.origin, launchZones: gate.launchZones, blockers: [...gate.blockers, ...blockers], capabilities: { sandboxCheckout: ready && gate.mode === "sandbox", realPayment: false, realDelivery: false, transactionalEmail: ready, controlledOrder: ready && gate.mode === "controlled", publicCommerce: false }, routes: { cart: "wired", homeDelivery: "sandbox-read-only", order: "wired", paymentSession: "sandbox-only-live-compensation-blocked", servicePoint: "blocked-by-0011", stripeWebhook: "atomic-d1-effects" } }, ready ? 200 : 503);
+  }
+  if (!gate.ready || !gate.origin || url.origin !== gate.origin) return fail("COMMERCE_CLOSED", 503);
+  if (!env.DB) return fail("DATABASE_UNAVAILABLE", 503);
   if (gate.mode === "live" && blockers.length) return fail("COMMERCE_CLOSED", 503);
   if (gate.mode !== "live" && !ownerOk(request, env)) return fail("CONTROLLED_ACCESS_REQUIRED", 403);
   if (url.pathname === routes.points) return fail("SERVICE_POINT_NOT_ACTIVATED", 503);
@@ -234,7 +254,6 @@ export async function productionCommerceApiResponse(
     try { return json({ data: await new D1ProductionCheckoutStore(env.DB).currentOrder(current.cartId) }); } catch (cause) { return map(cause); }
   }
   if (url.pathname === routes.delivery) {
-    if (gate.mode === "sandbox") return fail("REAL_PROVIDER_DISABLED_IN_SANDBOX", 503);
     const parsed = await body(request); if (!parsed || !exact(parsed, ["address"])) return fail("INVALID_BODY", 400);
     try {
       const provider = dependencies.deliveryProvider ?? createSendcloudProviderPorts({ publicKey: env.SENDCLOUD_PUBLIC_KEY, secretKey: env.SENDCLOUD_SECRET_KEY });
@@ -254,11 +273,12 @@ export async function productionCommerceApiResponse(
     try { return json({ data: await new D1ProductionCheckoutStore(env.DB).createOrder({ cartId: current.cartId, quoteId: parsed.quoteId, optionId: parsed.optionId, address: parsed.address as never, email: parsed.email, idempotencyKey: key(request)!, termsVersion: LEGAL_VERSION, privacyVersion: LEGAL_VERSION, now: now() }) }, 201); } catch (cause) { return map(cause); }
   }
   if (url.pathname === routes.payment) {
+    if (gate.mode !== "sandbox") return fail("LATE_PAYMENT_COMPENSATION_NOT_ACTIVATED", 503);
     const empty = await bytes(request, 1); if (!empty || empty.length) return fail("INVALID_BODY", 400);
     try {
       const checkout = new D1ProductionCheckoutStore(env.DB);
       const prepared = await checkout.prepareCheckoutSession({ cartId: current.cartId, idempotencyKey: key(request)!, origin: gate.origin, locale: "fr", now: now() });
-      const provider = dependencies.paymentProvider ?? createStripePaymentProviderPorts({ apiKey: env.STRIPE_SECRET_KEY, webhookSecret: env.STRIPE_WEBHOOK_SECRET, mode: gate.mode === "sandbox" ? "test" : "live" });
+      const provider = dependencies.paymentProvider ?? createStripePaymentProviderPorts({ apiKey: env.STRIPE_SECRET_KEY, webhookSecret: env.STRIPE_WEBHOOK_SECRET, mode: "test" });
       const receipt = await provider.checkout.createSession(prepared);
       await checkout.recordCheckoutSession(prepared, receipt, now());
       return json({ data: { url: receipt.checkoutUrl } }, 201);

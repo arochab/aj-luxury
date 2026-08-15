@@ -16,6 +16,7 @@ const controlled = Object.freeze({
   PAYMENT_PROVIDER: "stripe",
   STRIPE_SECRET_KEY: "sk_live_redacted",
   STRIPE_WEBHOOK_SECRET: "whsec_redacted",
+  STRIPE_SETTLEMENT_MODE: "live",
   DELIVERY_PROVIDER: "sendcloud",
   SENDCLOUD_API_VERSION: "3",
   SENDCLOUD_PUBLIC_KEY: "public-redacted",
@@ -111,7 +112,7 @@ test("service-point purchase is an explicit 503 and never reaches a provider", a
   assert.equal((await response.json()).error.code, "SERVICE_POINT_NOT_ACTIVATED");
 });
 
-test("payment session cannot call Stripe before the server order snapshot is available", async () => {
+test("controlled payment session stays closed until late-payment compensation is activated", async () => {
   const cartToken = "A".repeat(43);
   const csrfToken = "B".repeat(43);
   const response = await productionCommerceApiResponse(
@@ -129,7 +130,7 @@ test("payment session cannot call Stripe before the server order snapshot is ava
     controlled,
   );
   assert.equal(response.status, 503);
-  assert.equal((await response.json()).error.code, "COMMERCE_UNAVAILABLE");
+  assert.equal((await response.json()).error.code, "LATE_PAYMENT_COMPENSATION_NOT_ACTIVATED");
 });
 
 test("a verified Stripe webhook is never acknowledged without atomic effects", async () => {
@@ -138,7 +139,6 @@ test("a verified Stripe webhook is never acknowledged without atomic effects", a
     new Request("https://ajluxurystore.com/api/commerce/webhooks/stripe", {
       method: "POST",
       headers: {
-        ...ownerHeaders,
         "Stripe-Signature": "t=1,v1=" + "a".repeat(64),
         "Content-Type": "application/json",
       },
@@ -167,4 +167,47 @@ test("a verified Stripe webhook is never acknowledged without atomic effects", a
   assert.equal(verifications, 1);
   assert.equal(response.status, 503);
   assert.equal((await response.json()).error.code, "PAYMENT_EFFECTS_UNAVAILABLE");
+});
+
+test("a signed existing payment settles after commerce is closed without owner headers", async () => {
+  let effects = 0;
+  const closedAfterSession = {
+    APP_ENV: "production",
+    COMMERCE_MODE: "closed",
+    COMMERCE_ORIGIN: "https://ajluxurystore.com",
+    STRIPE_SETTLEMENT_MODE: "live",
+    DB: {},
+  };
+  const response = await productionCommerceApiResponse(
+    new Request("https://ajluxurystore.com/api/commerce/webhooks/stripe", {
+      method: "POST",
+      headers: {
+        "Stripe-Signature": "t=1,v1=" + "a".repeat(64),
+        "Content-Type": "application/json",
+      },
+      body: "{}",
+    }),
+    closedAfterSession,
+    {
+      paymentProvider: {
+        checkout: { async createSession() { throw new Error("not-called"); } },
+        refunds: { async createRefund() { throw new Error("not-called"); } },
+        webhooks: { async verify() {
+          return {
+            provider: "stripe", providerEventId: "evt_paid_closed_1",
+            eventType: "checkout.session.completed",
+            occurredAt: new Date().toISOString(), livemode: true,
+            kind: "payment", orderId: "order_1", providerPaymentId: "pi_1",
+            providerCheckoutSessionId: "cs_live_1", state: "paid",
+            amountCents: 2999, currency: "EUR", providerFailureCode: null,
+            semanticKey: "stripe:payment:pi_1:paid",
+          };
+        } },
+      },
+      paymentEffects: { async applyVerified() { effects += 1; return "applied"; } },
+    },
+  );
+  assert.equal(response.status, 200);
+  assert.equal(effects, 1);
+  assert.deepEqual(await response.json(), { received: true, disposition: "applied" });
 });
