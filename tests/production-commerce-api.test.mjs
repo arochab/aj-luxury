@@ -111,7 +111,7 @@ test("service-point purchase is an explicit 503 and never reaches a provider", a
   assert.equal((await response.json()).error.code, "SERVICE_POINT_NOT_ACTIVATED");
 });
 
-test("payment session is not exposed while webhook effects are absent", async () => {
+test("payment session cannot call Stripe before the server order snapshot is available", async () => {
   const cartToken = "A".repeat(43);
   const csrfToken = "B".repeat(43);
   const response = await productionCommerceApiResponse(
@@ -129,7 +129,7 @@ test("payment session is not exposed while webhook effects are absent", async ()
     controlled,
   );
   assert.equal(response.status, 503);
-  assert.equal((await response.json()).error.code, "PAYMENT_WEBHOOK_EFFECTS_NOT_ACTIVATED");
+  assert.equal((await response.json()).error.code, "COMMERCE_UNAVAILABLE");
 });
 
 test("a verified Stripe webhook is never acknowledged without atomic effects", async () => {
@@ -149,11 +149,22 @@ test("a verified Stripe webhook is never acknowledged without atomic effects", a
       paymentProvider: {
         checkout: { async createSession() { throw new Error("not-called"); } },
         refunds: { async createRefund() { throw new Error("not-called"); } },
-        webhooks: { async verify() { verifications += 1; return { kind: "ignored" }; } },
+        webhooks: { async verify() {
+          verifications += 1;
+          return {
+            provider: "stripe", providerEventId: "evt_paid_1",
+            eventType: "checkout.session.completed",
+            occurredAt: new Date().toISOString(), livemode: true,
+            kind: "payment", orderId: "order_1", providerPaymentId: "pi_1",
+            providerCheckoutSessionId: "cs_live_1", state: "paid",
+            amountCents: 2999, currency: "EUR", providerFailureCode: null,
+            semanticKey: "stripe:payment:pi_1:paid",
+          };
+        } },
       },
     },
   );
   assert.equal(verifications, 1);
   assert.equal(response.status, 503);
-  assert.equal((await response.json()).error.code, "PAYMENT_EFFECTS_NOT_ACTIVATED");
+  assert.equal((await response.json()).error.code, "PAYMENT_EFFECTS_UNAVAILABLE");
 });
