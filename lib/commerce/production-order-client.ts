@@ -164,6 +164,7 @@ export async function createProductionOrder(input: Readonly<{
   address: ShippingAddress;
   email: string;
   idempotencyKey: string;
+  servicePointId?: string;
 }>): Promise<PublicProductionOrder> {
   return orderResponse(await fetch(ORDER_PATH, {
     method: "POST",
@@ -175,6 +176,7 @@ export async function createProductionOrder(input: Readonly<{
       optionId: input.optionId,
       address: input.address,
       email: input.email,
+      ...(input.servicePointId ? { servicePointId: input.servicePointId } : {}),
       termsAccepted: true,
       privacyAccepted: true,
     }),

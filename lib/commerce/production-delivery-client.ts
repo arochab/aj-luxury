@@ -5,12 +5,14 @@ import { readCartCsrfToken } from "./preprod-cart-client.ts";
 import type { ShippingAddress } from "./preprod-shipping-client.ts";
 
 const OPTIONS_PATH = commerceApiPath("production", "/checkout/delivery-options");
+const POINTS_PATH = commerceApiPath("production", "/checkout/service-points");
 const SELECT_PATH = commerceApiPath(
   "production",
   "/checkout/delivery-options/select",
 );
 const OPTION_PATTERN = /^delivery_[0-9a-f]{64}$/;
 const QUOTE_PATTERN = /^quote_[0-9a-f]{64}$/;
+const POINT_PATTERN = /^point_[0-9a-f]{64}$/;
 const UTC_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 
 export type PublicProductionDeliveryOption = Readonly<{
@@ -19,12 +21,23 @@ export type PublicProductionDeliveryOption = Readonly<{
   carrierCode: string;
   serviceCode: string;
   displayName: string;
-  deliveryMode: "home";
+  deliveryMode: "home" | "service_point";
   amountCents: number;
   currency: "EUR";
   estimatedDaysMin: number;
   estimatedDaysMax: number;
   dutiesTerms: "EU_INCLUDED" | "DAP";
+  expiresAt: string;
+}>;
+
+export type PublicProductionServicePoint = Readonly<{
+  servicePointId: string;
+  optionId: string;
+  displayName: string;
+  postalCode: string;
+  city: string;
+  countryCode: string;
+  openingHoursSummary: string | null;
   expiresAt: string;
 }>;
 
@@ -65,7 +78,8 @@ export function parseProductionDeliveryOption(
     typeof value.carrierCode !== "string" || value.carrierCode.length < 1 || value.carrierCode.length > 80 ||
     typeof value.serviceCode !== "string" || value.serviceCode.length < 1 || value.serviceCode.length > 80 ||
     typeof value.displayName !== "string" || value.displayName.length < 1 || value.displayName.length > 160 ||
-    value.deliveryMode !== "home" || value.currency !== "EUR" ||
+    !["home", "service_point"].includes(String(value.deliveryMode)) ||
+    value.currency !== "EUR" ||
     !Number.isSafeInteger(value.amountCents) || (value.amountCents as number) < 0 ||
     !Number.isSafeInteger(value.estimatedDaysMin) || (value.estimatedDaysMin as number) < 1 ||
     !Number.isSafeInteger(value.estimatedDaysMax) ||
@@ -76,6 +90,44 @@ export function parseProductionDeliveryOption(
     new Date(value.expiresAt).toISOString() !== value.expiresAt
   ) throw new ProductionDeliveryApiError("MALFORMED_RESPONSE");
   return Object.freeze(value as PublicProductionDeliveryOption);
+}
+
+export function parseProductionServicePoint(
+  value: unknown,
+): PublicProductionServicePoint {
+  const keys = [
+    "city", "countryCode", "displayName", "expiresAt", "openingHoursSummary",
+    "optionId", "postalCode", "servicePointId",
+  ];
+  if (!record(value) || !exact(value, keys) ||
+    typeof value.servicePointId !== "string" || !POINT_PATTERN.test(value.servicePointId) ||
+    typeof value.optionId !== "string" || !OPTION_PATTERN.test(value.optionId) ||
+    typeof value.displayName !== "string" || value.displayName.length < 1 || value.displayName.length > 160 ||
+    typeof value.postalCode !== "string" || value.postalCode.length < 1 || value.postalCode.length > 16 ||
+    typeof value.city !== "string" || value.city.length < 1 || value.city.length > 120 ||
+    typeof value.countryCode !== "string" || !/^[A-Z]{2}$/.test(value.countryCode) ||
+    !(value.openingHoursSummary === null ||
+      (typeof value.openingHoursSummary === "string" && value.openingHoursSummary.length <= 500)) ||
+    typeof value.expiresAt !== "string" || !UTC_PATTERN.test(value.expiresAt) ||
+    Number.isNaN(Date.parse(value.expiresAt)) ||
+    new Date(value.expiresAt).toISOString() !== value.expiresAt
+  ) throw new ProductionDeliveryApiError("MALFORMED_RESPONSE");
+  return Object.freeze(value as PublicProductionServicePoint);
+}
+
+export function parseProductionServicePoints(
+  value: unknown,
+  optionId: string,
+): readonly PublicProductionServicePoint[] {
+  if (!Array.isArray(value) || value.length > 100) {
+    throw new ProductionDeliveryApiError("MALFORMED_RESPONSE");
+  }
+  const points = Object.freeze(value.map(parseProductionServicePoint));
+  if (points.some((point) => point.optionId !== optionId) ||
+    new Set(points.map(({ servicePointId }) => servicePointId)).size !== points.length) {
+    throw new ProductionDeliveryApiError("MALFORMED_RESPONSE");
+  }
+  return points;
 }
 
 export function parseProductionDeliveryOptions(
@@ -145,14 +197,27 @@ export async function requestProductionDeliveryOptions(
   ));
 }
 
+export async function requestProductionServicePoints(
+  optionId: string,
+  address: ShippingAddress,
+  idempotencyKey: string,
+): Promise<readonly PublicProductionServicePoint[]> {
+  return parseProductionServicePoints(await post(
+    POINTS_PATH,
+    { address, optionId },
+    idempotencyKey,
+  ), optionId);
+}
+
 export async function selectProductionDeliveryOption(
   optionId: string,
   address: ShippingAddress,
   idempotencyKey: string,
+  servicePointId?: string,
 ): Promise<PublicProductionDeliveryOption> {
   const selected = parseProductionDeliveryOption(await post(
     SELECT_PATH,
-    { address, optionId },
+    { address, optionId, ...(servicePointId ? { servicePointId } : {}) },
     idempotencyKey,
   ));
   if (selected.optionId !== optionId) {
@@ -160,4 +225,3 @@ export async function selectProductionDeliveryOption(
   }
   return selected;
 }
-

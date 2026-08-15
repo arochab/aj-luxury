@@ -11,9 +11,11 @@ import {
 } from "../../lib/commerce/preprod-shipping-client";
 import {
   requestProductionDeliveryOptions,
+  requestProductionServicePoints,
   selectProductionDeliveryOption,
   ProductionDeliveryApiError,
   type PublicProductionDeliveryOption,
+  type PublicProductionServicePoint,
 } from "../../lib/commerce/production-delivery-client";
 import {
   createProductionOrder,
@@ -83,6 +85,9 @@ export default function ProductionCheckoutClient() {
   const [email, setEmail] = useState("");
   const [options, setOptions] = useState<readonly PublicProductionDeliveryOption[] | null>(null);
   const [selected, setSelected] = useState<PublicProductionDeliveryOption | null>(null);
+  const [relayOption, setRelayOption] = useState<PublicProductionDeliveryOption | null>(null);
+  const [points, setPoints] = useState<readonly PublicProductionServicePoint[] | null>(null);
+  const [selectedPoint, setSelectedPoint] = useState<PublicProductionServicePoint | null>(null);
   const [order, setOrder] = useState<PublicProductionOrder | null>(null);
   const [legalAccepted, setLegalAccepted] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -90,6 +95,7 @@ export default function ProductionCheckoutClient() {
   const [errorCode, setErrorCode] = useState<string | null>(null);
   const quoteAttempt = useRef<{ fingerprint: string; key: string } | null>(null);
   const selectAttempt = useRef<{ optionId: string; key: string } | null>(null);
+  const pointsAttempt = useRef<{ optionId: string; key: string } | null>(null);
   const orderAttempt = useRef<string | null>(null);
   const paymentAttempt = useRef<string | null>(null);
   const errorRef = useRef<HTMLDivElement>(null);
@@ -121,8 +127,12 @@ export default function ProductionCheckoutClient() {
     setForm((current) => ({ ...current, [field]: value }));
     setOptions(null);
     setSelected(null);
+    setRelayOption(null);
+    setPoints(null);
+    setSelectedPoint(null);
     quoteAttempt.current = null;
     selectAttempt.current = null;
+    pointsAttempt.current = null;
   }
 
   async function requestOptions(event: FormEvent<HTMLFormElement>) {
@@ -137,6 +147,9 @@ export default function ProductionCheckoutClient() {
     setSubmitting(true);
     setErrorCode(null);
     setSelected(null);
+    setRelayOption(null);
+    setPoints(null);
+    setSelectedPoint(null);
     try {
       setOptions(await requestProductionDeliveryOptions(address, key));
     } catch (error) {
@@ -154,6 +167,33 @@ export default function ProductionCheckoutClient() {
 
   async function choose(option: PublicProductionDeliveryOption) {
     if (submitting) return;
+    if (option.deliveryMode === "service_point") {
+      const key = pointsAttempt.current?.optionId === option.optionId
+        ? pointsAttempt.current.key
+        : crypto.randomUUID();
+      pointsAttempt.current = { optionId: option.optionId, key };
+      setSubmitting(true);
+      setErrorCode(null);
+      setSelected(null);
+      setSelectedPoint(null);
+      try {
+        const available = await requestProductionServicePoints(
+          option.optionId,
+          shippingAddress(form),
+          key,
+        );
+        setRelayOption(option);
+        setPoints(available);
+        if (available.length === 0) setErrorCode("SERVICE_POINT_UNAVAILABLE");
+      } catch (error) {
+        setErrorCode(error instanceof ProductionDeliveryApiError
+          ? error.code
+          : "DELIVERY_UNAVAILABLE");
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
     const key = selectAttempt.current?.optionId === option.optionId
       ? selectAttempt.current.key
       : crypto.randomUUID();
@@ -166,6 +206,35 @@ export default function ProductionCheckoutClient() {
         shippingAddress(form),
         key,
       ));
+      setRelayOption(null);
+      setPoints(null);
+    } catch (error) {
+      setErrorCode(error instanceof ProductionDeliveryApiError
+        ? error.code
+        : "DELIVERY_UNAVAILABLE");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function choosePoint(point: PublicProductionServicePoint) {
+    if (!relayOption || submitting || point.optionId !== relayOption.optionId) return;
+    const attemptId = `${relayOption.optionId}:${point.servicePointId}`;
+    const key = selectAttempt.current?.optionId === attemptId
+      ? selectAttempt.current.key
+      : crypto.randomUUID();
+    selectAttempt.current = { optionId: attemptId, key };
+    setSubmitting(true);
+    setErrorCode(null);
+    try {
+      setSelected(await selectProductionDeliveryOption(
+        relayOption.optionId,
+        shippingAddress(form),
+        key,
+        point.servicePointId,
+      ));
+      setSelectedPoint(point);
+      setPoints(null);
     } catch (error) {
       setErrorCode(error instanceof ProductionDeliveryApiError
         ? error.code
@@ -188,6 +257,7 @@ export default function ProductionCheckoutClient() {
         address: shippingAddress(form),
         email,
         idempotencyKey: key,
+        ...(selectedPoint ? { servicePointId: selectedPoint.servicePointId } : {}),
       }));
     } catch (error) {
       setErrorCode(error instanceof ProductionOrderApiError
@@ -285,8 +355,19 @@ export default function ProductionCheckoutClient() {
               <legend>{t("checkout.chooseDelivery")}</legend>
               {options.map((option) => (
                 <button className={styles.deliveryOption} type="button" key={option.optionId} disabled={submitting} onClick={() => void choose(option)}>
-                  <span><strong>{option.displayName}</strong><small>{t("checkout.homeDelivery")} · {option.estimatedDaysMin}–{option.estimatedDaysMax} {t("checkout.days")}</small></span>
+                  <span><strong>{option.displayName}</strong><small>{option.deliveryMode === "service_point" ? "Point relais" : t("checkout.homeDelivery")} · {option.estimatedDaysMin}–{option.estimatedDaysMax} {t("checkout.days")}</small></span>
                   <LocalizedPrice amountCents={option.amountCents} />
+                </button>
+              ))}
+            </fieldset>
+          ) : null}
+
+          {relayOption && points && !selected && !order ? (
+            <fieldset className={styles.deliveryOptions}>
+              <legend>Choisir un point relais</legend>
+              {points.map((point) => (
+                <button className={styles.deliveryOption} type="button" key={point.servicePointId} disabled={submitting} onClick={() => void choosePoint(point)}>
+                  <span><strong>{point.displayName}</strong><small>{point.postalCode} · {point.city}</small></span>
                 </button>
               ))}
             </fieldset>

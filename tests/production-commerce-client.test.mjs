@@ -12,7 +12,9 @@ import {
 } from "../lib/commerce/preprod-cart-client.ts";
 import {
   parseProductionDeliveryOptions,
+  parseProductionServicePoints,
   requestProductionDeliveryOptions,
+  requestProductionServicePoints,
   selectProductionDeliveryOption,
 } from "../lib/commerce/production-delivery-client.ts";
 import {
@@ -47,7 +49,33 @@ function productionOptions() {
       estimatedDaysMax: 4,
       dutiesTerms: "EU_INCLUDED",
       expiresAt: "2099-08-20T12:00:00.000Z",
+    }, {
+      optionId: `delivery_${"c".repeat(64)}`,
+      quoteId: `quote_${"d".repeat(64)}`,
+      carrierCode: "mondial-relay",
+      serviceCode: "service-point",
+      displayName: "Livraison en point relais",
+      deliveryMode: "service_point",
+      amountCents: 550,
+      currency: "EUR",
+      estimatedDaysMin: 3,
+      estimatedDaysMax: 5,
+      dutiesTerms: "EU_INCLUDED",
+      expiresAt: "2099-08-20T12:00:00.000Z",
     }];
+}
+
+function productionPoints() {
+  return [{
+    servicePointId: `point_${"e".repeat(64)}`,
+    optionId: productionOptions()[1].optionId,
+    displayName: "Relais Central",
+    postalCode: "75001",
+    city: "Paris",
+    countryCode: "FR",
+    openingHoursSummary: null,
+    expiresAt: "2099-08-20T12:00:00.000Z",
+  }];
 }
 
 function withDocumentCookie(callback) {
@@ -134,7 +162,7 @@ test("an ambiguous cart network retry keeps the caller's semantic key", async ()
   assert.deepEqual(keys, ["stable-line-attempt-0001", "stable-line-attempt-0001"]);
 });
 
-test("production delivery parser matches the router contract and rejects relay widening", () => {
+test("production delivery parser matches home and encrypted relay contracts", () => {
   const parsed = parseProductionDeliveryOptions(productionOptions());
   assert.equal(parsed[0].optionId, `delivery_${"b".repeat(64)}`);
   assert.equal(parsed[0].deliveryMode, "home");
@@ -142,13 +170,12 @@ test("production delivery parser matches the router contract and rejects relay w
     () => parseProductionDeliveryOptions({ options: productionOptions() }),
     /MALFORMED_RESPONSE/,
   );
-  assert.throws(
-    () => parseProductionDeliveryOptions([{
-      ...productionOptions()[0],
-      deliveryMode: "service_point",
-    }]),
-    /MALFORMED_RESPONSE/,
+  assert.equal(parsed[1].deliveryMode, "service_point");
+  assert.equal(
+    parseProductionServicePoints(productionPoints(), parsed[1].optionId)[0].city,
+    "Paris",
   );
+  assert.throws(() => parseProductionServicePoints(productionPoints(), parsed[0].optionId), /MALFORMED_RESPONSE/);
 });
 
 test("production quote and selection use the exact router response envelopes", async () => {
@@ -189,6 +216,50 @@ test("production quote and selection use the exact router response envelopes", a
   assert.deepEqual(JSON.parse(calls[1].init.body), {
     address,
     optionId: productionOptions()[0].optionId,
+  });
+});
+
+test("production relay lookup and exact point selection use canonical routes", async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (path, init) => {
+    calls.push({ path, init });
+    return Response.json({
+      data: calls.length === 1 ? productionPoints() : productionOptions()[1],
+    });
+  };
+  const address = {
+    recipient: "Ada Client",
+    line1: "1 rue du Test",
+    postalCode: "75001",
+    city: "Paris",
+    countryCode: "FR",
+  };
+  try {
+    await withDocumentCookie(async () => {
+      const points = await requestProductionServicePoints(
+        productionOptions()[1].optionId,
+        address,
+        "delivery-points-0001",
+      );
+      await selectProductionDeliveryOption(
+        productionOptions()[1].optionId,
+        address,
+        "delivery-relay-select-0001",
+        points[0].servicePointId,
+      );
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+  assert.deepEqual(calls.map(({ path }) => path), [
+    "/api/commerce/checkout/service-points",
+    "/api/commerce/checkout/delivery-options/select",
+  ]);
+  assert.deepEqual(JSON.parse(calls[1].init.body), {
+    address,
+    optionId: productionOptions()[1].optionId,
+    servicePointId: productionPoints()[0].servicePointId,
   });
 });
 
