@@ -3,9 +3,11 @@ import { CommerceError } from "../lib/commerce/backend-domain.ts";
 import { D1CommerceStore } from "../lib/commerce/d1-commerce-store.ts";
 import type { CommerceD1Database } from "../lib/commerce/d1-port.ts";
 import { D1ProductionCheckoutStore, ProductionCheckoutError } from "../lib/commerce/d1-production-checkout-store.ts";
-import { D1ProductionDeliveryStore, ProductionDeliveryError } from "../lib/commerce/d1-production-delivery-store.ts";
+import { D1ProductionDeliveryActivationStore } from "../lib/commerce/d1-production-delivery-activation-store.ts";
+import { ProductionDeliveryError } from "../lib/commerce/d1-production-delivery-store.ts";
 import { D1StripePaymentEffectsStore } from "../lib/commerce/d1-stripe-payment-effects.ts";
 import type { DeliveryProviderPorts } from "../lib/commerce/delivery-provider.ts";
+import { DeliveryReferenceVault } from "../lib/commerce/delivery-reference-vault.ts";
 import { authorizeBrowserMutation, buildCsrfCookie, buildSessionCookie, clearCsrfCookie, clearSessionCookie, isTrustedMutationOrigin } from "../lib/commerce/identity-access-policy.ts";
 import { PaymentProviderError, verifyAndDeliverPaymentWebhook, type PaymentProviderPorts, type PaymentWebhookEffectsPort } from "../lib/commerce/payment-provider.ts";
 import { evaluateWiredProductionReleaseGate, type ProductionCommerceEnvironment } from "../lib/commerce/production-release-gate.ts";
@@ -33,6 +35,8 @@ export type ProductionCommerceRuntimeEnvironment = ProductionCommerceEnvironment
   COMMERCE_CART_HMAC_SECRET?: string;
   COMMERCE_CONTROLLED_OWNER_EMAIL?: string;
   STRIPE_SETTLEMENT_MODE?: string;
+  DELIVERY_REFERENCE_ENCRYPTION_KEY_BASE64?: string;
+  DELIVERY_REFERENCE_KEY_VERSION?: string;
 }>;
 export type ProductionCommerceRouterDependencies = Readonly<{
   deliveryProvider?: DeliveryProviderPorts;
@@ -148,17 +152,73 @@ function settlementMode(env: ProductionCommerceRuntimeEnvironment): "test" | "li
     ? env.STRIPE_SETTLEMENT_MODE
     : null;
 }
+function deliveryVault(env: ProductionCommerceRuntimeEnvironment): DeliveryReferenceVault | null {
+  try {
+    return new DeliveryReferenceVault({
+      encryptionKeyBase64: env.DELIVERY_REFERENCE_ENCRYPTION_KEY_BASE64,
+      keyVersion: env.DELIVERY_REFERENCE_KEY_VERSION,
+    });
+  } catch {
+    return null;
+  }
+}
 function runtimeBlockers(env: ProductionCommerceRuntimeEnvironment, mode: string): string[] {
   const expectedSettlement = mode === "sandbox" ? "test" : "live";
   return [
     ...(!env.DB ? ["database-binding-missing"] : []),
     ...(!secret(env) ? ["cart-session-secret-missing"] : []),
+    ...(!deliveryVault(env) ? ["delivery-reference-vault-not-configured"] : []),
+    "provider-pricing-0012-not-activated",
     ...(settlementMode(env) !== expectedSettlement ? ["stripe-settlement-mode-mismatch"] : []),
     ...(["controlled", "live"].includes(mode)
-      ? ["service-point-not-activated", "late-payment-compensation-not-activated", "outbound-shipment-creation-not-activated"]
+      ? ["late-payment-compensation-not-activated", "outbound-shipment-creation-not-activated"]
       : []),
-    ...(mode === "live" ? ["stock-runtime-attestation-not-activated"] : []),
   ];
+}
+
+export async function productionStockRuntimeAttested(
+  env: ProductionCommerceRuntimeEnvironment,
+): Promise<boolean> {
+  if (!env.DB || !env.STOCK_MANIFEST_ID || !env.STOCK_MANIFEST_SHA256) return false;
+  try {
+    const [stock, approvals] = await Promise.all([
+      env.DB.prepare(
+        `SELECT COUNT(*) AS variant_count,
+          COALESCE(SUM(physical_quantity), 0) AS physical_quantity,
+          COALESCE(SUM(CASE WHEN reserves_validated=1 THEN 1 ELSE 0 END), 0) AS validated_count,
+          COALESCE(SUM(CASE WHEN physical_quantity < 0
+            OR gift_reserve_quantity < 0 OR safety_reserve_quantity < 0
+            OR gift_reserve_quantity + safety_reserve_quantity > physical_quantity
+            THEN 1 ELSE 0 END), 0) AS invalid_count
+        FROM inventory`,
+      ).first<{ variant_count: number; physical_quantity: number; validated_count: number; invalid_count: number }>(),
+      env.DB.prepare(
+        `SELECT COUNT(*) AS approval_count,
+          COUNT(DISTINCT actor_id) AS signer_count,
+          COALESCE(SUM(CASE WHEN json_extract(metadata_json, '$.role')='stock_owner' THEN 1 ELSE 0 END), 0) AS stock_owner_count,
+          COALESCE(SUM(CASE WHEN json_extract(metadata_json, '$.role')='release_owner' THEN 1 ELSE 0 END), 0) AS release_owner_count
+        FROM audit_log
+        WHERE action='launch_stock_import_approved'
+          AND entity_type='stock_manifest' AND entity_id=?
+          AND actor_type='admin' AND actor_id IS NOT NULL
+          AND json_extract(metadata_json, '$.payloadSha256')=?
+          AND json_extract(metadata_json, '$.attestation')='I_APPROVE_THIS_EXACT_STOCK_IMPORT'
+          AND json_extract(metadata_json, '$.role') IN ('stock_owner','release_owner')`,
+      ).bind(env.STOCK_MANIFEST_ID, env.STOCK_MANIFEST_SHA256).first<{
+        approval_count: number;
+        signer_count: number;
+        stock_owner_count: number;
+        release_owner_count: number;
+      }>(),
+    ]);
+    return Number(stock?.variant_count) === 12 &&
+      Number(stock?.physical_quantity) === 756 &&
+      Number(stock?.validated_count) === 12 && Number(stock?.invalid_count) === 0 &&
+      Number(approvals?.approval_count) === 2 && Number(approvals?.signer_count) === 2 &&
+      Number(approvals?.stock_owner_count) === 1 && Number(approvals?.release_owner_count) === 1;
+  } catch {
+    return false;
+  }
 }
 
 export async function productionCommerceApiResponse(
@@ -195,16 +255,18 @@ export async function productionCommerceApiResponse(
   }
   const gate = evaluateWiredProductionReleaseGate(env);
   const blockers = runtimeBlockers(env, gate.mode);
+  if (gate.mode === "live" && !await productionStockRuntimeAttested(env)) {
+    blockers.push("stock-runtime-attestation-not-verified");
+  }
   if (url.pathname === routes.health) {
     if (request.method !== "GET") return fail("METHOD_NOT_ALLOWED", 405);
     const ready = gate.ready && blockers.length === 0;
-    return json({ status: ready ? "ready" : "closed", environment: "production", mode: gate.mode, releaseSha: gate.releaseSha, origin: gate.origin, launchZones: gate.launchZones, blockers: [...gate.blockers, ...blockers], capabilities: { sandboxCheckout: ready && gate.mode === "sandbox", realPayment: false, realDelivery: false, transactionalEmail: ready, controlledOrder: ready && gate.mode === "controlled", publicCommerce: false }, routes: { cart: "wired", homeDelivery: "sandbox-read-only", order: "wired", paymentSession: "sandbox-only-live-compensation-blocked", servicePoint: "blocked-by-0011", stripeWebhook: "atomic-d1-effects" } }, ready ? 200 : 503);
+    return json({ status: ready ? "ready" : "closed", environment: "production", mode: gate.mode, releaseSha: gate.releaseSha, origin: gate.origin, launchZones: gate.launchZones, blockers: [...gate.blockers, ...blockers], capabilities: { sandboxCheckout: ready && gate.mode === "sandbox", realPayment: false, realDelivery: false, transactionalEmail: ready, controlledOrder: ready && gate.mode === "controlled", publicCommerce: false }, routes: { cart: "wired", homeDelivery: "blocked-by-provider-pricing-0012", order: "wired", paymentSession: "sandbox-only-live-compensation-blocked", servicePoint: "blocked-by-provider-pricing-0012", stripeWebhook: "atomic-d1-effects" } }, ready ? 200 : 503);
   }
   if (!gate.ready || !gate.origin || url.origin !== gate.origin) return fail("COMMERCE_CLOSED", 503);
   if (!env.DB) return fail("DATABASE_UNAVAILABLE", 503);
   if (gate.mode === "live" && blockers.length) return fail("COMMERCE_CLOSED", 503);
   if (gate.mode !== "live" && !ownerOk(request, env)) return fail("CONTROLLED_ACCESS_REQUIRED", 403);
-  if (url.pathname === routes.points) return fail("SERVICE_POINT_NOT_ACTIVATED", 503);
   let current: CartSession | null;
   try { current = await session(request); } catch {
     const headers = new Headers(); headers.append("Set-Cookie", clearSessionCookie("cart")); headers.append("Set-Cookie", clearCsrfCookie("cart"));
@@ -244,7 +306,7 @@ export async function productionCommerceApiResponse(
     } catch (cause) { return map(cause); }
   }
   if (!current) return fail("CART_SESSION_REQUIRED", 401);
-  if ([routes.delivery, routes.select, routes.order, routes.payment].includes(url.pathname as never)) {
+  if ([routes.delivery, routes.points, routes.select, routes.order, routes.payment].includes(url.pathname as never)) {
     if (request.method !== "POST") return fail("METHOD_NOT_ALLOWED", 405);
     if (!key(request)) return fail("IDEMPOTENCY_KEY_REQUIRED", 400);
     if (!mutationOk(request, gate.origin, current)) return fail("CSRF_REJECTED", 403);
@@ -254,23 +316,39 @@ export async function productionCommerceApiResponse(
     try { return json({ data: await new D1ProductionCheckoutStore(env.DB).currentOrder(current.cartId) }); } catch (cause) { return map(cause); }
   }
   if (url.pathname === routes.delivery) {
+    if (blockers.includes("provider-pricing-0012-not-activated")) return fail("DELIVERY_PRICING_NOT_ACTIVATED", 503);
     const parsed = await body(request); if (!parsed || !exact(parsed, ["address"])) return fail("INVALID_BODY", 400);
     try {
       const provider = dependencies.deliveryProvider ?? createSendcloudProviderPorts({ publicKey: env.SENDCLOUD_PUBLIC_KEY, secretKey: env.SENDCLOUD_SECRET_KEY });
-      return json({ data: await new D1ProductionDeliveryStore(env.DB, provider).quoteHomeOptions({ cartId: current.cartId, address: parsed.address as never, idempotencyKey: key(request)!, now: now() }) });
+      const vault = deliveryVault(env); if (!vault) return fail("DELIVERY_REFERENCE_VAULT_UNAVAILABLE", 503);
+      return json({ data: await new D1ProductionDeliveryActivationStore(env.DB, provider, vault).quoteOptions({ cartId: current.cartId, address: parsed.address as never, idempotencyKey: key(request)!, now: now() }) });
     } catch (cause) { return map(cause); }
   }
-  if (url.pathname === routes.select) {
+  if (url.pathname === routes.points) {
+    if (blockers.includes("provider-pricing-0012-not-activated")) return fail("DELIVERY_PRICING_NOT_ACTIVATED", 503);
     const parsed = await body(request); if (!parsed || !exact(parsed, ["address", "optionId"]) || typeof parsed.optionId !== "string") return fail("INVALID_BODY", 400);
     try {
       const provider = dependencies.deliveryProvider ?? createSendcloudProviderPorts({ publicKey: env.SENDCLOUD_PUBLIC_KEY, secretKey: env.SENDCLOUD_SECRET_KEY });
-      return json({ data: await new D1ProductionDeliveryStore(env.DB, provider).selectHomeOption({ cartId: current.cartId, optionId: parsed.optionId, address: parsed.address as never, now: now() }) });
+      const vault = deliveryVault(env); if (!vault) return fail("DELIVERY_REFERENCE_VAULT_UNAVAILABLE", 503);
+      return json({ data: await new D1ProductionDeliveryActivationStore(env.DB, provider, vault).servicePoints({ cartId: current.cartId, optionId: parsed.optionId, address: parsed.address as never, idempotencyKey: key(request)!, now: now() }) });
+    } catch (cause) { return map(cause); }
+  }
+  if (url.pathname === routes.select) {
+    if (blockers.includes("provider-pricing-0012-not-activated")) return fail("DELIVERY_PRICING_NOT_ACTIVATED", 503);
+    const parsed = await body(request); const wanted = parsed && Object.hasOwn(parsed, "servicePointId") ? ["address", "optionId", "servicePointId"] : ["address", "optionId"];
+    if (!parsed || !exact(parsed, wanted) || typeof parsed.optionId !== "string" || (Object.hasOwn(parsed, "servicePointId") && typeof parsed.servicePointId !== "string")) return fail("INVALID_BODY", 400);
+    try {
+      const provider = dependencies.deliveryProvider ?? createSendcloudProviderPorts({ publicKey: env.SENDCLOUD_PUBLIC_KEY, secretKey: env.SENDCLOUD_SECRET_KEY });
+      const vault = deliveryVault(env); if (!vault) return fail("DELIVERY_REFERENCE_VAULT_UNAVAILABLE", 503);
+      return json({ data: await new D1ProductionDeliveryActivationStore(env.DB, provider, vault).selectOption({ cartId: current.cartId, optionId: parsed.optionId, servicePointId: typeof parsed.servicePointId === "string" ? parsed.servicePointId : null, address: parsed.address as never, now: now() }) });
     } catch (cause) { return map(cause); }
   }
   if (url.pathname === routes.order) {
-    const parsed = await body(request); const wanted = ["address", "email", "optionId", "privacyAccepted", "quoteId", "termsAccepted"];
+    if (blockers.includes("provider-pricing-0012-not-activated")) return fail("DELIVERY_PRICING_NOT_ACTIVATED", 503);
+    const parsed = await body(request); const wanted = parsed && Object.hasOwn(parsed, "servicePointId") ? ["address", "email", "optionId", "privacyAccepted", "quoteId", "servicePointId", "termsAccepted"] : ["address", "email", "optionId", "privacyAccepted", "quoteId", "termsAccepted"];
     if (!parsed || !exact(parsed, wanted) || typeof parsed.email !== "string" || typeof parsed.optionId !== "string" || typeof parsed.quoteId !== "string" || parsed.termsAccepted !== true || parsed.privacyAccepted !== true) return fail("INVALID_BODY", 400);
-    try { return json({ data: await new D1ProductionCheckoutStore(env.DB).createOrder({ cartId: current.cartId, quoteId: parsed.quoteId, optionId: parsed.optionId, address: parsed.address as never, email: parsed.email, idempotencyKey: key(request)!, termsVersion: LEGAL_VERSION, privacyVersion: LEGAL_VERSION, now: now() }) }, 201); } catch (cause) { return map(cause); }
+    if (Object.hasOwn(parsed, "servicePointId") && typeof parsed.servicePointId !== "string") return fail("INVALID_BODY", 400);
+    try { return json({ data: await new D1ProductionCheckoutStore(env.DB).createOrder({ cartId: current.cartId, quoteId: parsed.quoteId, optionId: parsed.optionId, servicePointId: typeof parsed.servicePointId === "string" ? parsed.servicePointId : null, address: parsed.address as never, email: parsed.email, idempotencyKey: key(request)!, termsVersion: LEGAL_VERSION, privacyVersion: LEGAL_VERSION, now: now() }) }, 201); } catch (cause) { return map(cause); }
   }
   if (url.pathname === routes.payment) {
     if (gate.mode !== "sandbox") return fail("LATE_PAYMENT_COMPENSATION_NOT_ACTIVATED", 503);
