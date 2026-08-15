@@ -136,8 +136,9 @@ function emailIsReady(env: ProductionCommerceEnvironment): boolean {
  * credential. Provider reachability and business proofs remain separate,
  * explicit release evidence.
  */
-export function evaluateProductionReleaseGate(
+function evaluateProductionReleaseGateInternal(
   env: ProductionCommerceEnvironment,
+  routerWired: boolean,
 ): ProductionReleaseGate {
   const blockers: ProductionReleaseBlocker[] = [];
   const requestedMode = env.COMMERCE_MODE;
@@ -199,14 +200,14 @@ export function evaluateProductionReleaseGate(
     blockers.push("controlled-order-proof-missing");
   }
 
-  // This branch intentionally exposes health only. Keep every commerce mode
-  // fail-closed until a separately reviewed production router is present in
-  // the Worker; configuration alone must never make sales appear available.
-  blockers.push("commerce-router-not-wired");
+  // Configuration can never attest that executable routing code is present.
+  // Only the production router module calls the wired entry point below.
+  if (!routerWired) blockers.push("commerce-router-not-wired");
 
-  const evidenceComplete = blockers.length === 1 &&
-    blockers[0] === "commerce-router-not-wired";
-  const ready = false;
+  const evidenceComplete = blockers.length === 0 || (
+    blockers.length === 1 && blockers[0] === "commerce-router-not-wired"
+  );
+  const ready = routerWired && blockers.length === 0;
   return Object.freeze({
     ready,
     evidenceComplete,
@@ -224,4 +225,25 @@ export function evaluateProductionReleaseGate(
       publicCommerce: ready && mode === "live",
     }),
   });
+}
+
+/**
+ * Configuration-only view. It deliberately remains closed because deployment
+ * variables cannot prove that the commerce router was included in the build.
+ */
+export function evaluateProductionReleaseGate(
+  env: ProductionCommerceEnvironment,
+): ProductionReleaseGate {
+  return evaluateProductionReleaseGateInternal(env, false);
+}
+
+/**
+ * Executable-code attestation used only by the reviewed production router.
+ * Runtime port readiness is checked separately by that router before any
+ * commerce capability is exposed.
+ */
+export function evaluateWiredProductionReleaseGate(
+  env: ProductionCommerceEnvironment,
+): ProductionReleaseGate {
+  return evaluateProductionReleaseGateInternal(env, true);
 }
