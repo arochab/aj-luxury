@@ -55,14 +55,20 @@ test("the private homepage preserves the approved film and the recovered Apollon
 
   assert.ok(rose > -1 && lilas > rose && pourpre > lilas);
   assert.match(page, /<HeroComposition\s*\/>/);
+  assert.doesNotMatch(page, /className="aj-film__message"/);
   assert.match(heroComposition, /<HeroBackgroundVideo/);
   assert.match(heroBackgroundVideo, /<HeroIdentityOverlay\s*\/>/);
   assert.match(page, /<T id="home\.apollonStatement"\s*\/>/);
+  assert.match(page, /<T id="home\.incarnationTitle"\s*\/>/);
   assert.match(page, /aria-label=\{`\$\{product\.model\} \$\{product\.name\}`\}/);
 });
 
 test("the Awwwards layer covers the critical short tablet and reduced-motion states", async () => {
   const css = await readFile(projectFile("app/globals.css"), "utf8");
+  const rail = await readFile(
+    projectFile("app/components/ApollonHorizontalRail.tsx"),
+    "utf8",
+  );
 
   assert.match(
     css,
@@ -71,12 +77,17 @@ test("the Awwwards layer covers the critical short tablet and reduced-motion sta
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
   assert.match(css, /\.aj-apollon-myth__frame img,[\s\S]*animation: none !important/);
   assert.match(css, /scroll-snap-type: x mandatory/);
+  assert.match(rail, /window\.scrollY - start/);
+  assert.match(rail, /prefers-reduced-motion: reduce/);
 });
 
 test("new editorial messages are localized in every supported locale", async () => {
   const keys = [
     "home.apollonEyebrow",
     "home.apollonStatement",
+    "home.incarnationEyebrow",
+    "home.incarnationTitle",
+    "home.incarnationBody",
     "home.firstGarment",
     "home.materialModal",
     "home.materialElastane",

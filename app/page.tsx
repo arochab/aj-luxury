@@ -6,6 +6,7 @@ import HeroComposition from "./components/HeroComposition";
 import StoreFooter from "./components/StoreFooter";
 import StoreHeader from "./components/StoreHeader";
 import ClientCopyText from "./components/ClientCopyText";
+import ApollonHorizontalRail from "./components/ApollonHorizontalRail";
 import { T } from "../lib/i18n/TranslatedText";
 import { getProducts } from "../lib/products";
 import { editorialMoodboardImages } from "../lib/editorial-moodboard";
@@ -59,26 +60,9 @@ export default function Home() {
     <main className="aj-home">
       <section className="aj-film" id="accueil" aria-label="AJ Luxury">
         <StoreHeader />
+        <h1 className="aj-film__portrait--sr">AJ Luxury — Reveal Your Inner Beauty</h1>
         <HeroComposition />
         <div className="aj-film__grade" aria-hidden="true" />
-
-        <div className="aj-film__message">
-          <p className="aj-film__eyebrow">AJ Luxury · Apollon 01</p>
-          <h1>
-            <T id="story.quote" />
-          </h1>
-          <p className="aj-film__promise">
-            <T id="story.definitionP2" />
-          </p>
-          <div className="aj-film__message-actions">
-            <a href="#collection">
-              <T id="story.discoverCollection" />
-            </a>
-            <Link href="/notre-histoire">
-              <T id="home.discoverStory" />
-            </Link>
-          </div>
-        </div>
 
         <div className="aj-film__signature">
           <p>Reveal Your Inner Beauty</p>
@@ -113,53 +97,54 @@ export default function Home() {
       </section>
 
       <section className="aj-apollon-myth" id="apollon">
-        <header className="aj-apollon-myth__intro">
-          <div>
-            <p><T id="home.apollonEyebrow" /></p>
-            <span aria-hidden="true">A</span>
-          </div>
-          <div>
-            <h2><T id="home.apollonStatement" /></h2>
-            <p>
-              <T id="story.definitionP1" />
-            </p>
-          </div>
-        </header>
-
-        <div className="aj-apollon-myth__gallery">
-          {apollonEditorialImages.map((image) => (
-            <figure
-              className={`aj-apollon-myth__card aj-apollon-myth__card--${image.position}`}
-              key={image.src}
-            >
-              <div className="aj-apollon-myth__frame">
-                <img
-                  src={image.src}
-                  alt={image.alt}
-                  width={1024}
-                  height={1536}
-                  loading="lazy"
-                  fetchPriority="low"
-                  decoding="async"
-                  sizes="(max-width: 760px) 82vw, 31vw"
-                />
+        <ApollonHorizontalRail />
+        <div className="aj-apollon-myth__sticky">
+          <div className="aj-apollon-myth__rail">
+            <header className="aj-apollon-myth__intro">
+              <div>
+                <p><T id="home.apollonEyebrow" /></p>
+                <span aria-hidden="true">A</span>
               </div>
-              <figcaption>
-                <span>{image.number}</span>
-                <strong>{image.name}</strong>
-              </figcaption>
-            </figure>
-          ))}
-        </div>
+              <div>
+                <h2><T id="home.apollonStatement" /></h2>
+                <p><T id="story.definitionP1" /></p>
+              </div>
+            </header>
 
-        <footer className="aj-apollon-myth__footer">
-          <p>
-            <T id="product.feature.2" />
-          </p>
-          <Link href="/shop">
-            <T id="story.discoverCollection" /> <span aria-hidden="true">↗</span>
-          </Link>
-        </footer>
+            <div className="aj-apollon-myth__gallery">
+              {apollonEditorialImages.map((image) => (
+                <figure
+                  className={`aj-apollon-myth__card aj-apollon-myth__card--${image.position}`}
+                  key={image.src}
+                >
+                  <div className="aj-apollon-myth__frame">
+                    <img
+                      src={image.src}
+                      alt={image.alt}
+                      width={1024}
+                      height={1536}
+                      loading="lazy"
+                      fetchPriority="low"
+                      decoding="async"
+                      sizes="(max-width: 760px) 82vw, 36vw"
+                    />
+                  </div>
+                  <figcaption>
+                    <span>{image.number}</span>
+                    <strong>{image.name}</strong>
+                  </figcaption>
+                </figure>
+              ))}
+            </div>
+
+            <footer className="aj-apollon-myth__footer">
+              <p><T id="product.feature.2" /></p>
+              <Link href="/shop">
+                <T id="story.discoverCollection" /> <span aria-hidden="true">↗</span>
+              </Link>
+            </footer>
+          </div>
+        </div>
       </section>
 
       <section className="aj-featured" id="campagne">
@@ -167,6 +152,11 @@ export default function Home() {
           <DeferredMetallicField motion="still" variant="silver" />
         </div>
         <div className="aj-featured__glow" aria-hidden="true" />
+        <header className="aj-featured__bridge">
+          <p><T id="home.incarnationEyebrow" /></p>
+          <h2><T id="home.incarnationTitle" /></h2>
+          <p><T id="home.incarnationBody" /></p>
+        </header>
         <div
           className="aj-featured__editorial"
           aria-label="AJ Luxury — Alex, Jérémy — Apollon"
@@ -190,23 +180,6 @@ export default function Home() {
               />
             </figure>
           ))}
-        </div>
-      </section>
-
-      <section className="aj-manifesto" aria-labelledby="aj-manifesto-title">
-        <p className="aj-manifesto__index"><T id="home.firstGarment" /></p>
-        <div className="aj-manifesto__statement">
-          <h2 id="aj-manifesto-title">
-            <T id="story.definitionTitle" />
-          </h2>
-          <div>
-            <p>
-              <T id="story.originP1" />
-            </p>
-            <Link href="/notre-histoire">
-              <T id="home.discoverStory" /> <span aria-hidden="true">↗</span>
-            </Link>
-          </div>
         </div>
       </section>
 

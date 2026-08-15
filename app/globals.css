@@ -1374,6 +1374,222 @@ footer:not([class]) > p {
   }
 }
 
+/* Private Apollon candidate: one compact vertical-to-horizontal chapter. */
+@keyframes aj-apollon-rail-travel {
+  from {
+    transform: translateX(0);
+  }
+
+  to {
+    transform: translateX(calc(-100% + 100vw));
+  }
+}
+
+@media (min-width: 761px) {
+  .aj-apollon-myth {
+    min-height: 180svh;
+    padding: 0;
+    view-timeline-axis: block;
+    view-timeline-name: --aj-apollon-rail;
+  }
+
+  .aj-apollon-myth__sticky {
+    position: sticky;
+    top: 0;
+    height: 100svh;
+    overflow: hidden;
+  }
+
+  .aj-apollon-myth__rail {
+    display: flex;
+    width: max-content;
+    height: 100%;
+    align-items: center;
+    gap: clamp(36px, 5vw, 84px);
+    padding: 7svh 8vw;
+    transform: translate3d(0, 0, 0);
+    will-change: transform;
+  }
+
+  .aj-apollon-myth__intro {
+    width: 58vw;
+    flex: 0 0 58vw;
+    grid-template-columns: minmax(120px, 0.35fr) minmax(360px, 1fr);
+    gap: clamp(30px, 5vw, 80px);
+    margin: 0;
+  }
+
+  .aj-apollon-myth__intro h2 {
+    font-size: clamp(52px, 6vw, 96px);
+  }
+
+  .aj-apollon-myth__gallery {
+    display: flex;
+    width: auto;
+    flex: none;
+    gap: clamp(18px, 2.4vw, 38px);
+    margin: 0;
+    padding: 0;
+  }
+
+  .aj-apollon-myth__card,
+  .aj-apollon-myth__card--rose,
+  .aj-apollon-myth__card--pourpre {
+    width: min(34vw, 470px);
+    flex: none;
+    margin: 0;
+  }
+
+  .aj-apollon-myth__frame {
+    height: min(70svh, 705px);
+  }
+
+  .aj-apollon-myth__footer {
+    width: 38vw;
+    flex: 0 0 38vw;
+    align-items: flex-start;
+    flex-direction: column;
+    margin: 0;
+  }
+}
+
+@media (max-width: 760px) {
+  .aj-apollon-myth__sticky {
+    position: relative;
+  }
+
+  .aj-apollon-myth__rail {
+    display: block;
+  }
+}
+
+@media (min-width: 761px) and (prefers-reduced-motion: reduce) {
+  .aj-apollon-myth {
+    min-height: auto;
+  }
+
+  .aj-apollon-myth__sticky {
+    position: relative;
+    height: auto;
+  }
+
+  .aj-apollon-myth__rail {
+    overflow-x: auto;
+    animation: none;
+    scroll-snap-type: x mandatory;
+    transform: none;
+  }
+
+  .aj-apollon-myth__intro,
+  .aj-apollon-myth__card,
+  .aj-apollon-myth__footer {
+    scroll-snap-align: start;
+  }
+}
+
+/* Distinct chapters: cinematic film, embodiment, then tactile commerce. */
+.aj-film::after {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  background:
+    linear-gradient(90deg, rgba(0, 0, 0, 0.12), transparent 24%, transparent 76%, rgba(0, 0, 0, 0.12)),
+    linear-gradient(0deg, rgba(0, 0, 0, 0.3), transparent 24%);
+  content: "";
+  pointer-events: none;
+}
+
+.aj-featured {
+  min-height: 100svh;
+}
+
+.aj-featured__bridge {
+  position: absolute;
+  z-index: 3;
+  top: clamp(34px, 5svh, 62px);
+  right: var(--aj-gutter);
+  left: var(--aj-gutter);
+  display: grid;
+  grid-template-columns: minmax(130px, 0.35fr) minmax(320px, 0.9fr) minmax(260px, 0.65fr);
+  align-items: end;
+  gap: clamp(24px, 4vw, 70px);
+  color: #f5f3ef;
+}
+
+.aj-featured__bridge p,
+.aj-featured__bridge h2 {
+  margin: 0;
+}
+
+.aj-featured__bridge > p:first-child {
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.aj-featured__bridge h2 {
+  font-size: clamp(42px, 5.5vw, 84px);
+  font-weight: 300;
+  letter-spacing: -0.07em;
+  line-height: 0.88;
+}
+
+.aj-featured__bridge > p:last-child {
+  max-width: 440px;
+  color: rgba(255, 255, 255, 0.68);
+  font-size: clamp(11px, 1vw, 14px);
+  line-height: 1.6;
+}
+
+.aj-featured__editorial {
+  padding-top: clamp(142px, 18svh, 190px);
+  padding-bottom: clamp(34px, 5svh, 62px);
+}
+
+.aj-product-card__image::after {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(110deg, transparent 20%, rgba(255, 255, 255, 0.22) 48%, transparent 76%);
+  content: "";
+  pointer-events: none;
+  transform: translateX(-120%);
+  transition: transform 900ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.aj-product-card:hover .aj-product-card__image::after,
+.aj-product-card:focus-within .aj-product-card__image::after {
+  transform: translateX(120%);
+}
+
+@media (max-width: 760px) {
+  .aj-featured {
+    display: block;
+    min-height: auto;
+    padding-top: 56px;
+  }
+
+  .aj-featured__bridge {
+    position: relative;
+    top: auto;
+    right: auto;
+    left: auto;
+    width: calc(100% - 32px);
+    grid-template-columns: 1fr;
+    gap: 18px;
+    margin: 0 auto;
+  }
+
+  .aj-featured__bridge h2 {
+    font-size: clamp(46px, 14vw, 66px);
+  }
+
+  .aj-featured__editorial {
+    padding-top: 42px;
+  }
+}
+
 /* AJ Luxury one-page experience */
 
 .home-shell {
