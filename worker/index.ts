@@ -197,7 +197,7 @@ const SHIPPING_PARCEL_TABLE_INVENTORY = Object.freeze({
 } as const);
 
 const PROVIDER_PRICED_DELIVERY_MIGRATION =
-  "0012_provider_priced_delivery_quotes.sql" as const;
+  "0013_provider_priced_delivery_orders.sql" as const;
 const MULTICARRIER_TABLE_INVENTORY = Object.freeze({
   delivery_option_snapshots: "delivery_option_snapshots",
   delivery_provider_reference_vault: "delivery_provider_reference_vault",
@@ -233,6 +233,7 @@ const MULTICARRIER_TRIGGER_INVENTORY = Object.freeze({
   trg_shipping_document_immutable: "shipping_document_metadata",
   trg_shipping_document_retain: "shipping_document_metadata",
   trg_shipping_quote_provider_pricing_contract: "shipping_quotes",
+  trg_orders_provider_pricing_contract: "orders",
 } as const);
 
 type InstalledSchemaObject = Readonly<{
@@ -387,7 +388,7 @@ async function readSyntheticDemoGate(
   try {
     // Sites does not expose its internal migration ledger to the Worker.
     // Prove 0008 from its immutable sentinel plus its exhaustive guard
-    // inventory, then prove 0009 through 0012 from exact schema inventories.
+    // inventory, then prove 0009 through 0013 from exact schema inventories.
     // Any missing, renamed or prefix-colliding object keeps the runtime closed.
     const installed = await env.DB.prepare(
       `SELECT type, name, tbl_name AS table_name FROM sqlite_master
@@ -400,6 +401,7 @@ async function readSyntheticDemoGate(
           OR lower(name) GLOB 'trg_delivery_service_point_*'
           OR lower(name) GLOB 'trg_shipping_document_*'
           OR lower(name) = 'trg_shipping_quote_provider_pricing_contract'
+          OR lower(name) = 'trg_orders_provider_pricing_contract'
           OR lower(tbl_name) IN (
             'preprod_demo_dataset',
             'shipping_quote_parcel_snapshots',
@@ -510,6 +512,7 @@ async function readSyntheticDemoGate(
         row.name.toLowerCase().startsWith("trg_shipping_document_") ||
         row.name.toLowerCase() ===
           "trg_shipping_quote_provider_pricing_contract" ||
+        row.name.toLowerCase() === "trg_orders_provider_pricing_contract" ||
         Object.hasOwn(
           MULTICARRIER_TABLE_INVENTORY,
           row.table_name.toLowerCase(),
