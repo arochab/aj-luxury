@@ -53,16 +53,24 @@ export class D1StripePaymentEffectsStore implements PaymentWebhookEffectsPort {
     if (order?.status === "paid") {
       return await this.#semanticComplete(event) ? "duplicate" : "stale";
     }
-    if (order?.status === "cancelled") {
-      return await this.#latePaymentRecorded(event) ? "duplicate" : "stale";
-    }
     if (
-      !order || order.status !== "pending_payment" || order.currency !== "EUR" ||
+      !order || !["pending_payment", "cancelled"].includes(order.status) ||
+      order.currency !== "EUR" ||
       order.total_cents !== event.amountCents || event.currency !== "EUR" ||
       order.checkout_session_id !== event.providerCheckoutSessionId ||
       order.checkout_status !== "created" || order.checkout_amount !== order.total_cents ||
       order.checkout_currency !== "EUR" || order.succeeded_payment_id !== null
     ) throw new StripePaymentEffectsError("MISMATCH", "Stripe payment does not match the server order.");
+    if (order.status === "cancelled") {
+      return await this.#latePaymentRecorded(event)
+        ? "duplicate"
+        : this.#recordLatePaymentDivergence(
+          event,
+          order,
+          verifiedAt,
+          "stock_reservation_inactive_or_missing",
+        );
+    }
     const timing = await this.#database.prepare(
       `SELECT COUNT(*) AS total_count,
         SUM(CASE WHEN status='active' THEN 1 ELSE 0 END) AS active_count,

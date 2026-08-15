@@ -11,6 +11,8 @@ import type { DeliveryProviderPorts } from "../lib/commerce/delivery-provider.ts
 import { DeliveryReferenceVault } from "../lib/commerce/delivery-reference-vault.ts";
 import { authorizeBrowserMutation, buildCsrfCookie, buildSessionCookie, clearCsrfCookie, clearSessionCookie, isTrustedMutationOrigin } from "../lib/commerce/identity-access-policy.ts";
 import { PaymentProviderError, verifyAndDeliverPaymentWebhook, type PaymentProviderPorts, type PaymentWebhookEffectsPort } from "../lib/commerce/payment-provider.ts";
+import { validateLaunchStockImport } from "../lib/commerce/launch-stock-import.ts";
+import { productionReleaseSchemaContractSha256 } from "../lib/commerce/production-schema-contract.ts";
 import { evaluateWiredProductionReleaseGate, type ProductionCommerceEnvironment } from "../lib/commerce/production-release-gate.ts";
 import { createSendcloudProviderPorts } from "../lib/commerce/sendcloud-provider.ts";
 import { createStripePaymentProviderPorts } from "../lib/commerce/stripe-payment-provider.ts";
@@ -44,6 +46,11 @@ export type ProductionCommerceRuntimeEnvironment = ProductionCommerceEnvironment
   COMMERCE_CONTROLLED_AUTH_HMAC_SECRET?: string;
   STRIPE_SETTLEMENT_MODE?: string;
   LATE_PAYMENT_REFUND_DISPATCH_ENABLED?: string;
+  CONTROLLED_PAYMENT_SESSION_ENABLED?: string;
+  OUTBOUND_SHIPMENT_CREATION_ENABLED?: string;
+  OPERATOR_ADMIN_MFA_ENABLED?: string;
+  TRANSACTIONAL_EMAIL_DISPATCH_ENABLED?: string;
+  RETURNS_WORKFLOW_ENABLED?: string;
   DELIVERY_REFERENCE_ENCRYPTION_KEY_BASE64?: string;
   DELIVERY_REFERENCE_KEY_VERSION?: string;
   DELIVERY_REFERENCE_DECRYPTION_KEYS_JSON?: string;
@@ -244,10 +251,24 @@ function runtimeBlockers(env: ProductionCommerceRuntimeEnvironment, mode: string
     ...(settlementMode(env) !== expectedSettlement ? ["stripe-settlement-mode-mismatch"] : []),
     ...(["controlled", "live"].includes(mode)
       ? [
+        ...(mode === "controlled" && env.CONTROLLED_PAYMENT_SESSION_ENABLED !== "true"
+          ? ["controlled-payment-session-not-enabled"]
+          : []),
         ...(env.LATE_PAYMENT_REFUND_DISPATCH_ENABLED === "true"
           ? []
           : ["late-payment-refund-dispatch-not-enabled"]),
-        "outbound-shipment-creation-not-activated",
+        ...(env.OUTBOUND_SHIPMENT_CREATION_ENABLED === "true"
+          ? []
+          : ["outbound-shipment-creation-not-enabled"]),
+        ...(env.OPERATOR_ADMIN_MFA_ENABLED === "true"
+          ? []
+          : ["operator-admin-mfa-not-enabled"]),
+        ...(env.TRANSACTIONAL_EMAIL_DISPATCH_ENABLED === "true"
+          ? []
+          : ["transactional-email-dispatch-not-enabled"]),
+        ...(env.RETURNS_WORKFLOW_ENABLED === "true"
+          ? []
+          : ["returns-workflow-not-activated"]),
       ]
       : []),
   ];
@@ -343,7 +364,62 @@ const latePaymentRefundSchemaInventory = Object.freeze([
   "trigger:trg_late_payment_refund_validate_transition:late_payment_refund_intents",
 ]);
 
-export async function productionLatePaymentRefundRuntimeReady(
+const productionReleaseSchemaInventory = Object.freeze([
+  "index:ux_production_release_controlled_order:production_release_attestations",
+  "index:ux_production_release_stock_manifest:production_release_attestations",
+  "index:ux_production_stock_manifest_payload:production_launch_stock_manifests",
+  "index:ux_production_stock_manifest_position:production_launch_stock_manifest_lines",
+  "index:ux_production_stock_manifest_variant:production_launch_stock_manifest_lines",
+  "table:production_launch_stock_manifest_lines:production_launch_stock_manifest_lines",
+  "table:production_launch_stock_manifests:production_launch_stock_manifests",
+  "table:production_release_attestations:production_release_attestations",
+  "table:production_runtime_schema_proofs:production_runtime_schema_proofs",
+  "trigger:trg_production_release_attestation_immutable:production_release_attestations",
+  "trigger:trg_production_release_attestation_retain:production_release_attestations",
+  "trigger:trg_production_release_attestation_validate:production_release_attestations",
+  "trigger:trg_production_schema_proof_immutable:production_runtime_schema_proofs",
+  "trigger:trg_production_schema_proof_retain:production_runtime_schema_proofs",
+  "trigger:trg_production_stock_manifest_immutable:production_launch_stock_manifests",
+  "trigger:trg_production_stock_manifest_line_closed:production_launch_stock_manifest_lines",
+  "trigger:trg_production_stock_manifest_line_immutable:production_launch_stock_manifest_lines",
+  "trigger:trg_production_stock_manifest_line_retain:production_launch_stock_manifest_lines",
+  "trigger:trg_production_stock_manifest_retain:production_launch_stock_manifests",
+]);
+
+export async function productionReleaseSchemaInstalled(
+  database: CommerceD1Database | undefined,
+): Promise<boolean> {
+  if (!database) return false;
+  try {
+    const [installed, sentinel] = await Promise.all([
+      database.prepare(
+        `SELECT lower(type) AS type, lower(name) AS name,
+          lower(tbl_name) AS table_name FROM sqlite_master
+        WHERE lower(tbl_name) IN (
+          'production_launch_stock_manifest_lines',
+          'production_launch_stock_manifests',
+          'production_release_attestations',
+          'production_runtime_schema_proofs'
+        ) AND lower(name) NOT GLOB 'sqlite_autoindex_*'
+        ORDER BY type, name`,
+      ).all<InstalledCommerceSchemaObject>(),
+      database.prepare(
+        `SELECT contract_sha256 FROM production_runtime_schema_proofs
+        WHERE migration_id='0015_production_release_attestation'`,
+      ).first<{ contract_sha256: string }>(),
+    ]);
+    const actual = installed.results
+      .map((row) => `${row.type}:${row.name}:${row.table_name}`)
+      .sort();
+    return actual.length === productionReleaseSchemaInventory.length &&
+      actual.every((value, index) => value === productionReleaseSchemaInventory[index]) &&
+      sentinel?.contract_sha256 === productionReleaseSchemaContractSha256;
+  } catch {
+    return false;
+  }
+}
+
+export async function productionLatePaymentRefundSchemaInstalled(
   database: CommerceD1Database | undefined,
 ): Promise<boolean> {
   if (!database) return false;
@@ -363,12 +439,109 @@ export async function productionLatePaymentRefundRuntimeReady(
       !actual.every((value, index) => value === latePaymentRefundSchemaInventory[index])) {
       return false;
     }
-    const attention = await database.prepare(
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function productionLatePaymentRefundRuntimeReady(
+  database: CommerceD1Database | undefined,
+): Promise<boolean> {
+  if (!await productionLatePaymentRefundSchemaInstalled(database) || !database) return false;
+  try {
+    const unresolved = await database.prepare(
       `SELECT COUNT(*) AS count FROM late_payment_refund_intents
-      WHERE status IN ('rejected','attention_required')
-        OR (status='claimed' AND attempts>=max_attempts)`,
+      WHERE status <> 'succeeded'`,
     ).first<{ count: number }>();
-    return Number(attention?.count ?? -1) === 0;
+    return Number(unresolved?.count ?? -1) === 0;
+  } catch {
+    return false;
+  }
+}
+
+export async function productionStockManifestRuntimeAttested(
+  env: ProductionCommerceRuntimeEnvironment,
+): Promise<boolean> {
+  const metadata = env.CF_VERSION_METADATA;
+  if (!env.DB || !env.STOCK_MANIFEST_ID || !env.STOCK_MANIFEST_SHA256 ||
+    !env.COMMERCE_RELEASE_SHA ||
+    !metadata?.id || !metadata.tag) return false;
+  try {
+    const proof = await env.DB.prepare(
+      `SELECT manifest.id AS manifest_id, manifest.protocol, manifest.payload_sha256,
+        manifest.counted_at, manifest.release_sha, manifest.worker_version_id,
+        manifest.physical_total, manifest.variant_count,
+        manifest.gifting_reserve_total, manifest.safety_reserve_total,
+        manifest.sav_reserve_total, manifest.sellable_total,
+        manifest.stock_owner_id, manifest.release_owner_id,
+        manifest.stock_owner_signed_at, manifest.release_owner_signed_at,
+        manifest.activated_at,
+        CASE WHEN EXISTS (
+          SELECT 1 FROM production_runtime_schema_proofs
+          WHERE migration_id='0015_production_release_attestation'
+            AND contract_sha256='${productionReleaseSchemaContractSha256}'
+        ) THEN 1 ELSE 0 END AS schema_proven
+      FROM production_launch_stock_manifests AS manifest
+      WHERE manifest.id=? AND manifest.payload_sha256=? AND manifest.release_sha=?`,
+    ).bind(
+      env.STOCK_MANIFEST_ID,
+      env.STOCK_MANIFEST_SHA256,
+      env.COMMERCE_RELEASE_SHA,
+    ).first<Record<string, string | number>>();
+    if (!proof || proof.schema_proven !== 1 ||
+      proof.release_sha !== env.COMMERCE_RELEASE_SHA ||
+      proof.worker_version_id !== metadata.id) return false;
+
+    const rows = await env.DB.prepare(
+      `SELECT line.position, line.variant_id, line.internal_reference,
+        line.physical_quantity, line.gifting_reserve_quantity,
+        line.safety_reserve_quantity, line.sav_reserve_quantity,
+        line.sellable_quantity, stock.physical_quantity AS live_physical_quantity,
+        stock.gift_reserve_quantity AS live_gifting_reserve_quantity,
+        stock.safety_reserve_quantity AS live_safety_reserve_quantity,
+        stock.reserves_validated AS live_reserves_validated
+      FROM production_launch_stock_manifest_lines AS line
+      INNER JOIN inventory AS stock ON stock.variant_id=line.variant_id
+      WHERE line.manifest_id=? ORDER BY line.position`,
+    ).bind(env.STOCK_MANIFEST_ID).all<Record<string, string | number>>();
+    if (rows.results.length !== 12 || rows.results.some((row, index) =>
+      Number(row.position) !== index ||
+      Number(row.live_physical_quantity) !== Number(row.physical_quantity) ||
+      Number(row.live_gifting_reserve_quantity) !== Number(row.gifting_reserve_quantity) ||
+      Number(row.live_safety_reserve_quantity) !==
+        Number(row.safety_reserve_quantity) + Number(row.sav_reserve_quantity) ||
+      Number(row.live_reserves_validated) !== 1)) return false;
+    const validated = await validateLaunchStockImport({
+      protocol: proof.protocol,
+      manifestId: proof.manifest_id,
+      countedAt: proof.counted_at,
+      variants: rows.results.map((row) => ({
+        variantId: row.variant_id,
+        internalReference: row.internal_reference,
+        physicalQuantity: Number(row.physical_quantity),
+        giftingReserveQuantity: Number(row.gifting_reserve_quantity),
+        safetyReserveQuantity: Number(row.safety_reserve_quantity),
+        savReserveQuantity: Number(row.sav_reserve_quantity),
+      })),
+      totals: {
+        physicalQuantity: Number(proof.physical_total),
+        giftingReserveQuantity: Number(proof.gifting_reserve_total),
+        safetyReserveQuantity: Number(proof.safety_reserve_total),
+        savReserveQuantity: Number(proof.sav_reserve_total),
+        sellableQuantity: Number(proof.sellable_total),
+      },
+      approvals: [
+        { role: "stock_owner", signerId: proof.stock_owner_id,
+          signedAt: proof.stock_owner_signed_at, payloadSha256: proof.payload_sha256,
+          attestation: "I_APPROVE_THIS_EXACT_STOCK_IMPORT" },
+        { role: "release_owner", signerId: proof.release_owner_id,
+          signedAt: proof.release_owner_signed_at, payloadSha256: proof.payload_sha256,
+          attestation: "I_APPROVE_THIS_EXACT_STOCK_IMPORT" },
+      ],
+    });
+    return validated.payloadSha256 === env.STOCK_MANIFEST_SHA256 &&
+      validated.manifestId === env.STOCK_MANIFEST_ID;
   } catch {
     return false;
   }
@@ -377,48 +550,47 @@ export async function productionLatePaymentRefundRuntimeReady(
 export async function productionStockRuntimeAttested(
   env: ProductionCommerceRuntimeEnvironment,
 ): Promise<boolean> {
-  if (!env.DB || !env.STOCK_MANIFEST_ID || !env.STOCK_MANIFEST_SHA256) return false;
+  const metadata = env.CF_VERSION_METADATA;
+  if (!await productionStockManifestRuntimeAttested(env) || !env.DB ||
+    !env.STOCK_MANIFEST_ID || !env.COMMERCE_RELEASE_SHA ||
+    !env.COMMERCE_CONTROLLED_ORDER_PROOF_ID || !metadata?.id || !metadata.tag) return false;
   try {
-    const [stock, approvals] = await Promise.all([
-      env.DB.prepare(
-        `SELECT COUNT(*) AS variant_count,
-          COALESCE(SUM(physical_quantity), 0) AS physical_quantity,
-          COALESCE(SUM(CASE WHEN reserves_validated=1 THEN 1 ELSE 0 END), 0) AS validated_count,
-          COALESCE(SUM(CASE WHEN physical_quantity < 0
-            OR gift_reserve_quantity < 0 OR safety_reserve_quantity < 0
-            OR gift_reserve_quantity + safety_reserve_quantity > physical_quantity
-            THEN 1 ELSE 0 END), 0) AS invalid_count
-        FROM inventory`,
-      ).first<{ variant_count: number; physical_quantity: number; validated_count: number; invalid_count: number }>(),
-      env.DB.prepare(
-        `SELECT COUNT(*) AS approval_count,
-          COUNT(DISTINCT actor_id) AS signer_count,
-          COALESCE(SUM(CASE WHEN actor_type='admin' AND actor_id IS NOT NULL THEN 1 ELSE 0 END), 0) AS valid_actor_count,
-          COALESCE(SUM(CASE WHEN json_extract(metadata_json, '$.role')='stock_owner'
-            AND json_extract(metadata_json, '$.payloadSha256')=?
-            AND json_extract(metadata_json, '$.attestation')='I_APPROVE_THIS_EXACT_STOCK_IMPORT'
-            THEN 1 ELSE 0 END), 0) AS stock_owner_count,
-          COALESCE(SUM(CASE WHEN json_extract(metadata_json, '$.role')='release_owner'
-            AND json_extract(metadata_json, '$.payloadSha256')=?
-            AND json_extract(metadata_json, '$.attestation')='I_APPROVE_THIS_EXACT_STOCK_IMPORT'
-            THEN 1 ELSE 0 END), 0) AS release_owner_count
-        FROM audit_log
-        WHERE action='launch_stock_import_approved'
-          AND entity_type='stock_manifest' AND entity_id=?`,
-      ).bind(env.STOCK_MANIFEST_SHA256, env.STOCK_MANIFEST_SHA256, env.STOCK_MANIFEST_ID).first<{
-        approval_count: number;
-        signer_count: number;
-        valid_actor_count: number;
-        stock_owner_count: number;
-        release_owner_count: number;
-      }>(),
-    ]);
-    return Number(stock?.variant_count) === 12 &&
-      Number(stock?.physical_quantity) === 756 &&
-      Number(stock?.validated_count) === 12 && Number(stock?.invalid_count) === 0 &&
-      Number(approvals?.approval_count) === 2 && Number(approvals?.signer_count) === 2 &&
-      Number(approvals?.valid_actor_count) === 2 &&
-      Number(approvals?.stock_owner_count) === 1 && Number(approvals?.release_owner_count) === 1;
+    const release = await env.DB.prepare(
+      `SELECT release.worker_version_id, release.worker_version_tag,
+        release.controlled_order_id, release.adam_approver_id,
+        release.jeremy_approver_id, manifest.stock_owner_id,
+        manifest.release_owner_id,
+        CASE WHEN EXISTS (
+          SELECT 1 FROM orders AS customer_order
+          INNER JOIN payments AS payment ON payment.order_id=customer_order.id
+          INNER JOIN shipments AS shipment ON shipment.order_id=customer_order.id
+          INNER JOIN email_outbox AS message ON message.order_id=customer_order.id
+          WHERE customer_order.id=release.controlled_order_id
+            AND customer_order.status IN ('paid','preparing','shipped')
+            AND customer_order.paid_at IS NOT NULL
+            AND payment.provider='stripe' AND payment.status='succeeded'
+            AND payment.amount_cents=customer_order.total_cents
+            AND payment.currency=customer_order.currency
+            AND shipment.status IN ('handed_over','in_transit','delivered')
+            AND shipment.provider_shipment_reference IS NOT NULL
+            AND shipment.tracking_reference IS NOT NULL
+            AND shipment.provider_receipt_fingerprint IS NOT NULL
+            AND shipment.label_created_at IS NOT NULL
+            AND message.kind='payment_confirmation'
+            AND message.status='sent' AND message.sent_at IS NOT NULL
+        ) THEN 1 ELSE 0 END AS controlled_order_proven
+      FROM production_release_attestations AS release
+      INNER JOIN production_launch_stock_manifests AS manifest
+        ON manifest.id=release.stock_manifest_id
+      WHERE release.release_sha=? AND release.stock_manifest_id=?`,
+    ).bind(env.COMMERCE_RELEASE_SHA, env.STOCK_MANIFEST_ID)
+      .first<Record<string, string | number>>();
+    return release?.controlled_order_proven === 1 &&
+      release.worker_version_id === metadata.id &&
+      release.worker_version_tag === metadata.tag &&
+      release.controlled_order_id === env.COMMERCE_CONTROLLED_ORDER_PROOF_ID &&
+      release.stock_owner_id === release.jeremy_approver_id &&
+      release.release_owner_id === release.adam_approver_id;
   } catch {
     return false;
   }
@@ -470,11 +642,19 @@ export async function productionCommerceApiResponse(
       !await productionLatePaymentRefundRuntimeReady(env.DB)) {
       blockers.push("late-payment-refund-schema-or-operations-not-ready");
     }
+    if (["controlled", "live"].includes(gate.mode) &&
+      !await productionReleaseSchemaInstalled(env.DB)) {
+      blockers.push("production-release-schema-0015-not-installed");
+    }
+    if (["controlled", "live"].includes(gate.mode) &&
+      !await productionStockManifestRuntimeAttested(env)) {
+      blockers.push("stock-manifest-runtime-not-attested");
+    }
     if (gate.mode === "live" && !await productionStockRuntimeAttested(env)) {
       blockers.push("stock-runtime-attestation-not-verified");
     }
     const ready = gate.ready && blockers.length === 0;
-    return json({ status: ready ? "ready" : "closed", environment: "production", mode: gate.mode, releaseSha: gate.releaseSha, origin: gate.origin, launchZones: gate.launchZones, blockers: [...gate.blockers, ...blockers], capabilities: { sandboxCheckout: ready && gate.mode === "sandbox", realPayment: ready && gate.mode === "controlled", realDelivery: false, transactionalEmail: false, controlledOrder: ready && gate.mode === "controlled", publicCommerce: false }, routes: { cart: "wired", homeDelivery: "wired-provider-priced", order: "wired", paymentSession: "sandbox-or-controlled-with-durable-refund", servicePoint: "wired-encrypted", stripeWebhook: "atomic-d1-effects-and-late-refund-obligation", lateRefundDispatch: "wired-bounded-owner-only" } }, ready ? 200 : 503);
+    return json({ status: ready ? "ready" : "closed", environment: "production", mode: gate.mode, releaseSha: gate.releaseSha, origin: gate.origin, launchZones: gate.launchZones, blockers: [...gate.blockers, ...blockers], capabilities: { sandboxCheckout: ready && gate.mode === "sandbox", realPayment: ready && gate.mode === "controlled", realDelivery: ready && gate.mode === "controlled", transactionalEmail: ready && env.TRANSACTIONAL_EMAIL_DISPATCH_ENABLED === "true", controlledOrder: ready && gate.mode === "controlled", publicCommerce: false }, routes: { cart: "wired", homeDelivery: "wired-provider-priced", order: "wired", paymentSession: "sandbox-or-controlled-with-durable-refund", servicePoint: "wired-encrypted", stripeWebhook: "atomic-d1-effects-and-late-refund-obligation", lateRefundDispatch: "wired-bounded-owner-only" } }, ready ? 200 : 503);
   }
   if (!gate.ready || !gate.origin || url.origin !== gate.origin) return fail("COMMERCE_CLOSED", 503);
   if (gate.mode !== "live" && !await controlledOwnerRequestAuthenticated(request, env)) {
@@ -488,10 +668,20 @@ export async function productionCommerceApiResponse(
     !await productionLatePaymentRefundRuntimeReady(env.DB)) {
     blockers.push("late-payment-refund-schema-or-operations-not-ready");
   }
+  if (["controlled", "live"].includes(gate.mode) &&
+    !await productionReleaseSchemaInstalled(env.DB)) {
+    blockers.push("production-release-schema-0015-not-installed");
+  }
+  if (["controlled", "live"].includes(gate.mode) &&
+    !await productionStockManifestRuntimeAttested(env)) {
+    blockers.push("stock-manifest-runtime-not-attested");
+  }
   if (gate.mode === "live" && !await productionStockRuntimeAttested(env)) {
     blockers.push("stock-runtime-attestation-not-verified");
   }
-  if (gate.mode === "live" && blockers.length) return fail("COMMERCE_CLOSED", 503);
+  if (gate.mode === "live" && blockers.length && url.pathname !== routes.refundDispatch) {
+    return fail("COMMERCE_CLOSED", 503);
+  }
   if (url.pathname === routes.refundDispatch) {
     if (request.method !== "POST") return fail("METHOD_NOT_ALLOWED", 405);
     if (!await controlledOwnerRequestAuthenticated(request, env)) {
@@ -500,7 +690,7 @@ export async function productionCommerceApiResponse(
     if (!gate.origin || !originOk(request, gate.origin)) return fail("ORIGIN_REJECTED", 403);
     if (!key(request)) return fail("IDEMPOTENCY_KEY_REQUIRED", 400);
     if (env.LATE_PAYMENT_REFUND_DISPATCH_ENABLED !== "true" ||
-      blockers.includes("late-payment-refund-schema-or-operations-not-ready")) {
+      !await productionLatePaymentRefundSchemaInstalled(env.DB)) {
       return fail("LATE_PAYMENT_REFUND_NOT_READY", 503);
     }
     const empty = await bytes(request, 1);
@@ -610,8 +800,15 @@ export async function productionCommerceApiResponse(
       return fail("PAYMENT_SESSION_NOT_ACTIVATED", 503);
     }
     if (gate.mode === "controlled" && (
+      env.CONTROLLED_PAYMENT_SESSION_ENABLED !== "true" ||
+      env.OUTBOUND_SHIPMENT_CREATION_ENABLED !== "true" ||
+      env.OPERATOR_ADMIN_MFA_ENABLED !== "true" ||
+      env.TRANSACTIONAL_EMAIL_DISPATCH_ENABLED !== "true" ||
+      env.RETURNS_WORKFLOW_ENABLED !== "true" ||
       env.LATE_PAYMENT_REFUND_DISPATCH_ENABLED !== "true" ||
-      blockers.includes("late-payment-refund-schema-or-operations-not-ready")
+      blockers.includes("late-payment-refund-schema-or-operations-not-ready") ||
+      blockers.includes("production-release-schema-0015-not-installed") ||
+      blockers.includes("stock-manifest-runtime-not-attested")
     )) return fail("LATE_PAYMENT_REFUND_NOT_READY", 503);
     const empty = await bytes(request, 1); if (!empty || empty.length) return fail("INVALID_BODY", 400);
     try {

@@ -59,7 +59,7 @@ const syntheticMigration = journal.entries.find(
 assert.ok(syntheticMigration);
 assert.equal(syntheticMigration.when, releaseBuildEpoch);
 const terminalMigration = journal.entries.at(-1);
-assert.equal(terminalMigration.tag, "0014_late_payment_refund_compensation");
+assert.equal(terminalMigration.tag, "0015_production_release_attestation");
 assert.ok(
   terminalMigration.when > releaseBuildEpoch,
   "the additive service-point vault migration must follow the frozen synthetic release",

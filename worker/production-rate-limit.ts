@@ -13,6 +13,7 @@ export type ProductionRateLimitEnvironment = Readonly<{
 type LimitClass = "commerce" | "provider" | "webhook" | "operator";
 
 const exactRoutes = new Map<string, LimitClass>([
+  ["/api/commerce/health", "commerce"],
   ["/api/commerce/cart", "commerce"],
   ["/api/commerce/checkout/delivery-options", "provider"],
   ["/api/commerce/checkout/service-points", "provider"],
@@ -23,6 +24,7 @@ const exactRoutes = new Map<string, LimitClass>([
   ["/api/commerce/orders/current", "commerce"],
   ["/api/commerce/account/current", "commerce"],
   ["/api/commerce/admin/health", "operator"],
+  ["/api/commerce/admin/late-payment-refunds/dispatch", "operator"],
 ]);
 
 const cartLine = /^\/api\/commerce\/cart\/lines\/[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/;
@@ -105,7 +107,6 @@ export async function productionCommerceRateLimitResponse(
 ): Promise<Response | null> {
   if (env?.APP_ENV !== "production") return null;
   const pathname = new URL(request.url).pathname;
-  if (pathname === "/api/commerce/health") return null;
   const classification = routeClass(pathname);
   if (!classification) return null;
   const binding = classification === "commerce"

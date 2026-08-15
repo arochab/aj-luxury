@@ -19,6 +19,10 @@ export default function ProductionCheckoutSuccessClient() {
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
+    window.history.replaceState(null, "", window.location.pathname);
+  }, []);
+
+  useEffect(() => {
     let active = true;
     let timeout: number | undefined;
     void getCurrentProductionOrder()
@@ -74,4 +78,3 @@ export default function ProductionCheckoutSuccessClient() {
     </div>
   );
 }
-

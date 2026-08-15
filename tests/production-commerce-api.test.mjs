@@ -7,6 +7,12 @@ import {
   productionLatePaymentRefundRuntimeReady,
   productionStockRuntimeAttested,
 } from "../worker/production-commerce-api.ts";
+import { launchVariantSeed } from "../db/seed.ts";
+import { createLaunchStockPayloadSha256 } from "../lib/commerce/launch-stock-import.ts";
+import {
+  productionReleaseSchemaContract,
+  productionReleaseSchemaContractSha256,
+} from "../lib/commerce/production-schema-contract.ts";
 
 const releaseSha = "a".repeat(40);
 const controlledSecret = "controlled-auth-secret-value-0001";
@@ -51,6 +57,17 @@ const controlled = Object.freeze({
 const ownerHeaders = Object.freeze({
   "oai-authenticated-user-email": "owner@example.com",
   "oai-authenticated-user-id": "owner-1",
+});
+
+test("production release schema sentinel is bound to its canonical contract", async () => {
+  const digest = new Uint8Array(await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(productionReleaseSchemaContract),
+  ));
+  assert.equal(
+    Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join(""),
+    productionReleaseSchemaContractSha256,
+  );
 });
 
 async function authenticatedOwnerHeaders(method, pathname) {
@@ -187,26 +204,80 @@ test("delivery runtime proof rejects missing and prefix-colliding 0013 objects",
   assert.equal(await productionDeliveryRuntimeInstalled(database([...exact, { ...exact[1], name: "delivery_provider_reference_vault_shadow" }])), false);
 });
 
-function stockProofDatabase(stock, approvals) {
+function stockProofDatabase(proof, lines, releaseProof) {
   return {
     prepare(query) {
       return {
         bind() { return this; },
-        async first() { return query.includes("FROM inventory") ? stock : approvals; },
+        async first() {
+          if (query.includes("FROM production_launch_stock_manifests")) return proof;
+          if (query.includes("FROM production_release_attestations")) return releaseProof;
+          return null;
+        },
+        async all() { return { results: lines }; },
       };
     },
   };
 }
 
-test("live stock attestation requires exact D1 inventory and two distinct bound approvals", async () => {
-  const exactStock = { variant_count: 12, physical_quantity: 756, validated_count: 12, invalid_count: 0 };
-  const twoApprovals = { approval_count: 2, signer_count: 2, valid_actor_count: 2, stock_owner_count: 1, release_owner_count: 1 };
-  const env = { DB: stockProofDatabase(exactStock, twoApprovals), STOCK_MANIFEST_ID: "stock-launch-20260815", STOCK_MANIFEST_SHA256: "b".repeat(64) };
+test("live stock attestation recomputes the exact 12-line manifest and controlled-order proof", async () => {
+  const countedAt = "2026-08-15T01:00:00.000Z";
+  const variants = launchVariantSeed.map((variant) => ({
+    variantId: variant.id,
+    internalReference: variant.internalReference,
+    physicalQuantity: variant.physicalQuantity,
+    giftingReserveQuantity: 0,
+    safetyReserveQuantity: 0,
+    savReserveQuantity: 0,
+  }));
+  const unsigned = {
+    protocol: "ajl-launch-stock-import-v1",
+    manifestId: "stock-launch-20260815",
+    countedAt,
+    variants,
+    totals: { physicalQuantity: 756, giftingReserveQuantity: 0, safetyReserveQuantity: 0, savReserveQuantity: 0, sellableQuantity: 756 },
+  };
+  const payload = await createLaunchStockPayloadSha256(unsigned);
+  const proof = {
+    manifest_id: unsigned.manifestId, protocol: unsigned.protocol, payload_sha256: payload,
+    counted_at: countedAt, release_sha: releaseSha,
+    worker_version_id: controlled.CF_VERSION_METADATA.id,
+    physical_total: 756, variant_count: 12, gifting_reserve_total: 0,
+    safety_reserve_total: 0, sav_reserve_total: 0, sellable_total: 756,
+    stock_owner_id: "jeremy", release_owner_id: "adam",
+    stock_owner_signed_at: "2026-08-15T01:01:00.000Z",
+    release_owner_signed_at: "2026-08-15T01:02:00.000Z",
+    schema_proven: 1,
+  };
+  const lines = variants.map((variant, position) => ({
+    position, variant_id: variant.variantId, internal_reference: variant.internalReference,
+    physical_quantity: variant.physicalQuantity, gifting_reserve_quantity: 0,
+    safety_reserve_quantity: 0, sav_reserve_quantity: 0,
+    sellable_quantity: variant.physicalQuantity,
+    live_physical_quantity: variant.physicalQuantity,
+    live_gifting_reserve_quantity: 0, live_safety_reserve_quantity: 0,
+    live_reserves_validated: 1,
+  }));
+  const releaseProof = {
+    worker_version_id: controlled.CF_VERSION_METADATA.id,
+    worker_version_tag: releaseSha, controlled_order_id: "order-controlled-0001",
+    stock_owner_id: "jeremy", release_owner_id: "adam",
+    jeremy_approver_id: "jeremy", adam_approver_id: "adam",
+    controlled_order_proven: 1,
+  };
+  const env = {
+    DB: stockProofDatabase(proof, lines, releaseProof), STOCK_MANIFEST_ID: unsigned.manifestId,
+    STOCK_MANIFEST_SHA256: payload, COMMERCE_RELEASE_SHA: releaseSha,
+    COMMERCE_CONTROLLED_ORDER_PROOF_ID: "order-controlled-0001",
+    CF_VERSION_METADATA: controlled.CF_VERSION_METADATA,
+  };
   assert.equal(await productionStockRuntimeAttested(env), true);
-  assert.equal(await productionStockRuntimeAttested({ ...env, DB: stockProofDatabase(exactStock, { ...twoApprovals, signer_count: 1 }) }), false);
-  assert.equal(await productionStockRuntimeAttested({ ...env, DB: stockProofDatabase(exactStock, { ...twoApprovals, approval_count: 3, signer_count: 3, valid_actor_count: 3 }) }), false);
-  assert.equal(await productionStockRuntimeAttested({ ...env, DB: stockProofDatabase({ ...exactStock, invalid_count: 1 }, twoApprovals) }), false);
-  assert.equal(await productionStockRuntimeAttested({ ...env, STOCK_MANIFEST_SHA256: "c".repeat(64), DB: { prepare() { throw new Error("unbound-proof"); } } }), false);
+  const redistributed = lines.map((line, index) => index === 0
+    ? { ...line, live_physical_quantity: line.live_physical_quantity + 1 }
+    : line);
+  assert.equal(await productionStockRuntimeAttested({ ...env, DB: stockProofDatabase(proof, redistributed, releaseProof) }), false);
+  assert.equal(await productionStockRuntimeAttested({ ...env, DB: stockProofDatabase({ ...proof, worker_version_id: crypto.randomUUID() }, lines, releaseProof) }), false);
+  assert.equal(await productionStockRuntimeAttested({ ...env, STOCK_MANIFEST_SHA256: "c".repeat(64) }), false);
 });
 
 test("controlled payment session stays closed until refund schema and dispatcher are ready", async () => {

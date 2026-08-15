@@ -20,11 +20,13 @@ test("production rate-limit bindings are an exact four-class readiness proof", (
   assert.equal(productionRateLimitBindingsReady({ ...ready, PROVIDER_RATE_LIMITER: undefined }), false);
 });
 
-test("health and unknown routes bypass the limiter without hiding their canonical response", async () => {
+test("health is protected while unknown routes retain canonical routing", async () => {
   const unavailable = { APP_ENV: "production" };
-  assert.equal(await productionCommerceRateLimitResponse(
+  const health = await productionCommerceRateLimitResponse(
     new Request("https://ajluxurystore.com/api/commerce/health"), unavailable,
-  ), null);
+  );
+  assert.equal(health.status, 503);
+  assert.equal((await health.json()).error.code, "RATE_LIMIT_UNAVAILABLE");
   assert.equal(await productionCommerceRateLimitResponse(
     new Request("https://ajluxurystore.com/api/commerce/future"), unavailable,
   ), null);
@@ -89,6 +91,7 @@ test("cart, provider, webhook and operator traffic use separate bindings", async
     "/api/commerce/checkout/payment-session",
     "/api/commerce/webhooks/stripe",
     "/api/commerce/admin/orders/order_1/shipping-label",
+    "/api/commerce/admin/late-payment-refunds/dispatch",
   ]) {
     assert.equal(await productionCommerceRateLimitResponse(
       new Request(`https://ajluxurystore.com${pathname}`, {
@@ -96,5 +99,5 @@ test("cart, provider, webhook and operator traffic use separate bindings", async
       }), env,
     ), null);
   }
-  assert.deepEqual(calls, ["commerce", "provider", "webhook", "operator"]);
+  assert.deepEqual(calls, ["commerce", "provider", "webhook", "operator", "operator"]);
 });

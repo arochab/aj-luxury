@@ -304,6 +304,8 @@ const adminEnv = Object.freeze({
   MONITORING_ALERTS_APPROVED: "true",
   COMMERCE_CONTROLLED_OWNER_EMAIL: "adam@example.com",
   COMMERCE_CONTROLLED_AUTH_HMAC_SECRET: controlledSecret,
+  OUTBOUND_SHIPMENT_CREATION_ENABLED: "true",
+  OPERATOR_ADMIN_MFA_ENABLED: "true",
 });
 
 async function adminRequest(headers = {}) {
@@ -346,6 +348,19 @@ test("platform owner headers alone cannot bypass the durable owner session and C
   );
   assert.equal(response.status, 403);
   assert.equal((await response.json()).error.code, "OWNER_SESSION_REQUIRED");
+});
+
+test("release health and the operator route share the exact outbound enablement flag", async () => {
+  const DB = {
+    prepare() { throw new Error("D1 must not be touched while outbound is disabled"); },
+    batch() { throw new Error("D1 must not be touched while outbound is disabled"); },
+  };
+  const response = await productionShippingLabelAdminResponse(
+    await adminRequest(),
+    { ...adminEnv, OUTBOUND_SHIPMENT_CREATION_ENABLED: "false", DB },
+  );
+  assert.equal(response.status, 503);
+  assert.equal((await response.json()).error.code, "OUTBOUND_SHIPPING_NOT_ENABLED");
 });
 
 test("operator route hard-stops an already claimed shipment for manual reconciliation", async () => {

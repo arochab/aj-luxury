@@ -13,7 +13,7 @@ import { D1LatePaymentRefundDispatcher, LatePaymentRefundDispatchError } from ".
 import { PaymentProviderError } from "../lib/commerce/payment-provider.ts";
 
 const directory = fileURLToPath(new URL("../drizzle/", import.meta.url));
-const migrations = readdirSync(directory).filter((name) => /^(?:000[0-7]|0009|0010|0011|0012|0013|0014)_.+\.sql$/.test(name)).sort();
+const migrations = readdirSync(directory).filter((name) => /^(?:000[0-7]|0009|0010|0011|0012|0013|0014|0015)_.+\.sql$/.test(name)).sort();
 class Statement {
   constructor(database, query, values = []) { this.database = database; this.query = query; this.values = values; }
   bind(...values) { return new Statement(this.database, this.query, values); }
@@ -166,6 +166,28 @@ test("paid event after reservations became inactive is durably flagged", async (
   assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM payments WHERE status='succeeded'").get().n, 0);
   assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM inventory_movements WHERE kind='sale'").get().n, 0);
   assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action='late_payment_refund_obligation_created'").get().n, 1);
+});
+
+test("a first paid webhook after order cancellation creates a durable refund obligation", async () => {
+  const { sqlite, d1, effects, event, expiry } = await fixture();
+  const reservationId = sqlite.prepare(
+    "SELECT id FROM stock_reservations WHERE cart_id='cart_prod'",
+  ).get().id;
+  await new D1CommerceStore(d1).expireReservation({
+    reservationId,
+    idempotencyKey: "expire-before-cancelled-webhook-0001",
+    now: new Date(Date.parse(expiry) + 1).toISOString(),
+  });
+  sqlite.prepare(
+    "UPDATE orders SET status='cancelled', updated_at=? WHERE id=?",
+  ).run(expiry, event.orderId);
+  const late = { ...event, occurredAt: new Date(Date.parse(expiry) + 2).toISOString() };
+  assert.equal(await effects.applyVerified(late), "applied");
+  assert.equal(sqlite.prepare("SELECT status FROM orders WHERE id=?").get(event.orderId).status, "cancelled");
+  assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM payments WHERE status='succeeded'").get().n, 0);
+  assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM inventory_movements WHERE kind='sale'").get().n, 0);
+  assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM late_payment_refund_intents WHERE status='pending'").get().n, 1);
+  assert.equal(await effects.applyVerified(late), "duplicate");
 });
 
 test("non-paid/out-of-order events are stale and do not mutate D1", async () => {

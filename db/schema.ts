@@ -2143,3 +2143,128 @@ export const customsRecords = sqliteTable(
     ),
   ],
 );
+
+export const productionRuntimeSchemaProofs = sqliteTable(
+  "production_runtime_schema_proofs",
+  {
+    migrationId: text("migration_id").primaryKey(),
+    contractSha256: text("contract_sha256").notNull(),
+    installedAt: text("installed_at").notNull(),
+  },
+  (table) => [
+    check(
+      "ck_production_schema_proof_hash",
+      sql`length(${table.contractSha256}) = 64
+        AND ${table.contractSha256} = lower(${table.contractSha256})
+        AND ${table.contractSha256} NOT GLOB '*[^0-9a-f]*'`,
+    ),
+  ],
+);
+
+export const productionLaunchStockManifests = sqliteTable(
+  "production_launch_stock_manifests",
+  {
+    id: text("id").primaryKey(),
+    protocol: text("protocol").notNull(),
+    payloadSha256: text("payload_sha256").notNull(),
+    countedAt: text("counted_at").notNull(),
+    releaseSha: text("release_sha").notNull(),
+    workerVersionId: text("worker_version_id").notNull(),
+    physicalTotal: integer("physical_total").notNull(),
+    variantCount: integer("variant_count").notNull(),
+    giftingReserveTotal: integer("gifting_reserve_total").notNull(),
+    safetyReserveTotal: integer("safety_reserve_total").notNull(),
+    savReserveTotal: integer("sav_reserve_total").notNull(),
+    sellableTotal: integer("sellable_total").notNull(),
+    stockOwnerId: text("stock_owner_id").notNull(),
+    releaseOwnerId: text("release_owner_id").notNull(),
+    stockOwnerSignedAt: text("stock_owner_signed_at").notNull(),
+    releaseOwnerSignedAt: text("release_owner_signed_at").notNull(),
+    activatedAt: text("activated_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("ux_production_stock_manifest_payload").on(table.payloadSha256),
+    check("ck_production_stock_manifest_protocol", sql`${table.protocol} = 'ajl-launch-stock-import-v1'`),
+    check(
+      "ck_production_stock_manifest_hashes",
+      sql`length(${table.payloadSha256}) = 64
+        AND ${table.payloadSha256} = lower(${table.payloadSha256})
+        AND ${table.payloadSha256} NOT GLOB '*[^0-9a-f]*'
+        AND length(${table.releaseSha}) = 40
+        AND ${table.releaseSha} = lower(${table.releaseSha})
+        AND ${table.releaseSha} NOT GLOB '*[^0-9a-f]*'`,
+    ),
+    check(
+      "ck_production_stock_manifest_totals",
+      sql`${table.physicalTotal} = 756 AND ${table.variantCount} = 12
+        AND ${table.giftingReserveTotal} >= 0
+        AND ${table.safetyReserveTotal} >= 0
+        AND ${table.savReserveTotal} >= 0
+        AND ${table.sellableTotal} >= 0
+        AND ${table.giftingReserveTotal} + ${table.safetyReserveTotal}
+          + ${table.savReserveTotal} + ${table.sellableTotal} = ${table.physicalTotal}`,
+    ),
+    check("ck_production_stock_manifest_distinct_approvers", sql`${table.stockOwnerId} <> ${table.releaseOwnerId}`),
+  ],
+);
+
+export const productionLaunchStockManifestLines = sqliteTable(
+  "production_launch_stock_manifest_lines",
+  {
+    id: text("id").primaryKey(),
+    manifestId: text("manifest_id").notNull()
+      .references(() => productionLaunchStockManifests.id, { onDelete: "restrict" }),
+    position: integer("position").notNull(),
+    variantId: text("variant_id").notNull()
+      .references(() => inventory.variantId, { onDelete: "restrict" }),
+    internalReference: text("internal_reference").notNull(),
+    physicalQuantity: integer("physical_quantity").notNull(),
+    giftingReserveQuantity: integer("gifting_reserve_quantity").notNull(),
+    safetyReserveQuantity: integer("safety_reserve_quantity").notNull(),
+    savReserveQuantity: integer("sav_reserve_quantity").notNull(),
+    sellableQuantity: integer("sellable_quantity").notNull(),
+  },
+  (table) => [
+    uniqueIndex("ux_production_stock_manifest_position").on(table.manifestId, table.position),
+    uniqueIndex("ux_production_stock_manifest_variant").on(table.manifestId, table.variantId),
+    check("ck_production_stock_manifest_position", sql`${table.position} BETWEEN 0 AND 11`),
+    check(
+      "ck_production_stock_manifest_line_totals",
+      sql`${table.physicalQuantity} >= 0
+        AND ${table.giftingReserveQuantity} >= 0
+        AND ${table.safetyReserveQuantity} >= 0
+        AND ${table.savReserveQuantity} >= 0
+        AND ${table.sellableQuantity} >= 0
+        AND ${table.giftingReserveQuantity} + ${table.safetyReserveQuantity}
+          + ${table.savReserveQuantity} + ${table.sellableQuantity} = ${table.physicalQuantity}`,
+    ),
+  ],
+);
+
+export const productionReleaseAttestations = sqliteTable(
+  "production_release_attestations",
+  {
+    releaseSha: text("release_sha").primaryKey(),
+    workerVersionId: text("worker_version_id").notNull(),
+    workerVersionTag: text("worker_version_tag").notNull(),
+    stockManifestId: text("stock_manifest_id").notNull()
+      .references(() => productionLaunchStockManifests.id, { onDelete: "restrict" }),
+    controlledOrderId: text("controlled_order_id").notNull()
+      .references(() => orders.id, { onDelete: "restrict" }),
+    adamApproverId: text("adam_approver_id").notNull(),
+    jeremyApproverId: text("jeremy_approver_id").notNull(),
+    approvedAt: text("approved_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("ux_production_release_stock_manifest").on(table.stockManifestId),
+    uniqueIndex("ux_production_release_controlled_order").on(table.controlledOrderId),
+    check(
+      "ck_production_release_hashes",
+      sql`length(${table.releaseSha}) = 40
+        AND ${table.releaseSha} = lower(${table.releaseSha})
+        AND ${table.releaseSha} NOT GLOB '*[^0-9a-f]*'
+        AND ${table.workerVersionTag} = ${table.releaseSha}`,
+    ),
+    check("ck_production_release_distinct_approvers", sql`${table.adamApproverId} <> ${table.jeremyApproverId}`),
+  ],
+);

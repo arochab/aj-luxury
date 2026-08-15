@@ -20,6 +20,8 @@ export type ProductionShippingLabelEnvironment = ProductionCommerceEnvironment &
   DB?: CommerceD1Database;
   COMMERCE_CONTROLLED_OWNER_EMAIL?: string;
   COMMERCE_CONTROLLED_AUTH_HMAC_SECRET?: string;
+  OUTBOUND_SHIPMENT_CREATION_ENABLED?: string;
+  OPERATOR_ADMIN_MFA_ENABLED?: string;
   SENDCLOUD_PUBLIC_KEY?: string;
   SENDCLOUD_SECRET_KEY?: string;
   SENDCLOUD_SENDER_ADDRESS_ID?: string;
@@ -233,6 +235,10 @@ export async function productionShippingLabelAdminResponse(
   if (!ownerAuthenticated(request, env)) return fail("OWNER_ACCESS_REQUIRED", 403);
   if (!await controlledOwnerRequestAuthenticated(request, env)) {
     return fail("CONTROLLED_ACCESS_REQUIRED", 403);
+  }
+  if (env.OUTBOUND_SHIPMENT_CREATION_ENABLED !== "true" ||
+    env.OPERATOR_ADMIN_MFA_ENABLED !== "true") {
+    return fail("OUTBOUND_SHIPPING_NOT_ENABLED", 503);
   }
   if (!env.DB) return fail("DATABASE_UNAVAILABLE", 503);
   const now = new Date().toISOString();
