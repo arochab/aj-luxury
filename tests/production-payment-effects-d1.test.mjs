@@ -11,6 +11,7 @@ import { DeliveryReferenceVault } from "../lib/commerce/delivery-reference-vault
 import { D1StripePaymentEffectsStore, StripePaymentEffectsError } from "../lib/commerce/d1-stripe-payment-effects.ts";
 import { D1LatePaymentRefundDispatcher, LatePaymentRefundDispatchError } from "../lib/commerce/d1-late-payment-refunds.ts";
 import { PaymentProviderError } from "../lib/commerce/payment-provider.ts";
+import { productionReleaseSchemaInstalled } from "../worker/production-commerce-api.ts";
 
 const directory = fileURLToPath(new URL("../drizzle/", import.meta.url));
 const migrations = readdirSync(directory).filter((name) => /^(?:000[0-7]|0009|0010|0011|0012|0013|0014|0015)_.+\.sql$/.test(name)).sort();
@@ -69,7 +70,8 @@ async function fixture(failEffectsAt = null, livemode = true) {
 }
 
 test("paid Checkout event atomically pays, sells stock, closes cart and enqueues bounded copy", async () => {
-  const { sqlite, effects, event } = await fixture();
+  const { sqlite, d1, effects, event } = await fixture();
+  assert.equal(await productionReleaseSchemaInstalled(d1), true);
   assert.equal(await effects.applyVerified(event), "applied");
   assert.equal(sqlite.prepare("SELECT status FROM orders WHERE id=?").get(event.orderId).status, "paid");
   assert.equal(sqlite.prepare("SELECT status FROM carts WHERE id='cart_prod'").get().status, "converted");

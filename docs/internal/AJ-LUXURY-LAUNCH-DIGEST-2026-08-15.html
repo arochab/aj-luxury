@@ -32,19 +32,19 @@
     <div>
       <div class="eyebrow">AJ Luxury · Cockpit lancement · 15 août 2026</div>
       <h1>Une vitrine live.<br>Un commerce encore sous contrôle.</h1>
-      <p class="summary">Le site, la direction artistique et la vidéo d’accueil sont publics. Le parcours marchand complet a réussi en démonstration privée. La vente réelle reste volontairement fermée tant que comptes fournisseurs, stock signé, données douanières et double validation de la version exacte ne sont pas réunis.</p>
+      <p class="summary">Le site, la direction artistique et la vidéo d’accueil sont publics. Le routeur marchand production est maintenant câblé dans le candidat local, avec des sécurités qui ferment le commerce dès qu’une preuve manque. La vente réelle reste volontairement fermée tant que comptes fournisseurs, stock signé, authentification opérateur, migration D1 et commande contrôlée n’ont pas été prouvés sur le terrain.</p>
     </div>
     <aside class="verdict">
       <span class="label">Réponse à Jérémy</span>
       <b>Non, pas encore de caleçon commandable en production.</b>
-      <p>Oui, le parcours est démontré de bout en bout sans débit, e-mail ni colis réel.</p>
+      <p>La vitrine est live. Le code marchand est candidat, mais aucun débit, e-mail, tarif ou colis réel n’a été autorisé.</p>
     </aside>
   </header>
 
   <div class="status-grid">
     <div class="status"><span class="label"><i class="dot live"></i>Public</span><strong>Front & DA</strong><p>Site, catalogue, fiches produit et vidéo V4 visibles sur ajluxurystore.com.</p></div>
     <div class="status"><span class="label"><i class="dot test"></i>Privé</span><strong>Commande test</strong><p>Panier, option domicile fictive, paiement test, compte et suivi validés.</p></div>
-    <div class="status"><span class="label"><i class="dot test"></i>Code</span><strong>Last mile</strong><p>Stripe, Sendcloud v3, Resend, stock, retours et reporting ont des contrats fail-closed testés.</p></div>
+    <div class="status"><span class="label"><i class="dot test"></i>Candidat local</span><strong>Routeur de vente</strong><p>Panier, relais, Stripe, Sendcloud v3, stock, retours, e-mails et reporting sont câblés ou en gate final.</p></div>
     <div class="status"><span class="label"><i class="dot closed"></i>Veto</span><strong>Vente réelle</strong><p>Aucun compte marchand, tarif, label, débit ou e-mail réel n’est encore activé.</p></div>
   </div>
 
@@ -53,14 +53,14 @@
     <table class="matrix">
       <thead><tr><th>Domaine</th><th>État</th><th>Acquis</th><th>Dernier verrou</th></tr></thead>
       <tbody>
-        <tr><td>Front & design</td><td><span class="pill pill-live">Live</span></td><td>Accueil premium, navigation, 3 coloris, responsive, panier/checkout/account visibles.</td><td>Les écrans publics ne sont pas encore reliés au routeur de vente réel.</td></tr>
+        <tr><td>Front & design</td><td><span class="pill pill-live">Live vitrine</span></td><td>Accueil premium, navigation, 3 coloris et responsive sont publics. Le client production sait appeler le nouveau routeur sans exposer de secret.</td><td>Le nouveau client marchand n’est pas encore déployé sur le domaine public.</td></tr>
         <tr><td>Vidéo accueil</td><td><span class="pill pill-live">Live</span></td><td>Hero V4 et relecture intégrés à la DA AJ Luxury.</td><td>Surveiller poids média et Core Web Vitals après trafic réel.</td></tr>
-        <tr><td>Commerce</td><td><span class="pill pill-test">Candidat</span></td><td>Panier/stock D1, idempotence, réservations et ordre des transitions.</td><td>Routeur production + D1 production propre + validation même SHA.</td></tr>
-        <tr><td>Livraison</td><td><span class="pill pill-test">Candidat</span></td><td>Sendcloud v3, domicile, points relais en lecture, documents et retours. Colis 150/250/350 g, 40×32×4 cm.</td><td>Compte et tarifs réels ; relais achetable après migration 0011 ; douane hors UE.</td></tr>
-        <tr><td>Paiement</td><td><span class="pill pill-test">Candidat</span></td><td>Stripe Checkout, 3DS/refus, signature brute, anti-rejeu, remboursements idempotents.</td><td>KYC/IBAN, clés test puis live, webhook sandbox et commande contrôlée.</td></tr>
-        <tr><td>Retours</td><td><span class="pill pill-test">Candidat</span></td><td>14 jours, approbation avant label, retour Belmont, UE inclus / hors UE DAP.</td><td>Route d’approbation opérateur et données douanières vérifiées.</td></tr>
-        <tr><td>Stock</td><td><span class="pill pill-test">À signer</span></td><td>12 variantes, base annoncée 756 unités, réserves atomiques, anti-survente.</td><td>Jérémy renseigne cadeaux/sécurité/SAV et cosigne l’empreinte exacte avec Adam.</td></tr>
-        <tr><td>Analytics</td><td><span class="pill pill-test">Code</span></td><td>KPI D1 agrégés : ventes, paiement, remboursement, stock, livraison, retours, e-mails.</td><td>Route admin protégée et définitions KPI validées ; aucun cookie tiers requis.</td></tr>
+        <tr><td>Commerce</td><td><span class="pill pill-test">Câblé, fermé</span></td><td>Routeur <code>/api/commerce</code>, panier D1, idempotence, réservations, commande, succès relu côté serveur et limitation des abus avant coût.</td><td>Déploiement du même SHA, D1 production sans données démo, authentification opérateur et drill réel.</td></tr>
+        <tr><td>Livraison</td><td><span class="pill pill-test">Câblée, fermée</span></td><td>Sendcloud v3, domicile et relais chiffré, prix fournisseur, document A6, suivi. Colis 150/250/350 g, 40×32×4 cm.</td><td>Compte/tarifs réels et preuve opérateur. L’étiquette réelle est UE uniquement ; UK/US/CA restent fermés jusqu’à la douane.</td></tr>
+        <tr><td>Paiement</td><td><span class="pill pill-test">Câblé, fermé</span></td><td>Stripe Checkout hébergé, signature brute, anti-rejeu, session unique et compensation durable des paiements tardifs.</td><td>KYC/IBAN, clés test puis live, webhook sandbox, dispatcher surveillé et commande contrôlée.</td></tr>
+        <tr><td>Retours</td><td><span class="pill pill-test">Candidat ops</span></td><td>Politique 14 jours, approbation avant label, inspection, retour Belmont et remboursements séparés de la commande.</td><td>Smoke réel demande → label → réception → inspection → remboursement, plus validation juridique finale.</td></tr>
+        <tr><td>Stock</td><td><span class="pill pill-test">À cosigner</span></td><td>12 variantes/756 unités exactes, réserves atomiques, expiration des paniers abandonnés et anti-survente. Le total seul ne suffit plus.</td><td>Jérémy renseigne cadeaux/sécurité/SAV ; Jérémy et Adam signent le même manifeste lié au SHA déployé.</td></tr>
+        <tr><td>Analytics & reporting</td><td><span class="pill pill-test">Candidat ops</span></td><td>KPI D1 first-party agrégés : ventes, paiement, remboursement, stock, livraison, retours et e-mails, sans SDK public ni PII.</td><td>Accès opérateur réel, définitions KPI validées et smoke sur données contrôlées.</td></tr>
       </tbody>
     </table>
   </section>
@@ -69,11 +69,11 @@
     <div class="eyebrow">02 · Mécanique client</div><h2>Un flux simple, avec vérité serveur</h2>
     <div class="flow">
       <div class="step"><span class="label">1</span><b>Panier</b><small>Variante et quantité contrôlées contre le stock vendable.</small></div>
-      <div class="step"><span class="label">2</span><b>Adresse</b><small>Zone UE, UK, US ou Canada. Ailleurs : fermeture propre.</small></div>
+      <div class="step"><span class="label">2</span><b>Adresse</b><small>Architecture UE, UK, US et Canada. Activation initiale réelle limitée aux zones juridiquement prêtes.</small></div>
       <div class="step"><span class="label">3</span><b>Transport</b><small>Offres Sendcloud avec transporteur, prix et délai réels.</small></div>
       <div class="step"><span class="label">4</span><b>Réservation</b><small>Stock bloqué atomiquement avant le paiement.</small></div>
       <div class="step"><span class="label">5</span><b>Paiement</b><small>Stripe hébergé ; seule une signature serveur confirme la vente.</small></div>
-      <div class="step"><span class="label">6</span><b>Opération</b><small>Jérémy emballe, imprime, dépose ; suivi et retours restent tracés.</small></div>
+      <div class="step"><span class="label">6</span><b>Opération</b><small>Jérémy emballe, imprime et dépose ; e-mail, suivi, retour et remboursement restent tracés.</small></div>
     </div>
   </section>
 
@@ -98,7 +98,7 @@
   <section>
     <div class="eyebrow">04 · Agentique, phase suivante</div><h2>Automatiser le travail, jamais la vérité financière</h2>
     <div class="agentic">
-      <div class="panel safe"><h3>À agentifier après le lancement</h3><ul><li>Résumé quotidien des commandes, retards et retours.</li><li>Préparation de réponses SAV soumises à validation humaine.</li><li>Détection et priorisation des exceptions transport.</li><li>Comparaison hebdomadaire des coûts et délais transporteurs.</li><li>Propositions de contenu et reporting dirigeant.</li></ul></div>
+      <div class="panel safe"><h3>À agentifier après le lancement</h3><ul><li>Résumé quotidien des commandes, retards et retours.</li><li>Préparation de réponses SAV soumises à validation humaine.</li><li>Détection et priorisation des exceptions transport.</li><li>Comparaison hebdomadaire des coûts et délais transporteurs.</li><li>Propositions de contenu et reporting dirigeant.</li><li>Budget API conseillé : 5 à 10 € par mois au départ, plafonné et mesuré.</li></ul></div>
       <div class="panel never"><h3>À garder déterministe</h3><ul><li>Débit, remboursement et validation des webhooks.</li><li>Calcul, réservation et décrément du stock.</li><li>Prix payé, taxes, douane et choix du service acheté.</li><li>Création d’étiquette ou retour sans règle et approbation.</li><li>Publication externe ou contact client sans contrôle.</li></ul></div>
     </div>
   </section>
@@ -107,8 +107,8 @@
     <div class="eyebrow">05 · Gate d’ouverture</div><h2>Trois preuves, dans cet ordre</h2>
     <div class="gates">
       <div class="gate"><b>1. Fournisseurs et vérité stock</b><span>Stripe KYC/IBAN + Sendcloud + domaine e-mail + manifeste stock et réserves signés.</span></div>
-      <div class="gate"><b>2. Sandbox complète</b><span>3DS, refus, remboursement, offre transport, label, e-mail, retour et restauration D1.</span></div>
-      <div class="gate"><b>3. Commande contrôlée</b><span>Un vrai boxer : paiement, stock, label, dépôt, suivi, réception puis remboursement/retour testés si prévu.</span></div>
+      <div class="gate"><b>2. Production contrôlée</b><span>D1 neuve sans 0008, même SHA partout, HMAC/MFA opérateur, 3DS, refus, remboursement, offre transport, label, e-mail et restauration.</span></div>
+      <div class="gate"><b>3. Commande contrôlée</b><span>Un vrai boxer : paiement, stock, label, dépôt et tracking remis au transporteur. Retours/remboursements smôkés avant ouverture publique.</span></div>
     </div>
   </section>
 
