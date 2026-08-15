@@ -114,7 +114,9 @@ test("0010 has an immutable Drizzle snapshot chained to exact 0009 metadata", ()
     }
   }
 
-  assert.deepEqual(journal.entries.find((entry) => entry.idx === 10), {
+  assert.deepEqual(journal.entries.find((entry) =>
+    entry.tag === "0010_multicarrier_delivery_foundation"
+  ), {
     idx: 10,
     version: "6",
     when: 1786651200000,
