@@ -1,4 +1,5 @@
 import type {
+  CheckoutLine,
   CheckoutSessionReceipt,
   CheckoutSessionRequest,
 } from "./payment-provider.ts";
@@ -444,7 +445,7 @@ export class D1ProductionCheckoutStore {
     ) {
       throw new ProductionCheckoutError("ORDER_EXPIRED", "Order reservation expired.");
     }
-    const lines = linesResult.results.map((line) => Object.freeze({
+    const lines: CheckoutLine[] = linesResult.results.map((line) => Object.freeze({
       internalReference: line.internal_reference,
       displayName: `${line.product_name} · ${line.color_name} · ${line.size}`,
       unitAmountCents: line.unit_price_cents,

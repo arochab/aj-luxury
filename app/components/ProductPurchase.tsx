@@ -7,6 +7,7 @@ import { getLocalizedProductCopy } from "@/lib/i18n/product-copy";
 import {
   CartApiError,
   ensureOpenCart,
+  getCart,
   setCartLineQuantity,
 } from "../../lib/commerce/preprod-cart-client";
 import { createLaunchVariantId } from "../../lib/commerce/product-identifiers";
@@ -14,17 +15,20 @@ import type { PublicStockBySize } from "../../lib/commerce/public-stock";
 import type { Product, ProductSize } from "../../lib/products";
 import { formatPrice, sizes } from "../../lib/products";
 import styles from "./ProductPage.module.css";
+import type { CommerceRuntimeMode } from "../../lib/commerce/commerce-runtime";
 
 type ProductPurchaseProps = {
   product: Product;
   products: Product[];
   availability: PublicStockBySize;
+  runtimeMode: CommerceRuntimeMode;
 };
 
 export default function ProductPurchase({
   product,
   products,
   availability,
+  runtimeMode,
 }: ProductPurchaseProps) {
   const [selectedSize, setSelectedSize] = useState<ProductSize | null>(null);
   const [feedback, setFeedback] = useState<
@@ -39,18 +43,29 @@ export default function ProductPurchase({
   const sizeGuideTrigger = useRef<HTMLButtonElement>(null);
   const cartError = useRef<HTMLParagraphElement>(null);
   const cartRequestInFlight = useRef(false);
+  const cartCreateAttempt = useRef<string | null>(null);
+  const cartLineAttempt = useRef<{
+    fingerprint: string;
+    key: string;
+  } | null>(null);
   const restoreSizeGuideFocus = useRef(false);
   const { locale, t } = useI18n();
   const localizedProduct = getLocalizedProductCopy(t, product.slug);
 
   function selectSize(size: ProductSize) {
-    if (availability[size].state === "sold-out") return;
+    if (
+      runtimeMode === "preproduction" &&
+      availability[size].state === "sold-out"
+    ) return;
 
     setSelectedSize(size);
     setFeedback(null);
   }
 
   function stockLabel(size: ProductSize) {
+    if (runtimeMode === "production") {
+      return t("product.stockCheckedAtAdd");
+    }
     const stock = availability[size];
 
     if (stock.state === "sold-out") {
@@ -141,18 +156,45 @@ export default function ProductPurchase({
     setFeedback(null);
     try {
       const variantId = createLaunchVariantId(product.slug, selectedSize);
-      const currentCart = await ensureOpenCart();
+      if (runtimeMode === "closed") throw new CartApiError("CART_UNAVAILABLE");
+      let currentCart;
+      if (runtimeMode === "production") {
+        currentCart = await getCart("production");
+        if (currentCart.status === "empty") {
+          const key = cartCreateAttempt.current ?? crypto.randomUUID();
+          cartCreateAttempt.current = key;
+          currentCart = await ensureOpenCart("production", key);
+          cartCreateAttempt.current = null;
+        }
+      } else {
+        currentCart = await ensureOpenCart("preproduction");
+      }
       const currentQuantity =
         currentCart.lines.find((line) => line.variantId === variantId)
           ?.quantity ?? 0;
-      if (currentQuantity >= 5) {
+      if (
+        currentQuantity >= 5 ||
+        (runtimeMode === "production" && currentCart.itemCount >= 3)
+      ) {
         throw new CartApiError("MAX_QUANTITY");
       }
 
+      const fingerprint = `${variantId}:${currentQuantity + 1}`;
+      const lineKey = runtimeMode === "production"
+        ? cartLineAttempt.current?.fingerprint === fingerprint
+          ? cartLineAttempt.current.key
+          : crypto.randomUUID()
+        : undefined;
+      if (runtimeMode === "production" && lineKey) {
+        cartLineAttempt.current = { fingerprint, key: lineKey };
+      }
       const updatedCart = await setCartLineQuantity(
         variantId,
         currentQuantity + 1,
+        runtimeMode,
+        lineKey,
       );
+      cartLineAttempt.current = null;
       const updatedLine = updatedCart.lines.find(
         (line) => line.variantId === variantId,
       );
@@ -184,11 +226,17 @@ export default function ProductPurchase({
         return t("product.cartOutOfStock");
       }
       if (feedback.code === "MAX_QUANTITY") {
-        return t("product.cartMaxQuantity");
+        return runtimeMode === "production"
+          ? t("checkout.parcelUnavailable")
+          : t("product.cartMaxQuantity");
       }
       return t("product.cartUnavailable");
     }
-    return t("product.cartSecureNotice");
+    return runtimeMode === "preproduction"
+      ? t("product.cartSecureNotice")
+      : runtimeMode === "production"
+        ? `Paiement sécurisé. ${t("product.stockCheckedAtAdd")}.`
+        : t("product.cartUnavailable");
   }
 
   return (
@@ -203,7 +251,9 @@ export default function ProductPurchase({
 
       <div className={styles.price}>
         <strong>{formatPrice(product.priceCents, locale)}</strong>
-        <span>{t("product.priceLabel")}</span>
+        {runtimeMode === "preproduction" && (
+          <span>{t("product.priceLabel")}</span>
+        )}
       </div>
 
       <p className={styles.description}>
@@ -253,7 +303,8 @@ export default function ProductPurchase({
         <div className={styles.sizeOptions}>
           {sizes.map((size) => {
             const label = stockLabel(size);
-            const soldOut = availability[size].state === "sold-out";
+            const soldOut = runtimeMode === "preproduction" &&
+              availability[size].state === "sold-out";
 
             return (
               <button
@@ -330,7 +381,7 @@ export default function ProductPurchase({
       <button
         className={styles.purchaseButton}
         type="button"
-        disabled={!selectedSize || cartBusy}
+        disabled={!selectedSize || cartBusy || runtimeMode === "closed"}
         onClick={() => void addToCart()}
         aria-busy={cartBusy}
       >
@@ -388,9 +439,9 @@ export default function ProductPurchase({
       </div>
 
       <div className={styles.service}>
-        <span>{t("product.shippingPending")}</span>
-        <span>{t("product.paymentPending")}</span>
-        <span>{t("product.returnsPending")}</span>
+        <span>{runtimeMode === "production" ? "Livraison calculée à l’adresse" : t("product.shippingPending")}</span>
+        <span>{runtimeMode === "production" ? "Paiement sécurisé par Stripe" : t("product.paymentPending")}</span>
+        <span>{runtimeMode === "production" ? "Retours selon les conditions de vente" : t("product.returnsPending")}</span>
       </div>
     </aside>
   );

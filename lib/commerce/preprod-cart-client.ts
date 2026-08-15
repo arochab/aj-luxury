@@ -1,8 +1,16 @@
 "use client";
 
-const CART_API_PATH = "/api/preprod/cart";
+import {
+  commerceApiPath,
+  type ActiveCommerceRuntimeMode,
+} from "./commerce-runtime.ts";
+
+function cartApiPath(mode: ActiveCommerceRuntimeMode): string {
+  return commerceApiPath(mode, "/cart");
+}
 const CART_CSRF_COOKIE = "__Host-aj_cart_csrf";
 const OPAQUE_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
+const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.:-]{7,127}$/;
 const UTC_TIMESTAMP_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 const publicVariantContract = Object.freeze({
   "variant_boxer_pourpre_s": ["pourpre", "pourpre", "S", "Pourpre Impérial", "/images/client/raw/product-card-pourpre.webp"],
@@ -224,9 +232,23 @@ function mutationHeaders(includeJson = false): HeadersInit {
   };
 }
 
-export async function getCart(): Promise<PublicCartSnapshot> {
+function productionIdempotencyHeaders(
+  mode: ActiveCommerceRuntimeMode,
+  idempotencyKey: string | undefined,
+): HeadersInit {
+  if (mode === "preproduction") return {};
+  if (!idempotencyKey || !IDEMPOTENCY_KEY_PATTERN.test(idempotencyKey)) {
+    throw new CartApiError("IDEMPOTENCY_KEY_REQUIRED");
+  }
+  return { "Idempotency-Key": idempotencyKey };
+}
+
+export async function getCart(
+  mode: ActiveCommerceRuntimeMode = "preproduction",
+): Promise<PublicCartSnapshot> {
+  const path = cartApiPath(mode);
   try {
-    return await cartRequest(CART_API_PATH);
+    return await cartRequest(path);
   } catch (error) {
     if (
       error instanceof CartApiError &&
@@ -234,19 +256,27 @@ export async function getCart(): Promise<PublicCartSnapshot> {
         error.code,
       )
     ) {
-      return cartRequest(CART_API_PATH);
+      return cartRequest(path);
     }
     throw error;
   }
 }
 
-export async function ensureOpenCart(): Promise<PublicCartSnapshot> {
+export async function ensureOpenCart(
+  mode: ActiveCommerceRuntimeMode = "preproduction",
+  idempotencyKey?: string,
+): Promise<PublicCartSnapshot> {
+  const path = cartApiPath(mode);
+  const idempotency = productionIdempotencyHeaders(mode, idempotencyKey);
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const csrfToken = readCartCsrfToken();
     try {
-      return await cartRequest(CART_API_PATH, {
+      return await cartRequest(path, {
         method: "POST",
-        headers: csrfToken ? { "X-CSRF-Token": csrfToken } : undefined,
+        headers: {
+          ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {}),
+          ...idempotency,
+        },
       });
     } catch (error) {
       if (
@@ -267,12 +297,17 @@ export async function ensureOpenCart(): Promise<PublicCartSnapshot> {
 export function setCartLineQuantity(
   variantId: string,
   quantity: number,
+  mode: ActiveCommerceRuntimeMode = "preproduction",
+  idempotencyKey?: string,
 ): Promise<PublicCartSnapshot> {
   return cartRequest(
-    `${CART_API_PATH}/lines/${encodeURIComponent(variantId)}`,
+    `${cartApiPath(mode)}/lines/${encodeURIComponent(variantId)}`,
     {
       method: "PUT",
-      headers: mutationHeaders(true),
+      headers: {
+        ...mutationHeaders(true),
+        ...productionIdempotencyHeaders(mode, idempotencyKey),
+      },
       body: JSON.stringify({ quantity }),
     },
   );
@@ -280,12 +315,17 @@ export function setCartLineQuantity(
 
 export function removeCartLine(
   variantId: string,
+  mode: ActiveCommerceRuntimeMode = "preproduction",
+  idempotencyKey?: string,
 ): Promise<PublicCartSnapshot> {
   return cartRequest(
-    `${CART_API_PATH}/lines/${encodeURIComponent(variantId)}`,
+    `${cartApiPath(mode)}/lines/${encodeURIComponent(variantId)}`,
     {
       method: "DELETE",
-      headers: mutationHeaders(),
+      headers: {
+        ...mutationHeaders(),
+        ...productionIdempotencyHeaders(mode, idempotencyKey),
+      },
     },
   );
 }

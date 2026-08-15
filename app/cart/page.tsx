@@ -3,6 +3,7 @@ import StoreHeader from "../components/StoreHeader";
 import { T } from "../../lib/i18n/TranslatedText";
 import CartClient from "./CartClient";
 import styles from "./CommerceShell.module.css";
+import { getServerCommerceRuntimeMode } from "../../lib/commerce/commerce-runtime.server";
 
 export const metadata = {
   title: "Votre panier | AJ Luxury",
@@ -10,13 +11,16 @@ export const metadata = {
 };
 
 export default function CartPage() {
+  const runtimeMode = getServerCommerceRuntimeMode();
   return (
     <main className={styles.shell}>
       <StoreHeader />
-      <aside className={styles.notice}>
-        <T id="cart.preprodNotice" />
-      </aside>
-      <CartClient />
+      {runtimeMode === "preproduction" && (
+        <aside className={styles.notice}>
+          <T id="cart.preprodNotice" />
+        </aside>
+      )}
+      <CartClient runtimeMode={runtimeMode} />
       <StoreFooter />
     </main>
   );
