@@ -6,6 +6,7 @@ import {
   type PaymentState,
   type PaymentWebhookInput,
   type RefundReceipt,
+  type RefundReconciliationRequest,
   type RefundRequest,
   type RefundState,
   type VerifiedIgnoredProviderEvent,
@@ -260,6 +261,48 @@ async function stripePost(
   return Object.freeze({ value: await boundedJson(response), requestId });
 }
 
+async function stripeGet(
+  runtime: StripeRuntimeConfiguration,
+  fetchImpl: FetchLike,
+  path: string,
+): Promise<Readonly<{ value: unknown; requestId: string | null }>> {
+  let response: Response;
+  try {
+    response = await fetchImpl(`${STRIPE_ORIGIN}${path}`, {
+      method: "GET",
+      redirect: "error",
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${runtime.apiKey}`,
+        "Stripe-Version": STRIPE_API_VERSION,
+      },
+      signal: AbortSignal.timeout(runtime.requestTimeoutMs),
+    });
+  } catch (error) {
+    const timeout = error instanceof DOMException && error.name === "TimeoutError";
+    throw new PaymentProviderError(
+      timeout ? "TIMEOUT" : "OUTCOME_UNKNOWN",
+      "Stripe refund reconciliation did not produce a confirmed outcome.",
+      { cause: error },
+    );
+  }
+  if (!response.ok) {
+    await response.body?.cancel();
+    // A retrieval failure is never evidence that the already-created refund
+    // was rejected. Keep the obligation reconcilable instead of terminal.
+    throw new PaymentProviderError(
+      "OUTCOME_UNKNOWN",
+      "Stripe refund reconciliation did not produce a confirmed outcome.",
+    );
+  }
+  const requestId = response.headers.get("Request-Id");
+  if (requestId !== null && (!safeString(requestId, 255) || !SAFE_PROVIDER_CODE.test(requestId))) {
+    await response.body?.cancel();
+    throw new PaymentProviderError("MALFORMED_RESPONSE", "Stripe request id is invalid.");
+  }
+  return Object.freeze({ value: await boundedJson(response), requestId });
+}
+
 function providerId(value: unknown, prefix: string, label: string): string {
   if (!safeString(value) || !SAFE_PROVIDER_CODE.test(value) || !value.startsWith(`${prefix}_`)) {
     throw new PaymentProviderError("MALFORMED_RESPONSE", `${label} is invalid.`);
@@ -327,6 +370,15 @@ function validateRefundRequest(request: RefundRequest): void {
   }
 }
 
+function validateRefundReconciliationRequest(request: RefundReconciliationRequest): void {
+  validateInternalId(request.orderId, "Order id");
+  providerId(request.providerPaymentId, "pi", "Stripe payment id");
+  providerId(request.providerRefundId, "re", "Stripe refund id");
+  if (request.currency !== "EUR" || !safeInteger(request.amountCents, 1, 100_000_000)) {
+    invalidRequest("Refund reconciliation request is invalid.");
+  }
+}
+
 function refundState(value: unknown): RefundState {
   switch (value) {
     case "pending": return "pending";
@@ -340,12 +392,13 @@ function refundState(value: unknown): RefundState {
 
 function refundReceipt(
   value: unknown,
-  request: RefundRequest,
+  request: RefundRequest | RefundReconciliationRequest,
   requestId: string | null,
 ): RefundReceipt {
   if (!record(value) || value.object !== "refund" || value.currency !== "eur" ||
     value.payment_intent !== request.providerPaymentId || metadataOrderId(value) !== request.orderId ||
-    value.amount !== request.amountCents || !safeInteger(value.amount, 1, 100_000_000)) {
+    value.amount !== request.amountCents || !safeInteger(value.amount, 1, 100_000_000) ||
+    ("providerRefundId" in request && value.id !== request.providerRefundId)) {
     throw new PaymentProviderError("MALFORMED_RESPONSE", "Stripe refund is invalid.");
   }
   return Object.freeze({
@@ -592,6 +645,15 @@ export function createStripePaymentProviderPorts(
           "/v1/refunds",
           request.idempotencyKey,
           form,
+        );
+        return refundReceipt(response.value, request, response.requestId);
+      },
+      async retrieveRefund(request: RefundReconciliationRequest) {
+        validateRefundReconciliationRequest(request);
+        const response = await stripeGet(
+          runtime,
+          fetchImpl,
+          `/v1/refunds/${request.providerRefundId}`,
         );
         return refundReceipt(response.value, request, response.requestId);
       },

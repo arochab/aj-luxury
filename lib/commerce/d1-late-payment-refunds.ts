@@ -81,7 +81,9 @@ async function receiptFingerprint(receipt: RefundReceipt): Promise<string> {
 /**
  * Durable Stripe-refund worker for payments that arrived after stock safety
  * expired. Unknown provider outcomes deliberately retain their lease: a later
- * worker replays the exact same Stripe Idempotency-Key after expiry.
+ * worker replays the exact same Stripe Idempotency-Key after expiry only until
+ * a provider refund id is known. Once known, retries reconcile that exact
+ * Stripe refund and can never create another one.
  */
 export class D1LatePaymentRefundDispatcher {
   readonly #database: CommerceD1Database;
@@ -183,16 +185,25 @@ export class D1LatePaymentRefundDispatcher {
   ): Promise<"succeeded" | "rejected" | "unknown" | "attentionRequired"> {
     let receipt: RefundReceipt;
     try {
-      receipt = await this.#provider.createRefund({
-        idempotencyKey: claim.idempotency_key,
-        orderId: claim.order_id,
-        providerPaymentId: claim.provider_payment_id,
-        amountCents: claim.amount_cents,
-        currency: claim.currency,
-        reason: "requested_by_customer",
-      });
+      receipt = claim.provider_refund_id === null
+        ? await this.#provider.createRefund({
+          idempotencyKey: claim.idempotency_key,
+          orderId: claim.order_id,
+          providerPaymentId: claim.provider_payment_id,
+          amountCents: claim.amount_cents,
+          currency: claim.currency,
+          reason: "requested_by_customer",
+        })
+        : await this.#provider.retrieveRefund({
+          orderId: claim.order_id,
+          providerPaymentId: claim.provider_payment_id,
+          providerRefundId: claim.provider_refund_id,
+          amountCents: claim.amount_cents,
+          currency: claim.currency,
+        });
     } catch (cause) {
-      if (cause instanceof PaymentProviderError && cause.code === "REJECTED") {
+      if (claim.provider_refund_id === null &&
+        cause instanceof PaymentProviderError && cause.code === "REJECTED") {
         await this.#markRejected(claim, now, null);
         return "rejected";
       }

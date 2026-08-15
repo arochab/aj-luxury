@@ -443,3 +443,72 @@ test("refund requests are bounded, carry an idempotency key and replay to one pr
     assert.equal(form.get("metadata[order_id]"), request.orderId);
   }
 });
+
+test("a known refund is reconciled with one exact bounded GET and no idempotent POST replay", async () => {
+  const calls = [];
+  const provider = ports(async (url, init) => {
+    calls.push({ url, init });
+    return new Response(JSON.stringify({
+      id: "re_refund123456789",
+      object: "refund",
+      amount: 2_999,
+      currency: "eur",
+      metadata: { order_id: "order_aj_00000001" },
+      payment_intent: "pi_payment123456789",
+      status: "succeeded",
+    }), {
+      status: 200,
+      headers: { "Request-Id": "req_reconcile123456789" },
+    });
+  });
+  const receipt = await provider.refunds.retrieveRefund({
+    orderId: "order_aj_00000001",
+    providerPaymentId: "pi_payment123456789",
+    providerRefundId: "re_refund123456789",
+    amountCents: 2_999,
+    currency: "EUR",
+  });
+  assert.equal(receipt.state, "succeeded");
+  assert.equal(receipt.providerRefundId, "re_refund123456789");
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, "https://api.stripe.com/v1/refunds/re_refund123456789");
+  assert.equal(calls[0].init.method, "GET");
+  assert.equal(calls[0].init.body, undefined);
+  assert.equal(calls[0].init.headers["Idempotency-Key"], undefined);
+  assert.equal(calls[0].init.headers.Authorization, `Bearer ${API_KEY}`);
+  assert.equal(calls[0].init.headers["Stripe-Version"], STRIPE_API_VERSION);
+});
+
+test("refund reconciliation rejects every mismatched durable binding", async () => {
+  const request = {
+    orderId: "order_aj_00000001",
+    providerPaymentId: "pi_payment123456789",
+    providerRefundId: "re_refund123456789",
+    amountCents: 2_999,
+    currency: "EUR",
+  };
+  const valid = {
+    id: request.providerRefundId,
+    object: "refund",
+    amount: request.amountCents,
+    currency: "eur",
+    metadata: { order_id: request.orderId },
+    payment_intent: request.providerPaymentId,
+    status: "succeeded",
+  };
+  for (const mismatch of [
+    { id: "re_wrong123456789" },
+    { payment_intent: "pi_wrong123456789" },
+    { amount: 1 },
+    { currency: "usd" },
+    { metadata: { order_id: "order_wrong_00000001" } },
+  ]) {
+    const provider = ports(async () => new Response(JSON.stringify({ ...valid, ...mismatch }), {
+      status: 200,
+    }));
+    await assert.rejects(
+      () => provider.refunds.retrieveRefund(request),
+      (error) => error?.code === "MALFORMED_RESPONSE",
+    );
+  }
+});

@@ -253,6 +253,59 @@ test("late refund dispatch cancels without paid/sale and never double-refunds", 
   assert.equal(calls.length, 1);
 });
 
+test("pending Stripe refund reconciles by exact id and finalizes D1 only once", async () => {
+  const { sqlite, d1, expiry } = await lateFixture();
+  const createCalls = [];
+  const retrieveCalls = [];
+  const provider = {
+    async createRefund(request) {
+      createCalls.push(request);
+      return succeededRefund({ state: "pending" });
+    },
+    async retrieveRefund(request) {
+      retrieveCalls.push(request);
+      return succeededRefund();
+    },
+  };
+  const firstNow = new Date(Date.parse(expiry) + 1_000).toISOString();
+  const first = new D1LatePaymentRefundDispatcher(d1, provider, () => "lease-token-pending-0001");
+  assert.deepEqual(await first.dispatch({ now: firstNow, leaseSeconds: 30 }), {
+    claimed: 1, succeeded: 0, rejected: 0, unknown: 1, attentionRequired: 0,
+  });
+  const retained = sqlite.prepare(
+    "SELECT status,provider_refund_id,lease_expires_at FROM late_payment_refund_intents",
+  ).get();
+  assert.equal(retained.status, "claimed");
+  assert.equal(retained.provider_refund_id, "re_late_fixture_001");
+  assert.equal(createCalls.length, 1);
+  assert.equal(retrieveCalls.length, 0);
+
+  const retryNow = new Date(Date.parse(retained.lease_expires_at) + 1).toISOString();
+  const retry = new D1LatePaymentRefundDispatcher(d1, provider, () => "lease-token-pending-0002");
+  assert.deepEqual(await retry.dispatch({ now: retryNow, leaseSeconds: 30 }), {
+    claimed: 1, succeeded: 1, rejected: 0, unknown: 0, attentionRequired: 0,
+  });
+  assert.equal(createCalls.length, 1);
+  assert.deepEqual(retrieveCalls, [{
+    orderId: createCalls[0].orderId,
+    providerPaymentId: createCalls[0].providerPaymentId,
+    providerRefundId: "re_late_fixture_001",
+    amountCents: createCalls[0].amountCents,
+    currency: createCalls[0].currency,
+  }]);
+  assert.equal(sqlite.prepare("SELECT status FROM late_payment_refund_intents").get().status, "succeeded");
+  assert.equal(sqlite.prepare("SELECT status FROM orders").get().status, "cancelled");
+  assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM payments WHERE status IN ('succeeded','refunded')").get().n, 0);
+  assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM inventory_movements WHERE kind='sale'").get().n, 0);
+  assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action='late_payment_refund_succeeded'").get().n, 1);
+  assert.deepEqual(await retry.dispatch({ now: new Date(Date.parse(retryNow) + 60_000).toISOString() }), {
+    claimed: 0, succeeded: 0, rejected: 0, unknown: 0, attentionRequired: 0,
+  });
+  assert.equal(createCalls.length, 1);
+  assert.equal(retrieveCalls.length, 1);
+  assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action='late_payment_refund_succeeded'").get().n, 1);
+});
+
 test("unknown Stripe timeout retains the lease then reconciles with the exact same key", async () => {
   const { sqlite, d1, expiry } = await lateFixture();
   const keys = [];
