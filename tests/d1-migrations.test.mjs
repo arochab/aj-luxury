@@ -370,6 +370,7 @@ test("Wrangler applies the canonical D1 chain 0000 to 0007 on empty and journale
       "0011_service_point_reference_vault.sql",
       "0012_provider_priced_delivery_quotes.sql",
       "0013_provider_priced_delivery_orders.sql",
+      "0014_late_payment_refund_compensation.sql",
     ],
   );
 

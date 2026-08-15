@@ -368,6 +368,9 @@ export const payments = sqliteTable(
     uniqueIndex("ux_payments_order_succeeded")
       .on(table.orderId)
       .where(sql`${table.status} = 'succeeded'`),
+    uniqueIndex("ux_payments_order_active_checkout")
+      .on(table.orderId)
+      .where(sql`${table.provider} = 'stripe' AND ${table.status} IN ('created', 'requires_action')`),
     index("idx_payments_order_id").on(table.orderId),
     check("ck_payments_provider", sql`${table.provider} IN ('test', 'stripe')`),
     check(
@@ -1955,6 +1958,150 @@ export const refunds = sqliteTable(
         OR (length(${table.providerReceiptFingerprint}) = 64
           AND ${table.providerReceiptFingerprint} = lower(${table.providerReceiptFingerprint})
           AND ${table.providerReceiptFingerprint} NOT GLOB '*[^0-9a-f]*')`,
+    ),
+  ],
+);
+
+export const latePaymentRefundIntents = sqliteTable(
+  "late_payment_refund_intents",
+  {
+    id: text("id").primaryKey(),
+    webhookEventId: text("webhook_event_id")
+      .notNull()
+      .references(() => webhookEvents.id, { onDelete: "restrict" }),
+    orderId: text("order_id")
+      .notNull()
+      .references(() => orders.id, { onDelete: "restrict" }),
+    providerEventId: text("provider_event_id").notNull(),
+    providerCheckoutSessionId: text("provider_checkout_session_id").notNull(),
+    providerPaymentId: text("provider_payment_id").notNull(),
+    amountCents: integer("amount_cents").notNull(),
+    currency: text("currency", { enum: ["EUR"] }).notNull().default("EUR"),
+    divergenceReason: text("divergence_reason", {
+      enum: [
+        "stock_reservation_inactive_or_missing",
+        "stock_reservation_expired_at_payment",
+      ],
+    }).notNull(),
+    status: text("status", {
+      enum: ["pending", "claimed", "succeeded", "rejected", "attention_required"],
+    }).notNull().default("pending"),
+    idempotencyKey: text("idempotency_key").notNull(),
+    leaseTokenHash: text("lease_token_hash"),
+    leasedAt: text("leased_at"),
+    leaseExpiresAt: text("lease_expires_at"),
+    providerRefundId: text("provider_refund_id"),
+    providerReceiptFingerprint: text("provider_receipt_fingerprint"),
+    attempts: integer("attempts").notNull().default(0),
+    maxAttempts: integer("max_attempts").notNull().default(5),
+    lastErrorCode: text("last_error_code", {
+      enum: ["outcome_unknown", "provider_rejected", "attempts_exhausted"],
+    }),
+    succeededAt: text("succeeded_at"),
+    terminalAt: text("terminal_at"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("ux_late_payment_refund_webhook").on(table.webhookEventId),
+    uniqueIndex("ux_late_payment_refund_order").on(table.orderId),
+    uniqueIndex("ux_late_payment_refund_payment").on(table.providerPaymentId),
+    uniqueIndex("ux_late_payment_refund_idempotency").on(table.idempotencyKey),
+    uniqueIndex("ux_late_payment_refund_provider_refund")
+      .on(table.providerRefundId)
+      .where(sql`${table.providerRefundId} IS NOT NULL`),
+    uniqueIndex("ux_late_payment_refund_active_lease")
+      .on(table.leaseTokenHash)
+      .where(sql`${table.leaseTokenHash} IS NOT NULL`),
+    index("idx_late_payment_refund_dispatch").on(
+      table.status,
+      table.leaseExpiresAt,
+      table.createdAt,
+    ),
+    check("ck_late_payment_refund_amount", sql`${table.amountCents} > 0`),
+    check("ck_late_payment_refund_currency", sql`${table.currency} = 'EUR'`),
+    check(
+      "ck_late_payment_refund_reason",
+      sql`${table.divergenceReason} IN (
+        'stock_reservation_inactive_or_missing',
+        'stock_reservation_expired_at_payment'
+      )`,
+    ),
+    check(
+      "ck_late_payment_refund_status",
+      sql`${table.status} IN (
+        'pending', 'claimed', 'succeeded', 'rejected', 'attention_required'
+      )`,
+    ),
+    check(
+      "ck_late_payment_refund_attempts",
+      sql`${table.attempts} >= 0 AND ${table.maxAttempts} BETWEEN 1 AND 10
+        AND ${table.attempts} <= ${table.maxAttempts}`,
+    ),
+    check(
+      "ck_late_payment_refund_error",
+      sql`${table.lastErrorCode} IS NULL OR ${table.lastErrorCode} IN (
+        'outcome_unknown', 'provider_rejected', 'attempts_exhausted'
+      )`,
+    ),
+    check(
+      "ck_late_payment_refund_hashes",
+      sql`(${table.leaseTokenHash} IS NULL OR (
+          length(${table.leaseTokenHash}) = 64
+          AND ${table.leaseTokenHash} = lower(${table.leaseTokenHash})
+          AND ${table.leaseTokenHash} NOT GLOB '*[^0-9a-f]*'
+        )) AND (${table.providerReceiptFingerprint} IS NULL OR (
+          length(${table.providerReceiptFingerprint}) = 64
+          AND ${table.providerReceiptFingerprint} = lower(${table.providerReceiptFingerprint})
+          AND ${table.providerReceiptFingerprint} NOT GLOB '*[^0-9a-f]*'
+        ))`,
+    ),
+    check(
+      "ck_late_payment_refund_state_shape",
+      sql`(${table.status} = 'pending'
+          AND ${table.attempts} = 0
+          AND ${table.leaseTokenHash} IS NULL
+          AND ${table.leasedAt} IS NULL
+          AND ${table.leaseExpiresAt} IS NULL
+          AND ${table.providerRefundId} IS NULL
+          AND ${table.providerReceiptFingerprint} IS NULL
+          AND ${table.lastErrorCode} IS NULL
+          AND ${table.succeededAt} IS NULL
+          AND ${table.terminalAt} IS NULL)
+        OR (${table.status} = 'claimed'
+          AND ${table.attempts} > 0
+          AND ${table.leaseTokenHash} IS NOT NULL
+          AND ${table.leasedAt} IS NOT NULL
+          AND ${table.leaseExpiresAt} IS NOT NULL
+          AND ${table.providerReceiptFingerprint} IS NULL
+          AND (${table.lastErrorCode} IS NULL OR ${table.lastErrorCode} = 'outcome_unknown')
+          AND ${table.succeededAt} IS NULL
+          AND ${table.terminalAt} IS NULL)
+        OR (${table.status} = 'succeeded'
+          AND ${table.leaseTokenHash} IS NULL
+          AND ${table.leasedAt} IS NULL
+          AND ${table.leaseExpiresAt} IS NULL
+          AND ${table.providerRefundId} IS NOT NULL
+          AND ${table.providerReceiptFingerprint} IS NOT NULL
+          AND ${table.lastErrorCode} IS NULL
+          AND ${table.succeededAt} IS NOT NULL
+          AND ${table.terminalAt} = ${table.succeededAt})
+        OR (${table.status} = 'rejected'
+          AND ${table.leaseTokenHash} IS NULL
+          AND ${table.leasedAt} IS NULL
+          AND ${table.leaseExpiresAt} IS NULL
+          AND ${table.providerReceiptFingerprint} IS NULL
+          AND ${table.lastErrorCode} = 'provider_rejected'
+          AND ${table.succeededAt} IS NULL
+          AND ${table.terminalAt} IS NOT NULL)
+        OR (${table.status} = 'attention_required'
+          AND ${table.leaseTokenHash} IS NULL
+          AND ${table.leasedAt} IS NULL
+          AND ${table.leaseExpiresAt} IS NULL
+          AND ${table.providerReceiptFingerprint} IS NULL
+          AND ${table.lastErrorCode} = 'attempts_exhausted'
+          AND ${table.succeededAt} IS NULL
+          AND ${table.terminalAt} IS NOT NULL)`,
     ),
   ],
 );

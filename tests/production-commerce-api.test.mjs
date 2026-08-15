@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { controlledRequestAuthorization, productionCommerceApiResponse, productionDeliveryRuntimeInstalled, productionStockRuntimeAttested } from "../worker/production-commerce-api.ts";
+import {
+  controlledRequestAuthorization,
+  productionCommerceApiResponse,
+  productionDeliveryRuntimeInstalled,
+  productionLatePaymentRefundRuntimeReady,
+  productionStockRuntimeAttested,
+} from "../worker/production-commerce-api.ts";
 
 const releaseSha = "a".repeat(40);
 const controlledSecret = "controlled-auth-secret-value-0001";
@@ -203,7 +209,7 @@ test("live stock attestation requires exact D1 inventory and two distinct bound 
   assert.equal(await productionStockRuntimeAttested({ ...env, STOCK_MANIFEST_SHA256: "c".repeat(64), DB: { prepare() { throw new Error("unbound-proof"); } } }), false);
 });
 
-test("controlled payment session stays closed until late-payment compensation is activated", async () => {
+test("controlled payment session stays closed until refund schema and dispatcher are ready", async () => {
   const cartToken = "A".repeat(43);
   const csrfToken = "B".repeat(43);
   const headers = await authenticatedOwnerHeaders("POST", "/api/commerce/checkout/payment-session");
@@ -222,7 +228,41 @@ test("controlled payment session stays closed until late-payment compensation is
     controlled,
   );
   assert.equal(response.status, 503);
-  assert.equal((await response.json()).error.code, "LATE_PAYMENT_COMPENSATION_NOT_ACTIVATED");
+  assert.equal((await response.json()).error.code, "LATE_PAYMENT_REFUND_NOT_READY");
+});
+
+test("late-refund runtime proof rejects terminal debt and prefix-colliding 0014 objects", async () => {
+  const exact = [
+    { type: "index", name: "idx_late_payment_refund_dispatch", table_name: "late_payment_refund_intents" },
+    { type: "index", name: "ux_late_payment_refund_active_lease", table_name: "late_payment_refund_intents" },
+    { type: "index", name: "ux_late_payment_refund_idempotency", table_name: "late_payment_refund_intents" },
+    { type: "index", name: "ux_late_payment_refund_order", table_name: "late_payment_refund_intents" },
+    { type: "index", name: "ux_late_payment_refund_payment", table_name: "late_payment_refund_intents" },
+    { type: "index", name: "ux_late_payment_refund_provider_refund", table_name: "late_payment_refund_intents" },
+    { type: "index", name: "ux_late_payment_refund_webhook", table_name: "late_payment_refund_intents" },
+    { type: "index", name: "ux_payments_order_active_checkout", table_name: "payments" },
+    { type: "table", name: "late_payment_refund_intents", table_name: "late_payment_refund_intents" },
+    { type: "trigger", name: "trg_late_payment_refund_lock_identity", table_name: "late_payment_refund_intents" },
+    { type: "trigger", name: "trg_late_payment_refund_retain", table_name: "late_payment_refund_intents" },
+    { type: "trigger", name: "trg_late_payment_refund_terminal_immutable", table_name: "late_payment_refund_intents" },
+    { type: "trigger", name: "trg_late_payment_refund_validate_claim_time", table_name: "late_payment_refund_intents" },
+    { type: "trigger", name: "trg_late_payment_refund_validate_insert", table_name: "late_payment_refund_intents" },
+    { type: "trigger", name: "trg_late_payment_refund_validate_success", table_name: "late_payment_refund_intents" },
+    { type: "trigger", name: "trg_late_payment_refund_validate_transition", table_name: "late_payment_refund_intents" },
+  ];
+  const database = (results, attention = 0) => ({
+    prepare(query) {
+      return query.includes("sqlite_master")
+        ? { async all() { return { results }; } }
+        : { async first() { return { count: attention }; } };
+    },
+  });
+  assert.equal(await productionLatePaymentRefundRuntimeReady(database(exact)), true);
+  assert.equal(await productionLatePaymentRefundRuntimeReady(database(exact, 1)), false);
+  assert.equal(await productionLatePaymentRefundRuntimeReady(database([
+    ...exact,
+    { type: "table", name: "late_payment_refund_intents_shadow", table_name: "late_payment_refund_intents_shadow" },
+  ])), false);
 });
 
 test("a verified Stripe webhook is never acknowledged without atomic effects", async () => {

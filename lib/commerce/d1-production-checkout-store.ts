@@ -485,9 +485,10 @@ export class D1ProductionCheckoutStore {
         quantity: 1,
       }));
     }
-    const paymentHash = await sha256Hex(
-      `${order.id}\0${input.idempotencyKey}`,
-    );
+    // One active Stripe Checkout Session per immutable order. Browser replay
+    // keys authenticate separate HTTP attempts; they must not mint competing
+    // provider sessions for the same stock reservation.
+    const paymentHash = await sha256Hex(`${order.id}\0stripe-checkout-v1`);
     return Object.freeze({
       idempotencyKey: `stripe-checkout:${paymentHash}`,
       orderId: order.id,

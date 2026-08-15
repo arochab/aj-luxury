@@ -99,6 +99,13 @@
       "when": 1786760000000,
       "tag": "0013_provider_priced_delivery_orders",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1786761000000,
+      "tag": "0014_late_payment_refund_compensation",
+      "breakpoints": true
     }
   ]
 }
