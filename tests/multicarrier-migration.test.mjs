@@ -50,7 +50,7 @@ test("0010 is additive and 0000 through 0009 stay byte-identical to git", () => 
   assert.match(migration, /OLD\.`provider_receipt_fingerprint` IS NOT NEW\.`provider_receipt_fingerprint`/);
 });
 
-test("0010 has a terminal Drizzle snapshot chained to exact 0009 metadata", () => {
+test("0010 has an immutable Drizzle snapshot chained to exact 0009 metadata", () => {
   const previous = JSON.parse(readFileSync(
     new URL("drizzle/meta/0009_snapshot.json", root),
     "utf8",
@@ -114,7 +114,7 @@ test("0010 has a terminal Drizzle snapshot chained to exact 0009 metadata", () =
     }
   }
 
-  assert.deepEqual(journal.entries.at(-2), {
+  assert.deepEqual(journal.entries.find((entry) => entry.idx === 10), {
     idx: 10,
     version: "6",
     when: 1786651200000,
