@@ -1335,6 +1335,7 @@ export const deliveryOptionSnapshots = sqliteTable(
     quotedAt: text("quoted_at").notNull(),
     expiresAt: text("expires_at").notNull(),
     selectedAt: text("selected_at"),
+    selectedServicePointId: text("selected_service_point_id"),
     createdAt: text("created_at").notNull(),
   },
   (table) => [
@@ -1446,6 +1447,64 @@ export const deliveryServicePointSnapshots = sqliteTable(
     ),
   ],
 );
+
+export const deliveryProviderReferenceVault = sqliteTable(
+  "delivery_provider_reference_vault",
+  {
+    id: text("id").primaryKey(),
+    algorithm: text("algorithm", { enum: ["A256GCM"] }).notNull().default("A256GCM"),
+    keyVersion: integer("key_version").notNull(),
+    providerCode: text("provider_code").notNull(),
+    referenceKind: text("reference_kind", {
+      enum: ["delivery_quote", "service_point"],
+    }).notNull(),
+    ownerId: text("owner_id").notNull(),
+    referenceSha256: text("reference_sha256").notNull(),
+    ivBase64: text("iv_base64").notNull(),
+    ciphertextBase64: text("ciphertext_base64").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("ux_delivery_reference_owner").on(
+      table.referenceKind,
+      table.ownerId,
+    ),
+    index("idx_delivery_reference_key_version").on(
+      table.keyVersion,
+      table.createdAt,
+    ),
+    check("ck_delivery_reference_algorithm", sql`${table.algorithm} = 'A256GCM'`),
+    check("ck_delivery_reference_key_version", sql`${table.keyVersion} > 0`),
+    check(
+      "ck_delivery_reference_kind",
+      sql`${table.referenceKind} IN ('delivery_quote','service_point')`,
+    ),
+    check(
+      "ck_delivery_reference_hash",
+      sql`length(${table.referenceSha256}) = 64
+        AND ${table.referenceSha256} = lower(${table.referenceSha256})
+        AND ${table.referenceSha256} NOT GLOB '*[^0-9a-f]*'`,
+    ),
+    check(
+      "ck_delivery_reference_iv",
+      sql`length(${table.ivBase64}) = 16
+        AND ${table.ivBase64} NOT GLOB '*[^A-Za-z0-9+/]*'`,
+    ),
+    check(
+      "ck_delivery_reference_ciphertext",
+      sql`length(${table.ciphertextBase64}) BETWEEN 24 AND 704
+        AND length(${table.ciphertextBase64}) % 4 = 0
+        AND rtrim(${table.ciphertextBase64},'=') NOT GLOB '*[^A-Za-z0-9+/]*'
+        AND length(${table.ciphertextBase64})
+          - length(rtrim(${table.ciphertextBase64},'=')) <= 2`,
+    ),
+    check(
+      "ck_delivery_reference_timestamp",
+      sql`strftime('%Y-%m-%dT%H:%M:%fZ',${table.createdAt}) IS ${table.createdAt}`,
+    ),
+  ],
+);
+
 export const shipments = sqliteTable(
   "shipments",
   {

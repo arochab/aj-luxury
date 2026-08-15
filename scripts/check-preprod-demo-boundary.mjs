@@ -59,10 +59,10 @@ const syntheticMigration = journal.entries.find(
 assert.ok(syntheticMigration);
 assert.equal(syntheticMigration.when, releaseBuildEpoch);
 const terminalMigration = journal.entries.at(-1);
-assert.equal(terminalMigration.tag, "0010_multicarrier_delivery_foundation");
+assert.equal(terminalMigration.tag, "0011_service_point_reference_vault");
 assert.ok(
   terminalMigration.when > releaseBuildEpoch,
-  "the additive multicarrier migration must follow the frozen synthetic release",
+  "the additive service-point vault migration must follow the frozen synthetic release",
 );
 
 if (

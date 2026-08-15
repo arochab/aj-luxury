@@ -254,3 +254,38 @@ test("0011 fails closed for a missing, foreign, expired or unsealed service poin
   assert.match(migration, /quote\.`selected_at` = option\.`selected_at`/);
   assert.doesNotMatch(migration, /provider_reference` text|raw_reference|api[_-]?key|secret[_-]?key/i);
 });
+
+test("0011 metadata is terminal, additive and chained to the exact 0010 snapshot", () => {
+  const previous = JSON.parse(readFileSync(`${drizzle}meta/0010_snapshot.json`, "utf8"));
+  const snapshot = JSON.parse(readFileSync(`${drizzle}meta/0011_snapshot.json`, "utf8"));
+  const journal = JSON.parse(readFileSync(`${drizzle}meta/_journal.json`, "utf8"));
+  assert.equal(snapshot.version, "6");
+  assert.equal(snapshot.dialect, "sqlite");
+  assert.equal(snapshot.prevId, previous.id);
+  assert.notEqual(snapshot.id, previous.id);
+  assert.equal(Object.keys(snapshot.tables).length, Object.keys(previous.tables).length + 1);
+  assert.ok(snapshot.tables.delivery_provider_reference_vault);
+  assert.equal(
+    snapshot.tables.delivery_option_snapshots.columns.selected_service_point_id.notNull,
+    false,
+  );
+  assert.deepEqual(
+    Object.keys(snapshot.tables.delivery_provider_reference_vault.checkConstraints).sort(),
+    [
+      "ck_delivery_reference_algorithm",
+      "ck_delivery_reference_ciphertext",
+      "ck_delivery_reference_hash",
+      "ck_delivery_reference_iv",
+      "ck_delivery_reference_key_version",
+      "ck_delivery_reference_kind",
+      "ck_delivery_reference_timestamp",
+    ],
+  );
+  assert.deepEqual(journal.entries.at(-1), {
+    idx: 11,
+    version: "6",
+    when: 1786753681203,
+    tag: "0011_service_point_reference_vault",
+    breakpoints: true,
+  });
+});
