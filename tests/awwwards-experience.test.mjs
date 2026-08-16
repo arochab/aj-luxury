@@ -79,6 +79,11 @@ test("the Awwwards layer covers the critical short tablet and reduced-motion sta
     projectFile("app/components/ApollonGuidedSequence.tsx"),
     "utf8",
   );
+  const experience = await readFile(
+    projectFile("app/components/HomeGsapExperience.tsx"),
+    "utf8",
+  );
+  const packageJson = JSON.parse(await readFile(projectFile("package.json"), "utf8"));
 
   assert.match(
     css,
@@ -87,10 +92,25 @@ test("the Awwwards layer covers the critical short tablet and reduced-motion sta
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
   assert.match(css, /\.aj-sequence__frame,[\s\S]*transition: none !important/);
   assert.match(css, /scroll-snap-type: x mandatory/);
-  assert.match(sequence, /requestAnimationFrame/);
+  assert.match(css, /@media \(max-width: 760px\)[\s\S]*\.aj-sequence__symbol \{[\s\S]*right: 57%;[\s\S]*bottom: 0;/);
+  assert.match(css, /@media \(max-width: 760px\)[\s\S]*\.aj-sequence__body \{[\s\S]*top: 0;[\s\S]*left: 40%;/);
+  assert.doesNotMatch(css, /\.aj-sequence__stage::before \{[\s\S]{0,180}top: 43%/);
+  assert.equal(packageJson.dependencies.gsap, "^3.15.0");
+  assert.equal(packageJson.dependencies["@gsap/react"], "^2.1.2");
+  assert.match(sequence, /useGSAP/);
+  assert.match(sequence, /gsap\.timeline/);
+  assert.match(sequence, /autoplayRef/);
+  assert.doesNotMatch(sequence, /requestAnimationFrame/);
   assert.match(sequence, /IntersectionObserver/);
   assert.match(sequence, /document\.visibilityState === "visible"/);
   assert.match(sequence, /prefers-reduced-motion: reduce/);
+  assert.match(experience, /ScrollTrigger/);
+  assert.match(experience, /gsap\.matchMedia/);
+  assert.match(experience, /\.aj-proof/);
+  assert.match(experience, /\.aj-product-card/);
+  assert.match(experience, /\.aj-moodboard__item/);
+  assert.match(experience, /\.aj-story__copy/);
+  assert.doesNotMatch(experience, /ScrollSmoother|scrollTo\(|\bpin\s*:/);
 });
 
 test("new editorial messages are localized in every supported locale", async () => {

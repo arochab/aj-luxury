@@ -7,7 +7,7 @@ import StoreFooter from "./components/StoreFooter";
 import StoreHeader from "./components/StoreHeader";
 import ClientCopyText from "./components/ClientCopyText";
 import ApollonGuidedSequence from "./components/ApollonGuidedSequence";
-import ExperienceMotionLayer from "./components/ExperienceMotionLayer";
+import HomeGsapExperience from "./components/HomeGsapExperience";
 import { T } from "../lib/i18n/TranslatedText";
 import { formatPrice, getProducts } from "../lib/products";
 import { editorialMoodboardImages } from "../lib/editorial-moodboard";
@@ -17,7 +17,7 @@ export default function Home() {
 
   return (
     <main className="aj-home">
-      <ExperienceMotionLayer />
+      <HomeGsapExperience />
       <section className="aj-film" id="accueil" aria-label="AJ Luxury">
         <StoreHeader />
         <h1 className="aj-film__portrait--sr">AJ Luxury — Reveal Your Inner Beauty</h1>

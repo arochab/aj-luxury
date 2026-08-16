@@ -3,11 +3,15 @@
 /* eslint-disable @next/next/no-img-element -- pre-optimized, client-owned campaign media */
 
 import Link from "next/link";
+import { useGSAP } from "@gsap/react";
+import gsap from "gsap";
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
 import { T } from "../../lib/i18n/TranslatedText";
 import { useI18n } from "../../lib/i18n/I18nProvider";
 
 const FRAME_DURATION = 5600;
+
+gsap.registerPlugin(useGSAP);
 
 const frames = [
   {
@@ -43,13 +47,13 @@ export default function ApollonGuidedSequence() {
   const sectionRef = useRef<HTMLElement>(null);
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const progressRef = useRef<HTMLSpanElement>(null);
-  const elapsedRef = useRef(0);
-  const lastTimeRef = useRef<number | null>(null);
-  const inViewRef = useRef(false);
+  const autoplayRef = useRef<gsap.core.Tween | null>(null);
+  const [inView, setInView] = useState(false);
+  const [pageVisible, setPageVisible] = useState(true);
+  const [reducedMotion, setReducedMotion] = useState(false);
 
   const selectFrame = (index: number, takeControl = false) => {
-    elapsedRef.current = 0;
-    lastTimeRef.current = null;
+    autoplayRef.current?.kill();
     if (progressRef.current) progressRef.current.style.transform = "scaleX(0)";
     setActive(index);
     if (takeControl) setPaused(true);
@@ -68,65 +72,63 @@ export default function ApollonGuidedSequence() {
     tabRefs.current[next]?.focus();
   };
 
+  useGSAP(() => {
+    const frame = sectionRef.current?.querySelector<HTMLElement>(".aj-sequence__frame.is-active");
+    if (!frame || reducedMotion) return;
+
+    const timeline = gsap.timeline({ defaults: { ease: "power4.out" } });
+    timeline
+      .fromTo(frame.querySelector(".aj-sequence__symbol img"), { autoAlpha: 0.65, scale: 1.075, xPercent: -3 }, { autoAlpha: 1, scale: 1, xPercent: 0, duration: 1.2 }, 0)
+      .fromTo(frame.querySelector(".aj-sequence__body img"), { autoAlpha: 0.65, scale: 1.065, xPercent: 3 }, { autoAlpha: 1, scale: 1, xPercent: 0, duration: 1.25 }, 0.05)
+      .fromTo(frame.querySelectorAll(".aj-sequence__copy > *"), { autoAlpha: 0, y: 18 }, { autoAlpha: 1, y: 0, duration: 0.75, stagger: 0.08 }, 0.2);
+  }, { dependencies: [active, reducedMotion], scope: sectionRef });
+
+  useGSAP(() => {
+    const progress = progressRef.current;
+    if (!progress || reducedMotion) return;
+
+    gsap.set(progress, { scaleX: 0, transformOrigin: "left center" });
+    const tween = gsap.to(progress, {
+      scaleX: 1,
+      duration: FRAME_DURATION / 1000,
+      ease: "none",
+      paused: true,
+      onComplete: () => setActive((current) => (current + 1) % frames.length),
+    });
+    autoplayRef.current = tween;
+    if (!paused && inView && pageVisible) tween.play();
+    return () => {
+      tween.kill();
+      if (autoplayRef.current === tween) autoplayRef.current = null;
+    };
+  }, { dependencies: [active, reducedMotion], scope: sectionRef });
+
+  useEffect(() => {
+    const tween = autoplayRef.current;
+    if (!tween) return;
+    if (!paused && inView && pageVisible && !reducedMotion) tween.play();
+    else tween.pause();
+  }, [paused, inView, pageVisible, reducedMotion, active]);
+
   useEffect(() => {
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
-    let animationFrame = 0;
-    const canRun = () =>
-      !paused &&
-      !reduced.matches &&
-      inViewRef.current &&
-      document.visibilityState === "visible";
-    const stop = () => {
-      if (animationFrame) window.cancelAnimationFrame(animationFrame);
-      animationFrame = 0;
-      lastTimeRef.current = null;
-    };
-    const schedule = () => {
-      if (!animationFrame && canRun()) animationFrame = window.requestAnimationFrame(tick);
-    };
     const observer = new IntersectionObserver(
-      ([entry]) => {
-        inViewRef.current = entry.isIntersecting;
-        if (entry.isIntersecting) schedule();
-        else stop();
-      },
+      ([entry]) => setInView(entry.isIntersecting),
       { threshold: 0.35 },
     );
-
-    function tick(time: number) {
-      animationFrame = 0;
-      if (!canRun()) return;
-      if (lastTimeRef.current === null) lastTimeRef.current = time;
-      const delta = time - lastTimeRef.current;
-      lastTimeRef.current = time;
-
-      elapsedRef.current += delta;
-      const progress = Math.min(1, elapsedRef.current / FRAME_DURATION);
-      if (progressRef.current) {
-        progressRef.current.style.transform = `scaleX(${progress})`;
-      }
-      if (progress >= 1) {
-        elapsedRef.current = 0;
-        setActive((current) => (current + 1) % frames.length);
-      }
-
-      schedule();
-    }
-
-    const syncPlayback = () => {
-      if (canRun()) schedule();
-      else stop();
-    };
+    const syncPreferences = () => setReducedMotion(reduced.matches);
+    const syncVisibility = () => setPageVisible(document.visibilityState === "visible");
     if (sectionRef.current) observer.observe(sectionRef.current);
-    document.addEventListener("visibilitychange", syncPlayback);
-    reduced.addEventListener("change", syncPlayback);
+    syncPreferences();
+    syncVisibility();
+    document.addEventListener("visibilitychange", syncVisibility);
+    reduced.addEventListener("change", syncPreferences);
     return () => {
       observer.disconnect();
-      document.removeEventListener("visibilitychange", syncPlayback);
-      reduced.removeEventListener("change", syncPlayback);
-      stop();
+      document.removeEventListener("visibilitychange", syncVisibility);
+      reduced.removeEventListener("change", syncPreferences);
     };
-  }, [paused]);
+  }, []);
 
   return (
     <section ref={sectionRef} className="aj-sequence" id="apollon" aria-labelledby="aj-sequence-title">
@@ -168,10 +170,7 @@ export default function ApollonGuidedSequence() {
             type="button"
             aria-label={paused ? t("sequence.resume") : t("sequence.pause")}
             aria-pressed={paused}
-            onClick={() => {
-              lastTimeRef.current = null;
-              setPaused((current) => !current);
-            }}
+            onClick={() => setPaused((current) => !current)}
           >
             <span aria-hidden="true">{paused ? "▶" : "Ⅱ"}</span>
           </button>
