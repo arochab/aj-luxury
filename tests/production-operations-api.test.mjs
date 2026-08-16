@@ -534,18 +534,18 @@ test("scheduled late-refund recovery stays closed before activation without touc
 test("scheduled reservation expiry returns stock once and is replay-safe", async () => {
   const context = reservationExpiryFixture();
   const variantId = "variant_boxer_pourpre_s";
-  await context.store.seedLaunchCatalog("2026-08-15T08:00:00.000Z");
+  await context.store.seedLaunchCatalog("2099-08-15T08:00:00.000Z");
   context.sqlite.exec("UPDATE inventory SET reserves_validated = 1");
   await context.store.createCart({
     id: "cart_scheduled_expiry",
-    expiresAt: "2026-08-15T10:00:00.000Z",
-    now: "2026-08-15T08:00:00.000Z",
+    expiresAt: "2099-08-15T10:00:00.000Z",
+    now: "2099-08-15T08:00:00.000Z",
   });
   await context.store.setCartLineQuantity({
     cartId: "cart_scheduled_expiry",
     variantId,
     quantity: 2,
-    now: "2026-08-15T08:00:30.000Z",
+    now: "2099-08-15T08:00:30.000Z",
   });
   await context.store.reserveStock({
     reservationId: "reservation_scheduled_expiry",
@@ -553,8 +553,8 @@ test("scheduled reservation expiry returns stock once and is replay-safe", async
     variantId,
     quantity: 2,
     idempotencyKey: "reserve:scheduled-expiry",
-    expiresAt: "2026-08-15T08:30:00.000Z",
-    now: "2026-08-15T08:01:00.000Z",
+    expiresAt: "2099-08-15T08:30:00.000Z",
+    now: "2099-08-15T08:01:00.000Z",
   });
   assert.equal(context.sqlite.prepare(
     "SELECT active_reserved_quantity FROM inventory WHERE variant_id = ?",
@@ -567,7 +567,7 @@ test("scheduled reservation expiry returns stock once and is replay-safe", async
     COMMERCE_MODE: "closed",
   };
   const first = await expireProductionReservations(env, {
-    now: "2026-08-15T09:00:00.000Z",
+    now: "2099-08-15T09:00:00.000Z",
   });
   assert.deepEqual(first, {
     closed: false,
@@ -592,7 +592,7 @@ test("scheduled reservation expiry returns stock once and is replay-safe", async
   ).get("reservation_scheduled_expiry").count, 1);
 
   const replay = await expireProductionReservations(env, {
-    now: "2026-08-15T09:01:00.000Z",
+    now: "2099-08-15T09:01:00.000Z",
   });
   assert.deepEqual(replay, {
     closed: false,
