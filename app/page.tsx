@@ -79,8 +79,8 @@ export default function Home() {
                 <img
                   src={product.image}
                   alt={`${product.model} ${product.name}`}
-                  width={1600}
-                  height={2000}
+                  width={1731}
+                  height={2600}
                   loading="lazy"
                   fetchPriority="low"
                   decoding="async"
@@ -125,17 +125,12 @@ export default function Home() {
               <img
                 src={image.src}
                 alt={image.alt}
-                width={1600}
-                height={2400}
+                width={image.width}
+                height={image.height}
                 loading="lazy"
                 fetchPriority="low"
                 decoding="async"
                 sizes="(max-width: 760px) 74vw, 46vw"
-                style={
-                  image.objectPosition
-                    ? { objectPosition: image.objectPosition }
-                    : undefined
-                }
               />
             </figure>
           ))}

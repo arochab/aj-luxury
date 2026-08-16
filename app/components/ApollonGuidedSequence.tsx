@@ -21,6 +21,8 @@ const frames = [
     name: "sequence.color.rose" as const,
     still: "/images/editorial/isabelle-apollon/apollon-rose-lyre-v1.webp",
     body: "/images/client/product-rose-model.webp",
+    bodyWidth: 1731,
+    bodyHeight: 2600,
     feature: "product.feature.3" as const,
     color: "#d8a7ba",
   },
@@ -29,6 +31,8 @@ const frames = [
     name: "sequence.color.lilac" as const,
     still: "/images/editorial/isabelle-apollon/apollon-lilas-lyre-v1.webp",
     body: "/images/client/editorial-lilas-chair.webp",
+    bodyWidth: 1731,
+    bodyHeight: 2600,
     feature: "product.feature.4" as const,
     color: "#a9abd9",
   },
@@ -37,6 +41,8 @@ const frames = [
     name: "sequence.color.purple" as const,
     still: "/images/editorial/isabelle-apollon/apollon-pourpre-lyre-v1.webp",
     body: "/images/client/campaign-duo-pourpre.webp",
+    bodyWidth: 2000,
+    bodyHeight: 1882,
     feature: "product.feature.7" as const,
     color: "#7d0f52",
   },
@@ -87,7 +93,7 @@ export default function ApollonGuidedSequence() {
       timeline = nextTimeline;
       nextTimeline
         .fromTo(frame.querySelector(".aj-sequence__symbol img"), { autoAlpha: 0.65, scale: 1.075, xPercent: -3 }, { autoAlpha: 1, scale: 1, xPercent: 0, duration: 1.2 }, 0)
-        .fromTo(frame.querySelector(".aj-sequence__body img"), { autoAlpha: 0.65, scale: 1.065, xPercent: 3 }, { autoAlpha: 1, scale: 1, xPercent: 0, duration: 1.25 }, 0.05)
+        .fromTo(frame.querySelector(".aj-sequence__body img"), { autoAlpha: 0.45 }, { autoAlpha: 1, duration: 1.25 }, 0.05)
         .fromTo(frame.querySelectorAll(".aj-sequence__copy > *"), { autoAlpha: 0, y: 18 }, { autoAlpha: 1, y: 0, duration: 0.75, stagger: 0.08 }, 0.2);
     });
 
@@ -172,10 +178,10 @@ export default function ApollonGuidedSequence() {
               key={frame.number}
             >
               <figure className="aj-sequence__symbol">
-                <img src={frame.still} alt={index === active ? t("sequence.stillAlt").replace("{color}", t(frame.name)) : ""} width={1024} height={1536} loading="lazy" decoding="async" />
+                <img src={frame.still} alt={index === active ? t("sequence.stillAlt").replace("{color}", t(frame.name)) : ""} width={1024} height={1536} loading="lazy" fetchPriority="low" decoding="async" />
               </figure>
               <figure className="aj-sequence__body">
-                <img src={frame.body} alt={index === active ? t("sequence.bodyAlt").replace("{color}", t(frame.name)) : ""} width={1600} height={2400} loading="lazy" decoding="async" />
+                <img src={frame.body} alt={index === active ? t("sequence.bodyAlt").replace("{color}", t(frame.name)) : ""} width={frame.bodyWidth} height={frame.bodyHeight} loading="lazy" fetchPriority="low" decoding="async" />
               </figure>
               <div className="aj-sequence__copy">
                 <span>{frame.number} / 03</span>

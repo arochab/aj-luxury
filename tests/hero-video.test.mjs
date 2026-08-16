@@ -258,7 +258,7 @@ test("hero playback is accessible, resource-aware and subject-safe", async () =>
   assert.doesNotMatch(heroComponent, /hero-duo-(?:static|cutout)/);
   assert.match(heroComponent, /<figcaption>/);
   assert.match(videoComponent, /<HeroIdentityOverlay \/>/);
-  assert.match(stylesheet, /\.aj-film__hero-video[\s\S]*object-fit: cover/);
+  assert.match(stylesheet, /\.aj-film__hero-video[\s\S]*object-fit: contain/);
   assert.match(
     stylesheet,
     /\.aj-film__hero-video \{[\s\S]*opacity: 0;[\s\S]*transition: opacity 1100ms/,
@@ -355,7 +355,9 @@ test("noncritical visual media stays outside the initial render path", async () 
     assert.doesNotMatch(source, /next\/image/);
   }
 
-  assert.ok((homepage.match(/fetchPriority="low"/g) ?? []).length >= 3);
+  // Both noncritical homepage media maps are explicitly low priority; each
+  // source occurrence fans out to all products or editorial images at render.
+  assert.ok((homepage.match(/fetchPriority="low"/g) ?? []).length >= 2);
   assert.match(productPage, /fetchPriority="low"/);
   assert.match(gallery, /const ready = eager \|\| \(visible && criticalPathComplete\)/);
   assert.match(gallery, /IntersectionObserver/);

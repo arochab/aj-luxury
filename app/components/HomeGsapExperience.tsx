@@ -62,7 +62,6 @@ export default function HomeGsapExperience() {
             gsap.from(".aj-product-card", {
               autoAlpha: 0,
               yPercent: 8,
-              clipPath: "inset(9% 0 0 0)",
               duration: 1.05,
               stagger: 0.12,
               ease: "power4.out",
@@ -72,23 +71,11 @@ export default function HomeGsapExperience() {
             gsap.from(".aj-moodboard__item", {
               autoAlpha: 0,
               y: 42,
-              scale: 0.965,
               duration: 1.1,
               stagger: 0.11,
               ease: "power3.out",
               scrollTrigger: { trigger: ".aj-moodboard", start: "top 82%", once: true },
             });
-            gsap.to(".aj-moodboard__item:nth-child(2) img", {
-              yPercent: -4,
-              ease: "none",
-              scrollTrigger: {
-                trigger: ".aj-moodboard",
-                start: "top bottom",
-                end: "bottom top",
-                scrub: 0.7,
-              },
-            });
-
             gsap.from(".aj-story__copy > div", {
               autoAlpha: 0,
               y: 46,
