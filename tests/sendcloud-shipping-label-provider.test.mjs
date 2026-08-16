@@ -5,7 +5,10 @@ import {
   FulfillmentProviderError,
   normalizeShippingAddress,
 } from "../lib/commerce/fulfillment-domain.ts";
-import { createSendcloudShippingLabelProvider } from "../lib/commerce/sendcloud-shipping-label-provider.ts";
+import {
+  createSendcloudShippingLabelProvider,
+  sendcloudInternationalCustomsContractSha256,
+} from "../lib/commerce/sendcloud-shipping-label-provider.ts";
 import { productionShippingLabelAdminResponse } from "../worker/production-shipping-label-admin-api.ts";
 import { productionOutboundShippingRuntimeConfigured } from "../worker/production-shipping-runtime.ts";
 import { controlledRequestAuthorization } from "../worker/production-commerce-api.ts";
@@ -94,6 +97,7 @@ async function fixture(overrides = {}) {
     delivery_mode: "home",
     selected_service_point_id: null,
     zone: address.zone,
+    duties_terms: address.zone === "EU" ? "EU_INCLUDED" : "DAP",
     profile_code: "AJL_ENVELOPE_1_ITEM_V1",
     source_version: "client-validated-2026-08-13",
     item_count: 1,
@@ -138,6 +142,29 @@ function receipt(overrides = {}) {
       carrier: { code: "colissimo", name: "Colissimo" },
       errors: [],
       ...overrides.data,
+    },
+  };
+}
+
+async function syntheticInternationalConfiguration() {
+  const json = JSON.stringify({
+    version: "AJL_APOLLON_CUSTOMS_V1",
+    description: "Men's knitted boxer briefs",
+    hsCode: "61071100",
+    originCountry: "FR",
+    materialContent: "95% cotton, 5% elastane",
+    unitNetWeightGrams: 100,
+    duties: "DAP",
+  });
+  const approval = await sendcloudInternationalCustomsContractSha256(json);
+  return {
+    ...configuration,
+    internationalCustoms: {
+      json,
+      contractSha256: approval,
+      adamApprovalSha256: approval,
+      jeremyApprovalSha256: approval,
+      senderEoriAttestation: "SENDCLOUD_SENDER_EORI_VERIFIED",
     },
   };
 }
@@ -200,7 +227,7 @@ test("relay delivery decrypts and sends only the exact selected Sendcloud point"
   assert.deepEqual(body.to_service_point, { id: 98765 });
 });
 
-test("UK, US and Canada remain hard-closed before any carrier call", async () => {
+test("UK, US and Canada remain hard-closed without doubly approved customs facts", async () => {
   const context = await fixture({
     address: {
       recipient: "Ada Client",
@@ -222,6 +249,97 @@ test("UK, US and Canada remain hard-closed before any carrier call", async () =>
     (error) => error instanceof FulfillmentProviderError && error.outcome === "rejected",
   );
   assert.equal(calls, 0);
+});
+
+test("an approved DAP contract creates exact Sendcloud v3 parcel items for a UK order", async () => {
+  const context = await fixture({
+    address: {
+      recipient: "Ada Client",
+      line1: "1 Test Street",
+      postalCode: "SW1A 1AA",
+      city: "London",
+      countryCode: "GB",
+    },
+  });
+  const internationalReceipt = receipt();
+  internationalReceipt.data.parcels[0].documents.push({
+    type: "commercial-invoice",
+    size: "a4",
+    link: "https://panel.sendcloud.sc/api/v3/parcels/383707309/documents/commercial-invoice",
+  });
+  let body;
+  const provider = createSendcloudShippingLabelProvider(
+    context.database,
+    await syntheticInternationalConfiguration(),
+    async (_url, init) => {
+      body = JSON.parse(init.body);
+      return Response.json(internationalReceipt, { status: 201 });
+    },
+    references(),
+  );
+  await provider.createLabel(request);
+  assert.deepEqual(body.parcels[0].parcel_items, [{
+    item_id: "order_line_1",
+    description: "Men's knitted boxer briefs",
+    quantity: 1,
+    weight: { value: "0.100", unit: "kg" },
+    price: { value: "29.99", currency: "EUR" },
+    hs_code: "61071100",
+    origin_country: "FR",
+    sku: "AJL-BOXER-POURPRE-M",
+    material_content: "95% cotton, 5% elastane",
+    properties: { color: "Pourpre", size: "M" },
+  }]);
+  assert.equal("customs_information" in body, false);
+});
+
+test("tampered approval, missing customs documents and missing US state all fail closed", async (t) => {
+  await t.test("tampered approval", async () => {
+    const context = await fixture({
+      address: { recipient: "Ada Client", line1: "1 Test Street", postalCode: "SW1A 1AA", city: "London", countryCode: "GB" },
+    });
+    const configured = await syntheticInternationalConfiguration();
+    let calls = 0;
+    const provider = createSendcloudShippingLabelProvider(
+      context.database,
+      { ...configured, internationalCustoms: { ...configured.internationalCustoms, jeremyApprovalSha256: "0".repeat(64) } },
+      async () => { calls += 1; return Response.json(receipt(), { status: 201 }); },
+      references(),
+    );
+    await assert.rejects(() => provider.createLabel(request), FulfillmentProviderError);
+    assert.equal(calls, 0);
+  });
+  await t.test("missing or unauthenticated customs documents", async () => {
+    const context = await fixture({
+      address: { recipient: "Ada Client", line1: "1 Test Street", postalCode: "SW1A 1AA", city: "London", countryCode: "GB" },
+    });
+    const provider = createSendcloudShippingLabelProvider(
+      context.database,
+      await syntheticInternationalConfiguration(),
+      async () => {
+        const invalid = receipt();
+        invalid.data.parcels[0].documents.push({
+          type: "commercial-invoice",
+          size: "a4",
+          link: "https://attacker.invalid/customs.pdf",
+        });
+        return Response.json(invalid, { status: 201 });
+      },
+      references(),
+    );
+    await assert.rejects(
+      () => provider.createLabel(request),
+      (error) => error instanceof FulfillmentProviderError && error.outcome === "ambiguous",
+    );
+  });
+  await t.test("missing US state", async () => {
+    await assert.rejects(
+      () => fixture({
+        address: { recipient: "Ada Client", line1: "1 Test Street", postalCode: "10001", city: "New York", countryCode: "US" },
+      }),
+      (error) => error?.code === "DESTINATION_UNAVAILABLE",
+    );
+  });
 });
 
 test("a second lease after an unknown outcome never performs a blind retry", async () => {

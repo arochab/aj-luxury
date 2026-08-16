@@ -30,6 +30,11 @@ export type ProductionShippingLabelEnvironment = ProductionCommerceEnvironment &
   DELIVERY_REFERENCE_ENCRYPTION_KEY_BASE64?: string;
   DELIVERY_REFERENCE_KEY_VERSION?: string;
   DELIVERY_REFERENCE_DECRYPTION_KEYS_JSON?: string;
+  SENDCLOUD_INTERNATIONAL_CUSTOMS_JSON?: string;
+  SENDCLOUD_INTERNATIONAL_CUSTOMS_SHA256?: string;
+  SENDCLOUD_INTERNATIONAL_CUSTOMS_ADAM_APPROVAL_SHA256?: string;
+  SENDCLOUD_INTERNATIONAL_CUSTOMS_JEREMY_APPROVAL_SHA256?: string;
+  SENDCLOUD_INTERNATIONAL_EORI_ATTESTATION?: string;
 }>; 
 
 export type ProductionShippingLabelDependencies = Readonly<{
@@ -304,6 +309,13 @@ export async function productionShippingLabelAdminResponse(
         originAddressAttestation: env.SENDCLOUD_SENDER_ADDRESS_ATTESTATION,
         referenceVault: {
           ...referenceVaultConfiguration(env),
+        },
+        internationalCustoms: {
+          json: env.SENDCLOUD_INTERNATIONAL_CUSTOMS_JSON,
+          contractSha256: env.SENDCLOUD_INTERNATIONAL_CUSTOMS_SHA256,
+          adamApprovalSha256: env.SENDCLOUD_INTERNATIONAL_CUSTOMS_ADAM_APPROVAL_SHA256,
+          jeremyApprovalSha256: env.SENDCLOUD_INTERNATIONAL_CUSTOMS_JEREMY_APPROVAL_SHA256,
+          senderEoriAttestation: env.SENDCLOUD_INTERNATIONAL_EORI_ATTESTATION,
         },
       },
     );

@@ -26,6 +26,17 @@ export type SendcloudShippingLabelConfiguration = Readonly<{
   /** Must attest that senderAddressId is the verified Sendcloud sender at Belmont. */
   originAddressAttestation?: string;
   referenceVault: DeliveryReferenceVaultConfiguration;
+  internationalCustoms?: SendcloudInternationalCustomsConfiguration;
+}>;
+
+export type SendcloudInternationalCustomsConfiguration = Readonly<{
+  /** Canonical product facts, managed once by AJ Luxury rather than per order. */
+  json?: string;
+  contractSha256?: string;
+  adamApprovalSha256?: string;
+  jeremyApprovalSha256?: string;
+  /** Attests that the verified Sendcloud sender address contains AJ Luxury's EORI. */
+  senderEoriAttestation?: string;
 }>;
 
 export type SendcloudShippingLabelFetch = (
@@ -54,6 +65,7 @@ type ShipmentContextRow = Readonly<{
   delivery_mode: "home" | "service_point";
   selected_service_point_id: string | null;
   zone: "EU" | "UK" | "US" | "CA";
+  duties_terms: "EU_INCLUDED" | "DAP" | "DDP";
   profile_code: string;
   source_version: string;
   item_count: number;
@@ -89,6 +101,17 @@ type ProviderCredentials = Readonly<{
   publicKey: string;
   secretKey: string;
   senderAddressId: number;
+}>;
+
+type ApprovedInternationalCustoms = Readonly<{
+  version: "AJL_APOLLON_CUSTOMS_V1";
+  description: string;
+  hsCode: string;
+  originCountry: string;
+  materialContent: string;
+  unitNetWeightGrams: number;
+  duties: "DAP";
+  contractSha256: string;
 }>;
 
 function record(value: unknown): value is Record<string, unknown> {
@@ -238,7 +261,8 @@ async function verifiedAddress(row: ShipmentContextRow) {
     if (
       proof.canonicalJson !== row.shipping_address_json ||
       proof.fingerprint !== row.shipping_address_fingerprint ||
-      proof.zone !== "EU" || row.zone !== "EU"
+      proof.zone !== row.zone ||
+      (["US", "CA"].includes(row.zone) && !proof.address.regionCode)
     ) {
       throw new Error("mismatch");
     }
@@ -246,9 +270,76 @@ async function verifiedAddress(row: ShipmentContextRow) {
   } catch {
     throw new FulfillmentProviderError(
       "rejected",
-      "Only an authenticated EU address is enabled; customs destinations remain closed.",
+      "The paid shipping address is not an authenticated launch-zone address.",
     );
   }
+}
+
+function parseInternationalCustomsJson(raw: string): Omit<ApprovedInternationalCustoms, "contractSha256"> {
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    throw new FulfillmentProviderError("rejected", "International customs facts are not configured.");
+  }
+  const expectedKeys = [
+    "description",
+    "duties",
+    "hsCode",
+    "materialContent",
+    "originCountry",
+    "unitNetWeightGrams",
+    "version",
+  ];
+  if (
+    !record(value) || Object.keys(value).sort().join("\0") !== expectedKeys.sort().join("\0") ||
+    value.version !== "AJL_APOLLON_CUSTOMS_V1" ||
+    !safeString(value.description, 120) || !safeString(value.materialContent, 120) ||
+    !/^\d{8}$/.test(String(value.hsCode)) || !/^[A-Z]{2}$/.test(String(value.originCountry)) ||
+    !Number.isSafeInteger(value.unitNetWeightGrams) || Number(value.unitNetWeightGrams) < 1 ||
+    Number(value.unitNetWeightGrams) > 500 || value.duties !== "DAP"
+  ) {
+    throw new FulfillmentProviderError("rejected", "International customs facts are not configured.");
+  }
+  return Object.freeze({
+    version: "AJL_APOLLON_CUSTOMS_V1",
+    description: String(value.description),
+    hsCode: String(value.hsCode),
+    originCountry: String(value.originCountry),
+    materialContent: String(value.materialContent),
+    unitNetWeightGrams: Number(value.unitNetWeightGrams),
+    duties: "DAP",
+  });
+}
+
+export async function sendcloudInternationalCustomsContractSha256(raw: string): Promise<string> {
+  return sha256Hex(JSON.stringify(parseInternationalCustomsJson(raw)));
+}
+
+async function approvedInternationalCustoms(
+  input: SendcloudInternationalCustomsConfiguration | undefined,
+  context: ShipmentContextRow,
+  itemCount: number,
+): Promise<ApprovedInternationalCustoms | null> {
+  if (context.zone === "EU") return null;
+  const raw = input?.json?.trim() ?? "";
+  const facts = parseInternationalCustomsJson(raw);
+  const contractSha256 = await sendcloudInternationalCustomsContractSha256(raw);
+  if (
+    !/^[0-9a-f]{64}$/.test(contractSha256) ||
+    input?.contractSha256 !== contractSha256 ||
+    input.adamApprovalSha256 !== contractSha256 ||
+    input.jeremyApprovalSha256 !== contractSha256 ||
+    input.senderEoriAttestation !== "SENDCLOUD_SENDER_EORI_VERIFIED" ||
+    context.duties_terms !== "DAP" || facts.duties !== "DAP" ||
+    facts.unitNetWeightGrams * itemCount >= context.weight_grams
+  ) {
+    throw new FulfillmentProviderError(
+      "rejected",
+      "International customs facts require matching Adam and Jeremy approvals.",
+    );
+  }
+  return Object.freeze({ ...facts, contractSha256 });
 }
 
 function parcelIsExact(row: ShipmentContextRow, itemCount: number): boolean {
@@ -297,6 +388,8 @@ export function buildSendcloudShipmentPayload(input: Readonly<{
   shippingOptionCode: string;
   senderAddressId: number;
   servicePointReference: string | null;
+  orderLines: readonly OrderLineRow[];
+  customs: ApprovedInternationalCustoms | null;
 }>): Record<string, unknown> {
   let toServicePoint: Readonly<{ id: number }> | null = null;
   if (input.context.delivery_mode === "service_point") {
@@ -331,6 +424,23 @@ export function buildSendcloudShipmentPayload(input: Readonly<{
         value: (input.context.weight_grams / 1_000).toFixed(3),
         unit: "kg",
       },
+      ...(input.customs ? {
+        parcel_items: input.orderLines.map((line) => ({
+          item_id: line.id,
+          description: input.customs?.description,
+          quantity: line.quantity,
+          weight: {
+            value: (input.customs!.unitNetWeightGrams / 1_000).toFixed(3),
+            unit: "kg",
+          },
+          price: { value: exactMoney(line.unit_price_cents), currency: "EUR" },
+          hs_code: input.customs?.hsCode,
+          origin_country: input.customs?.originCountry,
+          sku: line.internal_reference,
+          material_content: input.customs?.materialContent,
+          properties: { color: line.color_name, size: line.size },
+        })),
+      } : {}),
     }],
     reference: input.request.shipmentId,
     external_reference_id: input.request.idempotencyKey,
@@ -375,6 +485,25 @@ export async function parseSendcloudShipmentReceipt(
   if (labels.length !== 1 || !record(labels[0]) || !safeString(labels[0].link, 512)) {
     throw new FulfillmentProviderError("ambiguous", "Sendcloud did not prove one A6 label.");
   }
+  const customsDocumentKinds = parcel.documents.flatMap((document) => {
+    if (!record(document) ||
+      !["commercial-invoice", "customs-declaration", "cn22", "cn23"].includes(String(document.type)) ||
+      !safeString(document.link, 512)) return [];
+    try {
+      const documentUrl = new URL(String(document.link));
+      const kind = String(document.type);
+      return documentUrl.origin === PANEL_ORIGIN &&
+          documentUrl.pathname === `/api/v3/parcels/${String(parcel.id)}/documents/${kind}` &&
+          !documentUrl.search && !documentUrl.hash && !documentUrl.username && !documentUrl.password
+        ? [kind]
+        : [];
+    } catch {
+      return [];
+    }
+  }).sort();
+  if (context.zone !== "EU" && customsDocumentKinds.length < 1) {
+    throw new FulfillmentProviderError("ambiguous", "Sendcloud did not prove customs documents.");
+  }
   let labelUrl: URL;
   try {
     labelUrl = new URL(String(labels[0].link));
@@ -404,6 +533,7 @@ export async function parseSendcloudShipmentReceipt(
       carrierCode: context.carrier_code,
       externalReferenceId: request.idempotencyKey,
       label: { dpi: 72, mediaType: "application/pdf", size: "a6" },
+      customsDocumentKinds,
       parcelId: Number(parcel.id),
       sendcloudShipmentId: String(data.id),
       providerShipmentReference,
@@ -418,6 +548,7 @@ class D1SendcloudShippingLabelProvider implements ShippingLabelProviderPort {
   readonly #credentials: ProviderCredentials;
   readonly #fetch: SendcloudShippingLabelFetch;
   readonly #references: ReferenceReader;
+  readonly #internationalCustoms: SendcloudInternationalCustomsConfiguration | undefined;
 
   constructor(
     database: CommerceD1Database,
@@ -428,6 +559,7 @@ class D1SendcloudShippingLabelProvider implements ShippingLabelProviderPort {
     this.#database = database;
     this.#credentials = configuration(configurationInput);
     this.#fetch = fetchImpl;
+    this.#internationalCustoms = configurationInput.internationalCustoms;
     this.#references = referenceReader ?? new D1DeliveryReferenceStore(
       database,
       new DeliveryReferenceVault(configurationInput.referenceVault),
@@ -444,7 +576,8 @@ class D1SendcloudShippingLabelProvider implements ShippingLabelProviderPort {
         option.id AS option_id, option.provider_code, option.carrier_code,
         option.service_code, option.delivery_mode,
         option.selected_service_point_id,
-        configuration.zone, parcel.profile_code, parcel.source_version,
+        configuration.zone, configuration.duties_terms,
+        parcel.profile_code, parcel.source_version,
         parcel.item_count, parcel.weight_grams, parcel.length_mm,
         parcel.width_mm, parcel.height_mm
       FROM shipments AS shipment
@@ -466,7 +599,8 @@ class D1SendcloudShippingLabelProvider implements ShippingLabelProviderPort {
       request.idempotencyKey,
     ).first<ShipmentContextRow>();
     if (!context || context.status !== "paid" || context.currency !== "EUR" ||
-      context.provider_code !== "sendcloud") {
+      context.provider_code !== "sendcloud" ||
+      (context.zone === "EU" ? context.duties_terms !== "EU_INCLUDED" : context.duties_terms !== "DAP")) {
       throw new FulfillmentProviderError("rejected", "A paid Sendcloud order snapshot is required.");
     }
     // A second network attempt after a lost receipt can duplicate a shipment.
@@ -495,6 +629,7 @@ class D1SendcloudShippingLabelProvider implements ShippingLabelProviderPort {
     ) {
       throw new FulfillmentProviderError("rejected", "The paid order parcel snapshot is invalid.");
     }
+    const customs = await approvedInternationalCustoms(this.#internationalCustoms, context, itemCount);
     const [address, quoteReference] = await Promise.all([
       verifiedAddress(context),
       this.#references.open("delivery_quote", context.option_id),
@@ -523,6 +658,8 @@ class D1SendcloudShippingLabelProvider implements ShippingLabelProviderPort {
       shippingOptionCode,
       senderAddressId: this.#credentials.senderAddressId,
       servicePointReference,
+      orderLines: lineResult.results,
+      customs,
     });
     let response: Response;
     try {
