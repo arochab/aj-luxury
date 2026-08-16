@@ -97,7 +97,7 @@ test("the Awwwards layer covers the critical short tablet and reduced-motion sta
   assert.doesNotMatch(css, /\.aj-sequence__stage::before \{[\s\S]{0,180}top: 43%/);
   assert.equal(packageJson.dependencies.gsap, "^3.15.0");
   assert.equal(packageJson.dependencies["@gsap/react"], "^2.1.2");
-  assert.match(sequence, /useGSAP/);
+  assert.match(sequence, /import\("gsap"\)/);
   assert.match(sequence, /gsap\.timeline/);
   assert.match(sequence, /autoplayRef/);
   assert.doesNotMatch(sequence, /requestAnimationFrame/);
@@ -105,11 +105,15 @@ test("the Awwwards layer covers the critical short tablet and reduced-motion sta
   assert.match(sequence, /document\.visibilityState === "visible"/);
   assert.match(sequence, /prefers-reduced-motion: reduce/);
   assert.match(experience, /ScrollTrigger/);
+  assert.match(experience, /import\("gsap\/ScrollTrigger"\)/);
   assert.match(experience, /gsap\.matchMedia/);
   assert.match(experience, /\.aj-proof/);
   assert.match(experience, /\.aj-product-card/);
   assert.match(experience, /\.aj-moodboard__item/);
   assert.match(experience, /\.aj-story__copy/);
+  assert.doesNotMatch(sequence, /^import .* from "gsap"/m);
+  assert.doesNotMatch(experience, /^import .* from "gsap/m);
+  assert.doesNotMatch(experience, /^gsap\.registerPlugin/m);
   assert.doesNotMatch(experience, /ScrollSmoother|scrollTo\(|\bpin\s*:/);
 });
 

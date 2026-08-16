@@ -3,15 +3,17 @@
 /* eslint-disable @next/next/no-img-element -- pre-optimized, client-owned campaign media */
 
 import Link from "next/link";
-import { useGSAP } from "@gsap/react";
-import gsap from "gsap";
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
 import { T } from "../../lib/i18n/TranslatedText";
 import { useI18n } from "../../lib/i18n/I18nProvider";
 
 const FRAME_DURATION = 5600;
 
-gsap.registerPlugin(useGSAP);
+type PlaybackTween = {
+  kill: () => void;
+  pause: () => void;
+  play: () => void;
+};
 
 const frames = [
   {
@@ -47,7 +49,7 @@ export default function ApollonGuidedSequence() {
   const sectionRef = useRef<HTMLElement>(null);
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const progressRef = useRef<HTMLSpanElement>(null);
-  const autoplayRef = useRef<gsap.core.Tween | null>(null);
+  const autoplayRef = useRef<PlaybackTween | null>(null);
   const [inView, setInView] = useState(false);
   const [pageVisible, setPageVisible] = useState(true);
   const [reducedMotion, setReducedMotion] = useState(false);
@@ -72,36 +74,56 @@ export default function ApollonGuidedSequence() {
     tabRefs.current[next]?.focus();
   };
 
-  useGSAP(() => {
-    const frame = sectionRef.current?.querySelector<HTMLElement>(".aj-sequence__frame.is-active");
-    if (!frame || reducedMotion) return;
+  useEffect(() => {
+    if (reducedMotion) return;
+    let cancelled = false;
+    let timeline: PlaybackTween | null = null;
 
-    const timeline = gsap.timeline({ defaults: { ease: "power4.out" } });
-    timeline
-      .fromTo(frame.querySelector(".aj-sequence__symbol img"), { autoAlpha: 0.65, scale: 1.075, xPercent: -3 }, { autoAlpha: 1, scale: 1, xPercent: 0, duration: 1.2 }, 0)
-      .fromTo(frame.querySelector(".aj-sequence__body img"), { autoAlpha: 0.65, scale: 1.065, xPercent: 3 }, { autoAlpha: 1, scale: 1, xPercent: 0, duration: 1.25 }, 0.05)
-      .fromTo(frame.querySelectorAll(".aj-sequence__copy > *"), { autoAlpha: 0, y: 18 }, { autoAlpha: 1, y: 0, duration: 0.75, stagger: 0.08 }, 0.2);
-  }, { dependencies: [active, reducedMotion], scope: sectionRef });
+    void import("gsap").then(({ default: gsap }) => {
+      const frame = sectionRef.current?.querySelector<HTMLElement>(".aj-sequence__frame.is-active");
+      if (cancelled || !frame) return;
 
-  useGSAP(() => {
+      const nextTimeline = gsap.timeline({ defaults: { ease: "power4.out" } });
+      timeline = nextTimeline;
+      nextTimeline
+        .fromTo(frame.querySelector(".aj-sequence__symbol img"), { autoAlpha: 0.65, scale: 1.075, xPercent: -3 }, { autoAlpha: 1, scale: 1, xPercent: 0, duration: 1.2 }, 0)
+        .fromTo(frame.querySelector(".aj-sequence__body img"), { autoAlpha: 0.65, scale: 1.065, xPercent: 3 }, { autoAlpha: 1, scale: 1, xPercent: 0, duration: 1.25 }, 0.05)
+        .fromTo(frame.querySelectorAll(".aj-sequence__copy > *"), { autoAlpha: 0, y: 18 }, { autoAlpha: 1, y: 0, duration: 0.75, stagger: 0.08 }, 0.2);
+    });
+
+    return () => {
+      cancelled = true;
+      timeline?.kill();
+    };
+  }, [active, reducedMotion]);
+
+  useEffect(() => {
     const progress = progressRef.current;
     if (!progress || reducedMotion) return;
+    let cancelled = false;
+    let tween: PlaybackTween | null = null;
 
-    gsap.set(progress, { scaleX: 0, transformOrigin: "left center" });
-    const tween = gsap.to(progress, {
-      scaleX: 1,
-      duration: FRAME_DURATION / 1000,
-      ease: "none",
-      paused: true,
-      onComplete: () => setActive((current) => (current + 1) % frames.length),
+    void import("gsap").then(({ default: gsap }) => {
+      if (cancelled) return;
+      gsap.set(progress, { scaleX: 0, transformOrigin: "left center" });
+      const nextTween = gsap.to(progress, {
+        scaleX: 1,
+        duration: FRAME_DURATION / 1000,
+        ease: "none",
+        paused: true,
+        onComplete: () => setActive((current) => (current + 1) % frames.length),
+      });
+      tween = nextTween;
+      autoplayRef.current = nextTween;
+      if (!paused && inView && pageVisible) nextTween.play();
     });
-    autoplayRef.current = tween;
-    if (!paused && inView && pageVisible) tween.play();
+
     return () => {
-      tween.kill();
+      cancelled = true;
+      tween?.kill();
       if (autoplayRef.current === tween) autoplayRef.current = null;
     };
-  }, { dependencies: [active, reducedMotion], scope: sectionRef });
+  }, [active, inView, pageVisible, paused, reducedMotion]);
 
   useEffect(() => {
     const tween = autoplayRef.current;
