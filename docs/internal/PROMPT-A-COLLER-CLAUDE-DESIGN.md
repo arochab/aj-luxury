@@ -26,11 +26,29 @@ Deux chemins exclusifs :
 
 Recommandation du diagnostic : **A**. Écris ton arbitrage, daté, avant de coder.
 
-# 3. LA BRANCHE EST PRÊTE — NE LA RECRÉE PAS
+# 3. LE TERRAIN — TOUT EST SUR GITHUB, NE RECRÉE RIEN
 
-`claude/front-awwwards-20260817`, coupée à `59d595e`, checkout fait, poussée sur `origin`.
-Un hook `post-commit` pousse automatiquement chaque commit. Si tu vois `[github-first] … ECHEC`,
-ton travail n'existe que sur ce disque : corrige avant de continuer.
+**Dépôt : `arochab/aj-luxury` (privé). Branche : `claude/front-awwwards-20260817`, commit `a0d6c4b`.**
+Coupée à `59d595e`. Elle est poussée et complète : les 5 documents ci-dessus, **61 fichiers médias**
+(58 images + 4 vidéos hero, aucun Git LFS), et tout le code. Tu n'as rien à chercher ailleurs.
+
+```bash
+git clone https://github.com/arochab/aj-luxury.git
+cd aj-luxury
+git checkout claude/front-awwwards-20260817
+npm ci
+```
+
+Si tu travailles depuis la machine d'Adam, le clone existe déjà, déjà sur la bonne branche :
+`D:\Adam CHABBI Pro\business-clients\CLIENTS\aj-luxury`.
+
+Les actifs de la demande d'Adam :
+- caleçons **seuls** → `public/images/editorial/isabelle-apollon/apollon-{rose,lilas,pourpre}-lyre-v1.webp`
+- caleçons **portés** → `public/images/client/apollon-world/apollon-{rose,lilas,pourpre}-model-world-v1.webp`
+
+Un hook `post-commit` pousse automatiquement chaque commit (`git config core.hooksPath .githooks`
+après un clone neuf). Si tu vois `[github-first] … ECHEC`, ton travail n'existe que sur ton disque :
+corrige avant de continuer.
 
 Elle porte déjà une **passe de diagnostic** (réécriture de `ApollonGuidedSequence.tsx`, retrait du
 pin concurrent, `overflow-x: clip`, retrait des `scroll-behavior: smooth`). Résultat mesuré :
