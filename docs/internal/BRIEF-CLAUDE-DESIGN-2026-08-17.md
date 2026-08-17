@@ -3,6 +3,59 @@
 
 ---
 
+## 0. POINT DE DÉPART — TOUT EST DÉJÀ PRÊT
+
+**Le terrain est préparé. Tu n'as ni dépôt à cloner, ni branche à créer, ni actif à chercher.**
+
+```bash
+cd "D:\Adam CHABBI Pro\business-clients\CLIENTS\aj-luxury"
+git branch --show-current     # doit renvoyer : claude/front-awwwards-20260817
+```
+
+| | |
+|---|---|
+| **Branche de travail** | `claude/front-awwwards-20260817` — déjà créée, checkout fait, poussée sur `origin` |
+| **Coupée à** | `codex/ajl-awwwards-experience-20260815` @ `59d595e` |
+| **Dépôt distant** | `arochab/aj-luxury` (privé) |
+| **Actifs sur disque** | **62 fichiers médias, 22 Mo** — 58 images, 4 vidéos hero. Aucun Git LFS, aucun média dans `.gitignore`. |
+| **Les caleçons seuls** | `public/images/editorial/isabelle-apollon/apollon-{rose,lilas,pourpre}-lyre-v1.webp` |
+| **Les caleçons portés** | `public/images/client/apollon-world/apollon-{rose,lilas,pourpre}-model-{world,color}-v1.webp` |
+| **Preview privée** | `https://aj-luxury-awwwards-branch-preview.adam-chabbi94.workers.dev/` |
+
+**Un hook `post-commit` pousse automatiquement chaque commit sur `origin`.** Il est actif
+(`core.hooksPath = .githooks`). Si tu vois `[github-first] … ECHEC`, ton commit n'existe que sur ce
+disque : corrige avant de continuer. Ne le désactive jamais.
+
+**À lire avant d'écrire une ligne**, dans cet ordre : le présent document en entier ·
+`docs/internal/HANDOFF-2026-08-17.md` (état, décisions ouvertes, ce qu'il ne faut pas toucher) ·
+`docs/internal/GITHUB-FIRST.md` (gouvernance) · `docs/internal/AUDIT-FRONT-JURY-2026-08-17.md`
+(le verdict complet, si tu veux le raisonnement derrière un chantier).
+
+---
+
+## 0 bis. CORRECTIONS DU 2026-08-17 — ELLES PRIMENT SUR TOUT LE RESTE
+
+Deux faits établis **après** le jury, par vérification visuelle directe. Ils sont déjà intégrés
+au corps du document ; ce rappel existe pour que tu ne puisses pas les manquer.
+
+**① Le hero vidéo n'est PAS vide.** Toute affirmation contraire est fausse et retirée.
+Mesure de contrôle sur `ajluxurystore.com` : `currentSrc = aj-luxury-hero-v4-tablet-1440x810.mp4`,
+`readyState: 4`, `1440×810`, `currentTime 7,04 s`, `paused: true` (`loop:false`, lecture unique par
+conception). La première mesure avait été prise ~1,5 s après navigation sur un `<video preload="none">`
+dont la source est attribuée par JS, pas par des enfants `<source>` : état transitoire, pas panne.
+**Ne prescris rien sur la disponibilité de la vidéo.**
+
+**② Un treizième chantier existe : C13, la découpe des visages dans la vidéo hero.** Défaut relevé
+par Adam, confirmé à l'œil, **absent des douze rendus experts et testeurs**. Il est intégré au plan
+§5, au tableau d'agents §6.1 et à la table de preuves §8.3. Ce n'est pas une option.
+
+**La leçon à appliquer sur toute ton exécution :** les douze rendus ont travaillé sur du DOM, du CSS
+calculé, des timings et du code source. Le panneau navigateur n'était pas affiché : **personne n'a
+regardé le hero.** Une découpe qui bave est invisible dans une matrice de transform.
+**À chaque chantier livré, REGARDE le rendu. Une mesure verte n'est pas une preuve visuelle.**
+
+---
+
 ## 1. MISSION ET NIVEAU
 
 **Mission :** porter le front d'AJ Luxury de **3,2/10** à **9,7/10** sur la grille du jury Awwwards, en réécrivant la séquence Apollon autour d'une seule idée — le boxer seul et le boxer porté sont deux prises d'un même plateau, et le site doit le laisser voir.
@@ -146,11 +199,19 @@ Un seul sol, une seule lumière, **une seule échelle**. Le panneau gauche devie
 
 ---
 
-## 5. LE PLAN — 12 CHANTIERS, IMPACT DÉCROISSANT
+## 5. LE PLAN — 13 CHANTIERS, IMPACT DÉCROISSANT
 
-Gains en points de la note globale pondérée. Somme = **6,50**. `3,20 + 6,50 = 9,70`.
+Gains en points de la note globale pondérée. Somme C1→C12 = **6,50**. `3,20 + 6,50 = 9,70`.
+
+**C13 ne porte aucun point, et c'est délibéré.** Son défaut est cuit dans un actif vidéo : il ne se
+corrige pas par du code, donc il ne peut pas faire monter une note de code. Mais il est **plein écran
+avant tout scroll** — aucun juré ne le manquera. C'est un **bloqueur de perception** : le plan peut
+atteindre 9,70 avec C13 non résolu, et le site sera quand même recalé. Il est donc obligatoire, et
+son livrable est un dossier de décision, pas un correctif.
 
 **Ordre d'exécution imposé pour la première journée : C12 le matin, C1 l'après-midi.**
+**C13 se fait en parallèle dès le premier jour** — c'est de l'observation, il ne bloque rien et il
+conditionne un arbitrage d'Adam qui a besoin de temps.
 
 ---
 
@@ -311,23 +372,69 @@ Le seul endroit où le site passe de « motion faible » à « motion inexistant
 
 ---
 
-### C12 — LE HARNAIS, LA BRANCHE, L'URL DE SOUMISSION · **+0,05 direct — condition de démontrabilité des onze autres**
+### C12 — LE HARNAIS, LA BRANCHE, L'URL DE SOUMISSION · **+0,05 direct — condition de démontrabilité des douze autres**
 
 **Premier livrable. Avant toute ligne de C1.**
 
 - `tests/motion.e2e.mjs` devient **rouge** si le pin est retiré, si `scroll-behavior: smooth` revient, ou si un sélecteur repasse sous double autorité CSS + GSAP.
 - **Ligne de base sur la PREVIEW**, datée : TTFB / LCP / INP / CLS. Aucun critère contre la production.
-- **Gouvernance de branche : ce travail atterrit sur `claude/ajl-*` coupée à `59d595e`, ou dans un worktree dédié.** Aucune écriture sur `codex/ajl-awwwards-experience-20260815`. **Aucun des douze rendus antérieurs n'avait nommé la branche de destination.**
+- **Gouvernance de branche : la branche existe déjà, ne la recrée pas.** `claude/front-awwwards-20260817`, coupée à `59d595e`, checkout fait, poussée sur `origin`. Aucune écriture sur `codex/ajl-awwwards-experience-20260815`. **Aucun des douze rendus antérieurs n'avait nommé la branche de destination** — d'où cette ligne.
 - Inventaire du code mort avant reconstruction : `IntroSequence.tsx`, `ApollonHorizontalRail.tsx`, `.aj-apollon-myth`, `.aj-featured`. **Décide : rebrancher ou archiver.**
 - **Une seule URL de soumission, sans paramètre de requête.** `?apollon=` ne doit pas survivre.
 
-**Critères :** le harnais est **commité, vert sur la branche corrigée, rouge sur chacune des trois régressions** · une **ligne de base TTFB/LCP/INP/CLS existe sur la preview, datée** · la branche de travail est **`claude/*`** · un **arbitrage écrit et daté** existe pour chacun de : variante A/B, chemin `srcset`, signature, composants morts.
+**Critères :** le harnais est **commité, vert sur la branche corrigée, rouge sur chacune des trois régressions** · une **ligne de base TTFB/LCP/INP/CLS existe sur la preview, datée** · `git branch --show-current` renvoie **`claude/front-awwwards-20260817`** · un **arbitrage écrit et daté** existe pour chacun de : variante A/B, chemin `srcset`, signature, composants morts.
+
+---
+
+### C13 — LA DÉCOUPE DES VISAGES DANS LA VIDÉO HERO · **0 point — bloqueur de perception** · DA + Content
+
+**Premier plan du site, plein écran, avant tout scroll. Aucun jury ne dépasse ça.**
+Relevé par Adam. **Absent des douze rendus experts et testeurs.**
+
+**Constat, grossissements CSS ×2,6 puis ×4,2 sur `ajluxurystore.com` :**
+- silhouette des cheveux **détourée en dur** sur les deux mannequins, **aucun détail de mèche** contre
+  le fond métallique — le bord est géométrique, pas photographique ;
+- **liseré clair** le long de la chevelure du mannequin de gauche ;
+- **rupture de raccord mâchoire / cou** : la tête est posée sur le buste ;
+- **désaccord de température et de direction de lumière** entre visage et torse — visage frontal et
+  froid, corps éclairé de côté et plus chaud ;
+- **visage nettement plus mou que le corps**, dont la définition musculaire est nette.
+
+*Réserve honnête, à conserver dans ton rapport : à ×4,2 sur une source 1440×810, le manque de piqué
+est amplifié par l'agrandissement. **Le bord géométrique de la chevelure et l'absence totale de détail
+de mèche, eux, ne sont pas des artefacts d'agrandissement.***
+
+**Ce que tu ne peux PAS faire.** Le défaut est **cuit dans le fichier mp4**. Vérifié sur la page de
+production : `overlayPngUtilise: []` — aucun `hero-identity-overlay-*.png` n'est chargé, le hero
+n'est composé que de `.aj-film__hero-video` (z-index 1) au-dessus de ses posters.
+**Aucun filtre, masque, `mix-blend-mode` ou correction CSS ne réparera un détourage raté dans la
+source.** N'essaie pas : tu ne ferais que déplacer l'artefact et perdre une journée.
+
+**À faire :**
+- **Constater et documenter, sans corriger.** Captures à 1440×900 et 390×844, aux timecodes où les
+  deux visages sont les plus lisibles, plus un grossissement sur chaque tête.
+- **Chiffrer le coût de perception** : à quelle taille de rendu la découpe devient invisible, et si un
+  **recadrage plus large** — qui éloigne les visages — atténue suffisamment en attendant un nouveau rendu.
+- **Proposer le recadrage comme mesure provisoire uniquement**, en écrivant noir sur blanc que c'est
+  un pansement et non une correction.
+- **Vérifier si le défaut existe aussi sur la preview** ou seulement sur le build de production —
+  les deux servent des `.mp4` du même lot, mais ne le suppose pas : mesure-le.
+- **Ne commande aucun nouveau rendu.**
+
+**Contrainte dure de gouvernance.** La vidéo v4 est un actif d'**Isabelle**, sous autorisation
+archivée pour le site AJ Luxury. **Un nouveau rendu est un nouvel actif** →
+`PROPOSED — ISABELLE NOT YET CONFIRMED`, accord direct requis avant toute production.
+**Tu prépares la décision, tu ne la prends pas.** Décideur : Adam.
+
+**Critères :** un dossier de constat opposable — captures, timecodes, points de rupture nommés ·
+une réponse mesurée à « la preview est-elle affectée aussi ? » · une recommandation chiffrée entre
+**recadrer** et **re-rendre**, avec le coût de chacune · **zéro octet modifié sur un actif vidéo**.
 
 ---
 
 ## 6. LA GAUNTLET LOOP — À EXÉCUTER, PAS À RÉSUMER
 
-### 6.1 — Phase 1 : les huit agents experts
+### 6.1 — Phase 1 : les neuf agents experts
 
 Lance-les **en parallèle**, chacun avec le présent document en entrée. Niveau exigé pour tous : **expert mondial de référence, état de l'art août 2026 / 2027**. Une recommandation qui pourrait s'appliquer à n'importe quel site est une recommandation nulle.
 
@@ -335,6 +442,7 @@ Lance-les **en parallèle**, chacun avec le présent document en entrée. Niveau
 |---|---|---|---|
 | **E1** | **Ingénieur motion GSAP** | GSAP 3.15 / ScrollTrigger / SplitText / Flip + scroll-driven animations natives (`view()`, `scroll()`). Doit connaître ce que Chromium composite réellement. | C2, C7, C8 |
 | **E2** | **Directeur artistique digital** | Webdesign niveau Awwwards SOTD. Composition, échelle, lumière, raccord photographique. | C1, C3, C5 |
+| **E2b** | **Retoucheur / compositeur d'image** | Détourage, raccord de carnation, cohérence de lumière, artefacts de compositing sur séquence animée. **Doit regarder l'image, pas le DOM.** | **C13** |
 | **E3** | **Typographe / designer de systèmes** | Fontes variables, axes `opsz`/`wght`, échelles modulaires, métriques de substitution (`size-adjust`, `ascent-override`), tracking par palier. | C4 |
 | **E4** | **Directeur UX / scrollytelling** | Budget de scroll par beat, contrôle utilisateur, chapitrage, override manuel. | C2, C6, C8 |
 | **E5** | **Ingénieur front mobile / tactile** | Pin en scroll natif tactile, `svh`/`dvh`, barre d'URL, `normalizeScroll`, `pinType`, budget de frames sur milieu de gamme. | C6, C10 |
@@ -349,11 +457,11 @@ Lance-les **en parallèle**, chacun avec le présent document en entrée. Niveau
 4. **Aucun actif à créer sans le gate.** Vérifie l'inventaire par `git ls-tree` avant de citer un fichier. `product-pourpre-front.webp` n'existe pas.
 5. **Design 40 % + Creativity 20 %.** Si ton rendu ne déplace que Usability et Content, il ne sert à rien.
 
-### 6.2 — Phase 2 : les huit mêmes en agents testeurs adversariaux
+### 6.2 — Phase 2 : les neuf mêmes en agents testeurs adversariaux
 
 **Ne saute pas cette phase.** Verdict du tour précédent : **les testeurs ont surpassé les experts.** Chacun des six experts avait construit au moins une prescription phare sur une prémisse non vérifiée — trois sur la **même** hypothèse d'hydratation falsifiée. Chacun des six testeurs a attrapé au moins un critère d'acceptation inopérant. La couche adversariale s'est payée.
 
-Chaque testeur `T1..T8` reprend la discipline de son expert `E1..E8` et rend **strictement** :
+Chaque testeur `T1..T8` plus `T2b` reprend la discipline de son expert `E1..E8` plus `E2b` et rend **strictement** :
 - **Prescriptions validées** — avec la vérification qui les valide (fichier, ligne, mesure).
 - **Prescriptions rejetées** — avec le motif technique du rejet. Une prescription auto-contradictoire, un chemin inexistant, un critère non falsifiable, un mécanisme mal attribué : rejet.
 - **Manques critiques** — ce que l'expert n'a pas vu, et pourquoi c'est bloquant.
@@ -363,7 +471,7 @@ Chaque testeur `T1..T8` reprend la discipline de son expert `E1..E8` et rend **s
 
 ### 6.3 — Phase 3 : le jury final
 
-Le jury reçoit les 8 rendus experts + les 8 contre-tests. Il produit :
+Le jury reçoit les 9 rendus experts + les 9 contre-tests. Il produit :
 1. **Une note par discipline et une note globale**, calculée explicitement à la pondération `Design 0,40 · Usability 0,30 · Creativity 0,20 · Content 0,10`.
 2. **Sa tranche sur chaque désaccord expert/testeur non résolu**, avec la vérification qui la fonde.
 3. **La liste de ce qui reste sous le seuil.**
@@ -381,12 +489,13 @@ Le jury reçoit les 8 rendus experts + les 8 contre-tests. Il produit :
 **Interdits — aucune exception, aucune reformulation.**
 
 1. **Aucune mise en production.** Commerce fermé, **rollback R10 v15 live**, aucun paiement, transporteur ou e-mail réel connecté. **La preview Cloudflare privée est le seul terrain.**
-2. **Aucune écriture sur `codex/ajl-awwwards-experience-20260815`** ni sur aucune branche `codex/*`. Un repo, une branche, un agent. Ce travail vit sur **`claude/ajl-*`** coupée à `59d595e`, ou dans un **worktree dédié**.
+2. **Aucune écriture sur `codex/ajl-awwwards-experience-20260815`** ni sur aucune branche `codex/*`. Un repo, une branche, un agent. Ce travail vit sur **`claude/front-awwwards-20260817`**, déjà créée et déjà active — voir §0.
 3. **Aucun engagement commercial ou opérationnel inventé.** Interdits nommément : le SKU « Trio Apollon » à 79 €, tout prix dégressif, l'échange de taille offert, le libellé bancaire neutre, tout délai de livraison chiffré, toute extension de `CLIENT_VALIDATED_PARCEL_MAX_ITEMS` ou création d'`AJL_ENVELOPE_{4,5,6}_ITEMS_V1`. *(Note de lecture : le plafond réel est `currentQuantity >= 5 || (runtimeMode === 'production' && itemCount >= 3)` — le 3 ne s'applique qu'à la production, qui est fermée. Le « panier maximum de 89,97 € par construction » n'existe pas sur le terrain de test.)*
 4. **Aucun nouvel actif créatif sans gate.** Tout ce qui n'existe pas déjà dans le dépôt est **`PROPOSED — ISABELLE NOT YET CONFIRMED`** : packshot supplémentaire (dos, macro ceinture), régénération des plans rose et pourpre dans la lumière du lilas, **et tout élargissement d'usage des actifs `editorial/isabelle-apollon/*` au-delà du web** — grille Instagram, carton, encart colis, print. **Le gate le plus manqué est le dernier :** passer d'un usage web interne à un usage packaging et réseaux est un changement de périmètre, de crédit et de licence. *(Une licence typographique, elle, est un contrat éditeur : n'invoque pas le consentement d'Isabelle dessus — cela dilue un garde-fou qui doit rester exact pour rester crédible.)*
 5. **La parité Jérémy / Alex est un acquis.** Elle est **aujourd'hui rompue** dans la section signature (ratio 2:1, vérifié à l'ouverture des frames). Elle entre dans les critères de C1 et C2, pas dans une note de bas de page.
-6. **La vidéo hero est un acquis à préserver — mais elle n'a pas d'objet mesuré aujourd'hui.** Le `<video>` de production est vide, et la production est un autre build. **Reconfirme-la sur la preview dans un navigateur ordinaire avant toute prescription la concernant.**
+6. **La vidéo hero fonctionne — n'y touche pas.** ~~Le `<video>` de production est vide~~ : **constat retiré le 2026-08-17**, voir §0 bis ①. Mesure : `readyState: 4`, `1440×810`, 7,04 s joués, lecture unique par conception. `docs/PROJECT-BACKLOG.md` AJ-105 est exact. **Le seul défaut réel de la vidéo est la découpe des visages, traitée en C13 — et il est cuit dans le mp4, donc hors de portée du code.** Aucune prescription sur la disponibilité, le chargement ou le format de la vidéo.
 7. **Zéro heure sur le débogage de l'ancien pin.** C2 le rend caduc, C12 tranche le fait.
+8. **Ne re-rends aucun actif vidéo ou image, et n'en commande aucun.** C13 prépare la décision, il ne l'exécute pas. Le décideur est Adam, après accord direct d'Isabelle.
 
 **Hors périmètre, et pourquoi — ne dépense rien là-dessus.**
 
@@ -422,7 +531,7 @@ Il doit passer au **rouge** sur chacune de ces trois régressions injectées vol
 ### 8.2 — Ligne de base, datée, sur la preview
 
 ```bash
-git branch --show-current          # doit renvoyer claude/ajl-*
+git branch --show-current          # doit renvoyer claude/front-awwwards-20260817
 git log -1 --format="%H %ad"
 curl -sSo /dev/null -w "%{time_starttransfer}\n" <preview-url>   # ×5, médiane
 ```
@@ -445,6 +554,7 @@ Plus une trace Lighthouse (5 runs, médiane) desktop 1440×900 **et** mobile : *
 | **C10** | Capture **1280×640** pendant l'intégralité du pin · script `naturalWidth > clientWidth × dPR × 1,15` · **fichier d'arbitrage `srcset` daté, décideur nommé** |
 | **C11** | Test de substitution écrit, appliqué à CDLP / Le Slip Français / Hanro, résultat par candidate · grep « Jérémy » et « Alex » dans le texte visible rendu · scan des chaînes ≥15 caractères en doublon |
 | **C12** | Les trois runs rouges du harnais · fichier de ligne de base daté · `git branch --show-current` · les **quatre arbitrages écrits et datés** |
+| **C13** | Captures **1440×900 et 390×844** aux timecodes retenus, plus un grossissement par tête · relevé `overlayPngUtilise` prouvant qu'aucun PNG d'overlay n'intervient · mesure comparée **preview vs production** · note de recommandation **recadrer / re-rendre** chiffrée, décideur nommé · `git diff --stat` sur `public/videos/` = **vide** |
 
 ### 8.4 — Forme du rendu final
 
@@ -456,86 +566,39 @@ Pour chaque chantier, dans cet ordre, sans exception :
 ---
 
 **En une ligne pour lundi :** C12 le matin — le harnais, la branche, la ligne de base. C1 l'après-midi — la plaque. C'est le seul chantier qui répond littéralement à la demande d'Adam, il est constructible avec les actifs existants, il ne requiert aucun consentement, et il vaut à lui seul plus de points que les six audits e-commerce réunis.
+
 ---
 
-# ADDENDUM DU 2026-08-17 — À LIRE AVANT D'EXÉCUTER
+## 9. EN UNE LIGNE POUR LUNDI
 
-Deux corrections postérieures au jury, établies par vérification visuelle directe sur
-`ajluxurystore.com`. Elles priment sur tout ce qui précède.
+**Matin — C12 :** le harnais, la ligne de base sur la preview. La branche est déjà prête, vérifie-la
+et n'en crée pas d'autre.
 
-## A1. Le hero vidéo n'est PAS vide — retire ce constat
+**Après-midi — C1 :** la plaque. C'est le seul chantier qui répond **littéralement** à la demande
+d'Adam, il est constructible avec les actifs déjà présents sur le disque, il ne requiert **aucun
+consentement**, et il vaut à lui seul plus de points que les six audits e-commerce réunis.
 
-Toute mention d'un `<video>` de production vide, à `0 Ko` transféré ou `networkState: 0`, est
-**fausse**. Mesure de contrôle :
+**En parallèle, dès le premier jour — C13 :** regarde le hero, documente la découpe, ne corrige rien.
+L'arbitrage d'Adam a besoin de temps, et ce chantier est de l'observation pure.
 
-```
-currentSrc  : aj-luxury-hero-v4-tablet-1440x810.mp4?v=v4
-readyState  : 4 (HAVE_ENOUGH_DATA)    dims : 1440x810
-currentTime : 7,04 s                  paused : true — loop:false, lecture unique par conception
-```
+---
 
-La première mesure avait été prise ~1,5 s après navigation sur un `<video preload="none">` dont la
-source est attribuée par JS, pas par des enfants `<source>`. C'était un état transitoire, pas une panne.
+## 10. LES QUATRE FAÇONS DE RATER CETTE MISSION
 
-**Ne prescris rien sur la disponibilité de la vidéo. Elle marche.**
+Elles sont toutes déjà arrivées lors du tour précédent. Relis-les avant chaque rendu.
 
-## A2. 🔴 NOUVEAU CHANTIER — C13 : la découpe des visages dans la vidéo hero
+1. **Citer une mesure de production comme description de la branche.** Six rendus sur douze l'ont
+   fait. La production et la preview sont **deux builds différents** : la production n'a même pas de
+   GSAP. Toute mesure doit être prise sur la preview, et datée.
+2. **Bâtir une prescription phare sur une prémisse non vérifiée.** Chacun des six experts l'a fait,
+   trois sur la **même** hypothèse falsifiée. Ouvre le fichier, lis la ligne, mesure la valeur —
+   avant d'écrire la recommandation, pas après.
+3. **Écrire un critère d'acceptation inopérant.** Chacun des six testeurs en a attrapé au moins un.
+   La §6.2 en liste huit connus : les reproduire est un échec automatique.
+4. **Ne pas regarder le rendu.** C'est ainsi que treize agents ont manqué un défaut plein écran que
+   le client a vu en trois secondes. **Une mesure verte n'est pas une preuve visuelle.**
 
-**Discipline : Direction artistique + Content · Priorité : P0 de perception.**
+---
 
-C'est le premier plan du site, plein écran, avant tout scroll. Aucun jury Awwwards ne dépasse ça.
-
-### Constat, grossissements CSS ×2,6 puis ×4,2
-
-- silhouette des cheveux **détourée en dur** sur les deux mannequins, **aucun détail de mèche** contre
-  le fond métallique — bord géométrique, pas photographique ;
-- **liseré clair** le long de la chevelure du mannequin de gauche ;
-- **rupture de raccord mâchoire/cou** : la tête est posée sur le buste ;
-- **désaccord de température et de direction de lumière** entre visage et torse — visage frontal et
-  froid, corps éclairé de côté, plus chaud ;
-- **visage nettement plus mou que le corps**, dont la définition musculaire est nette.
-
-Réserve : à ×4,2 sur une source 1440×810, le manque de piqué est amplifié par l'agrandissement.
-**Le bord géométrique de la chevelure et l'absence de détail de mèche, eux, ne sont pas des artefacts.**
-
-### Ce que tu ne peux PAS faire
-
-Le défaut est **cuit dans le fichier mp4**. Vérifié sur la page de production : aucun
-`hero-identity-overlay-*.png` n'est chargé, le hero n'est composé que de `.aj-film__hero-video`
-(z-index 1) au-dessus de ses posters.
-
-**Aucun correctif CSS, filtre, masque ou `mix-blend-mode` ne réparera un détourage raté dans la
-source.** N'essaie pas. Tu ne ferais que déplacer l'artefact.
-
-### Ce que tu dois faire
-
-1. **Constater et documenter**, sans corriger : captures à 1440 et 390, aux timecodes où les deux
-   visages sont les plus lisibles. C'est la pièce qui déclenche la décision d'Adam.
-2. **Chiffrer le coût de perception** : à quel point la découpe est visible au premier écran, à
-   quelle distance de lecture elle devient invisible, et si un recadrage plus large — qui éloigne
-   les visages — atténue suffisamment en attendant un nouveau rendu.
-3. **Proposer le recadrage de contournement** comme mesure provisoire uniquement, en disant
-   explicitement que c'est un pansement.
-4. **Ne commande aucun nouveau rendu.** Voir la contrainte ci-dessous.
-
-### Contrainte dure de gouvernance
-
-La vidéo v4 est un actif d'**Isabelle**, sous autorisation archivée pour le site AJ Luxury.
-**Un nouveau rendu est un nouvel actif** → `PROPOSED — ISABELLE NOT YET CONFIRMED`.
-Accord direct d'Isabelle requis avant toute production. Adam décide de l'engager ou non.
-Tu prépares la décision, tu ne la prends pas.
-
-### Critère d'acceptation
-
-Un dossier de constat opposable — captures, timecodes, points de rupture identifiés — plus une
-recommandation chiffrée entre *recadrer* et *re-rendre*, remise à Adam. **Zéro modification de
-l'actif vidéo.**
-
-## A3. Pourquoi ce chantier manquait
-
-Les 12 rendus experts et testeurs ont travaillé sur du DOM, du CSS calculé, des timings et du code
-source. Le panneau navigateur n'était pas affiché pendant l'audit : **personne n'a regardé le hero**.
-Une découpe qui bave est invisible dans une matrice de transform. Défaut relevé par Adam.
-
-**Leçon à appliquer pendant toute ton exécution : à chaque chantier livré, REGARDE le rendu.
-Une mesure verte n'est pas une preuve visuelle.**
+*Document préparé le 2026-08-17. Terrain vérifié, branche active, actifs sur disque, hook de
+sauvegarde armé. Il ne te manque rien pour commencer.*
