@@ -26,21 +26,19 @@ export default function HomeGsapExperience() {
               { autoAlpha: 1, y: 0, duration: 1, stagger: 0.12, delay: 0.55, ease: "power3.out" },
             );
 
-            gsap.from(".aj-proof > p", {
-              autoAlpha: 0,
-              x: -22,
-              duration: 0.8,
-              ease: "power3.out",
-              scrollTrigger: { trigger: ".aj-proof", start: "top 84%", once: true },
+            const proofTimeline = gsap.timeline({
+              scrollTrigger: {
+                trigger: ".aj-proof",
+                start: "top 82%",
+                end: "bottom 30%",
+                scrub: 0.7,
+              },
             });
-            gsap.from(".aj-proof dl > div", {
-              autoAlpha: 0,
-              y: 26,
-              duration: 0.85,
-              stagger: 0.09,
-              ease: "power3.out",
-              scrollTrigger: { trigger: ".aj-proof", start: "top 82%", once: true },
-            });
+            proofTimeline
+              .fromTo(".aj-proof > p", { autoAlpha: 0, x: -28 }, { autoAlpha: 1, x: 0, duration: 0.22, ease: "power3.out" }, 0)
+              .fromTo(".aj-proof__material--modal dt", { autoAlpha: 0, xPercent: -12 }, { autoAlpha: 1, xPercent: 0, duration: 0.58, ease: "power4.out" }, 0.04)
+              .fromTo(".aj-proof__material--elastic", { autoAlpha: 0, yPercent: 18 }, { autoAlpha: 1, yPercent: 0, duration: 0.5, ease: "power3.out" }, 0.22)
+              .fromTo(".aj-proof__meta > div", { autoAlpha: 0, y: 24 }, { autoAlpha: 1, y: 0, duration: 0.36, stagger: 0.08, ease: "power3.out" }, 0.42);
 
             gsap.from(".aj-sequence__heading > *", {
               autoAlpha: 0,
@@ -67,6 +65,23 @@ export default function HomeGsapExperience() {
               ease: "power4.out",
               scrollTrigger: { trigger: ".aj-shop__rail", start: "top 82%", once: true },
             });
+
+            gsap.fromTo(
+              ".aj-product-card__image img",
+              { clipPath: "inset(0 0 12% 0)", yPercent: 3 },
+              {
+                clipPath: "inset(0 0 0% 0)",
+                yPercent: 0,
+                ease: "none",
+                stagger: 0.08,
+                scrollTrigger: {
+                  trigger: ".aj-shop__rail",
+                  start: "top 86%",
+                  end: "bottom 42%",
+                  scrub: 0.75,
+                },
+              },
+            );
 
             gsap.from(".aj-moodboard__item", {
               autoAlpha: 0,
@@ -98,6 +113,32 @@ export default function HomeGsapExperience() {
                 },
               },
             );
+          });
+
+          media.add("(min-width: 981px) and (prefers-reduced-motion: no-preference)", () => {
+            const sequenceStage = document.querySelector<HTMLElement>(".aj-sequence__stage");
+            if (!sequenceStage) return;
+
+            const sequenceTimeline = gsap.timeline({
+              scrollTrigger: {
+                trigger: sequenceStage,
+                start: "top 8%",
+                end: "+=85%",
+                pin: true,
+                pinSpacing: true,
+                scrub: 0.8,
+                anticipatePin: 1,
+                invalidateOnRefresh: true,
+              },
+            });
+
+            sequenceTimeline
+              .fromTo(sequenceStage, { clipPath: "inset(3% 1.5% 3% 1.5%)", y: 26 }, { clipPath: "inset(0% 0% 0% 0%)", y: 0, duration: 0.24, ease: "power3.out" }, 0)
+              .to(".aj-sequence__heading", { autoAlpha: 0.2, y: -36, duration: 0.3, ease: "power2.out" }, 0)
+              .to(sequenceStage, { "--aj-split": "29%", duration: 0.42, ease: "power2.inOut" }, 0.2)
+              .fromTo(".aj-sequence__copy", { xPercent: -8 }, { xPercent: 0, duration: 0.38, ease: "power3.out" }, 0.28)
+              .fromTo(".aj-sequence__controls", { yPercent: 18 }, { yPercent: 0, duration: 0.32, ease: "power3.out" }, 0.44)
+              .to(sequenceStage, { "--aj-split": "34%", duration: 0.28, ease: "power2.inOut" }, 0.72);
           });
           revertGsap = () => media.revert();
         }, root);

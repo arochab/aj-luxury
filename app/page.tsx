@@ -38,22 +38,18 @@ export default function Home() {
         <p id="apollon-proof-title">
           Apollon 01 · {formatPrice(products[0].priceCents)}
         </p>
-        <dl>
-          <div>
-            <dt>94 %</dt>
+        <dl className="aj-proof__composition">
+          <div className="aj-proof__material aj-proof__material--modal">
+            <dt>94<span>%</span></dt>
             <dd><T id="home.materialModal" /></dd>
           </div>
-          <div>
-            <dt>6 %</dt>
+          <div className="aj-proof__material aj-proof__material--elastic">
+            <dt>06<span>%</span></dt>
             <dd><T id="home.materialElastane" /></dd>
           </div>
-          <div>
-            <dt>03</dt>
-            <dd><T id="home.colors" /></dd>
-          </div>
-          <div>
-            <dt>S—XL</dt>
-            <dd><T id="home.sizes" /></dd>
+          <div className="aj-proof__meta">
+            <div><dt>03</dt><dd><T id="home.colors" /></dd></div>
+            <div><dt>S—XL</dt><dd><T id="home.sizes" /></dd></div>
           </div>
         </dl>
       </section>

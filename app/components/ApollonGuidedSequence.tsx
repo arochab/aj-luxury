@@ -40,9 +40,9 @@ const frames = [
     number: "03",
     name: "sequence.color.purple" as const,
     still: "/images/editorial/isabelle-apollon/apollon-pourpre-lyre-v1.webp",
-    body: "/images/client/campaign-duo-pourpre.webp",
-    bodyWidth: 2000,
-    bodyHeight: 1882,
+    body: "/images/client/hero-pourpre-model.webp",
+    bodyWidth: 1731,
+    bodyHeight: 2600,
     feature: "product.feature.7" as const,
     color: "#7d0f52",
   },
@@ -92,8 +92,8 @@ export default function ApollonGuidedSequence() {
       const nextTimeline = gsap.timeline({ defaults: { ease: "power4.out" } });
       timeline = nextTimeline;
       nextTimeline
-        .fromTo(frame.querySelector(".aj-sequence__symbol img"), { autoAlpha: 0.65, scale: 1.075, xPercent: -3 }, { autoAlpha: 1, scale: 1, xPercent: 0, duration: 1.2 }, 0)
-        .fromTo(frame.querySelector(".aj-sequence__body img"), { autoAlpha: 0.45 }, { autoAlpha: 1, duration: 1.25 }, 0.05)
+        .fromTo(frame.querySelector(".aj-sequence__symbol img"), { autoAlpha: 0.48, scale: 1.12, xPercent: -4 }, { autoAlpha: 1, scale: 1.04, xPercent: 0, duration: 1.35 }, 0)
+        .fromTo(frame.querySelector(".aj-sequence__body img"), { autoAlpha: 0.2, clipPath: "inset(0 0 100% 0)" }, { autoAlpha: 1, clipPath: "inset(0 0 0% 0)", duration: 1.4 }, 0.08)
         .fromTo(frame.querySelectorAll(".aj-sequence__copy > *"), { autoAlpha: 0, y: 18 }, { autoAlpha: 1, y: 0, duration: 0.75, stagger: 0.08 }, 0.2);
     });
 
