@@ -3,242 +3,307 @@
 /* eslint-disable @next/next/no-img-element -- pre-optimized, client-owned campaign media */
 
 import Link from "next/link";
-import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { T } from "../../lib/i18n/TranslatedText";
 import { useI18n } from "../../lib/i18n/I18nProvider";
 
-const FRAME_DURATION = 5600;
-
-type PlaybackTween = {
-  kill: () => void;
-  pause: () => void;
-  play: () => void;
-};
+/**
+ * Le vêtement seul et le vêtement porté sont deux prises d'un MÊME plateau :
+ * même mur, même sol de marbre, même lyre, même laurier, même arc.
+ * La séquence ne fabrique pas deux fonds — elle ouvre une fenêtre sur la même plaque.
+ *
+ * Une seule horloge : le scroll. Aucun minuteur, aucune auto-avance.
+ */
 
 const frames = [
   {
     number: "01",
     name: "sequence.color.rose" as const,
     still: "/images/editorial/isabelle-apollon/apollon-rose-lyre-v1.webp",
-    bodyWorld: "/images/client/apollon-world/apollon-rose-model-world-v1.webp",
-    bodyColor: "/images/client/apollon-world/apollon-rose-model-color-v1.webp",
-    bodyWidth: 1731,
-    bodyHeight: 2600,
+    worn: "/images/client/apollon-world/apollon-rose-model-world-v1.webp",
     feature: "product.feature.3" as const,
-    color: "#d8a7ba",
+    accent: "#d8a7ba",
+    // Échantillonné sur le mur de la plaque elle-même, jamais inventé.
+    ground: "#b8878f",
+    // Aligne l'horizon marbre/mur entre les deux prises.
+    stillPosition: "50% 46%",
+    wornPosition: "50% 52%",
   },
   {
     number: "02",
     name: "sequence.color.lilac" as const,
     still: "/images/editorial/isabelle-apollon/apollon-lilas-lyre-v1.webp",
-    bodyWorld: "/images/client/apollon-world/apollon-lilas-model-world-v1.webp",
-    bodyColor: "/images/client/apollon-world/apollon-lilas-model-color-v1.webp",
-    bodyWidth: 1731,
-    bodyHeight: 2600,
+    worn: "/images/client/apollon-world/apollon-lilas-model-world-v1.webp",
     feature: "product.feature.4" as const,
-    color: "#a9abd9",
+    accent: "#a9abd9",
+    ground: "#6f7391",
+    stillPosition: "50% 46%",
+    wornPosition: "50% 52%",
   },
   {
     number: "03",
     name: "sequence.color.purple" as const,
     still: "/images/editorial/isabelle-apollon/apollon-pourpre-lyre-v1.webp",
-    bodyWorld: "/images/client/apollon-world/apollon-pourpre-model-world-v1.webp",
-    bodyColor: "/images/client/apollon-world/apollon-pourpre-model-color-v1.webp",
-    bodyWidth: 1731,
-    bodyHeight: 2600,
+    worn: "/images/client/apollon-world/apollon-pourpre-model-world-v1.webp",
     feature: "product.feature.7" as const,
-    color: "#7d0f52",
+    accent: "#c8608f",
+    ground: "#6d2540",
+    stillPosition: "50% 46%",
+    wornPosition: "50% 52%",
   },
 ] as const;
+
+type Timeline = {
+  kill: () => void;
+  scrollTrigger?: { labelToScroll: (label: string) => number } | null;
+};
 
 export default function ApollonGuidedSequence() {
   const { t } = useI18n();
   const [active, setActive] = useState(0);
-  const [paused, setPaused] = useState(false);
-  const sectionRef = useRef<HTMLElement>(null);
-  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
-  const progressRef = useRef<HTMLSpanElement>(null);
-  const autoplayRef = useRef<PlaybackTween | null>(null);
-  const [inView, setInView] = useState(false);
-  const [pageVisible, setPageVisible] = useState(true);
   const [reducedMotion, setReducedMotion] = useState(false);
-  const [conceptMode, setConceptMode] = useState<"world" | "color">("world");
-
-  const selectFrame = (index: number, takeControl = false) => {
-    autoplayRef.current?.kill();
-    if (progressRef.current) progressRef.current.style.transform = "scaleX(0)";
-    setActive(index);
-    if (takeControl) setPaused(true);
-  };
-
-  const moveSelection = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
-    let next = index;
-    if (event.key === "ArrowRight") next = (index + 1) % frames.length;
-    else if (event.key === "ArrowLeft") next = (index - 1 + frames.length) % frames.length;
-    else if (event.key === "Home") next = 0;
-    else if (event.key === "End") next = frames.length - 1;
-    else return;
-
-    event.preventDefault();
-    selectFrame(next, true);
-    tabRefs.current[next]?.focus();
-  };
-
-  useEffect(() => {
-    if (reducedMotion) return;
-    let cancelled = false;
-    let timeline: PlaybackTween | null = null;
-
-    void import("gsap").then(({ default: gsap }) => {
-      const frame = sectionRef.current?.querySelector<HTMLElement>(".aj-sequence__frame.is-active");
-      if (cancelled || !frame) return;
-
-      const nextTimeline = gsap.timeline({ defaults: { ease: "power4.out" } });
-      timeline = nextTimeline;
-      nextTimeline
-        .fromTo(frame.querySelector(".aj-sequence__symbol img"), { autoAlpha: 0.48, scale: 1.12, xPercent: -4 }, { autoAlpha: 1, scale: 1.04, xPercent: 0, duration: 1.35 }, 0)
-        .fromTo(frame.querySelector(".aj-sequence__body img"), { autoAlpha: 0.2, clipPath: "inset(0 0 100% 0)" }, { autoAlpha: 1, clipPath: "inset(0 0 0% 0)", duration: 1.4 }, 0.08)
-        .fromTo(frame.querySelectorAll(".aj-sequence__copy > *"), { autoAlpha: 0, y: 18 }, { autoAlpha: 1, y: 0, duration: 0.75, stagger: 0.08 }, 0.2);
-    });
-
-    return () => {
-      cancelled = true;
-      timeline?.kill();
-    };
-  }, [active, reducedMotion]);
-
-  useEffect(() => {
-    const progress = progressRef.current;
-    if (!progress || reducedMotion) return;
-    let cancelled = false;
-    let tween: PlaybackTween | null = null;
-
-    void import("gsap").then(({ default: gsap }) => {
-      if (cancelled) return;
-      gsap.set(progress, { scaleX: 0, transformOrigin: "left center" });
-      const nextTween = gsap.to(progress, {
-        scaleX: 1,
-        duration: FRAME_DURATION / 1000,
-        ease: "none",
-        paused: true,
-        onComplete: () => setActive((current) => (current + 1) % frames.length),
-      });
-      tween = nextTween;
-      autoplayRef.current = nextTween;
-      if (!paused && inView && pageVisible) nextTween.play();
-    });
-
-    return () => {
-      cancelled = true;
-      tween?.kill();
-      if (autoplayRef.current === tween) autoplayRef.current = null;
-    };
-  }, [active, inView, pageVisible, paused, reducedMotion]);
-
-  useEffect(() => {
-    const tween = autoplayRef.current;
-    if (!tween) return;
-    if (!paused && inView && pageVisible && !reducedMotion) tween.play();
-    else tween.pause();
-  }, [paused, inView, pageVisible, reducedMotion, active]);
-
-  useEffect(() => {
-    const requestedMode = new URLSearchParams(window.location.search).get("apollon");
-    setConceptMode(requestedMode === "color" ? "color" : "world");
-  }, []);
+  const sectionRef = useRef<HTMLElement>(null);
+  const pinRef = useRef<HTMLDivElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
+  const timelineRef = useRef<Timeline | null>(null);
+  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   useEffect(() => {
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const observer = new IntersectionObserver(
-      ([entry]) => setInView(entry.isIntersecting),
-      { threshold: 0.35 },
+    const sync = () => setReducedMotion(reduced.matches);
+    sync();
+    reduced.addEventListener("change", sync);
+    return () => reduced.removeEventListener("change", sync);
+  }, []);
+
+  useEffect(() => {
+    const pin = pinRef.current;
+    const stage = stageRef.current;
+    if (!pin || !stage) return;
+
+    let cancelled = false;
+    let cleanup: (() => void) | undefined;
+
+    void Promise.all([import("gsap"), import("gsap/ScrollTrigger")]).then(
+      ([gsapModule, scrollTriggerModule]) => {
+        if (cancelled) return;
+        const gsap = gsapModule.default;
+        const { ScrollTrigger } = scrollTriggerModule;
+        gsap.registerPlugin(ScrollTrigger);
+
+        const context = gsap.context(() => {
+          const media = gsap.matchMedia();
+
+          // Le scroll est l'horloge. Trois actes, une seule timeline, un seul pin.
+          const buildTimeline = (span: string) => {
+            const timeline = gsap.timeline({
+              defaults: { ease: "none" },
+              scrollTrigger: {
+                trigger: pin,
+                start: "top top",
+                end: span,
+                pin,
+                pinSpacing: true,
+                scrub: 1,
+                anticipatePin: 1,
+                invalidateOnRefresh: true,
+                fastScrollEnd: 2500,
+                onUpdate: (self) => {
+                  // Trois actes égaux : l'index dérive du scroll, jamais d'un minuteur.
+                  const next = Math.min(
+                    frames.length - 1,
+                    Math.floor(self.progress * frames.length * 0.999),
+                  );
+                  setActive((current) => (current === next ? current : next));
+                },
+              },
+            });
+
+            // Acte 1 — la plaque se révèle, le vêtement seul occupe tout le cadre.
+            timeline
+              .fromTo(
+                stage,
+                { "--aj-plate-scale": 1.08, "--aj-wipe": "100%" },
+                { "--aj-plate-scale": 1, duration: 0.22, ease: "power2.out" },
+                0,
+              )
+              // Acte 2 — le volet : le vêtement seul devient le vêtement porté.
+              // Même plateau, même échelle, même lumière. C'est la bascule.
+              .to(stage, { "--aj-wipe": "38%", duration: 0.38, ease: "power2.inOut" }, 0.24)
+              // Acte 3 — le coloris change sur un décor tenu.
+              .to(stage, { "--aj-wipe": "34%", duration: 0.3, ease: "power1.inOut" }, 0.68);
+
+            timeline.addLabel("rose", 0.05);
+            timeline.addLabel("lilas", 0.42);
+            timeline.addLabel("pourpre", 0.78);
+            return timeline;
+          };
+
+          media.add("(min-width: 981px) and (prefers-reduced-motion: no-preference)", () => {
+            const timeline = buildTimeline("+=220%");
+            timelineRef.current = timeline as unknown as Timeline;
+            return () => {
+              timeline.kill();
+              timelineRef.current = null;
+            };
+          });
+
+          // Le mobile n'est pas une amputation : même récit, pin vertical, volet vertical.
+          media.add("(max-width: 980px) and (prefers-reduced-motion: no-preference)", () => {
+            ScrollTrigger.config({ ignoreMobileResize: true });
+            const timeline = buildTimeline("+=180%");
+            timelineRef.current = timeline as unknown as Timeline;
+            return () => {
+              timeline.kill();
+              timelineRef.current = null;
+            };
+          });
+
+          // Après décodage des plaques, la géométrie du pin est recalculée.
+          const images = Array.from(stage.querySelectorAll("img"));
+          void Promise.all(
+            images.map((image) => image.decode().catch(() => undefined)),
+          ).then(() => {
+            if (!cancelled) ScrollTrigger.refresh();
+          });
+        }, pin);
+
+        cleanup = () => context.revert();
+      },
     );
-    const syncPreferences = () => setReducedMotion(reduced.matches);
-    const syncVisibility = () => setPageVisible(document.visibilityState === "visible");
-    if (sectionRef.current) observer.observe(sectionRef.current);
-    syncPreferences();
-    syncVisibility();
-    document.addEventListener("visibilitychange", syncVisibility);
-    reduced.addEventListener("change", syncPreferences);
+
     return () => {
-      observer.disconnect();
-      document.removeEventListener("visibilitychange", syncVisibility);
-      reduced.removeEventListener("change", syncPreferences);
+      cancelled = true;
+      cleanup?.();
     };
   }, []);
 
+  // Les onglets restent l'override manuel : ils déplacent le scroll, ils ne volent pas le contrôle.
+  const selectFrame = (index: number) => {
+    setActive(index);
+    const label = ["rose", "lilas", "pourpre"][index];
+    const trigger = timelineRef.current?.scrollTrigger;
+    if (!trigger || reducedMotion) {
+      sectionRef.current?.scrollIntoView({ behavior: "auto", block: "start" });
+      return;
+    }
+    void import("gsap").then(({ default: gsap }) => {
+      window.scrollTo({ top: trigger.labelToScroll(label), behavior: "auto" });
+      void gsap;
+    });
+  };
+
+  const frame = frames[active];
+
+  const stageStyle = {
+    "--aj-accent": frame.accent,
+    "--aj-ground": frame.ground,
+  } as CSSProperties;
+
   return (
     <section ref={sectionRef} className="aj-sequence" id="apollon" aria-labelledby="aj-sequence-title">
-      <header className="aj-sequence__heading">
-        <p><T id="home.apollonEyebrow" /></p>
-        <h2 id="aj-sequence-title"><T id="home.incarnationTitle" /></h2>
-        <p><T id="home.incarnationBody" /></p>
-      </header>
+      <div ref={pinRef} className="aj-sequence__pin">
+        <header className="aj-sequence__heading">
+          <p><T id="home.apollonEyebrow" /></p>
+          <h2 id="aj-sequence-title"><T id="home.incarnationTitle" /></h2>
+          <p><T id="home.incarnationBody" /></p>
+        </header>
 
-      <div className="aj-sequence__stage" style={{ "--aj-accent": frames[active].color } as CSSProperties}>
-        <div className="aj-sequence__visuals" aria-live="polite">
-          {frames.map((frame, index) => (
-            <article
-              className={`aj-sequence__frame${index === active ? " is-active" : ""}`}
-              id={`aj-sequence-panel-${index}`}
-              role="tabpanel"
-              aria-labelledby={`aj-sequence-tab-${index}`}
-              aria-hidden={index !== active}
-              key={frame.number}
-            >
-              <figure className="aj-sequence__symbol">
-                <img src={frame.still} alt={index === active ? t("sequence.stillAlt").replace("{color}", t(frame.name)) : ""} width={1024} height={1536} loading="lazy" fetchPriority="low" decoding="async" />
-              </figure>
-              <figure className="aj-sequence__body">
-                <img src={conceptMode === "color" ? frame.bodyColor : frame.bodyWorld} alt={index === active ? t("sequence.bodyAlt").replace("{color}", t(frame.name)) : ""} width={frame.bodyWidth} height={frame.bodyHeight} loading="lazy" fetchPriority="low" decoding="async" />
-              </figure>
-              <div className="aj-sequence__copy">
-                <span>{frame.number} / 03</span>
-                <h3>{t(frame.name)}</h3>
-                <p><T id={frame.feature} /></p>
-              </div>
-            </article>
-          ))}
-        </div>
-
-        <div className="aj-sequence__controls">
-          <button
-            className="aj-sequence__transport"
-            type="button"
-            aria-label={paused ? t("sequence.resume") : t("sequence.pause")}
-            aria-pressed={paused}
-            onClick={() => setPaused((current) => !current)}
-          >
-            <span aria-hidden="true">{paused ? "▶" : "Ⅱ"}</span>
-          </button>
-
-          <div className="aj-sequence__choices" role="tablist" aria-label={t("sequence.tablist")}>
-            {frames.map((frame, index) => (
-              <button
-                type="button"
-                role="tab"
-                id={`aj-sequence-tab-${index}`}
-                aria-controls={`aj-sequence-panel-${index}`}
-                aria-selected={index === active}
-                tabIndex={index === active ? 0 : -1}
-                className={index === active ? "is-active" : ""}
-                ref={(node) => { tabRefs.current[index] = node; }}
-                onClick={() => selectFrame(index, true)}
-                onFocus={() => setPaused(true)}
-                onKeyDown={(event) => moveSelection(event, index)}
-                key={frame.number}
+        <div ref={stageRef} className="aj-sequence__stage" style={stageStyle}>
+          {/* Une seule plaque. Le panneau porté est une fenêtre ouverte dessus,
+              pas un second cadrage indépendant. */}
+          <div className="aj-plate">
+            {frames.map((item, index) => (
+              <figure
+                className={`aj-plate__still${index === active ? " is-active" : ""}`}
+                key={`still-${item.number}`}
+                aria-hidden={index !== active}
               >
-                <span>{frame.number}</span>
-                <strong>{t(frame.name)}</strong>
-              </button>
+                <img
+                  src={item.still}
+                  alt={index === active ? t("sequence.stillAlt").replace("{color}", t(item.name)) : ""}
+                  width={1024}
+                  height={1536}
+                  style={{ objectPosition: item.stillPosition }}
+                  loading={index === 0 ? "eager" : "lazy"}
+                  fetchPriority={index === 0 ? "high" : "low"}
+                  decoding="async"
+                />
+              </figure>
             ))}
+
+            <div className="aj-plate__wipe">
+              <div className="aj-plate__wipe-inner">
+                {frames.map((item, index) => (
+                  <figure
+                    className={`aj-plate__worn${index === active ? " is-active" : ""}`}
+                    key={`worn-${item.number}`}
+                    aria-hidden={index !== active}
+                  >
+                    <img
+                      src={item.worn}
+                      alt={index === active ? t("sequence.bodyAlt").replace("{color}", t(item.name)) : ""}
+                      width={1731}
+                      height={2600}
+                      style={{ objectPosition: item.wornPosition }}
+                      loading={index === 0 ? "eager" : "lazy"}
+                      fetchPriority={index === 0 ? "high" : "low"}
+                      decoding="async"
+                    />
+                  </figure>
+                ))}
+              </div>
+            </div>
+
+            {/* Un seul étalonnage, appliqué identiquement aux deux panneaux. */}
+            <div className="aj-plate__grade" aria-hidden="true" />
           </div>
 
-          <div className="aj-sequence__progress" aria-hidden="true">
-            <span ref={progressRef} />
+          <div className="aj-sequence__copy">
+            <span>{frame.number} / 03</span>
+            <h3>{t(frame.name)}</h3>
+            <p><T id={frame.feature} /></p>
           </div>
 
-          <Link href="/shop"><T id="story.discoverCollection" /> <span aria-hidden="true">↗</span></Link>
+          <div className="aj-sequence__controls">
+            <div className="aj-sequence__choices" role="tablist" aria-label={t("sequence.tablist")}>
+              {frames.map((item, index) => (
+                <button
+                  type="button"
+                  role="tab"
+                  id={`aj-sequence-tab-${index}`}
+                  aria-controls="aj-sequence-stage"
+                  aria-selected={index === active}
+                  tabIndex={index === active ? 0 : -1}
+                  className={index === active ? "is-active" : ""}
+                  ref={(node) => { tabRefs.current[index] = node; }}
+                  onClick={() => selectFrame(index)}
+                  onKeyDown={(event) => {
+                    let next = index;
+                    if (event.key === "ArrowRight") next = (index + 1) % frames.length;
+                    else if (event.key === "ArrowLeft") next = (index - 1 + frames.length) % frames.length;
+                    else if (event.key === "Home") next = 0;
+                    else if (event.key === "End") next = frames.length - 1;
+                    else return;
+                    event.preventDefault();
+                    selectFrame(next);
+                    tabRefs.current[next]?.focus();
+                  }}
+                  key={item.number}
+                >
+                  <span>{item.number}</span>
+                  <strong>{t(item.name)}</strong>
+                </button>
+              ))}
+            </div>
+
+            <Link className="aj-sequence__cta" href="/shop">
+              <T id="story.discoverCollection" />
+              <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" focusable="false">
+                <path d="M3 9L9 3M9 3H4.2M9 3V7.8" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="square" />
+              </svg>
+            </Link>
+          </div>
         </div>
       </div>
     </section>

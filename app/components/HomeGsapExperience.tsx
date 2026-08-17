@@ -115,31 +115,10 @@ export default function HomeGsapExperience() {
             );
           });
 
-          media.add("(min-width: 981px) and (prefers-reduced-motion: no-preference)", () => {
-            const sequenceStage = document.querySelector<HTMLElement>(".aj-sequence__stage");
-            if (!sequenceStage) return;
-
-            const sequenceTimeline = gsap.timeline({
-              scrollTrigger: {
-                trigger: sequenceStage,
-                start: "top 8%",
-                end: "+=85%",
-                pin: true,
-                pinSpacing: true,
-                scrub: 0.8,
-                anticipatePin: 1,
-                invalidateOnRefresh: true,
-              },
-            });
-
-            sequenceTimeline
-              .fromTo(sequenceStage, { clipPath: "inset(3% 1.5% 3% 1.5%)", y: 26 }, { clipPath: "inset(0% 0% 0% 0%)", y: 0, duration: 0.24, ease: "power3.out" }, 0)
-              .to(".aj-sequence__heading", { autoAlpha: 0.2, y: -36, duration: 0.3, ease: "power2.out" }, 0)
-              .to(sequenceStage, { "--aj-split": "29%", duration: 0.42, ease: "power2.inOut" }, 0.2)
-              .fromTo(".aj-sequence__copy", { xPercent: -8 }, { xPercent: 0, duration: 0.38, ease: "power3.out" }, 0.28)
-              .fromTo(".aj-sequence__controls", { yPercent: 18 }, { yPercent: 0, duration: 0.32, ease: "power3.out" }, 0.44)
-              .to(sequenceStage, { "--aj-split": "34%", duration: 0.28, ease: "power2.inOut" }, 0.72);
-          });
+          // La séquence Apollon a désormais UNE SEULE autorité d'animation :
+          // ApollonGuidedSequence.tsx, qui porte son propre pin et son propre volet.
+          // Un second pin sur .aj-sequence__stage créait deux pin-spacers concurrents
+          // sur la même section. Ne le réintroduis pas ici.
           revertGsap = () => media.revert();
         }, root);
 

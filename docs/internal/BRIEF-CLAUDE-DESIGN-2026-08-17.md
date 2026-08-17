@@ -602,3 +602,79 @@ Elles sont toutes déjà arrivées lors du tour précédent. Relis-les avant cha
 
 *Document préparé le 2026-08-17. Terrain vérifié, branche active, actifs sur disque, hook de
 sauvegarde armé. Il ne te manque rien pour commencer.*
+
+---
+
+# ADDENDUM 2 — LA CAUSE RACINE DU P0, TROUVÉE LE 2026-08-17
+
+**Ceci remplace toutes les hypothèses de la §3.1 sur le pin. La §3.1 disait « deux suspects, non
+prouvés ». Le vrai coupable n'était dans aucune des deux listes.**
+
+## Le conteneur de défilement n'est pas la fenêtre
+
+`app/globals.css`, règle `.home-shell` :
+
+```css
+.home-shell {
+  position: relative;
+  height: 100svh;          /* ← la coquille fait exactement un écran */
+  overflow-x: hidden;
+  overflow-y: auto;        /* ← ET c'est ELLE qui défile */
+  scroll-behavior: smooth;
+  scroll-snap-type: y mandatory;
+}
+```
+
+**C'est `.home-shell` qui défile, pas le document.** ScrollTrigger observe `window` par défaut.
+Il ne voit donc **jamais** le scroll de l'utilisateur : aucun `scrub` ne progresse, aucune timeline
+épinglée n'avance, et `--aj-split` reste figé à sa valeur initiale — exactement le symptôme mesuré.
+
+Cela explique d'un coup :
+- pourquoi la timeline épinglée ne produisait rien alors que GSAP, ScrollTrigger, les sélecteurs et
+  la media query étaient tous corrects ;
+- pourquoi `window.scrollY` restait bloqué à **1590** sur des appels successifs — la fenêtre ne
+  défile pas, c'est la coquille qui défile ;
+- pourquoi deux campagnes DevTools se « contredisaient » : elles mesuraient toutes deux la mauvaise
+  cible.
+
+## Trois aggravants sur le même élément
+
+1. **`scroll-snap-type: y mandatory`** sur le conteneur de défilement. Un snap obligatoire se bat
+   frontalement avec une scène épinglée et scrubbée : le navigateur ramène la position de scroll
+   pendant que la timeline essaie de la lire.
+2. **`scroll-behavior: smooth`** — déjà documenté par GSAP comme incompatible avec ScrollTrigger.
+3. **`.aj-home { overflow: hidden }`** — crée un second conteneur de défilement au-dessus de
+   l'élément épinglé. `overflow-x: clip` coupe le débordement horizontal sans créer ce conteneur.
+
+## Ce que tu dois trancher, et c'est un arbitrage d'architecture
+
+Deux chemins, **exclusifs** :
+
+**A — Le document redevient le scroller.** Retirer `height: 100svh`, `overflow-y: auto` et
+`scroll-snap-type` de `.home-shell`. C'est l'architecture de tous les sites ScrollTrigger, et c'est
+ce que suppose le reste du plan (C2, C6, C8, C10). Coût : le site perd son modèle « deck à snap
+vertical », qu'il faut réécrire là où il servait.
+
+**B — ScrollTrigger apprend le vrai scroller.** `ScrollTrigger.defaults({ scroller: '.home-shell' })`,
+ou `scroller` par trigger. Moins invasif, mais tu conserves un snap obligatoire qui restera en
+conflit avec chaque scène scrubbée, et `ScrollSmoother` restera inutilisable.
+
+**Recommandation : A.** Écris l'arbitrage, daté, décideur nommé — il rejoint les quatre arbitrages
+exigés en C12.
+
+## État de la branche à la remise
+
+`claude/front-awwwards-20260817` porte une **première passe de diagnostic**, écrite par Claude Code
+avant qu'Adam ne recadre le partage des rôles. **Tu n'es pas tenu de la conserver** : traite-la comme
+une preuve que le terrain répond, pas comme une base de départ imposée.
+
+Ce qu'elle contient : réécriture de `ApollonGuidedSequence.tsx` en une timeline épinglée unique
+(plaque unique, volet par deux transforms contra-rotatifs, `@property --aj-wipe`, `--aj-ground`
+per-frame, plus d'auto-avance, plus de `?apollon=`), retrait du pin concurrent dans
+`HomeGsapExperience.tsx`, `overflow-x: clip` sur `.aj-home`, retrait des deux
+`scroll-behavior: smooth`, et suppression des surcharges mobiles mortes.
+
+**Résultat mesuré après déploiement : `.pin-spacer` passe de 0 à 1.** Le pin s'instancie enfin.
+Le scrub, lui, reste bloqué tant que le conflit de scroller ci-dessus n'est pas tranché.
+
+`git log claude/front-awwwards-20260817` donne le détail. `git revert` si tu préfères repartir nu.
