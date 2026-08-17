@@ -24,3 +24,6 @@
 *.docx binary
 *.xlsx binary
 *.zip binary
+
+# Les hooks doivent rester en LF : Git Bash sous Windows peut refuser un shebang en CRLF.
+.githooks/** text eol=lf
