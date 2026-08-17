@@ -20,7 +20,8 @@ const frames = [
     number: "01",
     name: "sequence.color.rose" as const,
     still: "/images/editorial/isabelle-apollon/apollon-rose-lyre-v1.webp",
-    body: "/images/client/product-rose-model.webp",
+    bodyWorld: "/images/client/apollon-world/apollon-rose-model-world-v1.webp",
+    bodyColor: "/images/client/apollon-world/apollon-rose-model-color-v1.webp",
     bodyWidth: 1731,
     bodyHeight: 2600,
     feature: "product.feature.3" as const,
@@ -30,7 +31,8 @@ const frames = [
     number: "02",
     name: "sequence.color.lilac" as const,
     still: "/images/editorial/isabelle-apollon/apollon-lilas-lyre-v1.webp",
-    body: "/images/client/editorial-lilas-chair.webp",
+    bodyWorld: "/images/client/apollon-world/apollon-lilas-model-world-v1.webp",
+    bodyColor: "/images/client/apollon-world/apollon-lilas-model-color-v1.webp",
     bodyWidth: 1731,
     bodyHeight: 2600,
     feature: "product.feature.4" as const,
@@ -40,7 +42,8 @@ const frames = [
     number: "03",
     name: "sequence.color.purple" as const,
     still: "/images/editorial/isabelle-apollon/apollon-pourpre-lyre-v1.webp",
-    body: "/images/client/hero-pourpre-model.webp",
+    bodyWorld: "/images/client/apollon-world/apollon-pourpre-model-world-v1.webp",
+    bodyColor: "/images/client/apollon-world/apollon-pourpre-model-color-v1.webp",
     bodyWidth: 1731,
     bodyHeight: 2600,
     feature: "product.feature.7" as const,
@@ -59,6 +62,7 @@ export default function ApollonGuidedSequence() {
   const [inView, setInView] = useState(false);
   const [pageVisible, setPageVisible] = useState(true);
   const [reducedMotion, setReducedMotion] = useState(false);
+  const [conceptMode, setConceptMode] = useState<"world" | "color">("world");
 
   const selectFrame = (index: number, takeControl = false) => {
     autoplayRef.current?.kill();
@@ -139,6 +143,11 @@ export default function ApollonGuidedSequence() {
   }, [paused, inView, pageVisible, reducedMotion, active]);
 
   useEffect(() => {
+    const requestedMode = new URLSearchParams(window.location.search).get("apollon");
+    setConceptMode(requestedMode === "color" ? "color" : "world");
+  }, []);
+
+  useEffect(() => {
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
     const observer = new IntersectionObserver(
       ([entry]) => setInView(entry.isIntersecting),
@@ -181,7 +190,7 @@ export default function ApollonGuidedSequence() {
                 <img src={frame.still} alt={index === active ? t("sequence.stillAlt").replace("{color}", t(frame.name)) : ""} width={1024} height={1536} loading="lazy" fetchPriority="low" decoding="async" />
               </figure>
               <figure className="aj-sequence__body">
-                <img src={frame.body} alt={index === active ? t("sequence.bodyAlt").replace("{color}", t(frame.name)) : ""} width={frame.bodyWidth} height={frame.bodyHeight} loading="lazy" fetchPriority="low" decoding="async" />
+                <img src={conceptMode === "color" ? frame.bodyColor : frame.bodyWorld} alt={index === active ? t("sequence.bodyAlt").replace("{color}", t(frame.name)) : ""} width={frame.bodyWidth} height={frame.bodyHeight} loading="lazy" fetchPriority="low" decoding="async" />
               </figure>
               <div className="aj-sequence__copy">
                 <span>{frame.number} / 03</span>

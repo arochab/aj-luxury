@@ -70,6 +70,11 @@ test("the private homepage preserves the approved film and the recovered Apollon
   assert.match(sequence, /selectFrame\(index, true\)/);
   assert.match(sequence, /progressRef/);
   assert.match(sequence, /setPaused/);
+  assert.match(sequence, /URLSearchParams\(window\.location\.search\)\.get\("apollon"\)/);
+  assert.match(sequence, /requestedMode === "color" \? "color" : "world"/);
+  assert.match(sequence, /apollon-rose-model-world-v1\.webp/);
+  assert.match(sequence, /apollon-rose-model-color-v1\.webp/);
+  assert.match(sequence, /conceptMode === "color" \? frame\.bodyColor : frame\.bodyWorld/);
   assert.match(page, /aria-label=\{`\$\{product\.model\} \$\{product\.name\}`\}/);
 });
 

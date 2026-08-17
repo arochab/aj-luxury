@@ -44,6 +44,7 @@ next-env.d.ts
 /output/
 /migration-staging/
 /.aj-d1/
+/.codex-asset-work/
 /inputs_assets/
 /deliverables/
 /docs/internal/evidence/
