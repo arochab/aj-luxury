@@ -678,3 +678,56 @@ per-frame, plus d'auto-avance, plus de `?apollon=`), retrait du pin concurrent d
 Le scrub, lui, reste bloqué tant que le conflit de scroller ci-dessus n'est pas tranché.
 
 `git log claude/front-awwwards-20260817` donne le détail. `git revert` si tu préfères repartir nu.
+
+---
+
+# ADDENDUM 3 — CORRECTION DE L'ADDENDUM 2. IL ÉTAIT FAUX.
+
+**L'ADDENDUM 2 affirmait que `.home-shell` était le conteneur de défilement et que c'était la cause
+racine du P0. C'est faux. Ne l'applique pas.** Il est conservé au-dessus comme trace, barré par
+celui-ci.
+
+## Ce qui a été vérifié, en source et sur la preview déployée
+
+| Contrôle | Résultat |
+|---|---|
+| `home-shell` dans un `.tsx` / `.ts` / `.js` | **0 occurrence.** La classe n'existe que dans `globals.css` et dans ces documents. |
+| `page.tsx:19` | monte `<main className="aj-home">` puis les sections directement — aucun conteneur défilant intermédiaire |
+| `document.querySelectorAll('.home-shell').length` sur la preview | **0** |
+| `document.scrollingElement === document.documentElement` | **true** — le document EST le scroller |
+| `getComputedStyle(html).scrollBehavior` | `auto` |
+| `.aj-home` overflow-x | `clip` |
+| `.pin-spacer` | **1** — le pin s'instancie |
+
+**Le réglage par défaut de ScrollTrigger, qui observe `window`, est donc le bon.** Le chemin A de
+l'addendum 2 est un no-op sur du code mort ; le chemin B pointerait un `scroller` sur un sélecteur
+vide et serait une régression. Les quatre `scroll-snap-type: y mandatory` sont portés par ces mêmes
+règles mortes.
+
+Crédit : c'est Claude Design qui a démonté cette fausse piste en lisant la source plutôt qu'en
+faisant confiance au document. C'est exactement le comportement que la §6.1 exige.
+
+## Le vrai symptôme, mesuré sur la preview déployée
+
+Scroll réel de 1 590 à 3 590 px, `scroll-behavior: auto`, 8 relevés :
+
+- **`--aj-plate-scale` évolue** — la timeline progresse donc bien ;
+- **`--aj-wipe` reste figé à `100%`** sur toute la traversée ;
+- le coloris actif ne change pas.
+
+**Conclusion : ce n'est pas un problème d'architecture de scroll, c'est un problème
+d'interpolation de propriété personnalisée.** `--aj-wipe` est déclarée
+`@property { syntax: "<percentage>" }` et animée par GSAP. La piste à instrumenter en premier est
+la façon dont GSAP écrit cette variable — valeur avec unité, `CSSPlugin`, ou le fait que la valeur
+posée soit invalide et que le moteur retombe sur l'`initial-value` de `@property`.
+
+Un contournement connu, à évaluer et non à appliquer aveuglément : animer un objet proxy et écrire
+la variable dans un `onUpdate` via `style.setProperty()`, ce qui contourne toute question de
+parsing GSAP.
+
+## La leçon, et elle vaut pour toi comme pour moi
+
+L'ADDENDUM 2 a été écrit à partir d'une lecture de `globals.css` sans vérifier qu'un composant
+rendait la classe. **Une règle CSS n'est pas une preuve qu'un élément existe.** La §6.1 point 1 le
+disait déjà : « toute prémisse doit être mesurée ou lue dans la source, avec ligne et fichier ».
+Je ne l'ai pas appliquée à moi-même.
