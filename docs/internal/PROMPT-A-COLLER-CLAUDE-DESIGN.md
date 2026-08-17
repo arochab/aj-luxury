@@ -1,102 +1,133 @@
-Tu prends le front d'AJ Luxury. Objectif : Awwwards Site of the Day, seuil jury 9,7/10.
+Tu prends le front d'AJ Luxury, marque française de sous-vêtements masculins premium.
+Objectif : **Awwwards Site of the Day**. Seuil d'acceptation du jury interne : **9,7/10**,
+pondération Design 40 % · Usability 30 % · Creativity 20 % · Content 10 %.
+Note actuelle mesurée : **3,2/10**. Ce n'est pas une estimation, c'est un audit instrumenté.
 
-# 1. LIS D'ABORD, EN ENTIER, DANS CET ORDRE
+## 0. LE TERRAIN
 
-- `docs/internal/BRIEF-CLAUDE-DESIGN-2026-08-17.md` — ton ordre de mission complet : 13 chantiers,
-  critères d'acceptation mesurables, gauntlet loop à exécuter, contraintes dures, table de preuves.
-  **Lis l'ADDENDUM 2 en fin de document avant tout le reste : il contient la cause racine du P0 et
-  il périme les hypothèses de la §3.1.**
-- `docs/internal/HANDOFF-2026-08-17.md` — état du projet, décisions ouvertes, ce qu'il ne faut pas toucher.
-- `docs/internal/AUDIT-FRONT-JURY-2026-08-17.md` — le raisonnement complet du jury, si tu veux le
-  détail derrière un chantier.
-
-# 2. LA PREMIÈRE CHOSE À TRANCHER, AVANT TOUTE LIGNE DE CODE
-
-`.home-shell` est `height: 100svh` + `overflow-y: auto` : **c'est elle qui défile, pas le document.**
-ScrollTrigger observe `window` par défaut, donc il ne voit jamais le scroll. C'est pour ça qu'aucune
-timeline épinglée n'a jamais progressé. Aggravants sur le même élément : `scroll-snap-type: y mandatory`
-et, plus haut, `overflow: hidden` sur `.aj-home`.
-
-Deux chemins exclusifs :
-- **A** — le document redevient le scroller : retirer `height: 100svh`, `overflow-y: auto` et
-  `scroll-snap-type` de `.home-shell`. C'est l'architecture de tous les sites ScrollTrigger et c'est
-  ce que supposent les chantiers C2, C6, C8 et C10.
-- **B** — `ScrollTrigger.defaults({ scroller: '.home-shell' })`. Moins invasif, mais le snap
-  obligatoire restera en conflit avec chaque scène scrubbée et ScrollSmoother restera inutilisable.
-
-Recommandation du diagnostic : **A**. Écris ton arbitrage, daté, avant de coder.
-
-# 3. LE TERRAIN — TOUT EST SUR GITHUB, NE RECRÉE RIEN
-
-**Dépôt : `arochab/aj-luxury` (privé). Branche : `claude/front-awwwards-20260817`, commit `a0d6c4b`.**
-Coupée à `59d595e`. Elle est poussée et complète : les 5 documents ci-dessus, **61 fichiers médias**
-(58 images + 4 vidéos hero, aucun Git LFS), et tout le code. Tu n'as rien à chercher ailleurs.
+**Dépôt : `arochab/aj-luxury` (privé) · Branche : `claude/front-awwwards-20260817`**
 
 ```bash
 git clone https://github.com/arochab/aj-luxury.git
 cd aj-luxury
 git checkout claude/front-awwwards-20260817
 npm ci
+git config core.hooksPath .githooks
 ```
 
-Si tu travailles depuis la machine d'Adam, le clone existe déjà, déjà sur la bonne branche :
-`D:\Adam CHABBI Pro\business-clients\CLIENTS\aj-luxury`.
+Si tu tournes sur la machine d'Adam, le clone existe déjà, déjà sur la bonne branche :
+`D:\Adam CHABBI Pro\business-clients\CLIENTS\aj-luxury`
 
-Les actifs de la demande d'Adam :
+**Si tu n'as accès ni au dépôt ni au disque, arrête-toi immédiatement et dis-le.** Ne travaille pas
+de mémoire, ne devine aucun fichier, n'invente aucun chemin. Tout ce qui suit suppose que tu lis le
+code réel.
+
+## 1. LIS AVANT D'ÉCRIRE — DANS CET ORDRE
+
+1. `docs/internal/BRIEF-CLAUDE-DESIGN-2026-08-17.md` — ton ordre de mission complet : 13 chantiers
+   chiffrés, critères d'acceptation exécutables, table de preuves, hors-périmètre justifié.
+   **Commence par son ADDENDUM 2 : il contient la cause racine et il périme la §3.1.**
+2. `docs/internal/HANDOFF-2026-08-17.md` — état, décisions ouvertes, ce qu'il ne faut pas toucher.
+3. `docs/internal/AUDIT-FRONT-JURY-2026-08-17.md` — le raisonnement du jury, à consulter au besoin.
+
+## 2. LA CAUSE RACINE — À TRANCHER AVANT TOUTE LIGNE DE CODE
+
+`.home-shell` est `height: 100svh` + `overflow-y: auto` : **c'est elle qui défile, pas le document.**
+ScrollTrigger observe `window` par défaut, donc il ne voit jamais le scroll. Aucune timeline épinglée
+n'a jamais progressé sur ce site — ni l'ancienne, ni la mienne. Aggravants sur le même élément :
+`scroll-snap-type: y mandatory` (se bat frontalement avec un pin scrubbé) et, plus haut,
+`overflow: hidden` sur `.aj-home`.
+
+Deux chemins **exclusifs** :
+- **A** — le document redevient le scroller : retirer `height: 100svh`, `overflow-y: auto` et
+  `scroll-snap-type` de `.home-shell`. Architecture standard ScrollTrigger, supposée par les
+  chantiers C2, C6, C8 et C10.
+- **B** — `ScrollTrigger.defaults({ scroller: '.home-shell' })`. Moins invasif, mais le snap
+  obligatoire restera en conflit et ScrollSmoother restera inutilisable.
+
+**Recommandation : A.** Écris ton arbitrage, daté, avant de coder. Tant que ce point n'est pas
+tranché, aucun scrub ne bougera quel que soit le code écrit par-dessus.
+
+## 3. CE QU'ADAM DEMANDE, MOT POUR MOT
+
+**Les images IA des caleçons SANS mannequins À CÔTÉ de celles AVEC mannequins, sur le MÊME fond.**
+
+Le fait décisif, vérifié en ouvrant les fichiers : ce sont **deux prises du même plateau** — même mur,
+même sol de marbre, même lyre, même laurier, même arc, même carquois. Ratios identiques (0,6667).
+Le CSS actuel fabrique deux fonds artificiels pour les séparer. Ton travail est de laisser voir la plaque.
+
 - caleçons **seuls** → `public/images/editorial/isabelle-apollon/apollon-{rose,lilas,pourpre}-lyre-v1.webp`
 - caleçons **portés** → `public/images/client/apollon-world/apollon-{rose,lilas,pourpre}-model-world-v1.webp`
 
-Un hook `post-commit` pousse automatiquement chaque commit (`git config core.hooksPath .githooks`
-après un clone neuf). Si tu vois `[github-first] … ECHEC`, ton travail n'existe que sur ton disque :
-corrige avant de continuer.
+La variante **A** (`?apollon=world`) est arbitrée sans condition : la variante B supprime tous les
+props du mannequin et détruit donc activement le « même fond » demandé. Interdits techniques précis
+en §4.3 du brief — notamment : **une seule échelle** pour les deux panneaux (deux `object-fit: cover`
+indépendants font apparaître la lyre partagée ~2,2× plus grande à droite), et **pas de `clip-path`
+comme propriété compositable** (Chromium ne composite que `transform`, `opacity`, `filter`,
+`backdrop-filter`).
 
-Elle porte déjà une **passe de diagnostic** (réécriture de `ApollonGuidedSequence.tsx`, retrait du
-pin concurrent, `overflow-x: clip`, retrait des `scroll-behavior: smooth`). Résultat mesuré :
-`.pin-spacer` est passé de 0 à 1. **Tu n'es pas tenu de la garder** — `git revert` si tu préfères
-partir nu. C'est une preuve que le terrain répond, pas une base imposée.
+## 4. LE NIVEAU ATTENDU
 
-# 4. CE QU'ON ATTEND DE TOI
+Du **full GSAP**, état de l'art août 2026/2027 : scène épinglée, scrubbée, chapitrée, qui tient aussi
+sur mobile. Pas du fade-and-rise. Aujourd'hui le site charge 46 Ko de GSAP + ScrollTrigger pour un
+`opacity .72 → 1` sur 12 px — c'est un réglage par défaut de thème, pas une intention.
 
-Du **full GSAP**, état de l'art août 2026/2027. Pas du fade-and-rise : une vraie scène épinglée,
-scrubbée, chapitrée, qui tient le mobile aussi.
+**Ton budget va au Design (40 %) et à la Creativity (20 %).** Six audits antérieurs ont dépensé ~70 %
+de leur effort sur Usability et Content, soit 40 % de la pondération : les exécuter intégralement
+amènerait ce site autour de 5,5, jamais à 9,7. Ne rééquilibre pas le plan.
 
-La demande fonctionnelle d'Adam, mot pour mot : **les images IA des caleçons SANS mannequins À CÔTÉ
-de celles AVEC mannequins, sur le MÊME fond.** Le fait décisif est dans le brief §4.1 : ce sont deux
-prises du **même plateau** — même mur, même sol de marbre, même lyre, même laurier, même arc. Le CSS
-actuel fabrique deux fonds artificiels pour les séparer. Ton travail est de laisser voir la plaque.
+## 5. EXÉCUTE LA GAUNTLET LOOP — NE LA RÉSUME PAS
 
-Variante **A** (`?apollon=world`) est arbitrée sans condition, la B détruit activement le « même
-fond » demandé. Détail et interdits techniques en §4.2 et §4.3.
+§6 du brief : **9 agents experts mondiaux en parallèle** (motion GSAP, direction artistique,
+retouche/compositing, typographie, UX scrollytelling, front mobile, marque premium, perf/a11y,
+qualité/harnais), puis **les 9 mêmes en testeurs adversariaux**, puis le **jury final** qui note à la
+pondération Awwwards. **Seuil 9,7.** Boucle de reprise tant que la note est en dessous, trois tours
+maximum, puis remontée à Adam.
 
-# 5. EXÉCUTE LA GAUNTLET LOOP — NE LA RÉSUME PAS
+Deux règles qui font échouer d'office :
+- La §3.2 liste **cinq affirmations falsifiées** — les reprendre est un échec automatique.
+- La §6.2 liste **huit critères connus comme inopérants** — un testeur qui les laisse passer a échoué.
 
-§6 du brief : 9 agents experts en parallèle, puis les 9 mêmes en testeurs adversariaux, puis le jury
-final pondéré Design 40 % / Usability 30 % / Creativity 20 % / Content 10 %. Seuil 9,7. Boucle de
-reprise tant que la note est en dessous, trois tours maximum.
+Le jury ne peut pas gonfler une note pour atteindre le seuil. « Le plan passe, le site reste à
+démontrer » est une issue valide et doit être écrite telle quelle.
 
-La §6.2 liste les critères connus comme inopérants : un testeur qui les laisse passer a échoué.
-La §3.2 liste cinq affirmations falsifiées : les reprendre est un échec automatique.
+## 6. INTERDITS ABSOLUS
 
-# 6. TU NE DÉPLOIES PAS
+- **Aucune mise en production.** Commerce fermé, rollback R10 v15 live. La preview Cloudflare privée
+  est le seul terrain.
+- **Aucune écriture sur une branche `codex/*`.** Un repo, une branche, un agent.
+- **Aucun nouvel actif créatif.** Tout ce qui n'est pas déjà dans le dépôt est
+  `PROPOSED — ISABELLE NOT YET CONFIRMED`. Ne re-rends aucune vidéo, n'en commande aucune.
+- **Aucune mesure prise sur `ajluxurystore.com` ne décrit cette branche** : la production est un
+  autre build, elle n'a même pas de GSAP. Ta ligne de base se prend sur la preview, datée.
+- **Tu ne déploies pas.** Tu écris le code et tu commites ; la mise en ligne Cloudflare est faite par
+  Claude Code sur demande d'Adam. Ne lance ni `wrangler`, ni build de release.
 
-Tu écris le code et tu commites. **La mise en ligne Cloudflare est faite par Claude Code**, sur
-demande d'Adam. Ne lance ni `wrangler`, ni de build de release.
+## 7. L'ÉTAT DE LA BRANCHE
 
-Pour ton information seulement, la commande utilisée est :
-`APP_ENV=preproduction PREPROD_TARGET_PROJECT_ID=appgprj_6a81995167048191b50b37833695f3dc npm run build`
-puis `npx wrangler deploy --config cloudflare.awwwards-preview.jsonc`.
+Elle porte une **passe de diagnostic** écrite par Claude Code avant qu'Adam ne recadre les rôles :
+réécriture de `ApollonGuidedSequence.tsx` en timeline épinglée unique, retrait du pin concurrent dans
+`HomeGsapExperience.tsx`, `overflow-x: clip` sur `.aj-home`, retrait des deux `scroll-behavior: smooth`,
+suppression des surcharges mobiles mortes. Résultat mesuré : `.pin-spacer` est passé de **0 à 1**.
 
-# 7. INTERDITS ABSOLUS
+**Tu n'es pas tenu de la garder.** `git revert` si tu préfères partir nu. C'est une preuve que le
+terrain répond, pas une base imposée.
 
-- Aucune mise en production. Commerce fermé, rollback R10 v15 live. La preview privée est le seul terrain.
-- Aucune écriture sur une branche `codex/*`.
-- Aucun nouvel actif créatif : tout ce qui n'est pas déjà dans le dépôt est
-  `PROPOSED — ISABELLE NOT YET CONFIRMED`.
-- Ne re-rends aucun actif vidéo. C13 documente la découpe des visages, il ne la corrige pas.
-- Aucune mesure prise sur la production ne décrit cette branche : la prod est un autre build,
-  elle n'a même pas de GSAP.
+## 8. LA RÈGLE QUI A COÛTÉ LE PLUS CHER
 
-# 8. LA RÈGLE QUI A COÛTÉ LE PLUS CHER
+Treize agents ont manqué un défaut plein écran — une découpe de visages ratée dans la vidéo du hero —
+parce qu'ils regardaient le DOM, le CSS calculé et les timings. Personne n'a regardé l'image.
+Adam l'a vu en trois secondes.
 
-Treize agents ont manqué un défaut plein écran parce qu'ils regardaient le DOM et pas l'image.
 **À chaque chantier livré, regarde le rendu. Une mesure verte n'est pas une preuve visuelle.**
+
+## 9. FORME DE CHAQUE LIVRABLE
+
+Pour chaque chantier, dans cet ordre : **(a)** le diff · **(b)** la commande exacte qui prouve le
+critère · **(c)** sa sortie brute · **(d)** la capture avant/après quand le critère est visuel ·
+**(e)** le statut `ATTEINT` / `PARTIEL, delta = X points` / `BLOQUÉ, blocage = …, décideur = …`.
+
+Un critère non prouvé compte comme non atteint. Un critère prouvé sur la production compte comme non
+atteint. Un critère dont le chiffre de départ est faux te coûte le chantier entier.
+
+**Commence par lire le brief en entier, puis écris ton arbitrage du scroller. Rien d'autre avant ça.**
