@@ -56,42 +56,15 @@ const features = [
   "Maintien optimal au quotidien",
 ];
 
+/*
+ * ORDRE CANONIQUE — rose, lilas, pourpre.
+ * C'est l'ordre de la maquette, repris littéralement par ORDRE_COLORIS
+ * (app/page.tsx). /shop et /products/[slug] itèrent getProducts() dans
+ * l'ordre de déclaration et numérotent 01/02/03 : cette numérotation ne peut
+ * coïncider avec celle de l'accueil que si ce tableau porte le même ordre.
+ * Ne pas réordonner ici sans réordonner ORDRE_COLORIS, et réciproquement.
+ */
 export const products: Product[] = deepFreeze([
-  {
-    slug: "pourpre",
-    modelId: "boxer-aj-luxury",
-    model: "Apollon",
-    name: "Pourpre Impérial",
-    color: "Pourpre Impérial",
-    tone: "Profond et sophistiqué",
-    swatch: "#7d0f52",
-    image: "/images/client/raw/product-card-pourpre.webp",
-    gallery: [
-      {
-        src: "/images/client/raw/product-card-pourpre.webp",
-        frame: "main",
-        objectPosition: "center 30%",
-      },
-      { src: "/images/client/raw/product-pourpre-detail.webp", frame: "portrait" },
-      { src: "/images/client/raw/product-pourpre-back.webp", frame: "portrait" },
-      { src: "/images/client/raw/product-pourpre-alt.webp", frame: "portrait" },
-      { src: "/images/client/editorial-pourpre-chair.webp", frame: "portrait" },
-    ],
-    tagline: "Profond et sophistiqué",
-    description:
-      "Découvrez Apollon Pourpre Impérial, un boxer masculin pensé pour ceux qui recherchent l’alliance parfaite entre élégance, confort et raffinement.",
-    details: [
-      "Confectionné dans un tissu doux composé de 94 % modal et 6 % élasthanne, il offre un toucher soyeux, une grande respirabilité et une sensation de seconde peau. Sa coupe boxer classique épouse naturellement les formes du corps tout en garantissant une liberté de mouvement optimale au quotidien.",
-      "Sa ceinture élastique de 3,5 cm, ornée du logo métallique AJ Luxury, apporte une signature élégante et un maintien confortable.",
-      "Son coloris Pourpre Impérial, profond et sophistiqué, incarne l’assurance et le caractère. Une pièce intemporelle qui sublime votre collection de sous-vêtements.",
-    ],
-    features,
-    priceCents: 2999,
-    status: "launch-product",
-    statusLabel: "Modèle Apollon",
-    primaryModel: true,
-    benefits,
-  },
   {
     slug: "rose-pale",
     modelId: "boxer-aj-luxury",
@@ -134,7 +107,7 @@ export const products: Product[] = deepFreeze([
     color: "Lilas Céleste",
     tone: "Délicat et lumineux",
     swatch: "#a9abd9",
-    image: "/images/client/raw/product-lilas-model.webp",
+    image: "/images/client/editorial-lilas-chair.webp",
     gallery: [
       {
         src: "/images/client/raw/product-lilas-model.webp",
@@ -153,6 +126,41 @@ export const products: Product[] = deepFreeze([
       "Fabriqué à partir d’un mélange premium de 94 % modal et 6 % élasthanne, il procure un confort exceptionnel grâce à une matière légère, respirante et agréable au contact de la peau. Sa coupe boxer classique accompagne chaque mouvement tout en offrant un ajustement parfait.",
       "La ceinture de 3,5 cm, sublimée par le logo métallique AJ Luxury, apporte une finition luxueuse et une identité forte à cette création.",
       "Son coloris Lilas Céleste, délicat et lumineux, apporte une touche de modernité et d’originalité tout en conservant une élégance masculine assumée.",
+    ],
+    features,
+    priceCents: 2999,
+    status: "launch-product",
+    statusLabel: "Modèle Apollon",
+    primaryModel: true,
+    benefits,
+  },
+  {
+    slug: "pourpre",
+    modelId: "boxer-aj-luxury",
+    model: "Apollon",
+    name: "Pourpre Impérial",
+    color: "Pourpre Impérial",
+    tone: "Profond et sophistiqué",
+    swatch: "#7d0f52",
+    image: "/images/client/raw/product-card-pourpre.webp",
+    gallery: [
+      {
+        src: "/images/client/raw/product-card-pourpre.webp",
+        frame: "main",
+        objectPosition: "center 30%",
+      },
+      { src: "/images/client/raw/product-pourpre-detail.webp", frame: "portrait" },
+      { src: "/images/client/raw/product-pourpre-back.webp", frame: "portrait" },
+      { src: "/images/client/raw/product-pourpre-alt.webp", frame: "portrait" },
+      { src: "/images/client/editorial-pourpre-chair.webp", frame: "portrait" },
+    ],
+    tagline: "Profond et sophistiqué",
+    description:
+      "Découvrez Apollon Pourpre Impérial, un boxer masculin pensé pour ceux qui recherchent l’alliance parfaite entre élégance, confort et raffinement.",
+    details: [
+      "Confectionné dans un tissu doux composé de 94 % modal et 6 % élasthanne, il offre un toucher soyeux, une grande respirabilité et une sensation de seconde peau. Sa coupe boxer classique épouse naturellement les formes du corps tout en garantissant une liberté de mouvement optimale au quotidien.",
+      "Sa ceinture élastique de 3,5 cm, ornée du logo métallique AJ Luxury, apporte une signature élégante et un maintien confortable.",
+      "Son coloris Pourpre Impérial, profond et sophistiqué, incarne l’assurance et le caractère. Une pièce intemporelle qui sublime votre collection de sous-vêtements.",
     ],
     features,
     priceCents: 2999,

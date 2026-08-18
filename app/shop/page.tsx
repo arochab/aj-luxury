@@ -15,7 +15,7 @@ import styles from "../components/Boutique.module.css";
 export const metadata: Metadata = {
   title: "Boutique | AJ Luxury",
   description:
-    "Découvrez Apollon, le boxer AJ Luxury décliné en Pourpre Impérial, Rose Velours et Lilas Céleste.",
+    "Découvrez Apollon, le boxer AJ Luxury décliné en Rose Velours, Lilas Céleste et Pourpre Impérial.",
 };
 
 /*
@@ -132,6 +132,12 @@ export default function ShopPage() {
                 </span>
                 <span className={styles.carteVoile} aria-hidden="true" />
 
+                {/*
+                  La numérotation suit l'ordre de déclaration de
+                  lib/products.ts, qui est l'ordre canonique rose, lilas,
+                  pourpre — le même que ORDRE_COLORIS sur l'accueil. Les deux
+                  écrans numérotent donc les trois coloris identiquement.
+                */}
                 <span className={styles.carteIndex} aria-hidden="true">
                   {String(index + 1).padStart(2, "0")}
                 </span>

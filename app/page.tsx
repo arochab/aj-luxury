@@ -6,6 +6,7 @@ import HeroComposition from "./components/HeroComposition";
 import StoreFooter from "./components/StoreFooter";
 import StoreHeader from "./components/StoreHeader";
 import ClientCopyText from "./components/ClientCopyText";
+import LocalizedPrice from "./components/LocalizedPrice";
 import ApollonGuidedSequence from "./components/ApollonGuidedSequence";
 import HomeGsapExperience from "./components/HomeGsapExperience";
 import { T } from "../lib/i18n/TranslatedText";
@@ -28,6 +29,16 @@ import styles from "./components/Accueil.module.css";
        vers la boutique. On n'imite pas un tunnel d'achat qui existe ailleurs ;
      • l'en-tête et le pied restent StoreHeader / StoreFooter, qui portent la
        navigation, le sélecteur de langue et le panier réels.
+
+   L'en-tête est le PREMIER ENFANT DIRECT de <main class="aj-home">, hors du
+   film et hors de HomeGsapExperience. Ce n'est pas cosmétique : `.aj-film`
+   porte `overflow: hidden`, et un tel ancêtre annule le `position: sticky` de
+   StoreChrome.module.css:35. Rendue dans le film, la barre sortait du champ
+   avec lui et l'utilisateur traversait ensuite ~11 hauteurs d'écran — #plaque,
+   #coloris, #matiere, éditorial, clôture — sans logo, sans menu et sans
+   panier, sur un site marchand. `.aj-home` porte `overflow-x: clip`, que
+   estDansUnConteneurDeDefilement() (StoreHeader.tsx:62) autorise
+   explicitement : la barre y colle, et sa dérobade au scroll reste câblée.
    ========================================================================== */
 
 /** L'ordre de la maquette : rose, lilas, pourpre. */
@@ -42,6 +53,8 @@ const SIGNATURES: Record<string, string> = {
 
 export default function Home() {
   const produits = getProducts();
+  /* Un seul prix pour les trois coloris — même lecture que app/shop/page.tsx:31. */
+  const prixCents = produits[0]?.priceCents ?? null;
   const coloris = ORDRE_COLORIS.map((slug) => {
     const produit = produits.find((item) => item.slug === slug) ?? produits[0];
     return {
@@ -56,11 +69,12 @@ export default function Home() {
 
   return (
     <main className="aj-home">
+      <StoreHeader />
+
       <HomeGsapExperience>
         {/* ── 01 · Le film ─────────────────────────────────────────────── */}
         <span id="accueil" aria-hidden="true" />
         <section className="aj-film" id="haut" aria-labelledby="aj-signature">
-          <StoreHeader />
           <HeroComposition />
           <div className="aj-film__grade" aria-hidden="true" />
 
@@ -132,6 +146,19 @@ export default function Home() {
               <li>L</li>
               <li>XL</li>
             </ul>
+            {/* Le prix, traité comme un chiffre d'affichage et non comme une
+                mention — même traitement que Boutique.module.css:105, --t4 et
+                graisse fine. L'accueil est l'écran dont la mission est de faire
+                choisir : il ne peut pas être le seul à ne jamais dire combien.
+                Les trois coloris partagent le même prix, un chiffre suffit. */}
+            <p className="aj-home__prix">
+              <span className="aj-home__prix-mention">
+                <T id="nav.apollon" />
+              </span>
+              <span className="aj-home__prix-chiffre">
+                <LocalizedPrice amountCents={prixCents} />
+              </span>
+            </p>
             <Link className={styles.colorisAction} href="/shop">
               <T id="home.viewBoutique" />
             </Link>

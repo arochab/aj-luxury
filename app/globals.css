@@ -3081,12 +3081,67 @@ footer:not([class]) > p {
 .aj-home {
   --aj-border: rgba(255, 255, 255, 0.32);
   --aj-gutter: clamp(18px, 2.8vw, 44px);
+  /* Hauteur réelle du StoreHeader, qui est DANS le flux (position: sticky).
+     Le film s'en déduit pour que en-tête + film tiennent exactement un écran,
+     comme dans la maquette où l'en-tête est fixe et #ajFilm inset de 76px.
+     Mesuré : 76px au-dessus de 900px, 110,4px en dessous (l'en-tête passe sur
+     deux rangées, StoreChrome.module.css:415). Recit.module.css:48 a relevé la
+     même valeur pour la même raison. */
+  --aj-tete-h: var(--aj-header-h);
   /* `overflow: hidden` crée un conteneur de défilement : tout descendant épinglé
      par ScrollTrigger est alors clippé et le pin ne tient plus. `overflow-x: clip`
-     coupe le débordement horizontal sans créer ce conteneur. */
+     coupe le débordement horizontal sans créer ce conteneur. C'est aussi ce qui
+     laisse vivre le `position: sticky` du StoreHeader, désormais premier enfant
+     direct de ce bloc : `clip` n'est pas dans la liste que
+     estDansUnConteneurDeDefilement() (StoreHeader.tsx:62) considère bloquante. */
   overflow-x: clip;
   background: #0a0a0b;
   color: #fff;
+}
+
+/* Sous 900px l'en-tête passe sur deux rangées : marque + actions, puis la nav.
+   4rem + 2,8rem + 1px ≈ 6,9rem — hauteur mesurée 110,4px. */
+@media (max-width: 900px) {
+  .aj-home {
+    --aj-tete-h: 6.9rem;
+  }
+}
+
+/* Corollaire du correctif B1 : la barre colle enfin, donc elle surplombe ce
+   qui défile sous elle. Sans cette marge, « Découvrir ↓ » amènerait le haut de
+   #plaque exactement sous l'en-tête. Les ancres de l'accueil sont nommées une
+   à une plutôt que par `[id]` : la règle ne peut pas déborder sur un nœud que
+   du code ferait défiler pour une autre raison. */
+.aj-home :is(#accueil, #haut, #apollon, #plaque, #collection, #coloris, #matiere, #histoire) {
+  scroll-margin-top: var(--aj-tete-h);
+}
+
+/* Le prix de l'accueil, sous la grille des coloris. Il reprend au caractère
+   près le traitement de /shop (Boutique.module.css:104-112) : un chiffre
+   d'affichage en --t4, graisse fine, interlettrage resserré — pas la mention à
+   --t0 des vignettes. Les deux écrans sont à un clic l'un de l'autre, ils
+   doivent dire le prix de la même voix. */
+.aj-home__prix {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.aj-home__prix-mention {
+  color: var(--aj-encre-72);
+  font-size: var(--t0);
+  font-weight: var(--aj-w-gras);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.aj-home__prix-chiffre {
+  font-family: var(--disp);
+  font-optical-sizing: auto;
+  font-size: var(--t4);
+  font-weight: var(--aj-w-fin);
+  letter-spacing: var(--aj-ls-grand);
+  line-height: 1;
 }
 
 .aj-section-break {
@@ -3098,13 +3153,27 @@ footer:not([class]) > p {
 
 .aj-film {
   position: relative;
-  min-height: 100svh;
+  /* L'en-tête n'est plus DANS cette section (c'était le bloquant B1 : son
+     `overflow: hidden` annulait le `position: sticky` de la barre et la
+     navigation mourait sur onze hauteurs d'écran). Il la précède maintenant
+     dans le flux, donc le film doit rendre à l'écran la hauteur que la barre
+     occupe, sinon la signature et « Découvrir ↓ » tombent sous la ligne de
+     flottaison — mesuré : 39px de perte à 1440×900, 76px à 390×844. */
+  min-height: calc(100svh - var(--aj-tete-h));
   overflow: hidden;
   border-bottom: 1px solid var(--aj-border);
   background: #070709;
   isolation: isolate;
 }
 
+/* NE PAS insérer le film de --aj-header-h ici. Le cadrage `inset: 76px 0 0 0`
+   de la maquette (_design-reference/claude-design-accueil.html:62) suppose une
+   barre FIXE, hors flux, qui surplombe la section. La nôtre est COLLANTE, donc
+   dans le flux : le décalage est déjà payé par le `min-height` ci-dessus.
+   Mesuré en le posant quand même, à 1440×900 : bande morte de 76px de #070709
+   entre le bas de la barre (y=76) et le haut de la vidéo (y=152), et la
+   signature reste à 39px sous la ligne de flottaison. Le décalage serait
+   compté deux fois. */
 .aj-film__hero-scene,
 .aj-film__grade {
   position: absolute;
@@ -3286,11 +3355,19 @@ footer:not([class]) > p {
   border: 0;
 }
 
+/* Le bouton de pause du film. Son libellé est lu en toutes lettres au-dessus
+   de 760px : il tient donc le plancher typographique dur du socle, --t0 = 15px
+   (design-system.css:27-31), et pas un corps de mention légale.
+   Sa gouttière est celle de la signature qu'il surplombe — --gut, pas
+   --aj-gutter : à 1440 les deux valeurs divergent de 17px et l'œil lit un
+   défaut d'alignement entre le bouton et « Découvrir ↓ ».
+   Sa hauteur d'accroche reprend celle du bloc signature (Accueil.module.css:74)
+   plus 88px, soit la hauteur du bloc (44px) et autant d'air. */
 .aj-film__motion-toggle {
   position: absolute;
   z-index: 4;
-  right: var(--aj-gutter);
-  bottom: 82px;
+  right: var(--gut);
+  bottom: calc(clamp(26px, 4vh, 44px) + 88px);
   min-width: 6.5rem;
   min-height: 44px;
   padding: 12px 0 5px;
@@ -3299,7 +3376,7 @@ footer:not([class]) > p {
   background: transparent;
   color: rgba(255, 255, 255, 0.98);
   cursor: pointer;
-  font-size: 8px;
+  font-size: var(--t0);
   font-weight: 650;
   letter-spacing: 0.14em;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.72);
@@ -3978,14 +4055,22 @@ footer:not([class]) > p {
     --aj-gutter: 16px;
   }
 
-  .aj-film {
-    min-height: 100svh;
-  }
+  /* Pas de `min-height` ici : la règle de base vaut déjà 100svh moins la barre,
+     et --aj-tete-h a basculé à 6,9rem sous 900px. La réécrire en 100svh
+     rendrait la signature illisible sur téléphone. */
 
+  /* Sur téléphone le bouton n'est plus qu'un carré de 44px : le libellé passe
+     en lecture d'écran et seul le glyphe reste. Il remonte en haut du film —
+     le bord que le correctif B1 vient de dégager — parce qu'en bas il recouvre
+     le titre : le bloc signature y mesure 89px à 375px de large et 110px à
+     320px, selon que « Reveal Your Inner Beauty » tient sur une ou deux
+     lignes. Aucune constante `bottom` ne dégage les deux sans pousser la
+     commande au milieu de l'image ; mesuré, le carré chevauchait le titre de
+     16px à 375px. La gouttière reste celle de la signature. */
   .aj-film__motion-toggle {
-    top: auto;
-    right: 16px;
-    bottom: 82px;
+    top: clamp(14px, 2.2vh, 24px);
+    right: var(--gut);
+    bottom: auto;
     width: 44px;
     min-width: 44px;
     min-height: 44px;
@@ -3993,7 +4078,7 @@ footer:not([class]) > p {
     border: 1px solid rgba(255, 255, 255, 0.28);
     background: rgba(5, 5, 7, 0.48);
     backdrop-filter: blur(10px);
-    font-size: 11px;
+    font-size: var(--t0);
   }
 
   .aj-film__motion-toggle-icon {

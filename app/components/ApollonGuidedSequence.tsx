@@ -12,21 +12,47 @@ import styles from "./Accueil.module.css";
 /* ==========================================================================
    #plaque — le diptyque Apollon
    --------------------------------------------------------------------------
-   Le vêtement seul et le vêtement porté sont deux prises d'un MÊME plateau :
-   même mur, même sol de marbre, même lyre, même laurier, même arc. Vérifié à
-   l'image : dans les deux prises la lyre occupe ~28,5 % de la hauteur du
-   cadre et l'horizon marbre/mur tombe à ~71 %. Les deux plateaux sont donc
-   déjà à la même échelle de caméra — il suffit de les rendre à la même
-   HAUTEUR pour que la lyre partagée ait la même taille de part et d'autre du
-   raccord. C'est pour ça que le duo est fait de deux boîtes rigoureusement
-   identiques avec `object-fit: contain` : l'échelle commune est structurelle,
-   pas calculée, donc rien ne peut la désynchroniser.
+   Le vêtement seul et le vêtement porté sont deux prises du même plateau, et
+   le duo les rend à la même ÉCHELLE : deux boîtes rigoureusement identiques
+   en `object-fit: contain`, alimentées par deux fichiers de rapport quasi
+   égal (1024/1536 = 0,6667 et 1731/2600 = 0,6658, 0,13 % d'écart). Cette
+   égalité-là est structurelle : rien en JS ne peut la désynchroniser.
+
+   ── Ce que la passe précédente affirmait à tort ───────────────────────────
+   Le commentaire d'origine annonçait « dans les deux prises la lyre occupe
+   ~28,5 % de la hauteur du cadre et l'horizon marbre/mur tombe à ~71 % »,
+   pour les trois coloris, et en concluait que le diptyque formait un
+   panorama continu. C'est FAUX sur un panneau. Les trois diptyques ont été
+   reconstruits à partir des vrais fichiers (deux boîtes 1731/2600 accolées,
+   `contain`, exactement ce que rend le CSS), puis la ligne marbre/mur a été
+   relevée sur les bords hors sujet. Mesures :
+     • LILAS  — horizon aligné, lyre et laurier à la même échelle. Excellent.
+     • ROSE   — la lyre et les accessoires sont à la même échelle, l'horizon
+                dérive un peu ; ça passe.
+     • POURPRE — horizon à 69,2 % dans la prise « seul » et à 86,8 % au bord
+                droit de la prise « porté » : ~17 points de hauteur de
+                rupture, soit ~130 px sur une boîte de 760 px, pile sur la
+                couture. Et la lyre de droite faisait le double de celle de
+                gauche, coupée par le cadre. Le geste central du site était
+                donc faux une fois sur trois.
+
+   ── Ce qui a été fait ─────────────────────────────────────────────────────
+   1. Le pourpre porté bascule sur `apollon-pourpre-model-color-v1.webp` :
+      même homme, même coloris, même rapport 1731x2600, mais mur uni, sans
+      seconde lyre ni arc dupliqué. Plus rien ne promet d'horizon commun,
+      donc plus rien ne le contredit. Aucun actif nouveau.
+   2. Le duo assume DEUX CADRES au lieu d'un panorama : une gouttière les
+      sépare (`--duo-gouttiere`), le filet blanc qui soulignait la couture
+      est supprimé. La duplication des accessoires sur le rose et le lilas
+      se lit alors comme deux prises d'une même série, ce qu'elle est.
 
    Le volet entre les deux prises se fait par transforms contra-rotatifs : la
-   fenêtre (overflow: hidden) glisse d'un côté, son contenu glisse de l'autre
-   de la même quantité. Le plan porté ne bouge donc PAS pendant l'ouverture —
-   il reste ancré à son plateau. Ni clip-path ni left/right : sur une couche
-   1731x2600, l'un relayoute et l'autre repeint à chaque frame.
+   fenêtre glisse d'un côté, son contenu glisse de l'autre de la même
+   quantité. Le plan porté ne bouge donc pas RELATIVEMENT À SON CADRE pendant
+   l'ouverture — il reste ancré à son plateau. Ni clip-path ni left/right :
+   sur une couche 1731x2600, l'un relayoute et l'autre repeint à chaque frame.
+
+   Le cadre, lui, se recentre : voir `recentrage` plus bas.
 
    ── Sur le bug de la passe précédente ──────────────────────────────────────
    L'ancienne version animait `--aj-wipe`, une propriété enregistrée par
@@ -96,7 +122,11 @@ const PLATEAUX: readonly Plateau[] = [
     numero: "03",
     nomKey: "sequence.color.purple",
     still: "/images/editorial/isabelle-apollon/apollon-pourpre-lyre-v1.webp",
-    worn: "/images/client/apollon-world/apollon-pourpre-model-world-v1.webp",
+    /* Et non `-model-world-v1` : cette prise-là dupliquait la lyre au double
+       de l'échelle et cassait l'horizon de 17 points pile sur la couture.
+       Même homme, même coloris, même 1731x2600 — la parité du décompte des
+       apparitions n'est pas touchée. */
+    worn: "/images/client/apollon-world/apollon-pourpre-model-color-v1.webp",
     mur: "var(--aj-mur-pourpre)",
     voile: "var(--aj-voile-pourpre)",
     phrase:
@@ -106,6 +136,86 @@ const PLATEAUX: readonly Plateau[] = [
 
 /** Les trois mots du récit. Pas de clé de dictionnaire disponible pour eux. */
 const ETATS = ["Seul", "Se dévoile", "Porté"] as const;
+
+/* ==========================================================================
+   La partition
+   --------------------------------------------------------------------------
+   Le découpage précédent était un seul curseur linéaire : `p * 3 − 1`, borné.
+   Conséquences mesurées sur les 320svh de scroll épinglé (420svh de section
+   moins les 100svh de la scène collante) :
+     • le premier tiers, soit 106svh, laissait le rail RIGOUREUSEMENT immobile
+       — c'était la course d'entrée du volet du panneau 1, et rien d'autre ;
+     • pour les panneaux 2 et 3, l'ouverture du volet était calée sur le MÊME
+       intervalle que le déplacement du rail : le vêtement se dévoilait
+       pendant que son panneau glissait vers le cadre. On ne voyait donc
+       jamais le plan « Seul » du lilas ni celui du pourpre ;
+     • `local`, d'où sortent les trois mots, était calculé contre un index
+       obtenu par `Math.round(x)`, donc décalé d'un demi-panneau : le mot
+       « Seul » n'apparaissait que pour le premier coloris. Le récit ne se
+       jouait qu'une fois sur trois.
+
+   La partition remplace ce curseur par une suite de MESURES nommées. Chaque
+   coloris a ses trois temps ; entre deux coloris, un transit pendant lequel
+   le rail seul travaille, volets figés. Les durées sont relatives : leur
+   somme est ramenée à 1, donc la partition ne dépend pas de la hauteur de la
+   section et le point de rupture mobile (380svh) la resserre sans la
+   déformer.
+
+   Sur 320svh, ce tableau donne : 17svh de plan « Seul », 50svh de dévoilement,
+   17svh de plan « Porté », puis 34svh de transit — trois fois, deux transits.
+   3 × 84 + 2 × 34 = 320. Plus une seule hauteur d'écran de rail immobile.
+   ========================================================================== */
+
+type NomTemps = "transit" | "seul" | "devoile" | "porte";
+
+const DUREES: Record<NomTemps, number> = {
+  transit: 1.1,
+  seul: 0.55,
+  devoile: 1.6,
+  porte: 0.55,
+};
+
+type Mesure = {
+  readonly panneau: number;
+  readonly nom: NomTemps;
+  readonly debut: number;
+  readonly fin: number;
+};
+
+function partition(n: number): readonly Mesure[] {
+  const brut: { panneau: number; nom: NomTemps }[] = [];
+  for (let i = 0; i < n; i += 1) {
+    // Aucun transit avant le premier panneau : il n'y a rien à quitter. C'est
+    // très exactement ce qui produisait les 106svh de rail mort en tête.
+    if (i > 0) brut.push({ panneau: i, nom: "transit" });
+    brut.push({ panneau: i, nom: "seul" });
+    brut.push({ panneau: i, nom: "devoile" });
+    brut.push({ panneau: i, nom: "porte" });
+  }
+  const total = brut.reduce((somme, m) => somme + DUREES[m.nom], 0);
+  let curseur = 0;
+  return brut.map(({ panneau, nom }) => {
+    const debut = curseur / total;
+    curseur += DUREES[nom];
+    return { panneau, nom, debut, fin: curseur / total };
+  });
+}
+
+const MESURES = partition(PLATEAUX.length);
+
+/** Trouve la mesure en cours. Onze entrées : un balayage suffit, et il évite
+    de garder un index en cache que le scroll inversé rendrait faux. */
+function mesureA(q: number): Mesure {
+  for (let k = MESURES.length - 1; k > 0; k -= 1) {
+    if (q >= MESURES[k].debut) return MESURES[k];
+  }
+  return MESURES[0];
+}
+
+/** Où viser pour amener un coloris à son premier temps, scellé. */
+const REPERES: readonly number[] = PLATEAUX.map(
+  (_, i) => MESURES.find((m) => m.panneau === i && m.nom === "seul")?.debut ?? 0,
+);
 
 export type ColorisPlaque = {
   slug: string;
@@ -153,9 +263,19 @@ export default function ApollonGuidedSequence({ coloris }: Props) {
         const sceneNoeud = scene.current;
         if (!railNoeud || !sceneNoeud) return;
 
-        const panneaux = gsap.utils.toArray<HTMLElement>(`.${styles.panneau}`);
-        const fenetres = gsap.utils.toArray<HTMLElement>(`.${styles.fenetre}`);
-        const contenus = gsap.utils.toArray<HTMLElement>(`.${styles.fenetreContenu}`);
+        // Requêtes bornées à la scène, et non au document : `gsap.utils.toArray`
+        // ne connaît pas le scope de gsap.context().
+        const tous = (classe: string): HTMLElement[] =>
+          Array.from(sceneNoeud.querySelectorAll<HTMLElement>(`.${classe}`));
+
+        const panneaux = tous(styles.panneau);
+        const fenetres = tous(styles.fenetre);
+        const contenus = tous(styles.fenetreContenu);
+        // Les deux demi-boîtes de chaque panneau, dans l'ordre du DOM : elles
+        // se déplacent ENSEMBLE, c'est la paire qu'on recentre.
+        const paires = panneaux.map((panneau) =>
+          Array.from(panneau.querySelectorAll<HTMLElement>(`.${styles.demi}`)),
+        );
         const murs = [
           sceneNoeud.querySelector<HTMLElement>(`.${styles.murLilas}`),
           sceneNoeud.querySelector<HTMLElement>(`.${styles.murPourpre}`),
@@ -176,47 +296,100 @@ export default function ApollonGuidedSequence({ coloris }: Props) {
         let motVu = "";
 
         const piloter = (p: number) => {
-          // Le domaine part de −1, pas de 0 : sans cette course d'entrée, le
-          // premier panneau serait déjà « porté » avant le moindre scroll et
-          // ne se dévoilerait jamais. Le rail, lui, reste borné à [0, n−1].
-          const xr = borne(p, 0, 1) * n - 1;
-          const x = borne(xr, 0, n - 1);
+          const q = borne(p, 0, 1);
+          // Où en est-on dans la partition, et où en est-on DANS la mesure.
+          // Toute la scène dérive de ces deux nombres.
+          const mesure = mesureA(q);
+          const etendue = mesure.fin - mesure.debut;
+          const u = etendue > 0 ? borne((q - mesure.debut) / etendue, 0, 1) : 1;
 
+          // Le rail ne bouge QUE pendant un transit. `lisse` annule sa vitesse
+          // aux deux bornes : le panneau arrive posé, et le palier commence
+          // sur un plan strictement immobile plutôt que sur une décélération.
+          const x =
+            mesure.nom === "transit" ? mesure.panneau - 1 + lisse(u) : mesure.panneau;
           railNoeud.style.transform = `translate3d(${(-x * (100 / n)).toFixed(4)}%,0,0)`;
 
           // Les murs se croisent en opacité — jamais une couleur recalculée
-          // et repeinte plein écran à chaque frame.
-          if (murs[0]) murs[0].style.opacity = lisse(borne(x, 0, 1)).toFixed(4);
-          if (murs[1]) murs[1].style.opacity = lisse(borne(x - 1, 0, 1)).toFixed(4);
+          // et repeinte plein écran à chaque frame. `x` est déjà lissé pendant
+          // le transit et constant partout ailleurs : inutile de lisser deux
+          // fois, la dérivée est déjà nulle aux bornes.
+          if (murs[0]) murs[0].style.opacity = borne(x, 0, 1).toFixed(4);
+          if (murs[1]) murs[1].style.opacity = borne(x - 1, 0, 1).toFixed(4);
 
-          // Le volet de chaque panneau s'ouvre pendant que le rail s'approche
-          // de lui : à l'arrêt, le panneau est « porté ».
           for (let i = 0; i < n; i += 1) {
-            const ouverture = lisse(borne(xr - i + 1, 0, 1));
+            // Un panneau déjà traversé reste ouvert, un panneau à venir reste
+            // scellé, et le panneau courant ne s'ouvre que sur son temps
+            // « Se dévoile ». Il ARRIVE donc fermé au bout de son transit :
+            // c'est là tout le récit, et c'est ce qui manquait aux coloris 2
+            // et 3.
+            const ouverture =
+              i < mesure.panneau
+                ? 1
+                : i > mesure.panneau
+                  ? 0
+                  : mesure.nom === "devoile"
+                    ? lisse(u)
+                    : mesure.nom === "porte"
+                      ? 1
+                      : 0;
+
             // v : ce qu'il reste à ouvrir, en pourcentage de la boîte. La
             // fenêtre part de −v, le contenu de +v — même quantité, signes
-            // opposés, donc l'image reste immobile pendant que le volet passe.
+            // opposés, donc l'image reste immobile DANS SON CADRE pendant que
+            // le volet passe.
             const v = (1 - ouverture) * 100;
-            const negatif = (-v).toFixed(3);
-            const positif = v.toFixed(3);
             const fenetre = fenetres[i];
             const contenu = contenus[i];
-            if (fenetre) fenetre.style.transform = `translate3d(${negatif}%,0,0)`;
-            if (contenu) contenu.style.transform = `translate3d(${positif}%,0,0)`;
+            if (fenetre) fenetre.style.transform = `translate3d(${(-v).toFixed(3)}%,0,0)`;
+            if (contenu) contenu.style.transform = `translate3d(${v.toFixed(3)}%,0,0)`;
+
+            // Le recentrage du cadre. Volet fermé, la moitié droite du duo
+            // n'affiche rien : le cadre tenu le plus longtemps du site était à
+            // moitié vide, et la prise « seul » collée à gauche de sa colonne.
+            // On décale donc la PAIRE vers la droite de la moitié d'une boîte
+            // plus la moitié de la gouttière — ce qui centre exactement la
+            // seule prise visible — et cette compensation fond à zéro au
+            // rythme du volet. Le diptyque s'élargit depuis un cadre
+            // équilibré au lieu de se remplir dans un cadre troué.
+            //   Les 50 % sont un pourcentage de la demi-boîte elle-même :
+            // aucune mesure, aucune valeur en cache, donc rien à réinvalider
+            // au redimensionnement ni quand la hauteur dynamique du viewport
+            // bouge sans qu'un refresh soit déclenché.
+            const recentrage = `translate3d(calc((50% + var(--duo-gouttiere) / 2) * ${(
+              1 - ouverture
+            ).toFixed(4)}),0,0)`;
+            const paire = paires[i];
+            if (paire) for (const boite of paire) boite.style.transform = recentrage;
           }
 
           if (remplie) {
-            remplie.style.transform = `scaleX(${borne(p, 0, 1).toFixed(4)})`;
+            remplie.style.transform = `scaleX(${q.toFixed(4)})`;
           }
 
-          const index = Math.round(x);
+          // La bascule d'indicateur se fait au MILIEU du transit : le numéro
+          // change quand le nouveau panneau prend le cadre, pas quand
+          // l'ancien commence à sortir.
+          const bascule = mesure.nom === "transit" && u < 0.5;
+          const index = bascule ? mesure.panneau - 1 : mesure.panneau;
           if (index !== vu) {
             vu = index;
             setActif(index);
           }
 
-          const local = borne(xr - index + 1, 0, 1);
-          const mot = local < 0.12 ? ETATS[0] : local < 0.88 ? ETATS[1] : ETATS[2];
+          // Les trois mots sont désormais LUS dans la partition, plus déduits
+          // d'un reste de division. Pendant un transit, on quitte un plan
+          // porté pour en aborder un scellé : « Porté » puis « Seul ».
+          const mot =
+            mesure.nom === "seul"
+              ? ETATS[0]
+              : mesure.nom === "devoile"
+                ? ETATS[1]
+                : mesure.nom === "porte"
+                  ? ETATS[2]
+                  : bascule
+                    ? ETATS[2]
+                    : ETATS[0];
           if (mot !== motVu) {
             motVu = mot;
             setEtat(mot);
@@ -258,6 +431,11 @@ export default function ApollonGuidedSequence({ coloris }: Props) {
           contenus.forEach((noeud) => {
             noeud.style.transform = "";
           });
+          paires.forEach((paire) => {
+            paire.forEach((boite) => {
+              boite.style.transform = "";
+            });
+          });
           murs.forEach((noeud) => {
             if (noeud) noeud.style.opacity = "";
           });
@@ -268,14 +446,15 @@ export default function ApollonGuidedSequence({ coloris }: Props) {
   });
 
   // Les onglets déplacent le scroll : ils ne prennent jamais la main sur lui.
+  // La cible est le début du temps « Seul » du coloris visé — on arrive donc
+  // sur la plaque scellée, et c'est le scroll qui la dévoile. Le repère sort
+  // de la partition : la barre et le récit ne peuvent pas diverger.
   const viser = (index: number) => {
     const section = racine.current;
     if (!section) return;
     const nom = t(PLATEAUX[index].nomKey);
     if (live.current) live.current.textContent = nom;
-    const haut =
-      section.offsetTop +
-      ((index + 1) / PLATEAUX.length) * amplitude.current();
+    const haut = section.offsetTop + REPERES[index] * amplitude.current();
     window.scrollTo({ top: haut, behavior: "auto" });
     setActif(index);
   };
@@ -291,6 +470,13 @@ export default function ApollonGuidedSequence({ coloris }: Props) {
       className={styles.plaque}
       id="plaque"
       aria-labelledby="aj-plaque-titre"
+      /* Le fond de la SECTION suit le coloris courant. `.plaqueScene` fait
+         100svh : dès que le viewport réel dépasse le « small viewport » —
+         mobile dont la barre d'URL se rétracte — une bande de section se
+         découvre sous la scène, et elle restait rose sous un mur pourpre.
+         Ce n'est pas une couleur animée : elle change avec `actif`, donc
+         deux fois par traversée, jamais par frame. */
+      style={{ "--mur-courant": PLATEAUX[actif].mur } as CSSProperties}
     >
       <h2 className="aj-sr-only" id="aj-plaque-titre">
         {t("home.incarnationTitle")}

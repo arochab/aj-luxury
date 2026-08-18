@@ -188,27 +188,51 @@
    vertical. Dans chaque panneau, deux prises du MÊME plateau : le vêtement
    seul et le vêtement porté.
 
-   L'échelle partagée n'est pas calculée, elle est structurelle : les deux
-   moitiés du duo sont deux boîtes rigoureusement identiques et les deux
-   images y sont en `contain`. Comme les deux fichiers ont le même rapport
-   (1024/1536 = 0,6667 et 1731/2600 = 0,6658, soit 0,13 % d'écart), elles
-   sont rendues à la même hauteur — donc la lyre partagée a la même taille
-   de part et d'autre du raccord. Aucun JS ne peut casser ça.
+   L'échelle partagée est structurelle : les deux moitiés du duo sont deux
+   boîtes rigoureusement identiques et les deux images y sont en `contain`.
+   Comme les deux fichiers ont le même rapport (1024/1536 = 0,6667 et
+   1731/2600 = 0,6658, soit 0,13 % d'écart), elles sont rendues à la même
+   HAUTEUR. Aucun JS ne peut casser ça.
+
+   Ce que l'échelle commune ne garantit PAS, et qu'il a fallu corriger : que
+   les deux prises forment un panorama continu. Mesuré sur les fichiers, la
+   ligne marbre/mur ne tombe au même endroit que sur le lilas. Le duo est
+   donc rendu comme DEUX CADRES qui se répondent — une gouttière les sépare,
+   aucun filet ne souligne la couture — et non comme une image coupée en
+   deux. Voir le commentaire de `.duo`.
    ========================================================================== */
 
+/* Le fond de section porte la couleur du coloris COURANT, pas un rose figé.
+   `.plaqueScene` fait 100svh ; dès que le viewport réel dépasse le « small
+   viewport » — mobile dont la barre d'URL se rétracte — une bande de
+   `.plaque` se découvre sous la scène. Elle restait rose sous un mur
+   pourpre. La valeur est posée en style inline par le composant au
+   changement de panneau : trois fois par session, jamais par frame. Ce
+   n'est pas une couleur animée, c'est un repli qui suit le récit. */
 .plaque {
   position: relative;
   height: 420svh;
-  background: var(--aj-mur-rose);
+  background: var(--mur-courant, var(--aj-mur-rose));
 }
 
 /* Collant en CSS, donc PAS de pin: true sur le ScrollTrigger — les deux se
-   disputeraient la même position. */
+   disputeraient la même position.
+
+   `clip` et non `hidden`, et c'est un bloquant corrigé, pas un détail de
+   style : `.rail` fait 300 % de large à l'intérieur, donc `scrollWidth` vaut
+   trois fois `clientWidth`. Avec `hidden`, cette boîte EST un conteneur de
+   défilement horizontal. Chaque panneau porte un lien « Découvrir » : au
+   premier Tab vers celui du panneau 2 ou 3, le navigateur fait défiler la
+   scène de jusqu'à 200 % de la largeur du viewport pour amener le lien dans
+   le champ, et rien ne remet jamais `scrollLeft` à 0 — rail, murs, barre et
+   piste sortent de l'écran pour le reste de la session. `clip` coupe le
+   débordement SANS créer de conteneur de défilement. Même idiome, même
+   raison qu'à globals.css:3083 et Boutique.module.css:18. */
 .plaqueScene {
   position: sticky;
   top: 0;
   height: 100svh;
-  overflow: hidden;
+  overflow: clip;
 }
 
 /* Les trois murs empilés. Le fond de scène ne change pas de couleur : ce sont
@@ -312,29 +336,48 @@
    sur la HAUTEUR disponible — `flex: 0 1 auto`, pas `1 1 50%` : les boîtes ne
    s'étirent donc pas pour remplir la ligne, elles épousent exactement l'image.
    Résultat mesuré sur banc, du 1440x900 au 600x300 : rapport 0,6658 au
-   millième près, boîtes rigoureusement identiques, et zéro pixel entre les
-   deux — les deux prises se touchent, le raccord est franc. C'est là que la
-   lyre partagée doit avoir la même taille, et elle l'a par construction.
+   millième près, boîtes rigoureusement identiques. La lyre partagée a donc la
+   même taille des deux côtés, par construction.
+
+   LA GOUTTIÈRE. La version précédente collait les deux boîtes bord à bord et
+   revendiquait « un raccord franc ». Vérification à l'image sur les trois
+   plateaux : c'est vrai du lilas, ça passe sur le rose, c'est faux sur le
+   pourpre — la ligne marbre/mur y tombait à 69 % à gauche et à 87 % à droite,
+   et la lyre de droite faisait le double de celle de gauche. Prétendre au
+   panorama continu, c'est signer l'erreur de montage à chaque fois qu'elle
+   arrive. On assume donc DEUX CADRES : une gouttière les sépare, la
+   duplication des accessoires se lit comme deux prises d'une même série, et
+   plus rien ne promet une ligne d'horizon commune.
+
+   La gouttière est une variable locale parce que le JS la réutilise : la
+   compensation de recentrage vaut (largeur d'une boîte + gouttière) / 2, soit
+   `calc(50% + var(--duo-gouttiere) / 2)` en pourcentage de la demi-boîte.
 
    `justify-content: center` : quand la hauteur est très généreuse, le
    diptyque se centre dans sa colonne au lieu de s'y coller. */
 .duo {
+  --duo-gouttiere: clamp(10px, 1.2vw, 22px);
   position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: var(--duo-gouttiere);
   height: 100%;
   min-width: 0;
-  overflow: hidden;
+  overflow: clip;
 }
 
+/* `clip`, jamais `hidden` : la fenêtre du volet déborde de sa demi-boîte de
+   100 % de sa largeur, donc `hidden` en ferait un conteneur de défilement de
+   plus — même piège que `.plaqueScene`. */
 .demi {
   position: relative;
   flex: 0 1 auto;
   height: 100%;
   min-width: 0;
   aspect-ratio: 1731 / 2600;
-  overflow: hidden;
+  overflow: clip;
+  will-change: transform;
 }
 
 .prise {
@@ -352,11 +395,16 @@
    fait tenir l'illusion des deux prises d'un même décor.
    Coût compositeur pur. Ni clip-path (relayoute une couche 1731x2600 par
    frame), ni left/right (déclenche le layout).
-   État par défaut : OUVERT. Sans JS, le plan porté est visible. */
+   État par défaut : OUVERT. Sans JS, le plan porté est visible.
+
+   Le filet blanc de 1 px qui marquait le bord ouvrant a été SUPPRIMÉ : il
+   n'avait de sens que si l'on prétendait à un panorama continu, et il
+   soulignait la couture au lieu de la faire oublier. Ce qui sépare les deux
+   prises est maintenant la gouttière de `.duo`, assumée. */
 .fenetre {
   position: absolute;
   inset: 0;
-  overflow: hidden;
+  overflow: clip;
   will-change: transform;
 }
 
@@ -364,23 +412,6 @@
   position: absolute;
   inset: 0;
   will-change: transform;
-}
-
-/* La couture : un filet vertical net sur le bord ouvrant de la fenêtre. */
-.fenetre::before {
-  position: absolute;
-  z-index: 3;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  width: 1px;
-  background: linear-gradient(
-    transparent,
-    rgba(255, 255, 255, 0.5) 16%,
-    rgba(255, 255, 255, 0.22) 84%,
-    transparent
-  );
-  content: "";
 }
 
 .plaqueBarre {
@@ -450,7 +481,14 @@
 /* Sous 900 px la copie passe AU-DESSUS des plaques : en deux colonnes elle
    confisquerait la largeur dont les deux prises ont besoin pour rester
    entières. Le rail reste horizontal — le récit ne change pas, le mobile
-   n'est pas une amputation. */
+   n'est pas une amputation.
+
+   Et la phrase du panneau reste LUE. Elle était masquée ici par
+   `.panneauTexte { display: none }`, que la branche « mouvement réduit »
+   plus bas remettait en `display: block` : un mobile en mouvement réduit
+   lisait donc la phrase, un mobile ordinaire non. Une amputation qui
+   dépendait d'un réglage d'accessibilité n'est pas une décision de mise en
+   page, c'est un accident. La ligne est supprimée des deux côtés. */
 @media (max-width: 899px) {
   .plaque {
     height: 380svh;
@@ -468,15 +506,12 @@
      haute, donc c'est la LARGEUR qui décide. On dimensionne sur elle et on
      laisse le rapport dériver la hauteur — sinon les deux boîtes seraient
      bien plus hautes que les images qu'elles portent, et le volet balaierait
-     du mur nu avant d'atteindre la prise. */
+     du mur nu avant d'atteindre la prise. La gouttière est retranchée des
+     deux moitiés, sinon la paire déborderait de sa colonne. */
   .demi {
-    width: 50%;
+    width: calc(50% - var(--duo-gouttiere) / 2);
     height: auto;
     max-height: 100%;
-  }
-
-  .panneauTexte {
-    display: none;
   }
 }
 
@@ -850,10 +885,11 @@
     min-height: 86svh;
   }
 
-  .panneauTexte {
-    display: block;
-  }
-
+  /* `.demi` s'ajoute ici : le réglage animé lui écrit un translate3d de
+     recentrage en style inline, qui n'appartient pas à GSAP. Sans cette
+     surcharge, une bascule vers « mouvement réduit » en cours de session
+     laisserait le diptyque décalé d'une demi-boîte vers la droite. */
+  .demi,
   .fenetre,
   .fenetreContenu {
     transform: none !important;

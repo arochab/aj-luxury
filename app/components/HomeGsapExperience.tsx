@@ -21,17 +21,38 @@ import styles from "./Accueil.module.css";
    ========================================================================== */
 
 export default function HomeGsapExperience({ children }: { children: ReactNode }) {
-  const racine = useAjMotion<HTMLDivElement>(({ gsap, mm }) => {
+  const racine = useAjMotion<HTMLDivElement>(({ gsap, racine: noeud, mm }) => {
     mm.add({ anime: "(prefers-reduced-motion: no-preference)" }, (contexte) => {
       const { anime } = contexte.conditions as { anime: boolean };
       // Mouvement réduit : rien n'est posé, donc rien n'est masqué. Le CSS
       // livre déjà la page entière, lisible et statique.
       if (!anime) return;
 
-      // Les blocs révélés. L'état de départ est posé ICI, en JS : si ce
-      // fichier ne s'exécute jamais, le contenu est déjà à sa place.
-      const blocs = gsap.utils.toArray<HTMLElement>(".aj-reveal");
+      /*
+       * Les blocs révélés. L'état de départ est posé ICI, en JS : si ce
+       * fichier ne s'exécute jamais, le contenu est déjà à sa place.
+       *
+       * Le garde-fou above-fold, repris de AjScrollReveal : GSAP arrive par
+       * import dynamique, donc au moment où ce réglage s'exécute la page est
+       * DÉJÀ peinte. Un `gsap.from` rend son état de départ immédiatement,
+       * et un ScrollTrigger dont le start est déjà franchi se déclenche au
+       * premier refresh : un bloc visible serait masqué puis re-révélé —
+       * un clignotement. On ne pose donc l'état de départ que sur ce qui est
+       * encore sous la ligne de flottaison ; le reste est laissé tel qu'il a
+       * été peint. Le seuil est le même que celui du start, 92 %.
+       *
+       * La requête est bornée au nœud du hook : `gsap.utils.toArray` ne
+       * connaît pas le scope de gsap.context() et balayait tout le document.
+       */
+      const seuil = window.innerHeight * 0.92;
+      const blocs = Array.from(
+        noeud.querySelectorAll<HTMLElement>(".aj-reveal"),
+      ).filter((bloc) => bloc.getBoundingClientRect().top > seuil);
+
       blocs.forEach((bloc) => {
+        // Le rang se lit sur le groupe COMPLET du parent, filtre compris :
+        // le décalage d'un bloc ne doit pas dépendre du nombre de ses voisins
+        // qui se trouvaient déjà à l'écran au chargement.
         const groupe = Array.from(
           bloc.parentElement?.querySelectorAll<HTMLElement>(".aj-reveal") ?? [],
         );
