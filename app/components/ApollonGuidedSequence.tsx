@@ -18,33 +18,40 @@ import styles from "./Accueil.module.css";
    égal (1024/1536 = 0,6667 et 1731/2600 = 0,6658, 0,13 % d'écart). Cette
    égalité-là est structurelle : rien en JS ne peut la désynchroniser.
 
-   ── Ce que la passe précédente affirmait à tort ───────────────────────────
-   Le commentaire d'origine annonçait « dans les deux prises la lyre occupe
-   ~28,5 % de la hauteur du cadre et l'horizon marbre/mur tombe à ~71 % »,
-   pour les trois coloris, et en concluait que le diptyque formait un
-   panorama continu. C'est FAUX sur un panneau. Les trois diptyques ont été
-   reconstruits à partir des vrais fichiers (deux boîtes 1731/2600 accolées,
-   `contain`, exactement ce que rend le CSS), puis la ligne marbre/mur a été
-   relevée sur les bords hors sujet. Mesures :
-     • LILAS  — horizon aligné, lyre et laurier à la même échelle. Excellent.
-     • ROSE   — la lyre et les accessoires sont à la même échelle, l'horizon
-                dérive un peu ; ça passe.
-     • POURPRE — horizon à 69,2 % dans la prise « seul » et à 86,8 % au bord
-                droit de la prise « porté » : ~17 points de hauteur de
-                rupture, soit ~130 px sur une boîte de 760 px, pile sur la
-                couture. Et la lyre de droite faisait le double de celle de
-                gauche, coupée par le cadre. Le geste central du site était
-                donc faux une fois sur trois.
+   ── L'HORIZON DU DIPTYQUE, MESURÉ ─────────────────────────────────
+   Deux passes se sont contredites ici. La première annonçait un horizon à
+   ~71 % partout ; la deuxième a déclaré le pourpre faux — « horizon à 69 % à
+   gauche et 87 % à droite, la lyre de droite au double » — et a basculé sa
+   prise portée sur `-model-color`. La mesure a été REFAITE en PIL sur les
+   vrais fichiers : deux boîtes 473x711 en `object-fit: contain`, bande de
+   détection 34 px, exactement ce que rend le CSS. Résultat :
+     • POURPRE — 69,2 % au bord DROIT du « seul » (contraste 117), 69,3 % au
+                bord GAUCHE du porté (contraste 135). Rupture à la couture :
+                0,1 POINT. C'est la couture la plus juste des trois plateaux,
+                et l'arête la plus franche du site.
+     • ROSE et LILAS — contrastes 27 à 64, ruptures de 10,4 et 12,9 points.
+   Le « 86,8 % » invoqué contre le pourpre n'était pas un décalage d'horizon :
+   c'est une SECONDE arête, présente à l'identique dans les deux prises
+   (86,2 % dans le « seul », 86,8 % dans le porté) — l'arc et le carquois
+   posés sur le marbre. Et la « lyre au double » n'existe pas : même diamètre
+   de tube, même laurier. Les trois plateaux sont trois prises du même décor.
 
-   ── Ce qui a été fait ─────────────────────────────────────────────────────
-   1. Le pourpre porté bascule sur `apollon-pourpre-model-color-v1.webp` :
-      même homme, même coloris, même rapport 1731x2600, mais mur uni, sans
-      seconde lyre ni arc dupliqué. Plus rien ne promet d'horizon commun,
-      donc plus rien ne le contredit. Aucun actif nouveau.
-   2. Le duo assume DEUX CADRES au lieu d'un panorama : une gouttière les
-      sépare (`--duo-gouttiere`), le filet blanc qui soulignait la couture
-      est supprimé. La duplication des accessoires sur le rose et le lilas
-      se lit alors comme deux prises d'une même série, ce qu'elle est.
+   ── POURQUOI `-model-world` ET PAS `-model-color` ──────────────────
+   La bascule vers `-model-color` a coûté le sol. Luminance moyenne du tiers
+   bas — le socle de marbre qui fait tenir la série : 149,5 pour le « seul »,
+   97,4 pour `-world`, 42,9 pour `-color`. Des trois variantes `-color` du
+   dépôt, celle du pourpre est la SEULE sans aucun sol (42,9 contre 107,1
+   rose et 81,1 lilas). Sur le panneau 03, le dernier avant #coloris, l'homme
+   y flottait sur un aplat pourpre et le marbre s'arrêtait net à la couture.
+   Le pourpre porté est donc revenu à `-model-world`. Aucun actif nouveau.
+
+   ── LA GOUTTIÈRE ────────────────────────────────────────────
+   Le duo assume DEUX CADRES plutôt qu'un panorama : une gouttière les sépare
+   (`--duo-gouttiere`), le filet blanc qui soulignait la couture est
+   supprimé. Ce choix tient toujours, mais pour sa vraie raison : les
+   accessoires se répètent d'une prise à l'autre, et deux prises d'une même
+   série se lisent mieux côte à côte que soudées. Ce n'est PAS un pansement
+   sur un horizon cassé — l'horizon du pourpre est juste à 0,1 point.
 
    Le volet entre les deux prises se fait par transforms contra-rotatifs : la
    fenêtre glisse d'un côté, son contenu glisse de l'autre de la même
@@ -122,11 +129,16 @@ const PLATEAUX: readonly Plateau[] = [
     numero: "03",
     nomKey: "sequence.color.purple",
     still: "/images/editorial/isabelle-apollon/apollon-pourpre-lyre-v1.webp",
-    /* Et non `-model-world-v1` : cette prise-là dupliquait la lyre au double
-       de l'échelle et cassait l'horizon de 17 points pile sur la couture.
-       Même homme, même coloris, même 1731x2600 — la parité du décompte des
-       apparitions n'est pas touchée. */
-    worn: "/images/client/apollon-world/apollon-pourpre-model-color-v1.webp",
+    /* `-model-world-v1`, et surtout pas `-model-color-v1`. Mesuré en PIL sur
+       les vrais fichiers, deux boîtes 473x711 en `contain`, bande de
+       détection 34px — exactement ce que rend le CSS : horizon marbre/mur à
+       69,2 % au bord DROIT du « seul » et à 69,3 % au bord GAUCHE du porté.
+       0,1 point de rupture à la couture : c'est la couture la plus juste des
+       trois plateaux. La variante `-color` n'a AUCUN sol (luminance moyenne
+       du tiers bas : 42,9, contre 97,4 pour `-world` et 149,5 pour le
+       « seul ») — l'homme y flotte sur un aplat et le marbre s'arrête net à
+       la couture. */
+    worn: "/images/client/apollon-world/apollon-pourpre-model-world-v1.webp",
     mur: "var(--aj-mur-pourpre)",
     voile: "var(--aj-voile-pourpre)",
     phrase:

@@ -339,15 +339,18 @@
    millième près, boîtes rigoureusement identiques. La lyre partagée a donc la
    même taille des deux côtés, par construction.
 
-   LA GOUTTIÈRE. La version précédente collait les deux boîtes bord à bord et
-   revendiquait « un raccord franc ». Vérification à l'image sur les trois
-   plateaux : c'est vrai du lilas, ça passe sur le rose, c'est faux sur le
-   pourpre — la ligne marbre/mur y tombait à 69 % à gauche et à 87 % à droite,
-   et la lyre de droite faisait le double de celle de gauche. Prétendre au
-   panorama continu, c'est signer l'erreur de montage à chaque fois qu'elle
-   arrive. On assume donc DEUX CADRES : une gouttière les sépare, la
-   duplication des accessoires se lit comme deux prises d'une même série, et
-   plus rien ne promet une ligne d'horizon commune.
+   LA GOUTTIÈRE. Une passe avait collé les deux boîtes bord à bord en
+   revendiquant « un raccord franc », une autre a déclaré le pourpre cassé
+   (« 69 % à gauche, 87 % à droite, lyre au double »). Mesure refaite en PIL
+   sur les vrais fichiers, deux boîtes 473x711 en `contain`, bande 34 px —
+   ce que rend ce CSS : l'horizon marbre/mur du pourpre tombe à 69,2 % à
+   gauche et 69,3 % à droite. 0,1 point de rupture, la couture la plus juste
+   des trois plateaux (rose et lilas : 10,4 et 12,9 points). Le « 87 % »
+   était une seconde arête — l'arc et le carquois posés sur le marbre —
+   présente dans les DEUX prises. Les trois plateaux sont trois prises du
+   même décor. La gouttière reste, non pour masquer un raccord, mais parce
+   que les accessoires se répètent d'une prise à l'autre : deux prises d'une
+   même série se lisent mieux côte à côte que soudées.
 
    La gouttière est une variable locale parce que le JS la réutilise : la
    compensation de recentrage vaut (largeur d'une boîte + gouttière) / 2, soit
@@ -489,7 +492,10 @@
    lisait donc la phrase, un mobile ordinaire non. Une amputation qui
    dépendait d'un réglage d'accessibilité n'est pas une décision de mise en
    page, c'est un accident. La ligne est supprimée des deux côtés. */
-@media (max-width: 899px) {
+/* Le point de rupture est 900px, pas 899 : l'en-tête et --aj-tete-h basculent
+   à `max-width: 900px` (globals.css:3105). Un pas d'écart laissait la plaque en
+   mise en page bureau alors que la barre avait déjà pris sa hauteur mobile. */
+@media (max-width: 900px) {
   .plaque {
     height: 380svh;
   }
@@ -498,7 +504,11 @@
     grid-template-columns: 1fr;
     grid-template-rows: auto minmax(0, 1fr);
     gap: clamp(14px, 2.4vh, 24px);
-    padding-top: clamp(72px, 9vh, 100px);
+    /* .plaqueScene est sticky top:0 et l'en-tête, vivante, la surplombe. La
+       marge doit donc partir de la hauteur RÉELLE de la barre, pas d'une
+       constante : 110,4px sous 900px contre 76px de clamp, soit 34,4px pris
+       sur .panneauTexte — c'est-à-dire sur le nom du coloris. */
+    padding-top: calc(var(--aj-tete-h) + clamp(14px, 2vh, 24px));
     padding-bottom: clamp(86px, 13vh, 116px);
   }
 
