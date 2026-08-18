@@ -19,22 +19,63 @@ import styles from "./Accueil.module.css";
    égalité-là est structurelle : rien en JS ne peut la désynchroniser.
 
    ── L'HORIZON DU DIPTYQUE, MESURÉ ─────────────────────────────────
-   Deux passes se sont contredites ici. La première annonçait un horizon à
-   ~71 % partout ; la deuxième a déclaré le pourpre faux — « horizon à 69 % à
-   gauche et 87 % à droite, la lyre de droite au double » — et a basculé sa
-   prise portée sur `-model-color`. La mesure a été REFAITE en PIL sur les
-   vrais fichiers : deux boîtes 473x711 en `object-fit: contain`, bande de
-   détection 34 px, exactement ce que rend le CSS. Résultat :
-     • POURPRE — 69,2 % au bord DROIT du « seul » (contraste 117), 69,3 % au
-                bord GAUCHE du porté (contraste 135). Rupture à la couture :
-                0,1 POINT. C'est la couture la plus juste des trois plateaux,
-                et l'arête la plus franche du site.
-     • ROSE et LILAS — contrastes 27 à 64, ruptures de 10,4 et 12,9 points.
-   Le « 86,8 % » invoqué contre le pourpre n'était pas un décalage d'horizon :
-   c'est une SECONDE arête, présente à l'identique dans les deux prises
-   (86,2 % dans le « seul », 86,8 % dans le porté) — l'arc et le carquois
-   posés sur le marbre. Et la « lyre au double » n'existe pas : même diamètre
-   de tube, même laurier. Les trois plateaux sont trois prises du même décor.
+   Banc et protocole : `_design-reference/mesure-horizon.py`. Toute mesure
+   d'horizon citée ici en sort, et rien d'autre ne fait autorité.
+
+   LE PROTOCOLE — écrit une fois, parce que trois passes successives ont
+   produit trois échelles de contraste incomparables faute de l'avoir écrit :
+     • BOÎTE — chaque prise rendue en 473x711 px, `object-fit: contain`,
+       exactement ce que rendent `.demi` / `.prise` à 1440x900 ;
+     • BANDE — 34 px de large, adjacente à la couture : les colonnes de DROITE
+       du « seul », celles de GAUCHE du porté. Le centre des cadres, occupé
+       par le vêtement ou par le corps, ne dit rien du décor ;
+     • LISSAGE — profil de luminance BT.601 ligne à ligne, moyenne glissante
+       sur 5 lignes ; sans elle le grain du marbre domine ;
+     • HORIZON — UNE arête et une seule : la ligne mur / sol de marbre. Prise
+       comme la première ligne sous 60 % où le profil franchit vers le haut le
+       seuil à mi-chemin entre la médiane MUR (50-64 %) et la médiane SOL
+       (88-97 %), et s'y maintient 12 lignes ;
+     • CONTRASTE — l'écart SOL − MUR en niveaux de luminance 0-255. Un ÉCART
+       DE PLAGES, jamais une pente. C'est précisément cette ambiguïté qui a
+       fait diverger les passes : un « contraste 117 » y désignait une pente
+       lissée, un « contraste 27 » un écart, et on les comparait ;
+     • RUPTURE — l'écart en POINTS entre les deux horizons. Seuil : 2 points.
+
+   RÉSULTAT — la couture tient sur les TROIS plateaux :
+     • rose    69,1 % au bord droit du « seul »  contre 68,9 %  →  0,1 point
+     • lilas   71,9 %                            contre 70,0 %  →  1,8 point
+     • pourpre 69,3 %                            contre 69,3 %  →  0,0 point
+
+   CE QUE MESURE UN DÉTECTEUR NAÏF. Le critère « ligne de gradient maximal »
+   annonce 10,4 points de rupture sur le rose et 12,9 sur le lilas. Ces
+   ruptures n'existent pas, et `--pics` le montre en une commande : il retient
+   83,0 % du côté « seul » du rose, qui est le CARQUOIS doré posé sur le
+   marbre (pente 11,1), quand l'horizon mur/sol est à 69,1 % avec une pente de
+   5 à 7 seulement. Sur le lilas il retient 81,0 % du côté porté — encore le
+   carquois. Les accessoires sont les objets les plus contrastés du décor et
+   ils ne sont PAS à la même place d'une prise à l'autre : les mesurer
+   fabrique une rupture. C'est la même erreur qui avait fait condamner le
+   pourpre (« 87 % à droite ») — l'arc et le carquois, présents à l'identique
+   dans les deux prises. Et la « lyre au double » n'existe pas : même diamètre
+   de tube, même laurier. Les trois plateaux sont trois prises du même décor,
+   et ça se mesure.
+
+   ── PAS DE CALE VERTICALE ─────────────────────────────────────────
+   Une cale par plateau sur la demi-boîte portée, en
+   `object-position: center calc(50% + var(--aj-cale-porte))`, a été
+   envisagée. Elle n'est pas écrite, pour deux raisons cumulatives :
+     • elle n'a rien à corriger — poser +10,4 % sur le rose CRÉERAIT la
+       rupture de dix points qu'elle prétendait annuler ;
+     • elle serait inerte de toute façon. En `contain`, les deux fichiers sont
+       contraints en LARGEUR : le jeu vertical total vaut 1,5 px pour le
+       « seul » et 0,6 px pour le porté, sur 711. `object-position` en
+       pourcentage ne répartit que ce jeu-là — sa course complète de 0 % à
+       100 % déplace le cadrage de 0,2 % de la hauteur de boîte, et une
+       consigne de 10,4 % se sature à 0,06 px.
+   Si un plateau dérivait un jour pour de bon, le levier serait un
+   `transform: translateY()` sur `.prise`, au prix d'un rognage du marbre en
+   bas et d'une lisière de mur nu en haut. Le paramètre `cale` du banc simule
+   ce levier, rognage compris, pour qu'on en voie le coût avant de l'écrire.
 
    ── POURQUOI `-model-world` ET PAS `-model-color` ──────────────────
    La bascule vers `-model-color` a coûté le sol. Luminance moyenne du tiers
@@ -129,12 +170,11 @@ const PLATEAUX: readonly Plateau[] = [
     numero: "03",
     nomKey: "sequence.color.purple",
     still: "/images/editorial/isabelle-apollon/apollon-pourpre-lyre-v1.webp",
-    /* `-model-world-v1`, et surtout pas `-model-color-v1`. Mesuré en PIL sur
-       les vrais fichiers, deux boîtes 473x711 en `contain`, bande de
-       détection 34px — exactement ce que rend le CSS : horizon marbre/mur à
-       69,2 % au bord DROIT du « seul » et à 69,3 % au bord GAUCHE du porté.
-       0,1 point de rupture à la couture : c'est la couture la plus juste des
-       trois plateaux. La variante `-color` n'a AUCUN sol (luminance moyenne
+    /* `-model-world-v1`, et surtout pas `-model-color-v1`. Mesuré au banc
+       `_design-reference/mesure-horizon.py` : horizon mur/marbre à 69,3 % au
+       bord DROIT du « seul » comme au bord GAUCHE du porté, contrastes 140 et
+       146 — 0,0 point de rupture, et l'arête la plus franche des trois
+       plateaux. La variante `-color` n'a AUCUN sol (luminance moyenne
        du tiers bas : 42,9, contre 97,4 pour `-world` et 149,5 pour le
        « seul ») — l'homme y flotte sur un aplat et le marbre s'arrête net à
        la couture. */
@@ -248,6 +288,13 @@ export default function ApollonGuidedSequence({ coloris }: Props) {
   const { t, locale } = useI18n();
   const [actif, setActif] = useState(0);
   const [etat, setEtat] = useState<string>(ETATS[0]);
+  // Le rail est-il REPLIÉ en une seule fenêtre ? C'est la seule question qui
+  // décide de l'inertie. Sous mouvement réduit le CSS déplie les trois
+  // panneaux, tous visibles, tous atteignables : `anime` reste faux et
+  // personne ne devient inerte. Cet état est posé par la branche animée de
+  // `mm.add` et repris à faux par son nettoyage, donc il suit exactement le
+  // régime que GSAP applique, pas une media query lue en double.
+  const [anime, setAnime] = useState(false);
   const scene = useRef<HTMLDivElement>(null);
   const rail = useRef<HTMLDivElement>(null);
   const live = useRef<HTMLParagraphElement>(null);
@@ -270,6 +317,11 @@ export default function ApollonGuidedSequence({ coloris }: Props) {
         // empilés, volets ouverts. Il n'y a rien à piloter, et surtout rien
         // à masquer.
         if (!anime) return;
+        // Le rail est replié : deux panneaux sur trois sont hors cadre, et
+        // `.plaqueScene` est en `overflow: clip`, donc le navigateur n'a
+        // aucun défilement de rattrapage pour ramener un focus qui s'y
+        // égarerait. On le déclare au rendu, qui posera `inert`.
+        setAnime(true);
 
         const railNoeud = rail.current;
         const sceneNoeud = scene.current;
@@ -452,6 +504,9 @@ export default function ApollonGuidedSequence({ coloris }: Props) {
             if (noeud) noeud.style.opacity = "";
           });
           if (remplie) remplie.style.transform = "";
+          // Le rail n'est plus piloté : plus rien n'est hors cadre par notre
+          // fait, donc plus rien ne doit rester inerte.
+          setAnime(false);
         };
       },
     );
@@ -507,6 +562,13 @@ export default function ApollonGuidedSequence({ coloris }: Props) {
               <article
                 className={styles.panneau}
                 key={plateau.cle}
+                /* Hors cadre = hors tabulation. Sans cela le lien « Découvrir »
+                   des panneaux 2 et 3 reste dans l'ordre de tabulation alors
+                   qu'il est invisible et inatteignable au scroll : WCAG 2.4.7
+                   et 2.4.11 échouent sur la pièce maîtresse de l'accueil.
+                   `inert` retire le sous-arbre du focus, du pointeur et de
+                   l'arbre d'accessibilité d'un seul geste. */
+                inert={anime && index !== actif}
                 style={
                   {
                     "--mur": plateau.mur,

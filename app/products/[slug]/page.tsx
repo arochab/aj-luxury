@@ -13,6 +13,7 @@ import StoreFooter from "../../components/StoreFooter";
 import StoreHeader from "../../components/StoreHeader";
 import styles from "../../components/ProductPage.module.css";
 import { getPublicStockBySize } from "../../../lib/commerce/internal-stock";
+import type { PublicStockBySize } from "../../../lib/commerce/public-stock";
 import { getProduct, getProducts } from "../../../lib/products";
 import { T } from "../../../lib/i18n/TranslatedText";
 import { getServerCommerceRuntimeMode } from "../../../lib/commerce/commerce-runtime.server";
@@ -49,7 +50,16 @@ export default async function ProductPage({ params }: ProductPageProps) {
 
   if (!product) notFound();
 
-  const availability = getPublicStockBySize(product.slug);
+  /* La disponibilité par taille est résolue ICI, sur le serveur, et descend en
+     props initiales : l'acheteur voit l'état de chaque taille au premier rendu,
+     jamais après montage. `null` n'existe qu'en cas d'échec de résolution —
+     c'est le seul cas où le panneau retombe sur « vérifié à l'ajout ». */
+  let availability: PublicStockBySize | null = null;
+  try {
+    availability = getPublicStockBySize(product.slug);
+  } catch {
+    availability = null;
+  }
   const runtimeMode = getServerCommerceRuntimeMode();
   const otherProducts = products.filter((item) => item.slug !== product.slug);
 

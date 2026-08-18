@@ -341,16 +341,24 @@
 
    LA GOUTTIÈRE. Une passe avait collé les deux boîtes bord à bord en
    revendiquant « un raccord franc », une autre a déclaré le pourpre cassé
-   (« 69 % à gauche, 87 % à droite, lyre au double »). Mesure refaite en PIL
-   sur les vrais fichiers, deux boîtes 473x711 en `contain`, bande 34 px —
-   ce que rend ce CSS : l'horizon marbre/mur du pourpre tombe à 69,2 % à
-   gauche et 69,3 % à droite. 0,1 point de rupture, la couture la plus juste
-   des trois plateaux (rose et lilas : 10,4 et 12,9 points). Le « 87 % »
-   était une seconde arête — l'arc et le carquois posés sur le marbre —
-   présente dans les DEUX prises. Les trois plateaux sont trois prises du
-   même décor. La gouttière reste, non pour masquer un raccord, mais parce
-   que les accessoires se répètent d'une prise à l'autre : deux prises d'une
-   même série se lisent mieux côte à côte que soudées.
+   (« 69 % à gauche, 87 % à droite, lyre au double »). Le banc
+   `_design-reference/mesure-horizon.py` tranche — deux boîtes 473x711 en
+   `contain`, bande de 34 px adjacente à la couture, profil de luminance
+   lissé sur 5 lignes, horizon pris au seuil à mi-hauteur entre la médiane du
+   mur et celle du sol, ce que rend exactement ce CSS. L'horizon mur/marbre
+   tombe à 69,1 / 68,9 % sur le rose, 71,9 / 70,0 % sur le lilas, 69,3 /
+   69,3 % sur le pourpre : 0,1, 1,8 et 0,0 point de rupture. La couture tient
+   sur les trois. Les « 87 % » et les « 10,4 points » venaient d'un détecteur
+   qui retenait l'arête la plus contrastée du cadre — le carquois posé sur le
+   marbre — au lieu de l'horizon. La gouttière reste, non pour masquer un
+   raccord, mais parce que les accessoires se répètent d'une prise à l'autre :
+   deux prises d'une même série se lisent mieux côte à côte que soudées.
+
+   Aucune cale verticale n'est posée sur la demi-boîte portée, et
+   `object-position` ne pourrait de toute façon pas en porter une : en
+   `contain` les deux fichiers sont contraints en LARGEUR, le jeu vertical
+   total vaut 1,5 px et 0,6 px sur 711, donc la course complète de
+   `object-position` déplace le cadrage de 0,2 % de la hauteur de boîte.
 
    La gouttière est une variable locale parce que le JS la réutilise : la
    compensation de recentrage vaut (largeur d'une boîte + gouttière) / 2, soit

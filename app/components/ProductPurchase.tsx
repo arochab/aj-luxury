@@ -11,7 +11,10 @@ import {
   setCartLineQuantity,
 } from "../../lib/commerce/preprod-cart-client";
 import { createLaunchVariantId } from "../../lib/commerce/product-identifiers";
-import type { PublicStockBySize } from "../../lib/commerce/public-stock";
+import type {
+  PublicStockBySize,
+  PublicStockStatus,
+} from "../../lib/commerce/public-stock";
 import type { Product, ProductSize } from "../../lib/products";
 import { formatPrice, sizes } from "../../lib/products";
 import styles from "./ProductPage.module.css";
@@ -20,7 +23,9 @@ import type { CommerceRuntimeMode } from "../../lib/commerce/commerce-runtime";
 type ProductPurchaseProps = {
   product: Product;
   products: Product[];
-  availability: PublicStockBySize;
+  /* Résolue sur le serveur et reçue au premier rendu. `null` signale un échec
+     de résolution : seul cas où l'on retombe sur « vérifié à l'ajout ». */
+  availability: PublicStockBySize | null;
   runtimeMode: CommerceRuntimeMode;
 };
 
@@ -52,31 +57,43 @@ export default function ProductPurchase({
   const { locale, t } = useI18n();
   const localizedProduct = getLocalizedProductCopy(t, product.slug);
 
+  /* Une seule lecture de la disponibilité, la même pour l'étiquette, l'état
+     grisé et le garde-fou de sélection. `null` = non résolue. */
+  function stockOf(size: ProductSize): PublicStockStatus | null {
+    return availability?.[size] ?? null;
+  }
+
+  function isSoldOut(size: ProductSize) {
+    return stockOf(size)?.state === "sold-out";
+  }
+
   function selectSize(size: ProductSize) {
-    if (
-      runtimeMode === "preproduction" &&
-      availability[size].state === "sold-out"
-    ) return;
+    // Le bouton reste focusable (aria-disabled), donc le refus se joue ici.
+    if (isSoldOut(size)) return;
 
     setSelectedSize(size);
     setFeedback(null);
   }
 
   function stockLabel(size: ProductSize) {
-    if (runtimeMode === "production") {
-      return t("product.stockCheckedAtAdd");
-    }
-    const stock = availability[size];
+    const stock = stockOf(size);
+
+    // Repli, et uniquement repli : la disponibilité n'a pas pu être résolue.
+    if (!stock) return t("product.stockCheckedAtAdd");
+
+    const simulated = runtimeMode === "preproduction";
 
     if (stock.state === "sold-out") {
-      return t("product.soldOut");
+      return simulated ? t("product.soldOut") : t("product.soldOutLive");
     }
 
     if (stock.state === "low-stock") {
-      return t("product.lowStockSimulated");
+      return simulated
+        ? t("product.lowStockSimulated")
+        : t("product.onlyLeft").replace("{count}", String(stock.remaining));
     }
 
-    return t("product.available");
+    return simulated ? t("product.available") : t("product.availableLive");
   }
 
   useEffect(() => {
@@ -235,7 +252,9 @@ export default function ProductPurchase({
     return runtimeMode === "preproduction"
       ? t("product.cartSecureNotice")
       : runtimeMode === "production"
-        ? `Paiement sécurisé. ${t("product.stockCheckedAtAdd")}.`
+        ? availability
+          ? "Paiement sécurisé."
+          : `Paiement sécurisé. ${t("product.stockCheckedAtAdd")}.`
         : t("product.cartUnavailable");
   }
 
@@ -312,8 +331,7 @@ export default function ProductPurchase({
         <div className={styles.sizeOptions}>
           {sizes.map((size) => {
             const label = stockLabel(size);
-            const soldOut = runtimeMode === "preproduction" &&
-              availability[size].state === "sold-out";
+            const soldOut = isSoldOut(size);
 
             return (
               <button
@@ -322,7 +340,10 @@ export default function ProductPurchase({
                 key={size}
                 aria-pressed={selectedSize === size}
                 aria-label={`${t("product.size")} ${size}, ${label}`}
-                disabled={soldOut}
+                /* aria-disabled et non disabled : la taille en rupture reste
+                   atteignable au clavier et annoncée par le lecteur d'écran,
+                   au lieu de disparaître de l'ordre de tabulation. */
+                aria-disabled={soldOut || undefined}
                 onClick={() => selectSize(size)}
               >
                 <span className={styles.sizeLetter}>{size}</span>
@@ -390,7 +411,12 @@ export default function ProductPurchase({
       <button
         className={styles.purchaseButton}
         type="button"
-        disabled={!selectedSize || cartBusy || runtimeMode === "closed"}
+        disabled={
+          !selectedSize ||
+          isSoldOut(selectedSize) ||
+          cartBusy ||
+          runtimeMode === "closed"
+        }
         onClick={() => void addToCart()}
         aria-busy={cartBusy}
       >

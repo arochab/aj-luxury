@@ -436,7 +436,7 @@
   line-height: 1.25;
 }
 
-.sizeButton:hover:not(:disabled) {
+.sizeButton:hover:not(:disabled):not([aria-disabled="true"]) {
   border-color: var(--aj-filet-fort);
 }
 
@@ -451,17 +451,22 @@
   color: rgba(8, 8, 10, 0.66);
 }
 
-.sizeButton:disabled {
+/* La rupture se lit dès l'affichage. aria-disabled porte le même traitement
+   visuel que :disabled, sans retirer la taille du parcours clavier. */
+.sizeButton:disabled,
+.sizeButton[aria-disabled="true"] {
   border-color: rgba(255, 255, 255, 0.1);
   color: rgba(255, 255, 255, 0.38);
   cursor: not-allowed;
 }
 
-.sizeButton:disabled .sizeLetter {
+.sizeButton:disabled .sizeLetter,
+.sizeButton[aria-disabled="true"] .sizeLetter {
   text-decoration: line-through;
 }
 
-.sizeButton:disabled .sizeAvailability {
+.sizeButton:disabled .sizeAvailability,
+.sizeButton[aria-disabled="true"] .sizeAvailability {
   color: rgba(255, 255, 255, 0.38);
 }
 

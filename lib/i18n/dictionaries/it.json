@@ -55,6 +55,7 @@
   "product.inStock": "disponibili",
   "product.available": "Disponibilità simulata",
   "product.lowStockSimulated": "Disponibilità limitata simulata",
+  "product.availableLive": "Disponibile",
   "product.lowStockLive": "Disponibilità limitata",
   "product.onlyLeft": "Solo {count} rimasti",
   "product.soldOut": "Indisponibilità simulata",
