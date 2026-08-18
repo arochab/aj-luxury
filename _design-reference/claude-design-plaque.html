@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AJ Luxury — Apollon, la plaque · trois actes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="crossorigin" />
+<link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,400..700&family=Manrope:wght@300..700&display=swap" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/gsap.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/ScrollTrigger.min.js"></script>
+<style>
+  @property --seam-live { syntax: '<percentage>'; inherits: true; initial-value: 100%; }
+  *, *::before, *::after { box-sizing: border-box; }
+  html { scroll-behavior: auto; }
+  body { margin: 0; background: #100e11; color: #f7f2ef; font-family: 'Manrope', 'Helvetica Neue', Helvetica, sans-serif; text-wrap: pretty; -webkit-font-smoothing: antialiased; }
+  a { color: #e8d6cb; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+  a:hover { color: #fff; }
+  :where(a, button, summary, [tabindex]):focus-visible { outline: 2px solid #f7f2ef; outline-offset: 3px; box-shadow: 0 0 0 6px rgba(16,14,17,.92); }
+</style>
+</helmet>
+
+<div id="ajRoot" style="
+  --rose:#97666a; --lilas:#616384; --pourpre:#3f051c;
+  --bone:#f7f2ef; --night:#100e11;
+  --k:1.40; --grade:saturate(1.02) contrast(1.015);
+  --dy-still:-15%; --dy-worn:-5.8%;
+  --t0:15px; --t1:clamp(17px,1.1vw,19px); --t2:clamp(22px,1.5vw,25px); --t3:clamp(29px,2vw,34px);
+  --t4:clamp(38px,2.9vw,45px); --t5:clamp(50px,4.2vw,60px); --t7:clamp(76px,8.6vw,138px);
+  --display:'Bodoni Moda','Times New Roman',serif;
+  font-size:var(--t1); line-height:1.5; background:var(--night)
+">
+
+  <section data-screen-label="01 Ouverture" style="position:relative; min-height:100svh; display:grid; grid-template-rows:auto 1fr auto; gap:28px; padding:clamp(26px,3vw,50px) clamp(24px,3.2vw,50px); background:#6f484c; color:#fff; overflow:hidden">
+    <div style="display:flex; justify-content:space-between; align-items:baseline; gap:24px; flex-wrap:wrap; font-size:var(--t0); letter-spacing:.08em; text-transform:uppercase">
+      <span>AJ Luxury · Apollon · AJ-102</span>
+      <a href="#collection" style="color:inherit; text-decoration:none; border-bottom:1px solid currentColor; padding-bottom:2px">Le boxer — 29,99 €</a>
+    </div>
+
+    <div style="align-self:center; display:flex; flex-direction:column; gap:clamp(20px,2vw,32px); max-width:min(60ch,94%)">
+      <h1 style="margin:0; font-family:var(--display); font-optical-sizing:auto; font-variation-settings:'opsz' 96; font-weight:500; font-size:var(--t7); line-height:.9; letter-spacing:-.03em">
+        <span style="display:block">Apollon.</span>
+        <span style="display:block">Un seul plateau,</span>
+        <span style="display:block; color:#f2dadc">deux prises.</span>
+      </h1>
+      <p style="margin:0; font-size:var(--t2); font-weight:300; line-height:1.35; letter-spacing:-.01em; max-width:40ch">
+        Le boxer seul et le boxer porté ont été photographiés au même endroit : même mur, même sol de marbre, même lyre, même laurier. <strong style="font-weight:600">Jérémy et Alex</strong>, fondateurs de la maison, sont les deux mannequins.
+      </p>
+    </div>
+
+    <div style="display:flex; justify-content:space-between; align-items:end; gap:clamp(16px,2vw,36px); flex-wrap:wrap; border-top:1px solid rgba(255,255,255,.34); padding-top:clamp(12px,1.2vw,18px); font-size:var(--t1)">
+      <div style="display:flex; flex-wrap:wrap; gap:clamp(14px,2vw,34px)">
+        <span>Rose Velours · Pourpre Impérial · Lilas Céleste</span>
+        <span>S — XL</span>
+        <span>94 % modal · 6 % élasthanne</span>
+        <span style="font-weight:700">29,99 €</span>
+      </div>
+      <span style="font-size:var(--t0); letter-spacing:.08em; text-transform:uppercase">Faire défiler ↓</span>
+    </div>
+  </section>
+
+  <section id="ajSeq" data-screen-label="02 La plaque — trois actes" style="position:relative; height:360svh; background:var(--rose)">
+    <div id="ajStick" style="position:sticky; top:0; height:100svh; overflow:hidden">
+
+      <div id="ajWall0" style="position:absolute; inset:0; background:var(--rose)"></div>
+      <div id="ajWall1" style="position:absolute; inset:0; background:var(--lilas); opacity:0"></div>
+      <div id="ajWall2" style="position:absolute; inset:0; background:var(--pourpre); opacity:0"></div>
+
+      <div id="ajGrid" style="position:absolute; inset:0; display:grid; grid-template-columns:minmax(0,352px) 1fr; align-items:center; gap:clamp(20px,2.4vw,44px); padding:clamp(20px,2.4vw,44px) clamp(20px,2.6vw,44px) clamp(84px,9vw,120px)">
+
+        <div id="ajCopy" style="position:relative; align-self:center; min-height:220px; padding:clamp(18px,1.8vw,26px); background:rgba(20,14,16,.80)">
+          <div class="ajC" data-i="0" style="color:#fff">
+            <span style="display:block; font-size:var(--t0); letter-spacing:.09em; text-transform:uppercase; opacity:.7">Acte I — le vêtement seul</span>
+            <h2 style="margin:.35em 0 .5em; font-family:var(--display); font-optical-sizing:auto; font-variation-settings:'opsz' 44; font-weight:500; font-size:var(--t4); line-height:1; letter-spacing:-.02em">Rose Velours</h2>
+            <p style="margin:0 0 1em; font-size:var(--t1); line-height:1.45; max-width:32ch">Plâtre rose, socle de marbre, lyre à gauche. La ceinture jacquard de 3,5 cm et sa plaque métal prennent la lumière de face.</p>
+            <span style="display:block; font-size:var(--t0); letter-spacing:.04em; opacity:.78">Porté par Jérémy</span>
+          </div>
+          <div class="ajC" data-i="1" style="position:absolute; inset:0; opacity:0; color:#fff">
+            <span style="display:block; font-size:var(--t0); letter-spacing:.09em; text-transform:uppercase; opacity:.7">Acte III — le coloris change</span>
+            <h2 style="margin:.35em 0 .5em; font-family:var(--display); font-optical-sizing:auto; font-variation-settings:'opsz' 44; font-weight:500; font-size:var(--t4); line-height:1; letter-spacing:-.02em">Lilas Céleste</h2>
+            <p style="margin:0 0 1em; font-size:var(--t1); line-height:1.45; max-width:32ch">Ardoise bleu-gris, clair-obscur latéral. Le plateau est le même, retourné : la lyre passe à droite. C'est cette lumière qui devient la référence de la maison.</p>
+            <span style="display:block; font-size:var(--t0); letter-spacing:.04em; opacity:.78">Porté par Alex</span>
+          </div>
+          <div class="ajC" data-i="2" style="position:absolute; inset:0; opacity:0; color:#fff">
+            <span style="display:block; font-size:var(--t0); letter-spacing:.09em; text-transform:uppercase; opacity:.72">Acte III — le coloris change</span>
+            <h2 style="margin:.35em 0 .5em; font-family:var(--display); font-optical-sizing:auto; font-variation-settings:'opsz' 44; font-weight:500; font-size:var(--t4); line-height:1; letter-spacing:-.02em">Pourpre Impérial</h2>
+            <p style="margin:0 0 1em; font-size:var(--t1); line-height:1.45; max-width:32ch">Bordeaux profond, mur mat. Le socle et la ligne du sol ne bougent pas d'un coloris à l'autre : c'est eux qui tiennent le plateau.</p>
+            <span style="display:block; font-size:var(--t0); letter-spacing:.04em; opacity:.78">Parité à rétablir — actif à produire</span>
+          </div>
+        </div>
+
+        <div id="ajStage" style="position:relative; justify-self:center; width:100%; max-width:calc((100svh - 176px) * 1.3); aspect-ratio:1.3 / 1; max-height:calc(100svh - 176px); --seam-live:100%; overflow:hidden; opacity:0">
+
+          <div class="ajFrame" data-i="0" style="position:absolute; inset:0; --sgn:1; --dx-still:-17.3%; --dx-worn:40.8%; filter:var(--grade)">
+            <img src="plaques/apollon-rose-model-world-v1.webp" alt="Apollon Rose Velours porté par Jérémy, sur le plateau de marbre" width="1731" height="2600" style="position:absolute; left:var(--dx-worn); top:var(--dy-worn); height:calc(var(--k) * 100%); width:auto; max-width:none" />
+            <div class="ajClip" style="position:absolute; inset:0; overflow:hidden; background:var(--wall); transform:translate3d(calc(var(--sgn) * (var(--seam-live) - 100%)), 0, 0); will-change:transform">
+              <div class="ajShift" style="position:absolute; inset:0; transform:translate3d(calc(var(--sgn) * (100% - var(--seam-live))), 0, 0); will-change:transform">
+                <img src="plaques/apollon-rose-lyre-v1.webp" alt="Le boxer Apollon Rose Velours seul, en lévitation au-dessus du socle de marbre" width="1024" height="1536" style="position:absolute; left:var(--dx-still); top:var(--dy-still); height:calc(var(--k) * 100%); width:auto; max-width:none" />
+              </div>
+            </div>
+          </div>
+
+          <div class="ajFrame" data-i="1" style="position:absolute; inset:0; opacity:0; --sgn:1; --dx-still:-17.3%; --dx-worn:-14%; filter:var(--grade)">
+            <img src="plaques/apollon-lilas-model-world-v1.webp" alt="Apollon Lilas Céleste porté par Alex, sur le même plateau" width="1731" height="2600" style="position:absolute; left:var(--dx-worn); top:var(--dy-worn); height:calc(var(--k) * 100%); width:auto; max-width:none" />
+            <div class="ajClip" style="position:absolute; inset:0; overflow:hidden; background:var(--wall); transform:translate3d(calc(var(--sgn) * (var(--seam-live) - 100%)), 0, 0); will-change:transform">
+              <div class="ajShift" style="position:absolute; inset:0; transform:translate3d(calc(var(--sgn) * (100% - var(--seam-live))), 0, 0); will-change:transform">
+                <img src="plaques/apollon-lilas-lyre-v1.webp" alt="Le boxer Apollon Lilas Céleste seul, au-dessus du socle de marbre" width="1024" height="1536" style="position:absolute; left:var(--dx-still); top:var(--dy-still); height:calc(var(--k) * 100%); width:auto; max-width:none" />
+              </div>
+            </div>
+          </div>
+
+          <div class="ajFrame" data-i="2" style="position:absolute; inset:0; opacity:0; --sgn:1; --dx-still:-17.3%; --dx-worn:40.8%; filter:var(--grade)">
+            <img src="plaques/apollon-pourpre-model-world-v1.webp" alt="Apollon Pourpre Impérial porté, sur le même plateau" width="1731" height="2600" style="position:absolute; left:var(--dx-worn); top:var(--dy-worn); height:calc(var(--k) * 100%); width:auto; max-width:none" />
+            <div class="ajClip" style="position:absolute; inset:0; overflow:hidden; background:var(--wall); transform:translate3d(calc(var(--sgn) * (var(--seam-live) - 100%)), 0, 0); will-change:transform">
+              <div class="ajShift" style="position:absolute; inset:0; transform:translate3d(calc(var(--sgn) * (100% - var(--seam-live))), 0, 0); will-change:transform">
+                <img src="plaques/apollon-pourpre-lyre-v1.webp" alt="Le boxer Apollon Pourpre Impérial seul, au-dessus du socle de marbre" width="1024" height="1536" style="position:absolute; left:var(--dx-still); top:var(--dy-still); height:calc(var(--k) * 100%); width:auto; max-width:none" />
+              </div>
+            </div>
+          </div>
+
+          <div id="ajGuides" style="position:absolute; inset:0; pointer-events:none; opacity:0">
+            <div style="position:absolute; left:0; right:0; top:82%; height:1px; background:rgba(255,255,255,.85)"></div>
+            <div id="ajGuideSeam" style="position:absolute; left:var(--seam); top:0; bottom:0; width:1px; background:rgba(255,255,255,.85)"></div>
+            <span style="position:absolute; left:6px; top:82%; transform:translateY(-140%); font-family:ui-monospace,Menlo,monospace; font-size:var(--t0); color:#fff">horizon 82 %</span>
+          </div>
+        </div>
+      </div>
+
+      <div id="ajControls" style="position:absolute; left:clamp(20px,2.6vw,44px); right:clamp(20px,2.6vw,44px); bottom:clamp(18px,2vw,30px); display:flex; flex-direction:column; gap:clamp(9px,1vw,14px); padding:clamp(12px,1.2vw,18px) clamp(14px,1.4vw,20px); background:rgba(20,14,16,.80); color:#fff">
+        <div style="display:flex; justify-content:space-between; align-items:baseline; gap:18px; flex-wrap:wrap">
+          <div style="display:flex; gap:clamp(12px,1.4vw,22px); font-size:var(--t0); letter-spacing:.08em; text-transform:uppercase">
+            <span class="ajActe" data-a="0" style="opacity:1">I — la plaque</span>
+            <span class="ajActe" data-a="1" style="opacity:.72">II — le volet</span>
+            <span class="ajActe" data-a="2" style="opacity:.72">III — le coloris</span>
+          </div>
+          <div style="display:flex; gap:clamp(8px,1vw,16px)">
+            <button type="button" class="ajTab" data-t="0" style="appearance:none; background:none; border:0; border-bottom:2px solid currentColor; padding:2px 0; cursor:pointer; color:inherit; font-family:inherit; font-size:var(--t1); font-weight:600">Rose Velours</button>
+            <button type="button" class="ajTab" data-t="1" style="appearance:none; background:none; border:0; border-bottom:2px solid transparent; padding:2px 0; cursor:pointer; color:inherit; font-family:inherit; font-size:var(--t1); font-weight:600; opacity:.72">Lilas Céleste</button>
+            <button type="button" class="ajTab" data-t="2" style="appearance:none; background:none; border:0; border-bottom:2px solid transparent; padding:2px 0; cursor:pointer; color:inherit; font-family:inherit; font-size:var(--t1); font-weight:600; opacity:.72">Pourpre Impérial</button>
+          </div>
+        </div>
+        <div style="position:relative; height:3px; background:rgba(255,255,255,.34)">
+          <div id="ajProg" style="position:absolute; inset:0; background:#fff; transform-origin:0 50%; transform:scaleX(0); will-change:transform"></div>
+        </div>
+      </div>
+
+      <p id="ajLive" aria-live="polite" aria-atomic="true" style="position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap"></p>
+    </div>
+  </section>
+
+  <section id="collection" data-screen-label="03 Le boxer" style="background:#f2efe9; color:#191716; padding:clamp(56px,7vw,120px) clamp(24px,4vw,64px)">
+    <div style="max-width:1240px; margin:0 auto; display:grid; grid-template-columns:repeat(auto-fit, minmax(min(100%,340px), 1fr)); gap:clamp(36px,5vw,80px); align-items:center">
+
+      <div class="ajReveal" style="display:flex; flex-direction:column; gap:clamp(18px,2vw,28px)">
+        <span style="font-size:var(--t0); letter-spacing:.09em; text-transform:uppercase; color:#6d635c">Apollon · AJ-102</span>
+        <h2 style="margin:0; font-family:var(--display); font-optical-sizing:auto; font-variation-settings:'opsz' 60; font-weight:500; font-size:var(--t5); line-height:.98; letter-spacing:-.025em">Le boxer, et rien<br />d'autre à choisir.</h2>
+        <p style="margin:0; font-size:var(--t2); font-weight:300; line-height:1.4; max-width:34ch; color:#3a342f">Une seule coupe, travaillée jusqu'à ne plus avoir de version B. 94 % modal pour la main, 6 % élasthanne pour la tenue, ceinture jacquard de 3,5 cm à plaque métal.</p>
+
+        <div style="display:flex; align-items:baseline; gap:14px; padding-top:4px">
+          <span style="font-family:var(--display); font-optical-sizing:auto; font-variation-settings:'opsz' 60; font-weight:500; font-size:var(--t4); letter-spacing:-.02em">29,99 €</span>
+          <span style="font-size:var(--t1); color:#6d635c">les trois coloris au même prix</span>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:10px">
+          <span style="font-size:var(--t0); letter-spacing:.09em; text-transform:uppercase; color:#6d635c">Coloris</span>
+          <div style="display:flex; flex-wrap:wrap; gap:10px">
+            <button type="button" class="ajCol" data-c="0" aria-pressed="true" style="display:flex; align-items:center; gap:10px; min-height:48px; padding:0 16px; cursor:pointer; background:#fff; border:1px solid #191716; color:inherit; font-family:inherit; font-size:var(--t1); font-weight:600">
+              <span aria-hidden="true" style="width:16px; height:16px; border-radius:50%; background:#e3b6c2; box-shadow:inset 0 0 0 1px rgba(0,0,0,.2)"></span>Rose Velours
+            </button>
+            <button type="button" class="ajCol" data-c="1" aria-pressed="false" style="display:flex; align-items:center; gap:10px; min-height:48px; padding:0 16px; cursor:pointer; background:transparent; border:1px solid rgba(25,23,22,.28); color:inherit; font-family:inherit; font-size:var(--t1); font-weight:600">
+              <span aria-hidden="true" style="width:16px; height:16px; border-radius:50%; background:#a9a5d6; box-shadow:inset 0 0 0 1px rgba(0,0,0,.2)"></span>Lilas Céleste
+            </button>
+            <button type="button" class="ajCol" data-c="2" aria-pressed="false" style="display:flex; align-items:center; gap:10px; min-height:48px; padding:0 16px; cursor:pointer; background:transparent; border:1px solid rgba(25,23,22,.28); color:inherit; font-family:inherit; font-size:var(--t1); font-weight:600">
+              <span aria-hidden="true" style="width:16px; height:16px; border-radius:50%; background:#7a2447; box-shadow:inset 0 0 0 1px rgba(0,0,0,.2)"></span>Pourpre Impérial
+            </button>
+          </div>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:10px">
+          <span style="font-size:var(--t0); letter-spacing:.09em; text-transform:uppercase; color:#6d635c">Taille</span>
+          <div style="display:flex; flex-wrap:wrap; gap:10px">
+            <button type="button" class="ajTaille" data-t="S" aria-pressed="false" style="min-width:56px; min-height:48px; cursor:pointer; background:transparent; border:1px solid rgba(25,23,22,.28); color:inherit; font-family:inherit; font-size:var(--t1); font-weight:600">S</button>
+            <button type="button" class="ajTaille" data-t="M" aria-pressed="false" style="min-width:56px; min-height:48px; cursor:pointer; background:transparent; border:1px solid rgba(25,23,22,.28); color:inherit; font-family:inherit; font-size:var(--t1); font-weight:600">M</button>
+            <button type="button" class="ajTaille" data-t="L" aria-pressed="false" style="min-width:56px; min-height:48px; cursor:pointer; background:transparent; border:1px solid rgba(25,23,22,.28); color:inherit; font-family:inherit; font-size:var(--t1); font-weight:600">L</button>
+            <button type="button" class="ajTaille" data-t="XL" aria-pressed="false" style="min-width:56px; min-height:48px; cursor:pointer; background:transparent; border:1px solid rgba(25,23,22,.28); color:inherit; font-family:inherit; font-size:var(--t1); font-weight:600">XL</button>
+          </div>
+        </div>
+
+        <button type="button" id="ajPanier" style="min-height:60px; padding:0 28px; cursor:pointer; background:#191716; border:1px solid #191716; color:#f2efe9; font-family:inherit; font-size:var(--t2); font-weight:600; letter-spacing:-.01em; text-align:left">Ajouter au panier — 29,99 €</button>
+        <p id="ajPanierNote" style="margin:0; font-size:var(--t0); color:#6d635c">Choisis une taille pour continuer.</p>
+      </div>
+
+      <div class="ajReveal" style="position:relative; aspect-ratio:1024 / 1536; background:#dcd6cd; overflow:hidden">
+        <img id="ajPack0" src="plaques/apollon-rose-lyre-v1.webp" alt="Le boxer Apollon Rose Velours seul, au-dessus du socle de marbre, lyre et laurier" width="1024" height="1536" style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover" />
+        <img id="ajPack1" src="plaques/apollon-lilas-lyre-v1.webp" alt="Le boxer Apollon Lilas Céleste seul, au-dessus du socle de marbre" width="1024" height="1536" style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover; opacity:0" />
+        <img id="ajPack2" src="plaques/apollon-pourpre-lyre-v1.webp" alt="Le boxer Apollon Pourpre Impérial seul, au-dessus du socle de marbre" width="1024" height="1536" style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover; opacity:0" />
+      </div>
+    </div>
+  </section>
+
+  <section data-screen-label="04 Jérémy et Alex" style="background:#5c534d; color:#fff; padding:clamp(56px,7vw,120px) clamp(24px,4vw,64px)">
+    <div style="max-width:1240px; margin:0 auto; display:flex; flex-direction:column; gap:clamp(36px,4.4vw,64px)">
+
+      <div class="ajReveal" style="display:flex; flex-direction:column; gap:clamp(14px,1.6vw,22px); max-width:52ch">
+        <span style="font-size:var(--t0); letter-spacing:.09em; text-transform:uppercase; opacity:.78">La maison</span>
+        <h2 style="margin:0; font-family:var(--display); font-optical-sizing:auto; font-variation-settings:'opsz' 60; font-weight:500; font-size:var(--t5); line-height:.98; letter-spacing:-.025em">Ceux qui le dessinent sont ceux qui le portent.</h2>
+        <p style="margin:0; font-size:var(--t2); font-weight:300; line-height:1.4; max-width:38ch">Jérémy et Alex ont fondé AJ Luxury à deux. Ils posent eux-mêmes, sur le même plateau, dans le même vêtement. Il n'y a personne entre le produit et vous.</p>
+      </div>
+
+      <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(min(100%,300px), 1fr)); gap:clamp(20px,3vw,44px)">
+        <figure class="ajReveal" style="margin:0; display:flex; flex-direction:column; gap:16px">
+          <div style="position:relative; aspect-ratio:3 / 4; overflow:hidden; background:#6a5e58">
+            <img src="plaques/apollon-rose-model-world-v1.webp" alt="Jérémy, fondateur, en Apollon Rose Velours sur le plateau de marbre" width="1731" height="2600" style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover; object-position:50% 14%" />
+          </div>
+          <figcaption style="display:flex; flex-direction:column; gap:6px">
+            <span style="font-family:var(--display); font-optical-sizing:auto; font-variation-settings:'opsz' 40; font-weight:500; font-size:var(--t3); letter-spacing:-.015em">Jérémy</span>
+            <span style="font-size:var(--t1); opacity:.82">Cofondateur — Rose Velours</span>
+          </figcaption>
+        </figure>
+
+        <figure class="ajReveal" style="margin:0; display:flex; flex-direction:column; gap:16px">
+          <div style="position:relative; aspect-ratio:3 / 4; overflow:hidden; background:#6a5e58">
+            <img src="plaques/apollon-lilas-model-world-v1.webp" alt="Alex, fondateur, en Apollon Lilas Céleste sur le même plateau" width="1731" height="2600" style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover; object-position:50% 14%" />
+          </div>
+          <figcaption style="display:flex; flex-direction:column; gap:6px">
+            <span style="font-family:var(--display); font-optical-sizing:auto; font-variation-settings:'opsz' 40; font-weight:500; font-size:var(--t3); letter-spacing:-.015em">Alex</span>
+            <span style="font-size:var(--t1); opacity:.82">Cofondateur — Lilas Céleste</span>
+          </figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <footer data-screen-label="05 Pied" style="background:#100e11; color:#f2efe9; padding:clamp(36px,4vw,56px) clamp(24px,4vw,64px)">
+    <div style="max-width:1240px; margin:0 auto; display:flex; flex-wrap:wrap; justify-content:space-between; align-items:baseline; gap:clamp(18px,3vw,44px)">
+      <span style="font-family:var(--display); font-optical-sizing:auto; font-variation-settings:'opsz' 32; font-weight:500; font-size:var(--t3); letter-spacing:-.015em">AJ Luxury</span>
+      <div style="display:flex; flex-wrap:wrap; gap:clamp(14px,2vw,32px); font-size:var(--t1)">
+        <a href="#apollon">La plaque</a>
+        <a href="#collection">Le boxer — 29,99 €</a>
+        <a href="#accueil">Haut de page</a>
+      </div>
+      <span style="font-size:var(--t0); opacity:.7">Conception, UX/UI et réalisation : Adam CHABBI</span>
+    </div>
+  </footer>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{
+  &quot;reperes&quot;: { &quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: false, &quot;tsType&quot;: &quot;boolean&quot;, &quot;section&quot;: &quot;Vérification&quot; },
+  &quot;raccord&quot;: { &quot;editor&quot;: &quot;range&quot;, &quot;default&quot;: 0, &quot;min&quot;: -12, &quot;max&quot;: 14, &quot;step&quot;: 0.5, &quot;unit&quot;: &quot; pts&quot;, &quot;tsType&quot;: &quot;number&quot;, &quot;section&quot;: &quot;Géométrie&quot; },
+  &quot;echelle&quot;: { &quot;editor&quot;: &quot;range&quot;, &quot;default&quot;: 1.4, &quot;min&quot;: 1.05, &quot;max&quot;: 1.9, &quot;step&quot;: 0.01, &quot;tsType&quot;: &quot;number&quot;, &quot;section&quot;: &quot;Géométrie&quot; }
+}">
+class Component extends DCLogic {
+  componentDidMount() { this.init(); }
+
+  init() {
+    const $ = (s) => document.querySelector(s);
+    const $$ = (s) => Array.from(document.querySelectorAll(s));
+    const seq = $('#ajSeq'), stick = $('#ajStick'), stage = $('#ajStage'), prog = $('#ajProg'), live = $('#ajLive');
+    if (!seq || !stage) return;
+    if (this._on) return;
+    this._on = true;
+
+    const frames = $$('.ajFrame'), copies = $$('.ajC'), walls = [$('#ajWall0'), $('#ajWall1'), $('#ajWall2')];
+    const actes = $$('.ajActe'), tabs = $$('.ajTab');
+    // Une custom property dont la valeur est un var() ne survit pas au
+    // compilateur de template : le mur de chaque frame est posé en littéral.
+    // Valeurs échantillonnées sur les plaques, pas inventées.
+    ['#97666a', '#616384', '#3f051c'].forEach((hex, i) => {
+      if (frames[i]) frames[i].style.setProperty('--wall', hex);
+      if (walls[i]) walls[i].style.background = hex;
+    });
+    this._seam = 48;                       // valeur de repos du raccord, en %
+    const ACTS = [0.20, 0.58];            // bornes : acte 1 | acte 2 | acte 3
+    const ease = (t) => t * t * (3 - 2 * t);
+    const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+    let lastAct = -1, lastFrame = -1;
+
+    // Une seule fonction pilote tout l'état visuel à partd'une progression 0→1.
+    // GSAP la scrubbe ; en repli, un écouteur de scroll l'appelle. Aucun minuteur.
+    const drive = (p) => {
+      const a1 = clamp(p / ACTS[0], 0, 1);
+      stage.style.opacity = String(ease(a1));
+      stage.style.transform = 'translate3d(0,' + (1 - ease(a1)) * 26 + 'px,0)';
+
+      const a2 = clamp((p - ACTS[0]) / (ACTS[1] - ACTS[0]), 0, 1);
+      // Une césure par frame : la propriété est portée par la frame, pas par le
+      // stage, donc chaque plaque ouvre dans sa propre bande vide de cuivres.
+      const seams = this._seams || [this._seam, this._seam, this._seam];
+      for (let i = 0; i < 3; i++) {
+        frames[i].style.setProperty('--seam-live', (100 - (100 - seams[i]) * ease(a2)) + '%');
+      }
+
+      const q = clamp((p - ACTS[1]) / (1 - ACTS[1]), 0, 1);
+      const o = [
+        1 - ease(clamp(q / 0.5, 0, 1)),
+        q < 0.5 ? ease(clamp(q / 0.5, 0, 1)) : 1 - ease(clamp((q - 0.5) / 0.5, 0, 1)),
+        q < 0.5 ? 0 : ease(clamp((q - 0.5) / 0.5, 0, 1)),
+      ];
+      for (let i = 0; i < 3; i++) {
+        frames[i].style.opacity = String(o[i]);
+        copies[i].style.opacity = String(o[i]);
+        if (walls[i]) walls[i].style.opacity = String(o[i]);
+      }
+
+      if (prog) prog.style.transform = 'scaleX(' + p + ')';
+
+      const act = p < ACTS[0] ? 0 : p < ACTS[1] ? 1 : 2;
+      if (act !== lastAct) {
+        lastAct = act;
+        actes.forEach((el, i) => { el.style.opacity = i === act ? '1' : '0.72'; });
+      }
+      const fi = q < 0.25 ? 0 : q < 0.75 ? 1 : 2;
+      if (fi !== lastFrame) {
+        lastFrame = fi;
+        tabs.forEach((el, i) => {
+          el.style.opacity = i === fi ? '1' : '0.72';
+          el.style.borderBottomColor = i === fi ? 'currentColor' : 'transparent';
+        });
+        // Encre blanche pleine sur un plateau de texte déterministe. Les murs
+        // échantillonnés n'ont pas la marge nécessaire — rose 4,75:1, pierre
+        // 4,85:1 en blanc pur — donc la hiérarchie ne peut pas passer par
+        // l'opacité : elle passe par la taille, la graisse et l'approche, sur un
+        // scrim rgba(20,14,16,.80) qui rend le contraste calculable.
+      }
+    };
+
+    const range = () => seq.offsetHeight - window.innerHeight;
+    const progress = () => clamp((window.scrollY - seq.offsetTop) / Math.max(1, range()), 0, 1);
+
+    // Géométrie responsive : deux branches, jamais un gate desktop.
+    this.mesurer();
+    let rt = null;
+    const onResize = () => {
+      clearTimeout(rt);
+      rt = setTimeout(() => {
+        this.mesurer();
+        drive(progress());
+        if (window.ScrollTrigger) window.ScrollTrigger.refresh();
+      }, 140);
+    };
+    addEventListener('resize', onResize);
+    this._offResize = () => removeEventListener('resize', onResize);
+
+    const reduit = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    // GSAP est chargé par le helmet, donc après ce montage : on l'attend avant
+    // de choisir le chemin, au lieu de tester une fois et de rater la fenêtre.
+    const attendre = (ms) => new Promise((ok) => {
+      if (window.gsap && window.ScrollTrigger) return ok(true);
+      const t0 = Date.now();
+      const i = setInterval(() => {
+        if (window.gsap && window.ScrollTrigger) { clearInterval(i); ok(true); }
+        else if (Date.now() - t0 > ms) { clearInterval(i); ok(false); }
+      }, 60);
+    });
+
+    const brancherGsap = () => {
+      const g = window.gsap, ST = window.ScrollTrigger;
+      g.registerPlugin(ST);
+      // Un remontage du composant tue la timeline mais laisse ses effets DOM
+      // (le .pin-spacer et le position:fixed) : on repart d'une ardoise propre,
+      // sinon le registre affiche 0 trigger alors que la page est encore
+      // épinglée — et le critère C2 devient invérifiable.
+      ST.getAll().forEach((t) => t.kill(true));
+      if (window.__ajPlaqueTl) { window.__ajPlaqueTl.kill(); window.__ajPlaqueTl = null; }
+      // Le sticky CSS n'existe que pour le repli sans GSAP. Dès que GSAP est
+      // là, c'est lui qui épingle : exactement 1 pin et 1 .pin-spacer.
+      stick.style.position = 'relative';
+      const px = { p: 0 };
+      this._tl = g.timeline({
+        defaults: { ease: 'none' },
+        scrollTrigger: {
+          trigger: seq, start: 'top top', end: 'bottom bottom',
+          pin: stick, pinSpacing: true, scrub: 1, anticipatePin: 1,
+          invalidateOnRefresh: true, fastScrollEnd: 2500,
+        },
+      });
+      // Une seule horloge : le scroll scrubbe ce proxy et l'onUpdate écrit la
+      // propriété enregistrée. GSAP ne peut pas interpoler une @property
+      // directement — c'est exactement le correctif du volet figé à 100 %.
+      this._tl.to(px, { p: 1, duration: 1, onUpdate: () => drive(px.p) }, 0);
+      this._tl.addLabel('rose', ACTS[1] + (1 - ACTS[1]) * 0.06);
+      this._tl.addLabel('lilas', ACTS[1] + (1 - ACTS[1]) * 0.5);
+      this._tl.addLabel('pourpre', ACTS[1] + (1 - ACTS[1]) * 0.96);
+      this._st = this._tl.scrollTrigger;
+      window.__ajPlaqueTl = this._tl;
+      const imgs = Array.from(stage.querySelectorAll('img'));
+      Promise.all(imgs.map((i) => (i.decode ? i.decode().catch(() => {}) : Promise.resolve())))
+        .then(() => ST.refresh());
+      // Référence directe pour la vérification. À lire ici et non dans
+      // ScrollTrigger.getAll() : la balise de chargement du helmet peut être
+      // évaluée deux fois, et le registre global appartient alors à la seconde
+      // copie du module tandis que le trigger vivant est dans la première. Dans
+      // le Next.js, où GSAP est importé une seule fois, getAll() renvoie bien 1.
+      window.__ajPlaqueST = this._st;
+      // Auto-réparation basée sur l'état de MA timeline et non sur le registre
+      // global : sinon la condition serait toujours vraie et rebrancherait sans fin.
+      setTimeout(() => {
+        if (this._mort) return;
+        const vivant = this._tl && this._tl.scrollTrigger && this._tl.scrollTrigger.pin;
+        if (!vivant) brancherGsap();
+      }, 500);
+    };
+
+    const brancherRepli = () => {
+      let raf = null;
+      const tick = () => { raf = null; drive(progress()); };
+      const onScroll = () => { if (!raf) raf = requestAnimationFrame(tick); };
+      addEventListener('scroll', onScroll, { passive: true });
+      addEventListener('resize', onScroll);
+      this._off = () => { removeEventListener('scroll', onScroll); removeEventListener('resize', onScroll); };
+      drive(progress());
+    };
+
+    if (!reduit) {
+      attendre(6000).then((ok) => {
+        if (this._mort) return;
+        if (ok) brancherGsap(); else brancherRepli();
+      });
+    }
+
+    // Override manuel : les onglets déplacent le scroll via labelToScroll, ils
+    // ne volent pas le contrôle et ne déclenchent aucune horloge.
+    const target = (i) => {
+      const lbl = ['rose', 'lilas', 'pourpre'][i];
+      if (this._st && this._st.labelToScroll) return this._st.labelToScroll(lbl);
+      return seq.offsetTop + (ACTS[1] + (1 - ACTS[1]) * [0.06, 0.5, 0.96][i]) * range();
+    };
+    tabs.forEach((btn, i) => {
+      btn.addEventListener('click', () => {
+        window.scrollTo({ top: target(i), behavior: 'auto' });
+        if (live) live.textContent = ['Rose Velours, porté par Jérémy', 'Lilas Céleste, porté par Alex', 'Pourpre Impérial'][i];
+      });
+    });
+
+    // prefers-reduced-motion : état de repos complet, pas de page vide.
+    if (reduit) {
+      seq.style.height = 'auto';
+      stick.style.position = 'static';
+      stick.style.height = 'auto';
+      stick.style.minHeight = '100svh';
+      drive(ACTS[1]);
+      stage.style.opacity = '1';
+      stage.style.transform = 'none';
+    }
+
+    this.boutique();
+    this.reveler();
+    this.appliquer();
+  }
+
+  // La boutique : le seul endroit où l'utilisateur agit. Coloris et taille sont
+  // deux choix réels, pas des décors — le bouton reste inerte tant que la taille
+  // n'est pas prise, parce qu'un panier sans taille n'existe pas.
+  boutique() {
+    const cols = Array.from(document.querySelectorAll('.ajCol'));
+    const tailles = Array.from(document.querySelectorAll('.ajTaille'));
+    const packs = [0, 1, 2].map((i) => document.getElementById('ajPack' + i));
+    const bouton = document.getElementById('ajPanier');
+    const note = document.getElementById('ajPanierNote');
+    if (!cols.length || !bouton) return;
+
+    const NOMS = ['Rose Velours', 'Lilas Céleste', 'Pourpre Impérial'];
+    let coloris = 0, taille = null;
+
+    const peindre = () => {
+      cols.forEach((b, i) => {
+        const on = i === coloris;
+        b.setAttribute('aria-pressed', on ? 'true' : 'false');
+        b.style.background = on ? '#fff' : 'transparent';
+        b.style.borderColor = on ? '#191716' : 'rgba(25,23,22,.28)';
+      });
+      packs.forEach((p, i) => { if (p) p.style.opacity = i === coloris ? '1' : '0'; });
+      tailles.forEach((b) => {
+        const on = b.dataset.t === taille;
+        b.setAttribute('aria-pressed', on ? 'true' : 'false');
+        b.style.background = on ? '#191716' : 'transparent';
+        b.style.color = on ? '#f2efe9' : 'inherit';
+        b.style.borderColor = on ? '#191716' : 'rgba(25,23,22,.28)';
+      });
+      bouton.style.opacity = taille ? '1' : '0.55';
+      bouton.textContent = taille
+        ? 'Ajouter au panier — ' + NOMS[coloris] + ', ' + taille + ' — 29,99 €'
+        : 'Ajouter au panier — 29,99 €';
+      if (note) {
+        note.textContent = taille
+          ? NOMS[coloris] + ' · taille ' + taille + ' · 94 % modal, 6 % élasthanne'
+          : 'Choisis une taille pour continuer.';
+      }
+    };
+
+    cols.forEach((b, i) => b.addEventListener('click', () => { coloris = i; peindre(); }));
+    tailles.forEach((b) => b.addEventListener('click', () => { taille = b.dataset.t; peindre(); }));
+    peindre();
+  }
+
+  // Révélations d'entrée : opacity et transform uniquement, une seule autorité,
+  // et un état de repos immédiat si le mouvement est refusé.
+  reveler() {
+    const blocs = Array.from(document.querySelectorAll('.ajReveal'));
+    if (!blocs.length) return;
+    const reduit = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduit) { blocs.forEach((b) => { b.style.opacity = '1'; b.style.transform = 'none'; }); return; }
+
+    blocs.forEach((b) => { b.style.opacity = '0'; b.style.transform = 'translate3d(0,22px,0)'; b.style.willChange = 'opacity, transform'; });
+
+    const jouer = (b, i) => {
+      b.style.transition = 'opacity .58s cubic-bezier(.22,1,.36,1) ' + (i * 70) + 'ms, transform .58s cubic-bezier(.22,1,.36,1) ' + (i * 70) + 'ms';
+      b.style.opacity = '1';
+      b.style.transform = 'translate3d(0,0,0)';
+      setTimeout(() => { b.style.willChange = 'auto'; }, 900 + i * 70);
+    };
+
+    const io = new IntersectionObserver((entrees) => {
+      entrees.forEach((e) => {
+        if (!e.isIntersecting) return;
+        const groupe = Array.from(e.target.parentElement.querySelectorAll('.ajReveal'));
+        jouer(e.target, Math.max(0, groupe.indexOf(e.target)));
+        io.unobserve(e.target);
+      });
+    }, { rootMargin: '0px 0px -12% 0px', threshold: 0.15 });
+    blocs.forEach((b) => io.observe(b));
+    this._io = io;
+  }
+
+  // Le mobile n'est pas une amputation de la proposition produit : même récit,
+  // mêmes trois actes, mêmes noms de coloris — le volet passe simplement en
+  // vertical. Les deux jeux de valeurs sont mesurés sur les plaques.
+  mesurer() {
+    const grid = document.getElementById('ajGrid');
+    const stage = document.getElementById('ajStage');
+    const copy = document.getElementById('ajCopy');
+    if (!grid || !stage) return;
+    const etroit = window.innerWidth < 760;
+    const frames = Array.from(document.querySelectorAll('.ajFrame'));
+    const clips = Array.from(document.querySelectorAll('.ajClip'));
+    const shifts = Array.from(document.querySelectorAll('.ajShift'));
+
+    if (etroit) {
+      this._seam = 42;
+      this._seams = [42, 42, 42];
+      grid.style.gridTemplateColumns = '1fr';
+      grid.style.gridTemplateRows = 'minmax(0,1fr) auto';
+      grid.style.alignItems = 'stretch';
+      grid.style.paddingBottom = 'clamp(96px,24vw,132px)';
+      if (copy) { copy.style.order = '2'; copy.style.minHeight = '0'; copy.style.alignSelf = 'start'; }
+      stage.style.order = '1';
+      // Pas de ratio imposé en étroit : la plaque remplit sa rangée, et comme k
+      // est relatif à la hauteur du stage la largeur de plaque suit toute seule.
+      // Un éventuel jeu latéral se remplit avec le mur échantillonné.
+      stage.style.aspectRatio = 'auto';
+      stage.style.height = '100%';
+      stage.style.minHeight = '0px';
+      stage.style.maxWidth = 'none';
+      stage.style.maxHeight = 'none';
+      // Échelle mobile dérivée de la boîte réelle : la plaque doit couvrir la
+      // largeur du stage quelle que soit la hauteur de rangée disponible, sinon
+      // un viewport court laisse des bandes de mur nu de part et d'autre. Les
+      // deux décalages verticaux se recalculent à partir du même k, pour garder
+      // le vêtement centré en haut et le visage juste sous la couture.
+      requestAnimationFrame(() => {
+        const b = stage.getBoundingClientRect();
+        if (!b.height || !b.width) return;
+        const k = Math.max(0.95, Math.min(2.4, b.width / (0.6667 * b.height)));
+        stage.style.setProperty('--k', k.toFixed(3));
+        stage.style.setProperty('--dy-still', ((0.21 - 0.353 * k) * 100).toFixed(1) + '%');
+        stage.style.setProperty('--dy-worn', ((0.44 - 0.05 * k) * 100).toFixed(1) + '%');
+      });
+      // Copie compacte pour laisser la plaque respirer — on réduit, on ne retire
+      // rien : les trois noms de coloris, l'intro et la barre restent là.
+      if (copy) {
+        copy.querySelectorAll('h2').forEach((h) => { h.style.fontSize = 'clamp(24px,7vw,32px)'; });
+        copy.querySelectorAll('p').forEach((p) => { p.style.fontSize = '15px'; p.style.marginBottom = '.6em'; });
+      }
+      frames.forEach((f) => {
+        f.style.setProperty('--dx-still', '0%');
+        f.style.setProperty('--dx-worn', '0%');
+      });
+      // Axe Y : le packshot occupe le haut, le plan porté le bas.
+      clips.forEach((c) => { c.style.transform = 'translate3d(0, calc(var(--sgn) * (var(--seam-live) - 100%)), 0)'; });
+      shifts.forEach((s) => { s.style.transform = 'translate3d(0, calc(var(--sgn) * (100% - var(--seam-live))), 0)'; });
+    } else {
+      this._seam = Number(this.props.raccord ?? 62);
+      grid.style.gridTemplateColumns = 'minmax(0,352px) minmax(0,1fr)';
+      // Remise à zéro obligatoire : sans elle, un retour de l'étroit vers le
+      // large laisse traîner le gabarit de rangées mobile et une piste fantôme.
+      grid.style.gridTemplateRows = '';
+      grid.style.alignItems = 'center';
+      grid.style.paddingBottom = '';
+      if (copy) { copy.style.order = ''; copy.style.minHeight = '220px'; copy.style.alignSelf = 'center'; }
+      stage.style.order = '';
+      stage.style.aspectRatio = '1.3 / 1';
+      stage.style.height = '';
+      stage.style.minHeight = '';
+      stage.style.maxWidth = 'calc((100svh - 176px) * 1.3)';
+      stage.style.maxHeight = 'calc(100svh - 176px)';
+      const k = Number(this.props.echelle ?? 1.40);
+      stage.style.setProperty('--k', k.toFixed(3));
+      stage.style.setProperty('--dy-still', '-15%');
+      stage.style.setProperty('--dy-worn', '-5.8%');
+      if (copy) {
+        copy.querySelectorAll('h2').forEach((h) => { h.style.fontSize = ''; });
+        copy.querySelectorAll('p').forEach((p) => { p.style.fontSize = ''; p.style.marginBottom = ''; });
+      }
+      // Chaque plateau range ses cuivres ailleurs, mesuré au pixel par déciles
+      // de largeur de plaque : rose lyre 0-1 et laurier 7-9, lilas lyre 8-9,
+      // pourpre étalé 0-4. Une césure unique en tranche donc forcément un.
+      // D'où une césure PAR frame, posée dans la bande vide de sa propre plaque.
+      const DX_STILL = [0, -10.6, 0];
+      const SEAMS = [36, 40, 50];
+      const decalage = Number(this.props.raccord ?? 0);
+      this._seams = SEAMS.map((s) => Math.max(30, Math.min(76, s + decalage)));
+      frames.forEach((f, i) => {
+        f.style.setProperty('--dx-still', (DX_STILL[i] || 0) + '%');
+        // La plaque portée démarre EXACTEMENT à la césure : son bord gauche est
+        // la césure, donc rien du plan porté ne peut être tranché par elle.
+        f.style.setProperty('--dx-worn', this._seams[i] + '%');
+      });
+      clips.forEach((c) => { c.style.transform = 'translate3d(calc(var(--sgn) * (var(--seam-live) - 100%)), 0, 0)'; });
+      shifts.forEach((s) => { s.style.transform = 'translate3d(calc(var(--sgn) * (100% - var(--seam-live))), 0, 0)'; });
+    }
+
+    const gs = document.getElementById('ajGuideSeam');
+    if (gs) {
+      gs.style.cssText = etroit
+        ? 'position:absolute; left:0; right:0; top:' + this._seam + '%; height:1px; background:rgba(255,255,255,.85)'
+        : 'position:absolute; left:' + this._seam + '%; top:0; bottom:0; width:1px; background:rgba(255,255,255,.85)';
+    }
+  }
+
+  componentDidUpdate() { this.appliquer(); }
+
+  appliquer() {
+    const stage = document.getElementById('ajStage');
+    const root = document.getElementById('ajRoot');
+    const guides = document.getElementById('ajGuides');
+    if (!stage || !root) return;
+    if (this.props.reperes !== undefined && guides) guides.style.opacity = this.props.reperes ? '1' : '0';
+    if (this.props.echelle !== undefined) root.style.setProperty('--k', String(this.props.echelle));
+    // Le raccord est lu par mesurer(), qui est la seule autorité sur la
+    // géométrie : on la relance plutôt que d'écrire un token que rien ne lit.
+    this.mesurer();
+  }
+
+  componentWillUnmount() { this._mort = true; if (this._tl) this._tl.kill(); if (this._st) this._st.kill(); if (this._off) this._off(); if (this._offResize) this._offResize(); if (this._io) this._io.disconnect(); }
+
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
