@@ -58,6 +58,19 @@ LE PROTOCOLE, POINT PAR POINT
 7. RUPTURE — l'écart, en POINTS de pourcentage, entre l'horizon du bord droit
    du « seul » et celui du bord gauche du porté. Seule grandeur qui décide.
    Seuil d'acceptation : 2 points.
+8. MARGE — passer le seuil ne suffit pas à dire qu'un plateau est tranquille.
+   Le tableau porte donc une colonne `marge`, pour qu'on lise l'état d'un
+   plateau sans avoir à relire cet en-tête :
+     • `. FRANC`   — rupture <= 1,5 pt ET les deux contrastes >= 35 ;
+     • `! LIMITE`  — accepté, mais soit la rupture dépasse 1,5 pt (marge
+       d'écart entamée), soit un contraste passe sous 35 (détection moins
+       sûre) ; le motif exact est imprimé à côté ;
+     • `X HORS SEUIL` — rupture > 2,0 pt.
+   Les deux bornes de vigilance (1,5 pt et 35 niveaux) sont volontairement plus
+   sévères que les seuils de rejet (2,0 pt et 30 niveaux) : elles servent à
+   voir venir, pas à condamner. En l'état, le pourpre est FRANC, le rose est
+   LIMITE par contraste faible (32,1 / 33,1) et le lilas LIMITE par rupture
+   (1,8 pt, 91 % du budget).
 
 L'ERREUR À NE PAS REFAIRE
 =========================
@@ -109,6 +122,10 @@ ZONE_SOL = (0.88, 0.97)
 DEPART = 0.60
 MAINTIEN = 12
 TOLERANCE = 2.0
+# Bornes de VIGILANCE, plus sévères que les seuils de rejet (2,0 pt / 30
+# niveaux) : au-delà, le plateau est encore accepté mais signalé `! LIMITE`.
+VIGILANCE_RUPTURE = 1.5
+VIGILANCE_CONTRASTE = 35.0
 
 # cle: (« seul », porté, cale en % de la hauteur de boîte — 0 partout, cf. LA CALE)
 PLATEAUX: dict[str, tuple[str, str, float]] = {
@@ -178,18 +195,42 @@ def couture(cle: str, cale: float | None = None):
     return hg, cg, hd, cd, abs(hg - hd)
 
 
+def marge(r: float, cg: float, cd: float) -> str:
+    """Le marqueur de marge — voir le point 8 du protocole. Trois etats, et le
+    motif exact des que le plateau n'est pas franc."""
+    if r > TOLERANCE:
+        return f"X HORS SEUIL  (rupture {r:.1f} > {TOLERANCE:.1f} pt)"
+    motifs = []
+    if r > VIGILANCE_RUPTURE:
+        motifs.append(f"rupture {r:.1f} pt = {100 * r / TOLERANCE:.0f} % du budget")
+    faibles = [c for c in (cg, cd) if c < VIGILANCE_CONTRASTE]
+    if faibles:
+        motifs.append(f"contraste {min(faibles):.1f} < {VIGILANCE_CONTRASTE:.0f}")
+    if motifs:
+        return "! LIMITE      (" + " ; ".join(motifs) + ")"
+    return ". FRANC"
+
+
 def tableau() -> None:
     print(
-        f"\n{'plateau':9} {'seul, bord DROIT':>24} {'porte, bord GAUCHE':>24} {'rupture':>10}"
+        f"\n{'plateau':9} {'seul, bord DROIT':>24} {'porte, bord GAUCHE':>24}"
+        f" {'rupture':>10}  marge"
     )
     for cle in PLATEAUX:
         hg, cg, hd, cd, r = couture(cle)
-        etat = "OK" if r <= TOLERANCE else "HORS SEUIL"
         print(
             f"{cle:9} {hg:10.1f} % (contraste {cg:5.1f}) "
-            f"{hd:10.1f} % (contraste {cd:5.1f}) {r:6.1f} pt  {etat}"
+            f"{hd:10.1f} % (contraste {cd:5.1f}) {r:6.1f} pt  {marge(r, cg, cd)}"
         )
-    print(f"\nSeuil d'acceptation : {TOLERANCE:.0f} points. Protocole : en-tete du fichier.")
+    print(
+        f"\nSeuil de rejet : {TOLERANCE:.1f} pt. Vigilance : rupture > "
+        f"{VIGILANCE_RUPTURE:.1f} pt ou contraste < {VIGILANCE_CONTRASTE:.0f}."
+    )
+    print(
+        ". FRANC = rien a surveiller | ! LIMITE = accepte mais sans marge"
+        " | X HORS SEUIL = a corriger"
+    )
+    print("Protocole : en-tete du fichier.")
 
 
 def pics() -> None:

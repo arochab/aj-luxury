@@ -140,12 +140,19 @@ export default function Home() {
           </div>
 
           <div className={styles.colorisPied}>
-            <ul className={styles.tailles} aria-label="Tailles disponibles">
-              <li>S</li>
-              <li>M</li>
-              <li>L</li>
-              <li>XL</li>
-            </ul>
+            {/* Ligne de spécification, PAS un sélecteur. Le choix de taille
+                appartient à la fiche produit, seul écran qui connaît le stock
+                par taille (ProductPurchase.tsx:38, availability résolue serveur
+                dans products/[slug]/page.tsx:57). Dessiner ici quatre boutons
+                inertes promettait une action qui n'existait pas : on retire le
+                cadre et le gabarit 58x48, et on nomme la plage à voix haute au
+                lieu de la cacher dans un aria-label. */}
+            <p className={styles.tailles}>
+              <span className={styles.taillesIntitule}>
+                <T id="home.sizes" />
+              </span>
+              <span className={styles.taillesPlage}>S · M · L · XL</span>
+            </p>
             {/* Le prix, traité comme un chiffre d'affichage et non comme une
                 mention — même traitement que Boutique.module.css:105, --t4 et
                 graisse fine. L'accueil est l'écran dont la mission est de faire

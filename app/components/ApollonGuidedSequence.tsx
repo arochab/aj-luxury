@@ -41,10 +41,28 @@ import styles from "./Accueil.module.css";
        lissée, un « contraste 27 » un écart, et on les comparait ;
      • RUPTURE — l'écart en POINTS entre les deux horizons. Seuil : 2 points.
 
-   RÉSULTAT — la couture tient sur les TROIS plateaux :
-     • rose    69,1 % au bord droit du « seul »  contre 68,9 %  →  0,1 point
-     • lilas   71,9 %                            contre 70,0 %  →  1,8 point
-     • pourpre 69,3 %                            contre 69,3 %  →  0,0 point
+   RÉSULTAT — les trois ruptures passent le seuil de 2 points, mais elles ne
+   le passent PAS de la même manière, et l'écrire uniformément serait refaire
+   l'erreur que ce protocole existe pour arrêter :
+     • pourpre — FRANC. 69,3 % au bord droit du « seul » contre 69,3 % au bord
+       gauche du porté → 0,0 point, sur des contrastes de 139,9 et 146,3. Le
+       mur et le sol sont séparés par plus de cent niveaux de luminance :
+       l'arête est franche, le seuil à mi-hauteur ne peut se tromper de ligne,
+       et la marge au seuil est entière.
+     • rose — JUSTE, MAIS À CONTRASTE FAIBLE. 69,1 % contre 68,9 % → 0,1 point,
+       donc la meilleure rupture après le pourpre — sur des contrastes de 32,1
+       et 33,1 seulement. L'en-tête du banc pose qu'un contraste sous 30
+       signale une position d'horizon moins sûre : le rose est à deux niveaux
+       de ce plancher. La rupture est bonne, la CONFIANCE dans les deux
+       positions qui la composent l'est moins. C'est le plateau à re-mesurer
+       en premier si les fichiers changent.
+     • lilas — DANS LE SEUIL, SANS MARGE. 71,9 % contre 70,0 % → 1,8 point sur
+       une tolérance de 2,0, soit 91 % du budget consommé au chiffre exact du banc. Contrastes 36,8 et
+       50,3 : la détection est sûre, c'est l'écart lui-même qui est grand. Un
+       recadrage de deux dixièmes de point sur l'une des deux prises le fait
+       passer HORS SEUIL.
+   Aucun de ces trois cas n'appelle un correctif aujourd'hui (voir PAS DE CALE
+   VERTICALE), mais seul le pourpre autorise à ne plus y penser.
 
    CE QUE MESURE UN DÉTECTEUR NAÏF. Le critère « ligne de gradient maximal »
    annonce 10,4 points de rupture sur le rose et 12,9 sur le lilas. Ces
@@ -317,15 +335,18 @@ export default function ApollonGuidedSequence({ coloris }: Props) {
         // empilés, volets ouverts. Il n'y a rien à piloter, et surtout rien
         // à masquer.
         if (!anime) return;
+        const railNoeud = rail.current;
+        const sceneNoeud = scene.current;
+        if (!railNoeud || !sceneNoeud) return;
+
         // Le rail est replié : deux panneaux sur trois sont hors cadre, et
         // `.plaqueScene` est en `overflow: clip`, donc le navigateur n'a
         // aucun défilement de rattrapage pour ramener un focus qui s'y
         // égarerait. On le déclare au rendu, qui posera `inert`.
+        // Après la garde, et pas avant : sur un retour anticipé, `gsap.context`
+        // n'enregistre aucun nettoyage, et un `setAnime(true)` posé plus haut
+        // laisserait l'état à vrai sans rien pour le redescendre.
         setAnime(true);
-
-        const railNoeud = rail.current;
-        const sceneNoeud = scene.current;
-        if (!railNoeud || !sceneNoeud) return;
 
         // Requêtes bornées à la scène, et non au document : `gsap.utils.toArray`
         // ne connaît pas le scope de gsap.context().

@@ -347,8 +347,18 @@
    lissé sur 5 lignes, horizon pris au seuil à mi-hauteur entre la médiane du
    mur et celle du sol, ce que rend exactement ce CSS. L'horizon mur/marbre
    tombe à 69,1 / 68,9 % sur le rose, 71,9 / 70,0 % sur le lilas, 69,3 /
-   69,3 % sur le pourpre : 0,1, 1,8 et 0,0 point de rupture. La couture tient
-   sur les trois. Les « 87 % » et les « 10,4 points » venaient d'un détecteur
+   69,3 % sur le pourpre : 0,1, 1,8 et 0,0 point de rupture, tous sous la
+   tolérance de 2,0. Mais les trois cas ne se valent pas, et les confondre
+   est exactement ce qui a produit trois jeux de chiffres incomparables :
+   le POURPRE est franc — 0,0 point sur des contrastes sol/mur de 139,9 et
+   146,3, arête nette, marge entière ; le ROSE est juste mais à contraste
+   faible — 0,1 point, sur des contrastes de 32,1 et 33,1 quand le banc pose
+   qu'en dessous de 30 la position d'horizon devient moins sûre, donc deux
+   niveaux de luminance de marge sur la détection elle-même ; le LILAS est
+   dans le seuil sans marge — 1,8 point sur 2,0, soit 91 % du budget, avec
+   des contrastes confortables (36,8 et 50,3) : ici c'est l'écart qui est
+   grand, pas la mesure qui est douteuse. Un seul des trois autorise à ne
+   plus y penser. Les « 87 % » et les « 10,4 points » venaient d'un détecteur
    qui retenait l'arête la plus contrastée du cadre — le carquois posé sur le
    marbre — au lieu de l'horizon. La gouttière reste, non pour masquer un
    raccord, mais parce que les accessoires se répètent d'une prise à l'autre :
@@ -626,24 +636,27 @@
   padding: clamp(28px, 4vh, 44px) var(--gut) clamp(56px, 8vh, 96px);
 }
 
+/* Ligne de spécification. Rien ici n'est cliquable, donc rien ici ne porte le
+   dessin d'un bouton : ni cadre var(--aj-filet-bouton), ni gabarit 58x48. Le
+   vrai sélecteur reste .sizeButton, sur la fiche produit. */
 .tailles {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  align-items: baseline;
+  gap: 0 14px;
   margin: 0;
-  padding: 0;
-  list-style: none;
+  font-size: var(--t0);
 }
 
-.tailles li {
-  display: grid;
-  min-width: 58px;
-  min-height: 48px;
-  place-items: center;
-  border: 1px solid var(--aj-filet-bouton);
-  font-size: var(--t0);
-  font-weight: var(--aj-w-moyen);
+.taillesIntitule {
+  color: var(--aj-encre-72);
   letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.taillesPlage {
+  font-weight: var(--aj-w-moyen);
+  letter-spacing: 0.16em;
 }
 
 .colorisAction {
