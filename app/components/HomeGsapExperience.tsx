@@ -1,196 +1,103 @@
 "use client";
 
-import { useEffect } from "react";
+import type { ReactNode } from "react";
+import { useAjMotion } from "./useAjMotion";
+import styles from "./Accueil.module.css";
 
-export default function HomeGsapExperience() {
-  useEffect(() => {
-    const root = document.querySelector<HTMLElement>(".aj-home");
-    if (!root) return;
+/* ==========================================================================
+   Les scènes au scroll de l'accueil, hors #plaque (qui porte les siennes).
+   --------------------------------------------------------------------------
+   Ce composant enveloppe la page en `display: contents` : il ne produit
+   aucune boîte, il ne fait qu'offrir une racine à gsap.context() pour que ses
+   sélecteurs ne puissent pas déborder sur l'écran d'un autre agent.
 
-    let cancelled = false;
-    let revertGsap: (() => void) | undefined;
+   Ce qu'il ne fait PAS, volontairement : l'ouverture du film. Volet,
+   sur-cadrage, montée de la signature et brillance sont des entrées de
+   chargement — elles doivent démarrer au premier paint. GSAP arrive par
+   import dynamique, donc toujours après ce paint : les piloter d'ici
+   donnerait un flash « visible → recouvert → révélé ». Elles sont donc en
+   @keyframes dans Accueil.module.css, en transform et opacity uniquement.
+   Le scroll reste la seule horloge de tout ce qui est piloté par le scroll.
+   ========================================================================== */
 
-    void Promise.all([import("gsap"), import("gsap/ScrollTrigger")]).then(
-      ([gsapModule, scrollTriggerModule]) => {
-        if (cancelled) return;
-        const gsap = gsapModule.default;
-        const { ScrollTrigger } = scrollTriggerModule;
-        gsap.registerPlugin(ScrollTrigger);
+export default function HomeGsapExperience({ children }: { children: ReactNode }) {
+  const racine = useAjMotion<HTMLDivElement>(({ gsap, mm }) => {
+    mm.add({ anime: "(prefers-reduced-motion: no-preference)" }, (contexte) => {
+      const { anime } = contexte.conditions as { anime: boolean };
+      // Mouvement réduit : rien n'est posé, donc rien n'est masqué. Le CSS
+      // livre déjà la page entière, lisible et statique.
+      if (!anime) return;
 
-        const context = gsap.context(() => {
-          const media = gsap.matchMedia();
-          media.add("(prefers-reduced-motion: no-preference)", () => {
-            gsap.fromTo(
-              ".aj-film__signature > *",
-              { autoAlpha: 0, y: 18 },
-              { autoAlpha: 1, y: 0, duration: 1, stagger: 0.12, delay: 0.55, ease: "power3.out" },
-            );
-
-            const proofTimeline = gsap.timeline({
-              scrollTrigger: {
-                trigger: ".aj-proof",
-                start: "top 82%",
-                end: "bottom 30%",
-                scrub: 0.7,
-              },
-            });
-            proofTimeline
-              .fromTo(".aj-proof > p", { autoAlpha: 0, x: -28 }, { autoAlpha: 1, x: 0, duration: 0.22, ease: "power3.out" }, 0)
-              .fromTo(".aj-proof__material--modal dt", { autoAlpha: 0, xPercent: -12 }, { autoAlpha: 1, xPercent: 0, duration: 0.58, ease: "power4.out" }, 0.04)
-              .fromTo(".aj-proof__material--elastic", { autoAlpha: 0, yPercent: 18 }, { autoAlpha: 1, yPercent: 0, duration: 0.5, ease: "power3.out" }, 0.22)
-              .fromTo(".aj-proof__meta > div", { autoAlpha: 0, y: 24 }, { autoAlpha: 1, y: 0, duration: 0.36, stagger: 0.08, ease: "power3.out" }, 0.42);
-
-            gsap.from(".aj-sequence__heading > *", {
-              autoAlpha: 0,
-              y: 34,
-              duration: 0.95,
-              stagger: 0.1,
-              ease: "power4.out",
-              scrollTrigger: { trigger: ".aj-sequence", start: "top 78%", once: true },
-            });
-
-            gsap.from(".aj-shop__heading > *", {
-              autoAlpha: 0,
-              y: 30,
-              duration: 0.9,
-              stagger: 0.1,
-              ease: "power3.out",
-              scrollTrigger: { trigger: ".aj-shop", start: "top 80%", once: true },
-            });
-            gsap.from(".aj-product-card", {
-              autoAlpha: 0,
-              yPercent: 8,
-              duration: 1.05,
-              stagger: 0.12,
-              ease: "power4.out",
-              scrollTrigger: { trigger: ".aj-shop__rail", start: "top 82%", once: true },
-            });
-
-            gsap.fromTo(
-              ".aj-product-card__image img",
-              { clipPath: "inset(0 0 12% 0)", yPercent: 3 },
-              {
-                clipPath: "inset(0 0 0% 0)",
-                yPercent: 0,
-                ease: "none",
-                stagger: 0.08,
-                scrollTrigger: {
-                  trigger: ".aj-shop__rail",
-                  start: "top 86%",
-                  end: "bottom 42%",
-                  scrub: 0.75,
-                },
-              },
-            );
-
-            gsap.from(".aj-moodboard__item", {
-              autoAlpha: 0,
-              y: 42,
-              duration: 1.1,
-              stagger: 0.11,
-              ease: "power3.out",
-              scrollTrigger: { trigger: ".aj-moodboard", start: "top 82%", once: true },
-            });
-            gsap.from(".aj-story__copy > div", {
-              autoAlpha: 0,
-              y: 46,
-              duration: 1.1,
-              ease: "power4.out",
-              scrollTrigger: { trigger: ".aj-story", start: "top 72%", once: true },
-            });
-            gsap.fromTo(
-              ".aj-story__metal",
-              { scale: 1.06, yPercent: -3 },
-              {
-                scale: 1,
-                yPercent: 3,
-                ease: "none",
-                scrollTrigger: {
-                  trigger: ".aj-story",
-                  start: "top bottom",
-                  end: "bottom top",
-                  scrub: 0.8,
-                },
-              },
-            );
-          });
-
-          // La séquence Apollon a désormais UNE SEULE autorité d'animation :
-          // ApollonGuidedSequence.tsx, qui porte son propre pin et son propre volet.
-          // Un second pin sur .aj-sequence__stage créait deux pin-spacers concurrents
-          // sur la même section. Ne le réintroduis pas ici.
-          revertGsap = () => media.revert();
-        }, root);
-
-        const revertMedia = revertGsap;
-        revertGsap = () => {
-          revertMedia?.();
-          context.revert();
-        };
-      },
-    );
-
-    return () => {
-      cancelled = true;
-      revertGsap?.();
-    };
-  }, []);
-
-  useEffect(() => {
-    const moodboard = document.querySelector<HTMLElement>(".aj-moodboard");
-    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const updateProgress = () => {
-      if (!moodboard) return;
-      const distance = moodboard.scrollWidth - moodboard.clientWidth;
-      const progress = distance > 0 ? moodboard.scrollLeft / distance : 1;
-      moodboard.style.setProperty("--aj-gallery-progress", String(progress));
-    };
-
-    let dragging = false;
-    let originX = 0;
-    let originScroll = 0;
-    const startDrag = (event: PointerEvent) => {
-      if (!moodboard || event.pointerType === "touch") return;
-      dragging = true;
-      originX = event.clientX;
-      originScroll = moodboard.scrollLeft;
-      moodboard.setPointerCapture(event.pointerId);
-      moodboard.classList.add("is-dragging");
-    };
-    const drag = (event: PointerEvent) => {
-      if (dragging && moodboard) moodboard.scrollLeft = originScroll - (event.clientX - originX);
-    };
-    const stopDrag = () => {
-      dragging = false;
-      moodboard?.classList.remove("is-dragging");
-    };
-    const keyScroll = (event: KeyboardEvent) => {
-      if (!moodboard || !["ArrowLeft", "ArrowRight"].includes(event.key)) return;
-      event.preventDefault();
-      moodboard.scrollBy({
-        left: event.key === "ArrowRight" ? 160 : -160,
-        behavior: reduced.matches ? "auto" : "smooth",
+      // Les blocs révélés. L'état de départ est posé ICI, en JS : si ce
+      // fichier ne s'exécute jamais, le contenu est déjà à sa place.
+      const blocs = gsap.utils.toArray<HTMLElement>(".aj-reveal");
+      blocs.forEach((bloc) => {
+        const groupe = Array.from(
+          bloc.parentElement?.querySelectorAll<HTMLElement>(".aj-reveal") ?? [],
+        );
+        const rang = Math.max(0, groupe.indexOf(bloc));
+        gsap.from(bloc, {
+          opacity: 0,
+          y: 26,
+          duration: 0.75,
+          delay: rang * 0.1,
+          // expo.out est le plus proche built-in de --e1 :
+          // cubic-bezier(.16, 1, .3, 1). Sortie longue, arrivée sans rebond.
+          ease: "expo.out",
+          scrollTrigger: {
+            trigger: bloc,
+            start: "top 88%",
+            once: true,
+            invalidateOnRefresh: true,
+          },
+        });
       });
-    };
 
-    moodboard?.addEventListener("pointerdown", startDrag);
-    moodboard?.addEventListener("pointermove", drag);
-    moodboard?.addEventListener("pointerup", stopDrag);
-    moodboard?.addEventListener("pointercancel", stopDrag);
-    moodboard?.addEventListener("keydown", keyScroll);
-    moodboard?.addEventListener("scroll", updateProgress, { passive: true });
-    window.addEventListener("resize", updateProgress, { passive: true });
-    updateProgress();
-    return () => {
-      moodboard?.removeEventListener("pointerdown", startDrag);
-      moodboard?.removeEventListener("pointermove", drag);
-      moodboard?.removeEventListener("pointerup", stopDrag);
-      moodboard?.removeEventListener("pointercancel", stopDrag);
-      moodboard?.removeEventListener("keydown", keyScroll);
-      moodboard?.removeEventListener("scroll", updateProgress);
-      window.removeEventListener("resize", updateProgress);
-    };
-  }, []);
+      // Le parallaxe de #matiere. Le débord de 6 % de part et d'autre est
+      // posé en CSS : la course de ±4 % ne peut donc jamais découvrir le fond.
+      gsap.utils
+        .toArray<HTMLElement>(`.${styles.matiereCadre} img`)
+        .forEach((image) => {
+          gsap.fromTo(
+            image,
+            { yPercent: -4 },
+            {
+              yPercent: 4,
+              ease: "none",
+              scrollTrigger: {
+                trigger: image.parentElement ?? image,
+                start: "top bottom",
+                end: "bottom top",
+                scrub: 0.6,
+                invalidateOnRefresh: true,
+              },
+            },
+          );
+        });
 
-  return null;
+      // Les trois cartes de coloris montent en décalé sur l'approche.
+      const cartes = gsap.utils.toArray<HTMLElement>(`.${styles.carte}`);
+      if (cartes.length) {
+        gsap.from(cartes, {
+          opacity: 0,
+          yPercent: 6,
+          duration: 1.05,
+          stagger: 0.12,
+          ease: "expo.out",
+          scrollTrigger: {
+            trigger: `.${styles.colorisGrille}`,
+            start: "top 84%",
+            once: true,
+            invalidateOnRefresh: true,
+          },
+        });
+      }
+    });
+  });
+
+  return (
+    <div ref={racine} className={styles.scenes}>
+      {children}
+    </div>
+  );
 }

@@ -245,18 +245,27 @@ export default function ProductPurchase({
       aria-label={t("product.purchaseInfoLabel")}
       aria-busy={cartBusy}
     >
-      <p className={styles.eyebrow}>{t("product.status")}</p>
-      <h1>{product.model}</h1>
-      <p className={styles.colorName}>{product.name}</p>
+      {/*
+        L'identité tient en trois lignes : le modèle, le coloris en lettrage
+        métallique — comme sur l'accueil — puis le ton. Le prix vient juste
+        après, seul sur sa ligne, entre deux filets : c'est le premier chiffre
+        que l'œil rencontre.
+      */}
+      <div className={styles.identity} data-aj-reveal>
+        <p className={styles.eyebrow}>{t("product.status")}</p>
+        <h1>{product.model}</h1>
+        <p className={`${styles.colorName} aj-metal`}>{product.name}</p>
+        <p className={styles.tone}>{localizedProduct.tone}</p>
+      </div>
 
-      <div className={styles.price}>
+      <div className={styles.price} data-aj-reveal>
         <strong>{formatPrice(product.priceCents, locale)}</strong>
         {runtimeMode === "preproduction" && (
           <span>{t("product.priceLabel")}</span>
         )}
       </div>
 
-      <p className={styles.description}>
+      <p className={styles.description} data-aj-reveal>
         {localizedProduct.description}
       </p>
 
@@ -316,7 +325,7 @@ export default function ProductPurchase({
                 disabled={soldOut}
                 onClick={() => selectSize(size)}
               >
-                <span>{size}</span>
+                <span className={styles.sizeLetter}>{size}</span>
                 <span className={styles.sizeAvailability}>{label}</span>
               </button>
             );

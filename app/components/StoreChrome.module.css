@@ -1,172 +1,173 @@
+/* ==========================================================================
+   AJ Luxury — le chrome : en-tête et pied de page
+   --------------------------------------------------------------------------
+   Ces deux blocs sont vus sur les quinze routes. Ils ne racontent rien : ils
+   tiennent le cadre pendant que le produit parle. Toutes les valeurs viennent
+   du socle (app/design-system.css), lui-même relevé sur la maquette validée
+   _design-reference/claude-design-accueil.html. Rien n'est réinventé ici.
+
+   Ce que la maquette impose, et qui est repris au caractère près :
+     • en-tête sur 76px (--aj-header-h), fond rgba(8,8,10,.86) + blur(14px),
+       filet bas rgba(255,255,255,.14) ;
+     • grille 1fr auto 1fr — marque à gauche, nav centrée, actions à droite ;
+     • nav et actions en 15px / 600 / .14em capitales ;
+     • le filet de survol SORT par la droite et RENTRE par la gauche : ce n'est
+       pas un border-bottom qui se colore, c'est un scaleX dont l'origine
+       change entre l'entrée et la sortie. Courbe --aj-e-nav, 350ms.
+
+   Tokens locaux : tout ce qui est propre au chrome est préfixé --chrome-.
+   Le socle n'est jamais modifié depuis ce fichier.
+   ========================================================================== */
+
+/* ==========================================================================
+   EN-TÊTE
+   ========================================================================== */
+
 .header {
-  --chrome-bg: rgba(9, 9, 11, 0.94);
-  align-items: center;
-  background: var(--chrome-bg);
-  border-bottom: 1px solid rgba(226, 229, 234, 0.22);
-  color: #f7f7f5;
-  display: grid;
-  font-family: var(--font-manrope), Arial, sans-serif;
-  grid-template-columns: minmax(16rem, 1fr) auto minmax(16rem, 1fr);
-  min-height: 5.75rem;
-  padding: 0 2rem;
-  position: relative;
-  width: 100%;
+  /* --- tokens locaux -------------------------------------------------- */
+  --chrome-fond: var(--aj-header-fond);
+  --chrome-encre: var(--aj-encre);
+  --chrome-filet: var(--aj-filet);
+  --chrome-filet-fort: var(--aj-filet-fort);
+  --chrome-ls: var(--aj-ls-nav);
+  --chrome-pad: var(--gut);
+
+  position: sticky;
+  top: 0;
   z-index: 50;
+
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: clamp(16px, 2vw, 28px);
+  width: 100%;
+  min-height: var(--aj-header-h);
+  padding-inline: var(--chrome-pad);
+
+  border-bottom: 1px solid var(--chrome-filet);
+  background: var(--chrome-fond);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  color: var(--chrome-encre);
+
+  font-family: var(--disp);
+  /* Pas de `will-change: transform` ici : `backdrop-filter` promeut déjà la
+     barre en couche, et GSAP écrit un translate3d le temps de la dérobade.
+     Un troisième calque permanent sur les quinze routes ne servirait rien. */
+}
+
+/* Voile de pose : dès que la page a quitté le haut, l'en-tête se densifie
+   pour rester lisible sur n'importe quel fond. Un pseudo-élément en opacity
+   plutôt qu'une transition de background-color — on ne compose que ce que
+   Chromium sait composer. */
+.header::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background: var(--aj-noir);
+  opacity: 0;
+  transition: opacity var(--aj-d-court) var(--e1);
+  pointer-events: none;
+}
+
+.headerPose::before {
+  opacity: 0.55;
 }
 
 .headerMinimal {
   grid-template-columns: 1fr auto;
 }
 
+/* Variante claire, conservée pour l'API du composant (prop `variant`). */
 .headerLight {
-  --chrome-bg: rgba(246, 246, 243, 0.9);
-  backdrop-filter: blur(14px);
-  border-bottom-color: rgba(17, 17, 18, 0.08);
-  color: #111112;
+  --chrome-fond: rgba(246, 246, 243, 0.9);
+  --chrome-encre: #111112;
+  --chrome-filet: rgba(17, 17, 18, 0.12);
+  --chrome-filet-fort: rgba(17, 17, 18, 0.3);
 }
 
-.headerLight .socialPending {
-  color: #6a6a6e;
+.headerLight::before {
+  background: #ffffff;
 }
 
-.headerLight .navLink::after,
-.headerLight .actionLink::after {
-  background: linear-gradient(90deg, #7d0f52, #a9abd9, #7d0f52);
+.headerLight .brandImage {
+  filter: none;
 }
+
+/* --- Marque ------------------------------------------------------------ */
 
 .brand {
-  align-items: center;
-  display: inline-flex;
+  display: inline-grid;
+  place-items: center;
   justify-self: start;
   line-height: 0;
 }
 
 .brandImage {
+  width: 82px;
   height: auto;
   object-fit: contain;
-  width: 6.6rem;
+  /* Pas de correction de luminosité : l'ombre portée suffit à détacher la
+     marque du film, et une brightness() mal calibrée brûlerait le fichier. */
+  filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.35));
 }
+
+/* --- Navigation et actions --------------------------------------------- */
 
 .desktopNav,
 .actions {
-  align-items: center;
   display: flex;
-  gap: clamp(1rem, 2.25vw, 2.5rem);
+  align-items: center;
+  min-width: 0;
 }
 
 .desktopNav {
   justify-content: center;
+  gap: clamp(18px, 2.4vw, 42px);
 }
 
 .actions {
+  justify-self: end;
   justify-content: flex-end;
-}
-
-.languageSwitcher {
-  align-items: center;
-  display: inline-flex;
-  flex: 0 0 auto;
-}
-
-.languageSwitcher label {
-  border: 0;
-  clip: rect(0 0 0 0);
-  clip-path: inset(50%);
-  height: 1px;
-  overflow: hidden;
-  position: absolute;
-  white-space: nowrap;
-  width: 1px;
-}
-
-.languageSwitcher select {
-  appearance: none;
-  background:
-    linear-gradient(45deg, transparent 50%, currentColor 50%) calc(100% - 0.72rem)
-      calc(50% - 0.1rem) / 0.25rem 0.25rem no-repeat,
-    linear-gradient(135deg, currentColor 50%, transparent 50%) calc(100% - 0.48rem)
-      calc(50% - 0.1rem) / 0.25rem 0.25rem no-repeat,
-    transparent;
-  border: 1px solid rgba(226, 229, 234, 0.32);
-  border-radius: 0;
-  color: inherit;
-  cursor: pointer;
-  font: 650 0.62rem/1.2 var(--font-manrope), Arial, sans-serif;
-  letter-spacing: 0.09em;
-  min-height: 2.75rem;
-  min-width: 2.75rem;
-  padding: 0.55rem 1.25rem 0.55rem 0.55rem;
-  text-transform: uppercase;
-}
-
-.languageSwitcher select option {
-  background: #111114;
-  color: #f7f7f5;
-}
-
-.languageSwitcherFooter {
-  margin-top: 1.4rem;
-}
-
-.headerLight .languageSwitcher select {
-  border-color: rgba(17, 17, 18, 0.24);
-}
-
-.navLink,
-.actionLink,
-.socialPending,
-.menuButton {
-  color: inherit;
-  font: 600 0.69rem/1.2 var(--font-manrope), Arial, sans-serif;
-  letter-spacing: 0.14em;
-  position: relative;
-  text-decoration: none;
-  text-transform: uppercase;
-}
-
-.navLink,
-.actionLink,
-.socialPending {
-  align-items: center;
-  display: inline-flex;
-  min-height: 2.75rem;
+  gap: clamp(14px, 1.8vw, 30px);
 }
 
 .navLink,
 .actionLink {
-  min-width: 2.75rem;
-  justify-content: center;
-  padding-inline: 0.35rem;
-}
-
-.socialPending {
-  align-items: center;
-  color: #c8cbd1;
+  position: relative;
   display: inline-flex;
-  gap: 0.48rem;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.75rem;
+  padding-inline: 0.2rem;
+
+  color: inherit;
+  font-family: var(--disp);
+  /* --t0 EST le plancher : 15px. Aucun texte du chrome ne descend en dessous. */
+  font-size: var(--t0);
+  font-weight: var(--aj-w-gras);
+  letter-spacing: var(--chrome-ls);
+  line-height: 1.2;
+  text-decoration: none;
+  text-transform: uppercase;
   white-space: nowrap;
 }
 
-.socialPending::before {
-  background: linear-gradient(135deg, #f2f3f4, #777b83);
-  border-radius: 50%;
-  content: "";
-  height: 0.34rem;
-  width: 0.34rem;
-}
-
+/* Le filet de la maquette : il traverse le mot, sort par la droite et rentre
+   par la gauche. Transform seul — jamais une largeur animée. */
 .navLink::after,
 .actionLink::after {
-  background: linear-gradient(90deg, #848890, #f1f2f3, #8a8e96);
-  bottom: -0.55rem;
   content: "";
-  height: 1px;
-  left: 0;
   position: absolute;
+  right: 0;
+  bottom: 0.55rem;
+  left: 0;
+  height: 1px;
+  background: currentColor;
   transform: scaleX(0);
   transform-origin: right;
-  transition: transform 220ms ease;
-  width: 100%;
+  transition: transform 350ms var(--aj-e-nav);
 }
 
 .navLink:hover::after,
@@ -178,394 +179,353 @@
   transform-origin: left;
 }
 
-.menuButton {
+/* --- Sélecteur de langue ------------------------------------------------ */
+
+.languageSwitcher {
+  display: inline-flex;
+  flex: 0 0 auto;
   align-items: center;
-  background: transparent;
-  border: 0;
-  cursor: pointer;
-  display: none;
-  gap: 0.65rem;
-  padding: 0.7rem 0;
 }
 
-.menuGlyph,
-.menuGlyph::before,
-.menuGlyph::after {
-  background: currentColor;
-  display: block;
-  height: 1px;
-  transition: transform 220ms ease, opacity 180ms ease;
-  width: 1.35rem;
-}
-
-.menuGlyph {
-  position: relative;
-}
-
-.menuGlyph::before,
-.menuGlyph::after {
-  content: "";
-  left: 0;
+.languageSwitcher label {
   position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
-.menuGlyph::before {
-  top: -0.38rem;
-}
+/* La maquette encadre la langue : un rectangle net, pas un menu déguisé.
+   Le chevron est peint en dégradés — aucune image, aucun glyphe de police. */
+.languageSwitcher select {
+  appearance: none;
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  padding: 0 1.75rem 0 0.75rem;
 
-.menuGlyph::after {
-  top: 0.38rem;
-}
-
-.menuButton[aria-expanded="true"] .menuGlyph {
-  background: transparent;
-}
-
-.menuButton[aria-expanded="true"] .menuGlyph::before {
-  transform: translateY(0.38rem) rotate(45deg);
-}
-
-.menuButton[aria-expanded="true"] .menuGlyph::after {
-  transform: translateY(-0.38rem) rotate(-45deg);
-}
-
-.backdrop {
-  background: rgba(0, 0, 0, 0.62);
-  border: 0;
-  inset: 0;
-  opacity: 0;
-  pointer-events: none;
-  position: fixed;
-  transition: opacity 250ms ease;
-  z-index: 48;
-}
-
-.backdropOpen {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.drawer {
+  border: 1px solid var(--chrome-filet-fort, rgba(255, 255, 255, 0.4));
+  border-radius: 0;
   background:
-    radial-gradient(circle at 85% 0%, rgba(215, 218, 224, 0.1), transparent 28rem),
-    #0b0b0d;
-  border-left: 1px solid rgba(226, 229, 234, 0.2);
-  bottom: 0;
-  color: #f7f7f5;
-  display: flex;
-  flex-direction: column;
-  max-width: 25rem;
-  padding: 7rem 2rem 2rem;
-  position: fixed;
-  right: 0;
-  top: 0;
-  transform: translateX(102%);
-  transition: transform 320ms cubic-bezier(0.22, 0.8, 0.22, 1);
-  width: min(88vw, 25rem);
-  z-index: 49;
-}
+    linear-gradient(45deg, transparent 50%, currentColor 50%)
+      calc(100% - 0.95rem) calc(50% - 0.09rem) / 0.26rem 0.26rem no-repeat,
+    linear-gradient(135deg, currentColor 50%, transparent 50%)
+      calc(100% - 0.69rem) calc(50% - 0.09rem) / 0.26rem 0.26rem no-repeat,
+    transparent;
 
-.drawerOpen {
-  transform: translateX(0);
-}
-
-.drawerNav {
-  display: grid;
-}
-
-.drawerLink {
-  align-items: center;
-  border-bottom: 1px solid rgba(226, 229, 234, 0.14);
   color: inherit;
-  display: flex;
-  font: 500 clamp(1.35rem, 6vw, 2rem)/1.1 var(--font-manrope), Arial, sans-serif;
-  justify-content: space-between;
-  letter-spacing: -0.03em;
-  padding: 1.1rem 0;
-  text-decoration: none;
-}
-
-.drawerLink::after {
-  color: #aeb1b7;
-  content: "↗";
-  font-size: 0.8rem;
-}
-
-.drawerMeta {
-  color: #aeb1b7;
-  font-size: 0.69rem;
-  letter-spacing: 0.13em;
-  margin-top: auto;
+  cursor: pointer;
+  font-family: var(--disp);
+  font-size: var(--t0);
+  font-weight: var(--aj-w-gras);
+  letter-spacing: var(--chrome-ls, 0.14em);
+  line-height: 1.2;
   text-transform: uppercase;
 }
 
+.languageSwitcher select option {
+  background: var(--aj-noir-media);
+  color: var(--aj-encre);
+}
+
+.headerLight .languageSwitcher select option {
+  background: #ffffff;
+  color: #111112;
+}
+
+.languageSwitcherFooter {
+  margin-top: 0.35rem;
+}
+
+.languageSwitcherFooter select {
+  --chrome-filet-fort: var(--aj-filet-bouton);
+  letter-spacing: var(--aj-ls-nav);
+}
+
+/* ==========================================================================
+   PIED DE PAGE
+   --------------------------------------------------------------------------
+   Il pesait 1,38 écran. Trois gestes le ramènent sous le demi-écran sans
+   retirer une seule information :
+     1. la marque redevient un mot — le logo était déjà dans l'en-tête de la
+        même page, et « AJ LUXURY » en métal dit la même chose en 25px ;
+     2. la signature n'est plus écrite deux fois : elle ne vit que dans la
+        ligne de bas de page, au traitement exact du h1 de la maquette
+        (15px / 600 / .24em) ;
+     3. les rangées de liens passent de 44px à 2,3rem, en gardant une cible
+        largement au-dessus du minimum de 24px exigé par WCAG 2.5.8.
+   ========================================================================== */
+
 .footer {
-  background:
-    radial-gradient(circle at 82% 16%, rgba(212, 215, 220, 0.08), transparent 25rem),
-    #09090b;
-  border-top: 1px solid rgba(226, 229, 234, 0.2);
-  color: #f7f7f5;
-  font-family: var(--font-manrope), Arial, sans-serif;
-  padding: clamp(3.5rem, 7vw, 6.5rem) clamp(1.25rem, 4vw, 4rem) 1.5rem;
+  --chrome-pied-encre: var(--aj-encre-84);
+  --chrome-pied-filet: var(--aj-filet);
+
+  padding: clamp(44px, 5.5vw, 78px) var(--gut) clamp(18px, 2vw, 26px);
+  border-top: 1px solid var(--chrome-pied-filet);
+  background: var(--aj-noir);
+  color: var(--aj-encre-72);
+  font-family: var(--disp);
+  font-size: var(--t0);
 }
 
 .footerTop {
   display: grid;
-  gap: clamp(3rem, 7vw, 7rem);
-  grid-template-columns: minmax(16rem, 1.25fr) 2fr;
+  grid-template-columns:
+    minmax(0, 1.15fr)
+    minmax(0, 0.95fr)
+    minmax(0, 0.95fr);
+  align-items: start;
+  gap: clamp(28px, 4vw, 72px);
 }
 
 .footerIdentity {
-  max-width: 28rem;
-}
-
-.footerLogo {
-  height: auto;
-  margin-bottom: 2rem;
-  width: 7.5rem;
-}
-
-.footerTitle {
-  font-size: clamp(1.6rem, 3vw, 2.8rem);
-  font-weight: 400;
-  letter-spacing: -0.04em;
-  line-height: 1.08;
-  margin: 0 0 1rem;
-}
-
-.footerCopy,
-.newsletterNote {
-  color: #aeb1b7;
-  font-size: 0.78rem;
-  line-height: 1.65;
-  margin: 0;
-}
-
-.footerColumns {
   display: grid;
-  gap: 2rem;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  justify-items: start;
+  gap: 0.85rem;
+  max-width: 36ch;
+}
+
+/* Le mot-marque. .aj-metal est posé côté TSX : l'utilitaire du socle porte le
+   dégradé et son repli @supports, ce fichier ne fait que le dimensionner. */
+.footerWordmark {
+  margin: 0;
+  font-family: var(--disp);
+  font-optical-sizing: auto;
+  font-size: var(--t2);
+  font-weight: var(--aj-w-normal);
+  letter-spacing: var(--aj-ls-sous);
+  line-height: 1;
+}
+
+.footerCopy {
+  margin: 0;
+  color: var(--aj-encre-72);
+  font-size: var(--t0);
+  font-weight: var(--aj-w-livre);
+  line-height: 1.6;
+  text-wrap: pretty;
 }
 
 .footerHeading {
-  color: #8e929a;
-  font-size: 0.64rem;
-  font-weight: 600;
-  letter-spacing: 0.15em;
-  margin: 0 0 1.2rem;
+  margin: 0 0 0.75rem;
+  color: var(--aj-encre-84);
+  font-size: var(--t0);
+  font-weight: var(--aj-w-gras);
+  letter-spacing: var(--aj-ls-label);
+  line-height: 1.3;
   text-transform: uppercase;
 }
 
 .footerLinks {
   display: grid;
-  gap: 0.72rem;
+  justify-items: start;
+  gap: 0;
 }
 
 .footerLink,
-.instagramPending {
-  color: #f7f7f5;
-  font-size: 0.78rem;
+.footerMail {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.3rem;
+  color: var(--chrome-pied-encre);
+  font-size: var(--t0);
+  font-weight: var(--aj-w-livre);
   line-height: 1.4;
   text-decoration: none;
 }
 
-.footerLink {
-  display: inline-flex;
-  min-height: 2.75rem;
-  align-items: center;
+.footerMail {
+  letter-spacing: 0.01em;
 }
 
-.footerLink:hover,
-.footerLink:focus-visible {
-  color: #c6c9cf;
+/* Même filet que la nav, même courbe : le chrome parle d'une seule voix. */
+.footerLink::after,
+.footerMail::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 0.42rem;
+  left: 0;
+  height: 1px;
+  background: currentColor;
+  transform: scaleX(0);
+  transform-origin: right;
+  transition: transform 350ms var(--aj-e-nav);
 }
 
-.instagramPending {
-  color: #777b83;
-}
-
-.newsletter {
-  border-bottom: 1px solid rgba(226, 229, 234, 0.35);
-  display: grid;
-  grid-template-columns: 1fr auto;
-  margin-bottom: 0.8rem;
-}
-
-.newsletter input,
-.newsletter button {
-  background: transparent;
-  border: 0;
-  color: inherit;
-  font: 500 0.72rem/1.2 var(--font-manrope), Arial, sans-serif;
-  padding: 0.8rem 0;
-}
-
-.newsletter input {
-  min-width: 0;
-}
-
-.newsletter input::placeholder {
-  color: #747880;
-}
-
-.newsletter button {
-  color: #777b83;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+.footerLink:hover::after,
+.footerLink:focus-visible::after,
+.footerMail:hover::after,
+.footerMail:focus-visible::after {
+  transform: scaleX(1);
+  transform-origin: left;
 }
 
 .footerBottom {
-  align-items: center;
-  border-top: 1px solid rgba(226, 229, 234, 0.14);
-  color: #777b83;
   display: flex;
-  font-size: 0.63rem;
+  flex-wrap: wrap;
+  align-items: baseline;
   justify-content: space-between;
-  letter-spacing: 0.1em;
-  margin-top: clamp(3rem, 7vw, 6rem);
-  padding-top: 1.25rem;
+  gap: 14px;
+
+  margin-top: clamp(30px, 4vw, 52px);
+  padding-top: clamp(14px, 1.6vw, 20px);
+  border-top: 1px solid var(--chrome-pied-filet);
+
+  color: var(--aj-encre-72);
+  font-size: var(--t0);
+  font-weight: var(--aj-w-moyen);
+  letter-spacing: var(--aj-ls-nav);
+  line-height: 1.4;
   text-transform: uppercase;
 }
 
+/* La signature, au traitement exact du h1 de la maquette. */
+.footerSignature {
+  letter-spacing: var(--aj-ls-signature);
+  font-weight: var(--aj-w-gras);
+  color: var(--aj-encre-84);
+}
+
+/* ==========================================================================
+   Focus — un seul liseré, partout, celui de la maquette.
+   ========================================================================== */
+
 .navLink:focus-visible,
 .actionLink:focus-visible,
-.menuButton:focus-visible,
-.drawerLink:focus-visible,
-.footerLink:focus-visible,
 .brand:focus-visible,
+.footerLink:focus-visible,
+.footerMail:focus-visible,
 .languageSwitcher select:focus-visible {
-  outline: 1px solid #e1e3e7;
-  outline-offset: 0.45rem;
+  outline: 1px solid currentColor;
+  outline-offset: 4px;
 }
+
+/* ==========================================================================
+   Étroit — deux rangées, jamais une amputation
+   --------------------------------------------------------------------------
+   Sous 900px l'en-tête passe sur deux rangées : marque + actions, puis la nav
+   pleine largeur sous un filet. Les trois liens restent visibles et au
+   plancher de 15px ; c'est l'interlettrage qui cède, pas le corps.
+   Hauteur totale visée : 4rem + 2,8rem + 1px ≈ 6,9rem — la valeur que
+   Recit.module.css a relevée pour caler son ouverture.
+   ========================================================================== */
 
 @media (max-width: 900px) {
   .header {
-    grid-template-columns: 5.4rem minmax(0, 1fr);
+    --chrome-pad: clamp(12px, 3.4vw, 20px);
+    --chrome-ls: 0.05em;
+
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 0;
     min-height: 0;
-    padding: 0 1rem;
-    overflow: clip;
   }
 
   .headerMinimal {
-    min-height: 4.75rem;
-    padding: 0 1.25rem;
+    grid-template-columns: auto minmax(0, 1fr);
   }
 
   .brand,
   .actions {
-    min-height: 4.75rem;
+    grid-row: 1;
+    min-height: 4rem;
   }
 
   .brand {
     grid-column: 1;
-    grid-row: 1;
   }
 
   .actions {
     grid-column: 2;
-    grid-row: 1;
-    gap: 0.45rem;
-    min-width: 0;
-    overflow: hidden;
+    gap: clamp(4px, 1.6vw, 12px);
   }
 
   .brandImage {
-    width: 5.4rem;
+    width: clamp(4.6rem, 16vw, 5.4rem);
   }
 
+  /* Pleine largeur : la rangée de nav reprend les gouttières de l'en-tête,
+     c'est la seule marge qui reste à distribuer entre trois mots. */
   .desktopNav {
-    border-top: 1px solid rgba(226, 229, 234, 0.16);
-    display: grid;
-    width: auto;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 0;
-    grid-column: 1 / -1;
     grid-row: 2;
-    margin: 0 -1rem;
-    overflow: hidden;
-    padding: 0.52rem 0.35rem;
+    grid-column: 1 / -1;
+    margin-inline: calc(-1 * var(--chrome-pad));
+    padding-inline: 0.25rem;
+    gap: 0;
+    justify-content: space-around;
+    border-top: 1px solid var(--chrome-filet);
   }
 
-  .desktopNav::-webkit-scrollbar {
-    display: none;
-  }
-
-  .navLink,
-  .socialPending {
-    min-width: 0;
-    padding-inline: 0.2rem;
-    font-size: clamp(0.54rem, 2.2vw, 0.68rem);
-    letter-spacing: 0.08em;
-    text-align: center;
-    white-space: nowrap;
-  }
-
-  .languageSwitcher select {
-    min-height: 2.75rem;
-    padding-bottom: 0.45rem;
-    padding-top: 0.45rem;
+  .navLink {
+    min-height: 2.8rem;
+    padding-inline: 0.15rem;
   }
 
   .actionLink {
-    min-width: auto;
     padding-inline: 0.22rem;
-    font-size: 0.61rem;
-    letter-spacing: 0.08em;
-  }
-
-  .actions .actionLink:first-of-type {
-    display: none;
-  }
-
-  .footerTop {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 620px) {
-  .actions {
-    gap: 0.25rem;
   }
 
   .languageSwitcher select {
-    max-width: 3.7rem;
-    padding-left: 0.42rem;
-    padding-right: 1.05rem;
+    min-width: 0;
+    padding: 0 1.45rem 0 0.55rem;
   }
 
-  .footerColumns {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .newsletterColumn {
-    grid-column: 1 / -1;
-  }
-
-  .newsletter {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .newsletter button {
-    border-top: 1px solid rgba(226, 229, 234, 0.14);
-    justify-self: stretch;
-    text-align: left;
-  }
-
-  .footerBottom {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 0.65rem;
+  .navLink::after,
+  .actionLink::after {
+    bottom: 0.42rem;
   }
 }
 
+/* Sous 380px trois mots capitales ne tiennent plus sur une ligne. Ils passent
+   sur deux lignes centrées — toujours à 15px. Réduire le corps serait plus
+   simple et interdit. */
+@media (max-width: 380px) {
+  .desktopNav .navLink {
+    white-space: normal;
+    text-align: center;
+    line-height: 1.15;
+  }
+
+  .desktopNav .navLink::after {
+    display: none;
+  }
+}
+
+@media (max-width: 860px) {
+  .footerTop {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: clamp(26px, 5vw, 40px);
+  }
+
+  .footerIdentity {
+    grid-column: 1 / -1;
+    max-width: 44ch;
+  }
+}
+
+@media (max-width: 520px) {
+  .footerBottom {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.55rem;
+  }
+}
+
+/* ==========================================================================
+   Mouvement réduit
+   --------------------------------------------------------------------------
+   Rien n'est masqué en CSS ici : le chrome est lisible sans une ligne de JS.
+   On coupe seulement les transitions ; la dérobade de l'en-tête, elle, n'est
+   jamais câblée sous prefers-reduced-motion (côté StoreHeader).
+   ========================================================================== */
+
 @media (prefers-reduced-motion: reduce) {
+  .header::before,
   .navLink::after,
   .actionLink::after,
-  .menuGlyph,
-  .menuGlyph::before,
-  .menuGlyph::after,
-  .backdrop,
-  .drawer {
+  .footerLink::after,
+  .footerMail::after {
     transition: none;
   }
 }

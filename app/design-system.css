@@ -1,0 +1,283 @@
+/* ==========================================================================
+   AJ Luxury — socle de design
+   --------------------------------------------------------------------------
+   Extrait de _design-reference/claude-design-accueil.html, la maquette validée
+   par le client. Les valeurs ne sont pas réinventées : elles sont relevées au
+   caractère près sur la référence. Toute divergence est un bug.
+
+   Convention de nommage — deux familles, une règle :
+     • les noms courts (--gut, --metal, --e1, --disp, --t0…--t7) viennent
+       littéralement de la maquette. On garde son vocabulaire.
+     • tout ce qui est ajouté ici porte le préfixe --aj-.
+
+   RÉSERVÉ, ne jamais redéfinir : globals.css possède déjà --aj-gutter,
+   --aj-border, --aj-wipe, --aj-plate-scale (portée .aj-home), --home-gutter,
+   --home-accent, --ink, --paper, --rose, --lilas, --pourpre, --font-manrope.
+   Les redéfinir casserait les pages déjà en production.
+   ========================================================================== */
+
+:root {
+  /* --- Fonte -------------------------------------------------------------
+     Manrope variable 200..800 est déjà auto-hébergée par globals.css sous le
+     nom « AJ Manrope » et préchargée par app/layout.tsx. On pointe dessus,
+     on ne recharge rien : un second chargement doublerait le poids réseau. */
+  --disp: var(--font-manrope), "Manrope", "Helvetica Neue", Helvetica, sans-serif;
+
+  /* --- Échelle typographique --------------------------------------------
+     Plancher dur : aucun texte visible sous 15px. --t0 EST ce plancher.
+     t0/t1/t2/t4/t6/t7 sont les paliers de la maquette, valeurs exactes.
+     t3 et t5 comblent les deux trous de l'échelle ; ils n'existent pas dans
+     la référence — à n'utiliser que si aucun palier d'origine ne convient. */
+  --t0: 15px;
+  --t1: clamp(16px, 1.05vw, 18px);
+  --t2: clamp(21px, 1.5vw, 25px);
+  --t3: clamp(27px, 2vw, 33px);
+  --t4: clamp(34px, 2.6vw, 44px);
+  --t5: clamp(42px, 3.8vw, 62px);
+  --t6: clamp(52px, 5.6vw, 86px);
+  --t7: clamp(60px, 7.6vw, 132px);
+
+  /* --- Graisses et interlettrages ---------------------------------------
+     Le contraste de la marque tient dans l'écart : titres très fins et très
+     resserrés, labels gras et très ouverts. Ne pas amortir cet écart. */
+  --aj-w-fin: 200;
+  --aj-w-livre: 300;
+  --aj-w-normal: 400;
+  --aj-w-moyen: 500;
+  --aj-w-gras: 600;
+  --aj-w-lourd: 700;
+
+  --aj-ls-titre: -0.055em; /* noms de coloris, en --t4 */
+  --aj-ls-grand: -0.03em; /* chiffres et titre de clôture, en --t6 */
+  --aj-ls-sous: -0.01em; /* sous-titres en --t2 */
+  --aj-ls-nav: 0.14em;
+  --aj-ls-label: 0.16em;
+  --aj-ls-prix: 0.18em;
+  --aj-ls-action: 0.2em;
+  --aj-ls-signature: 0.24em; /* le h1 du film, l'écart le plus ouvert */
+
+  /* --- Courbes ----------------------------------------------------------
+     --e1 est l'ease de signature : sortie très longue, arrivée sans rebond.
+     C'est elle par défaut. Les trois autres ne servent qu'aux gestes qu'elles
+     nomment, relevés eux aussi sur la maquette. */
+  --e1: cubic-bezier(0.16, 1, 0.3, 1);
+  --aj-e-volet: cubic-bezier(0.76, 0, 0.24, 1); /* volet d'ouverture, symétrique */
+  --aj-e-nav: cubic-bezier(0.2, 0.8, 0.2, 1); /* filet de survol de la nav */
+  --aj-e-eclat: cubic-bezier(0.4, 0, 0.2, 1); /* brillance qui traverse le titre */
+
+  /* --- Durées -----------------------------------------------------------
+     Trois durées suffisent. Elles servent à l'ouverture et aux survols ; tout
+     ce qui est piloté au scroll n'a pas de durée, il a un scrub. */
+  --aj-d-court: 0.75s; /* révélations, survols */
+  --aj-d-long: 1.15s; /* montée de la signature, volet, brillance */
+  --aj-d-ample: 2.6s; /* détente du sur-cadrage sur le film */
+
+  /* --- Gouttière et constantes de gabarit -------------------------------- */
+  --gut: clamp(20px, 4vw, 68px);
+  --aj-header-h: 76px; /* le film se cale dessous : inset: var(--aj-header-h) 0 0 0 */
+
+  /* --- Le métal ---------------------------------------------------------
+     Le dégradé signature, copié au caractère près. Neuf arrêts : ce sont les
+     ruptures serrées entre blanc pur et gris sombre qui donnent le poli du
+     métal. Ne pas simplifier, ne pas réordonner, ne pas changer l'angle.
+     S'applique par background-clip: text — voir l'utilitaire .aj-metal. */
+  --metal: linear-gradient(
+    100deg,
+    #ffffff 0%,
+    #d4d7db 11%,
+    #7c828a 24%,
+    #ffffff 38%,
+    #969ca4 50%,
+    #f2f4f5 62%,
+    #6d737b 76%,
+    #e2e5e8 89%,
+    #ffffff 100%
+  );
+
+  /* --- Fonds et encres --------------------------------------------------- */
+  --aj-noir: #08080a; /* fond de page, et couleur du volet d'ouverture */
+  --aj-noir-media: #101014; /* fond des cadres image avant décodage */
+
+  --aj-encre: #ffffff;
+  --aj-encre-94: rgba(255, 255, 255, 0.94); /* paragraphe sur mur coloré */
+  --aj-encre-90: rgba(255, 255, 255, 0.9);
+  --aj-encre-84: rgba(255, 255, 255, 0.84); /* labels secondaires */
+  --aj-encre-72: rgba(255, 255, 255, 0.72); /* mentions, pied de page */
+
+  --aj-filet: rgba(255, 255, 255, 0.14); /* bordure du header */
+  --aj-filet-rail: rgba(255, 255, 255, 0.3); /* piste de progression */
+  --aj-filet-bouton: rgba(255, 255, 255, 0.34); /* contour des tailles */
+  --aj-filet-fort: rgba(255, 255, 255, 0.5); /* champ du formulaire */
+  --aj-header-fond: rgba(8, 8, 10, 0.86); /* header, avec blur(14px) */
+
+  /* --- Les trois coloris -------------------------------------------------
+     « mur » = la couleur du plateau, échantillonnée au pixel sur les plaques,
+     jamais inventée. C'est le fond de scène qui s'interpole d'un coloris à
+     l'autre. « accent » = le filet actif sous la carte. « voile » = le fond
+     du bloc de texte posé sur le mur, qui garantit le contraste. */
+  --aj-mur-rose: #97666a;
+  --aj-mur-lilas: #616384;
+  --aj-mur-pourpre: #3f051c;
+
+  --aj-accent-rose: #dda9bd;
+  --aj-accent-lilas: #a9abd9;
+  --aj-accent-pourpre: #7d0f52;
+
+  --aj-voile-rose: rgba(20, 14, 16, 0.62);
+  --aj-voile-lilas: rgba(14, 14, 22, 0.62);
+  --aj-voile-pourpre: rgba(20, 6, 12, 0.62);
+}
+
+/* ==========================================================================
+   Utilitaires
+   Uniquement ce qui se répète réellement dans la maquette. Rien de spéculatif.
+   ========================================================================== */
+
+/* --- Lettrage métallique --------------------------------------------------
+   Le repli passe en premier : si background-clip: text n'est pas supporté, le
+   texte reste lisible en gris clair au lieu de disparaître. Le remplissage
+   transparent n'est appliqué qu'une fois le support confirmé.
+   Contraintes : l'élément ne peut plus porter de background-color, et le
+   dégradé se calcule sur sa boîte — un titre sur trois lignes reçoit donc UN
+   seul balayage de métal, ce qui est le rendu voulu.
+   L'animer en opacity ou en transform reste sans danger. */
+.aj-metal {
+  color: #f2f4f5;
+}
+
+@supports (background-clip: text) or (-webkit-background-clip: text) {
+  .aj-metal {
+    background-image: var(--metal);
+    background-clip: text;
+    -webkit-background-clip: text;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+  }
+}
+
+/* --- Gouttière ------------------------------------------------------------
+   La marge latérale unique de la page. Tout ce qui touche les bords s'aligne
+   dessus, y compris les éléments en position absolue (right/left: var(--gut)). */
+.aj-gut {
+  padding-inline: var(--gut);
+}
+
+/* --- Paliers typographiques -----------------------------------------------
+   Corps seul, volontairement : l'interlignage et la graisse dépendent de
+   l'usage et se posent au cas par cas. */
+.aj-t0 {
+  font-size: var(--t0);
+}
+.aj-t1 {
+  font-size: var(--t1);
+}
+.aj-t2 {
+  font-size: var(--t2);
+}
+.aj-t3 {
+  font-size: var(--t3);
+}
+.aj-t4 {
+  font-size: var(--t4);
+}
+.aj-t5 {
+  font-size: var(--t5);
+}
+.aj-t6 {
+  font-size: var(--t6);
+}
+.aj-t7 {
+  font-size: var(--t7);
+}
+
+/* --- Titre d'affichage ----------------------------------------------------
+   Un seul patron pour tous les titres. Les trois variables se surchargent sur
+   l'élément quand un titre s'écarte du réglage par défaut :
+     .aj-display                            → nom de coloris (fin, très serré)
+     style="--aj-display-w: 400; --aj-display-ls: -0.03em; --aj-display-lh: 0.94"
+                                            → titre de clôture et grands chiffres */
+.aj-display {
+  font-family: var(--disp);
+  font-optical-sizing: auto;
+  font-weight: var(--aj-display-w, var(--aj-w-fin));
+  line-height: var(--aj-display-lh, 0.96);
+  letter-spacing: var(--aj-display-ls, var(--aj-ls-titre));
+}
+
+/* --- Label ----------------------------------------------------------------
+   Le petit texte capitale très espacé : prix, chapitres, légendes, nav.
+   Il est au plancher (15px) — ne jamais le réduire, il y est déjà. */
+.aj-label {
+  font-size: var(--t0);
+  font-weight: var(--aj-w-gras);
+  letter-spacing: var(--aj-ls-label);
+  text-transform: uppercase;
+}
+
+/* --- Média plein cadre ----------------------------------------------------
+   Le patron d'image de fond répété dans toute la maquette. Le parent doit être
+   en position: relative et en overflow: hidden. */
+.aj-cover {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* --- Écran plein ----------------------------------------------------------
+   svh et non vh : sur mobile, vh se mesure barre d'adresse rétractée, ce qui
+   fait sauter la hauteur pendant le scroll et invalide les mesures de
+   ScrollTrigger. */
+.aj-ecran {
+  height: 100svh;
+  min-height: 100svh;
+}
+
+/* --- Scène épinglée -------------------------------------------------------
+   Le wrapper collant d'une scène au scroll. Le nœud animé est DEDANS, jamais
+   celui-ci.
+   ATTENTION : ceci épingle en CSS pur. Choisir l'un OU l'autre — soit cette
+   classe, soit pin: true sur ScrollTrigger — jamais les deux sur la même
+   scène, elles se disputeraient la même position.
+   L'overflow: hidden ci-dessous est sans danger parce que la scène est
+   elle-même collante ; posé sur un ANCÊTRE d'un élément épinglé par
+   ScrollTrigger, il créerait un conteneur de défilement et le pin lâcherait. */
+.aj-scene {
+  position: sticky;
+  top: 0;
+  height: 100svh;
+  overflow: hidden;
+}
+
+/* --- Masqué visuellement, lu par les lecteurs d'écran ---------------------
+   Pour les régions aria-live qui annoncent l'avancée d'une scène au scroll. */
+.aj-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ==========================================================================
+   Mouvement réduit
+   --------------------------------------------------------------------------
+   Doctrine : une variante statique LISIBLE, jamais une page vide.
+
+   La règle qui évite le pire : ne jamais masquer en CSS ce qui sera révélé par
+   GSAP. L'état de départ (opacity 0, translation) se pose en JS, via gsap.set
+   ou gsap.from — donc si le JS ne tourne pas, ou si le lecteur refuse le
+   mouvement, le contenu est déjà visible et rien n'est perdu.
+
+   Le filet de sécurité ci-dessous rattrape le cas où un état masqué aurait
+   quand même été écrit en ligne. .aj-reveal est la classe conventionnelle des
+   blocs qui se révèlent au scroll.
+   ========================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  .aj-reveal {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}

@@ -1,0 +1,880 @@
+/* ==========================================================================
+   AJ Luxury — Accueil
+   --------------------------------------------------------------------------
+   Portage de _design-reference/claude-design-accueil.html dans la vraie page.
+   Les valeurs viennent de la maquette validée ; les tokens viennent du socle
+   (app/design-system.css). Rien n'est ajouté au socle depuis ici : ce qui
+   manque est défini localement, en portée module.
+
+   Deux règles tenues partout dans ce fichier :
+     1. aucun texte visible sous --t0 (15px) ;
+     2. rien n'est masqué en CSS que GSAP devra révéler — l'état de départ des
+        scènes au scroll se pose en JS. Sans JS, la page est lisible.
+        Les seules animations écrites ici sont les entrées de chargement :
+        elles n'ont pas d'horloge de scroll, elles doivent démarrer au premier
+        paint, et un import dynamique de GSAP ne le peut pas.
+   ========================================================================== */
+
+/* Racine des scènes au scroll : aucune boîte, seulement un nœud à donner à
+   gsap.context() pour borner ses sélecteurs. */
+.scenes {
+  display: contents;
+}
+
+/* ==========================================================================
+   01 · #haut — le film
+   --------------------------------------------------------------------------
+   Le cadre, la vidéo et l'étalonnage restent à globals.css (.aj-film) :
+   la vidéo hero est un acquis. Ce module ne pose que la surcouche de la
+   maquette — volet d'ouverture, sur-cadrage, signature, découvrir.
+   ========================================================================== */
+
+/* Le volet d'ouverture. Un bloc noir qui remonte, jamais un fondu : le fondu
+   montre une image grise, le volet montre une image nette d'emblée.
+   Il est enfant de .aj-film__hero-scene, donc il ne couvre que le média —
+   l'en-tête reste lisible pendant l'ouverture. */
+.volet {
+  position: absolute;
+  inset: 0;
+  background: var(--aj-noir);
+  transform: scaleY(0);
+  transform-origin: 50% 100%;
+  animation: ajVolet var(--aj-d-long) var(--aj-e-volet) 0.12s both;
+  pointer-events: none;
+}
+
+@keyframes ajVolet {
+  from {
+    transform: scaleY(1);
+  }
+  to {
+    transform: scaleY(0);
+  }
+}
+
+/* Le sur-cadrage se détend. Posé sur .aj-film__hero-scene, qui n'a pas de
+   transform propre dans globals.css. */
+.surCadrage {
+  animation: ajSurCadrage var(--aj-d-ample) var(--e1) 0.12s both;
+}
+
+@keyframes ajSurCadrage {
+  from {
+    transform: scale(1.09);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+
+.signature {
+  position: absolute;
+  z-index: 3;
+  right: var(--gut);
+  bottom: clamp(26px, 4vh, 44px);
+  left: var(--gut);
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+  color: var(--aj-encre);
+}
+
+/* La signature est au plancher typographique (15px), très ouverte. */
+.signatureTitre {
+  position: relative;
+  margin: 0;
+  overflow: hidden;
+  font-family: var(--disp);
+  font-size: var(--t0);
+  font-weight: var(--aj-w-gras);
+  letter-spacing: var(--aj-ls-signature);
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+/* Le masque doit contenir l'extent complet du glyphe, pas la boîte de ligne :
+   une interlettre serrée donne une boîte plus courte que les glyphes et les
+   descendantes seraient tranchées. La marge négative rend la hauteur au flux
+   pour ne pas décaler le rythme. C'est le rapport boîte/extent qui est
+   corrigé, pas une valeur en pixels — sinon le défaut revient à chaque corps. */
+.signatureLigne {
+  display: block;
+  overflow: hidden;
+  padding-bottom: 0.3em;
+  margin-bottom: -0.3em;
+}
+
+.signatureLigne > span {
+  display: block;
+  animation: ajMontee var(--aj-d-long) var(--e1) 0.14s both;
+}
+
+@keyframes ajMontee {
+  from {
+    transform: translate3d(0, 110%, 0);
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+/* La brillance traverse la signature une seule fois, à la fin de l'ouverture.
+   Elle est masquée par .signatureTitre (overflow: hidden), donc elle
+   n'éclaire que le lettrage. */
+.signatureEclat {
+  position: absolute;
+  inset: -40% -10%;
+  background: linear-gradient(
+    100deg,
+    transparent 38%,
+    rgba(255, 255, 255, 0.92) 50%,
+    transparent 62%
+  );
+  mix-blend-mode: screen;
+  transform: translate3d(115%, 0, 0);
+  animation: ajEclat var(--aj-d-long) var(--aj-e-eclat) 1.75s both;
+  pointer-events: none;
+}
+
+@keyframes ajEclat {
+  from {
+    transform: translate3d(-115%, 0, 0);
+  }
+  to {
+    transform: translate3d(115%, 0, 0);
+  }
+}
+
+.decouvrir {
+  display: inline-flex;
+  align-items: center;
+  gap: clamp(14px, 2vw, 30px);
+  min-height: 44px;
+  color: inherit;
+  font-size: var(--t0);
+  font-weight: var(--aj-w-gras);
+  letter-spacing: var(--aj-ls-action);
+  text-transform: uppercase;
+  animation: ajMonteeDouce var(--aj-d-court) var(--e1) 1.5s both;
+}
+
+.decouvrirMot {
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.75);
+}
+
+.decouvrirFleche {
+  font-size: var(--t2);
+  font-weight: var(--aj-w-livre);
+}
+
+@keyframes ajMonteeDouce {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 14px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+/* ==========================================================================
+   02 · #plaque — le diptyque Apollon
+   --------------------------------------------------------------------------
+   Trois panneaux, trois murs, un rail horizontal piloté par le scroll
+   vertical. Dans chaque panneau, deux prises du MÊME plateau : le vêtement
+   seul et le vêtement porté.
+
+   L'échelle partagée n'est pas calculée, elle est structurelle : les deux
+   moitiés du duo sont deux boîtes rigoureusement identiques et les deux
+   images y sont en `contain`. Comme les deux fichiers ont le même rapport
+   (1024/1536 = 0,6667 et 1731/2600 = 0,6658, soit 0,13 % d'écart), elles
+   sont rendues à la même hauteur — donc la lyre partagée a la même taille
+   de part et d'autre du raccord. Aucun JS ne peut casser ça.
+   ========================================================================== */
+
+.plaque {
+  position: relative;
+  height: 420svh;
+  background: var(--aj-mur-rose);
+}
+
+/* Collant en CSS, donc PAS de pin: true sur le ScrollTrigger — les deux se
+   disputeraient la même position. */
+.plaqueScene {
+  position: sticky;
+  top: 0;
+  height: 100svh;
+  overflow: hidden;
+}
+
+/* Les trois murs empilés. Le fond de scène ne change pas de couleur : ce sont
+   les opacités qui se croisent. Une couleur interpolée en JS repeindrait tout
+   l'écran à chaque frame ; trois calques en opacity restent au compositeur. */
+.mur {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.murRose {
+  background: var(--aj-mur-rose);
+}
+
+.murLilas {
+  background: var(--aj-mur-lilas);
+  opacity: 0;
+}
+
+.murPourpre {
+  background: var(--aj-mur-pourpre);
+  opacity: 0;
+}
+
+.rail {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  width: 300%;
+  will-change: transform;
+}
+
+.panneau {
+  position: relative;
+  display: grid;
+  flex: 0 0 33.3333%;
+  grid-template-columns: minmax(0, 300px) minmax(0, 1fr);
+  align-items: center;
+  gap: clamp(14px, 1.8vw, 32px);
+  padding: clamp(88px, 11vh, 124px) var(--gut) clamp(80px, 10vh, 112px);
+  /* Repli sans JS : chaque panneau porte son propre mur. Le réglage GSAP le
+     rend transparent au montage pour laisser voir les calques croisés. */
+  background: var(--mur);
+}
+
+.panneauCopie {
+  padding: clamp(18px, 1.8vw, 26px) clamp(20px, 2vw, 30px);
+  background: var(--voile);
+}
+
+.panneauTitre {
+  --aj-display-w: var(--aj-w-fin);
+  margin: 0 0 0.34em;
+  font-size: var(--t4);
+}
+
+.panneauTexte {
+  margin: 0 0 0.9em;
+  font-size: var(--t1);
+  font-weight: var(--aj-w-livre);
+  line-height: 1.5;
+  color: var(--aj-encre-94);
+}
+
+.panneauPrix {
+  margin: 0;
+  color: var(--aj-encre);
+  font-size: var(--t0);
+  font-weight: var(--aj-w-gras);
+  letter-spacing: var(--aj-ls-prix);
+  text-transform: uppercase;
+}
+
+.panneauLien {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  margin-top: 0.6em;
+  color: var(--aj-encre);
+  font-size: var(--t0);
+  font-weight: var(--aj-w-gras);
+  letter-spacing: var(--aj-ls-action);
+  text-transform: uppercase;
+}
+
+.panneauLien > span:first-child {
+  padding-bottom: 5px;
+  border-bottom: 1px solid var(--aj-filet-fort);
+  transition: border-color var(--aj-d-court) var(--e1);
+}
+
+.panneauLien:hover > span:first-child,
+.panneauLien:focus-visible > span:first-child {
+  border-color: var(--aj-encre);
+}
+
+/* Le duo : deux boîtes identiques, une seule échelle.
+   Chaque demi-boîte porte le rapport du plateau (1731/2600) et se dimensionne
+   sur la HAUTEUR disponible — `flex: 0 1 auto`, pas `1 1 50%` : les boîtes ne
+   s'étirent donc pas pour remplir la ligne, elles épousent exactement l'image.
+   Résultat mesuré sur banc, du 1440x900 au 600x300 : rapport 0,6658 au
+   millième près, boîtes rigoureusement identiques, et zéro pixel entre les
+   deux — les deux prises se touchent, le raccord est franc. C'est là que la
+   lyre partagée doit avoir la même taille, et elle l'a par construction.
+
+   `justify-content: center` : quand la hauteur est très généreuse, le
+   diptyque se centre dans sa colonne au lieu de s'y coller. */
+.duo {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.demi {
+  position: relative;
+  flex: 0 1 auto;
+  height: 100%;
+  min-width: 0;
+  aspect-ratio: 1731 / 2600;
+  overflow: hidden;
+}
+
+.prise {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* Le volet, en deux transforms contra-rotatifs : la fenêtre glisse, le
+   contenu glisse de l'opposé, donc le plan porté ne bouge PAS d'un pixel
+   pendant que le volet s'ouvre. Il reste ancré à son plateau — c'est ça qui
+   fait tenir l'illusion des deux prises d'un même décor.
+   Coût compositeur pur. Ni clip-path (relayoute une couche 1731x2600 par
+   frame), ni left/right (déclenche le layout).
+   État par défaut : OUVERT. Sans JS, le plan porté est visible. */
+.fenetre {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  will-change: transform;
+}
+
+.fenetreContenu {
+  position: absolute;
+  inset: 0;
+  will-change: transform;
+}
+
+/* La couture : un filet vertical net sur le bord ouvrant de la fenêtre. */
+.fenetre::before {
+  position: absolute;
+  z-index: 3;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 1px;
+  background: linear-gradient(
+    transparent,
+    rgba(255, 255, 255, 0.5) 16%,
+    rgba(255, 255, 255, 0.22) 84%,
+    transparent
+  );
+  content: "";
+}
+
+.plaqueBarre {
+  position: absolute;
+  right: var(--gut);
+  bottom: clamp(24px, 3.4vh, 42px);
+  left: var(--gut);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  color: var(--aj-encre);
+}
+
+.onglets {
+  display: flex;
+  gap: clamp(16px, 2vw, 34px);
+}
+
+.onglet {
+  appearance: none;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 4px 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: var(--t0);
+  font-weight: var(--aj-w-gras);
+  letter-spacing: var(--aj-ls-prix);
+  opacity: 0.5;
+  transition: opacity var(--aj-d-court) var(--e1);
+}
+
+.ongletActif {
+  opacity: 1;
+}
+
+.etat {
+  font-size: var(--t0);
+  font-weight: var(--aj-w-gras);
+  letter-spacing: var(--aj-ls-action);
+  text-transform: uppercase;
+}
+
+.piste {
+  position: absolute;
+  right: var(--gut);
+  bottom: 0;
+  left: var(--gut);
+  height: 1px;
+  background: var(--aj-filet-rail);
+}
+
+.pisteRemplie {
+  position: absolute;
+  inset: 0;
+  background: var(--aj-encre);
+  transform: scaleX(0);
+  transform-origin: 0 50%;
+  will-change: transform;
+}
+
+/* Sous 900 px la copie passe AU-DESSUS des plaques : en deux colonnes elle
+   confisquerait la largeur dont les deux prises ont besoin pour rester
+   entières. Le rail reste horizontal — le récit ne change pas, le mobile
+   n'est pas une amputation. */
+@media (max-width: 899px) {
+  .plaque {
+    height: 380svh;
+  }
+
+  .panneau {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: clamp(14px, 2.4vh, 24px);
+    padding-top: clamp(72px, 9vh, 100px);
+    padding-bottom: clamp(86px, 13vh, 116px);
+  }
+
+  /* Ici la contrainte s'inverse : la colonne est étroite et la ligne est
+     haute, donc c'est la LARGEUR qui décide. On dimensionne sur elle et on
+     laisse le rapport dériver la hauteur — sinon les deux boîtes seraient
+     bien plus hautes que les images qu'elles portent, et le volet balaierait
+     du mur nu avant d'atteindre la prise. */
+  .demi {
+    width: 50%;
+    height: auto;
+    max-height: 100%;
+  }
+
+  .panneauTexte {
+    display: none;
+  }
+}
+
+/* ==========================================================================
+   03 · #coloris
+   ========================================================================== */
+
+.coloris {
+  background: var(--aj-noir);
+  color: var(--aj-encre);
+  padding: clamp(60px, 9vh, 120px) 0 0;
+}
+
+.colorisGrille {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  gap: 2px;
+  padding: 0 2px;
+}
+
+.carte {
+  position: relative;
+  display: block;
+  min-height: clamp(420px, 64vh, 720px);
+  overflow: hidden;
+  background: var(--aj-noir-media);
+  color: var(--aj-encre);
+}
+
+.carte img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 62%;
+  transition: transform 1.1s var(--e1);
+}
+
+.carte:hover img,
+.carte:focus-visible img {
+  transform: scale(1.04);
+}
+
+.carteLegende {
+  position: absolute;
+  right: 20px;
+  bottom: 22px;
+  left: 20px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.carteNom {
+  font-family: var(--disp);
+  font-optical-sizing: auto;
+  font-size: var(--t2);
+  font-weight: var(--aj-w-normal);
+  letter-spacing: var(--aj-ls-sous);
+}
+
+.cartePrix {
+  font-size: var(--t0);
+  font-weight: var(--aj-w-moyen);
+  letter-spacing: 0.1em;
+}
+
+.carteFilet {
+  position: absolute;
+  z-index: 3;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  background: var(--accent);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 700ms var(--e1);
+}
+
+.carte:hover .carteFilet,
+.carte:focus-visible .carteFilet {
+  transform: scaleX(1);
+}
+
+.colorisPied {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: clamp(20px, 3vw, 48px);
+  padding: clamp(28px, 4vh, 44px) var(--gut) clamp(56px, 8vh, 96px);
+}
+
+.tailles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tailles li {
+  display: grid;
+  min-width: 58px;
+  min-height: 48px;
+  place-items: center;
+  border: 1px solid var(--aj-filet-bouton);
+  font-size: var(--t0);
+  font-weight: var(--aj-w-moyen);
+  letter-spacing: 0.08em;
+}
+
+.colorisAction {
+  display: inline-flex;
+  align-items: center;
+  min-height: 56px;
+  padding: 0 34px;
+  background: var(--aj-encre);
+  color: var(--aj-noir);
+  font-size: var(--t1);
+  font-weight: var(--aj-w-lourd);
+}
+
+.colorisNote {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--aj-encre-72);
+  font-size: var(--t0);
+}
+
+/* ==========================================================================
+   04 · #matiere
+   ========================================================================== */
+
+.matiere {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+  background: var(--aj-noir);
+  color: var(--aj-encre);
+}
+
+.matiereCadre {
+  position: relative;
+  min-height: 100svh;
+  overflow: hidden;
+  background: var(--aj-noir-media);
+}
+
+/* Le débord vertical existe pour que le parallaxe ne découvre jamais le fond. */
+.matiereCadre img {
+  position: absolute;
+  inset: -6% 0;
+  width: 100%;
+  height: 112%;
+  object-fit: cover;
+  will-change: transform;
+}
+
+.matiereTexte {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: clamp(30px, 5vh, 56px);
+  padding: clamp(72px, 12vh, 132px) var(--gut);
+}
+
+.composition {
+  display: flex;
+  align-items: baseline;
+  gap: clamp(18px, 2.4vw, 40px);
+  flex-wrap: wrap;
+  margin: 0;
+}
+
+.compositionChiffre {
+  font-family: var(--disp);
+  font-optical-sizing: auto;
+  font-variation-settings: "opsz" 72;
+  font-size: var(--t6);
+  font-weight: var(--aj-w-normal);
+  letter-spacing: var(--aj-ls-grand);
+  line-height: 0.86;
+}
+
+.compositionMot {
+  font-size: var(--t0);
+  font-weight: var(--aj-w-moyen);
+  letter-spacing: var(--aj-ls-label);
+  text-transform: uppercase;
+}
+
+.matiereEnonce {
+  max-width: 30ch;
+  margin: 0;
+  color: var(--aj-encre-90);
+  font-size: var(--t2);
+  font-weight: var(--aj-w-fin);
+  line-height: 1.4;
+  letter-spacing: var(--aj-ls-sous);
+}
+
+.matiereLabel {
+  color: var(--aj-encre-84);
+  font-size: var(--t0);
+  font-weight: var(--aj-w-moyen);
+  letter-spacing: var(--aj-ls-nav);
+  text-transform: uppercase;
+}
+
+/* ==========================================================================
+   05 · Éditorial
+   ========================================================================== */
+
+.editorial {
+  background: var(--aj-noir);
+  padding: 0 2px;
+}
+
+.editorialGrille {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: 2px;
+}
+
+.editorialFigure {
+  position: relative;
+  margin: 0;
+  min-height: clamp(400px, 72vh, 820px);
+  overflow: hidden;
+  background: var(--aj-noir-media);
+}
+
+.editorialFigure img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.editorialFigure figcaption {
+  position: absolute;
+  bottom: 22px;
+  left: 20px;
+  color: var(--aj-encre);
+  font-size: var(--t0);
+  font-weight: var(--aj-w-moyen);
+  letter-spacing: var(--aj-ls-label);
+  text-transform: uppercase;
+}
+
+/* ==========================================================================
+   06 · Clôture
+   ========================================================================== */
+
+.cloture {
+  display: grid;
+  min-height: 88svh;
+  place-items: center;
+  background: var(--aj-noir);
+  color: var(--aj-encre);
+  padding: clamp(80px, 14vh, 180px) var(--gut);
+}
+
+.clotureBloc {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(28px, 5vh, 60px);
+  width: 100%;
+  max-width: 1100px;
+}
+
+.clotureTitre {
+  --aj-display-w: var(--aj-w-normal);
+  --aj-display-ls: -0.028em;
+  --aj-display-lh: 0.94;
+  max-width: 22ch;
+  margin: 0;
+  font-size: var(--t6);
+}
+
+.clotureTexte {
+  max-width: 52ch;
+  margin: 0;
+  color: var(--aj-encre-72);
+  font-size: var(--t1);
+  font-weight: var(--aj-w-livre);
+  line-height: 1.6;
+}
+
+.clotureActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: clamp(18px, 3vw, 40px);
+}
+
+.clotureActions a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 48px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid var(--aj-filet-fort);
+  font-size: var(--t0);
+  font-weight: var(--aj-w-gras);
+  letter-spacing: var(--aj-ls-action);
+  text-transform: uppercase;
+  transition: border-color var(--aj-d-court) var(--e1);
+}
+
+.clotureActions a:hover,
+.clotureActions a:focus-visible {
+  border-color: var(--aj-encre);
+}
+
+/* ==========================================================================
+   Mouvement réduit — une variante statique LISIBLE, jamais une page vide.
+   --------------------------------------------------------------------------
+   Le rail se déplie : les trois panneaux s'empilent, chacun sur son propre
+   mur, les deux prises côte à côte, volet ouvert. Tout le récit reste là,
+   sans une seule transformation pilotée.
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  .volet {
+    animation: none;
+    transform: scaleY(0);
+  }
+
+  .surCadrage,
+  .signatureLigne > span,
+  .decouvrir {
+    animation: none;
+  }
+
+  .signatureEclat {
+    display: none;
+  }
+
+  .plaque {
+    height: auto;
+  }
+
+  .plaqueScene {
+    position: static;
+    height: auto;
+  }
+
+  .mur {
+    display: none;
+  }
+
+  /* !important, et c'est délibéré : le réglage GSAP écrit ces transforms en
+     style inline. Si le lecteur bascule sur « mouvement réduit » en cours de
+     session, la branche est révoquée mais le style inline, lui, n'appartient
+     pas à GSAP. Sans cette surcharge, le rail resterait décalé de −66 % et la
+     colonne dépliée sortirait de l'écran. */
+  .rail {
+    position: static;
+    width: 100%;
+    flex-direction: column;
+    transform: none !important;
+    will-change: auto;
+  }
+
+  .panneau {
+    flex: 0 0 auto;
+    min-height: 86svh;
+  }
+
+  .panneauTexte {
+    display: block;
+  }
+
+  .fenetre,
+  .fenetreContenu {
+    transform: none !important;
+    will-change: auto;
+  }
+
+  .plaqueBarre,
+  .piste {
+    display: none;
+  }
+
+  .carte img,
+  .carteFilet {
+    transition: none;
+  }
+
+  .carteFilet {
+    transform: scaleX(1);
+  }
+
+  .matiereCadre img {
+    will-change: auto;
+  }
+}

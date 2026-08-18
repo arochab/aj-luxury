@@ -1,0 +1,409 @@
+/* ==========================================================================
+   Boutique — /shop
+   --------------------------------------------------------------------------
+   Le langage de _design-reference/claude-design-accueil.html porté sur l'écran
+   qui vend : fond noir, gouttière unique, filets de 2px, lettrage métallique
+   sur les noms de coloris, plancher typographique à 15px (--t0).
+
+   Aucun token n'est redéfini ici : tout vient de app/design-system.css. Les
+   seules variables locales sont préfixées --bq- et servent à faire descendre
+   la couleur d'accent d'un coloris jusqu'au filet de sa carte.
+
+   Règle de mouvement : rien n'est masqué en CSS. Les états de départ sont
+   posés par GSAP (AjScrollReveal). Sans JS, la page est déjà lisible.
+   ========================================================================== */
+
+.boutique {
+  min-height: 100svh;
+  /* clip et non hidden : clip ne crée pas de conteneur de défilement, donc ne
+     peut pas casser une mesure de ScrollTrigger. */
+  overflow: clip;
+  background: var(--aj-noir);
+  color: var(--aj-encre);
+  font-family: var(--disp);
+  font-size: var(--t1);
+  line-height: 1.5;
+}
+
+/* La scène GSAP n'existe que comme portée de sélecteurs : elle ne doit rien
+   changer au flux. */
+.scene {
+  display: contents;
+}
+
+/* --- 01 · Ouverture ------------------------------------------------------ */
+
+.ouverture {
+  display: grid;
+  gap: clamp(26px, 3.6vh, 46px);
+  padding: clamp(52px, 8vh, 108px) var(--gut) clamp(34px, 5vh, 60px);
+}
+
+.eyebrow {
+  margin: 0;
+  color: var(--aj-encre-84);
+  font-size: var(--t0);
+  font-weight: var(--aj-w-gras);
+  letter-spacing: var(--aj-ls-label);
+  text-transform: uppercase;
+}
+
+.titre {
+  max-width: 14ch;
+  margin: 0;
+  font-family: var(--disp);
+  font-optical-sizing: auto;
+  font-size: var(--t7);
+  font-weight: var(--aj-w-fin);
+  letter-spacing: var(--aj-ls-titre);
+  line-height: 0.9;
+}
+
+.chapo {
+  max-width: 34ch;
+  margin: 0;
+  color: var(--aj-encre-90);
+  font-size: var(--t2);
+  font-weight: var(--aj-w-fin);
+  letter-spacing: var(--aj-ls-sous);
+  line-height: 1.4;
+}
+
+/* Les quatre faits commerciaux, dont le prix. Grille pour que « 29,99 € » ne
+   soit jamais relégué sous la ligne de flottaison. */
+.faits {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+  gap: clamp(22px, 2.6vw, 44px);
+  margin: 0;
+  padding-top: clamp(22px, 3vh, 34px);
+  border-top: 1px solid var(--aj-filet);
+}
+
+.fait {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+
+.fait dt {
+  color: var(--aj-encre-72);
+  font-size: var(--t0);
+  font-weight: var(--aj-w-gras);
+  letter-spacing: var(--aj-ls-label);
+  text-transform: uppercase;
+}
+
+.fait dd {
+  margin: 0;
+  font-size: var(--t1);
+  font-weight: var(--aj-w-livre);
+  line-height: 1.45;
+}
+
+/* Le prix, traité comme un chiffre d'affichage et non comme une mention. */
+.prix {
+  font-family: var(--disp);
+  font-optical-sizing: auto;
+  font-size: var(--t4);
+  font-weight: var(--aj-w-fin);
+  letter-spacing: var(--aj-ls-grand);
+  line-height: 1;
+}
+
+.prixNote {
+  color: var(--aj-encre-72);
+  font-size: var(--t0);
+  line-height: 1.4;
+}
+
+/* --- 02 · La grille des coloris ------------------------------------------
+   Bord à bord, filets de 2px : le cadrage de la maquette (#coloris). */
+
+.grille {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  gap: 2px;
+  padding: 0 2px;
+  margin: 0;
+  list-style: none;
+}
+
+.carte {
+  position: relative;
+  background: var(--aj-noir-media);
+}
+
+/* GSAP est seul propriétaire du transform de .carteLien (le relais
+   data-aj-presse) : aucune transition CSS ici, sinon les deux moteurs se
+   disputeraient la même propriété. Le zoom de survol vit sur l'enfant
+   .carteMedia, en CSS — les deux transforms sont sur des nœuds distincts. */
+.carteLien {
+  position: relative;
+  display: block;
+  min-height: clamp(430px, 74vh, 800px);
+  height: 100%;
+  overflow: hidden;
+  color: inherit;
+  text-decoration: none;
+}
+
+.carteMedia {
+  position: absolute;
+  inset: 0;
+  transform: scale(1);
+  transition: transform 1.1s var(--e1);
+  will-change: transform;
+}
+
+.carteMedia img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 60%;
+}
+
+/* Le voile : sans lui le lettrage métallique perdrait son contraste sur les
+   zones claires de la photo. La maquette pose le même dégradé sur le film.
+
+   Le bas est celui de la maquette, quasi opaque : c'est indispensable ici, le
+   métal descend jusqu'à #6d737b et ces lettres-là disparaîtraient sur une
+   photo claire. Le haut est ajouté — la maquette n'y pose rien parce qu'elle
+   n'y écrit rien ; nous y mettons le numéro et l'appel « Découvrir », donc il
+   lui faut son propre adossement. 0deg : 0 % est le bas, 100 % le haut. */
+.carteVoile {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    0deg,
+    rgba(6, 6, 8, 0.88) 0%,
+    rgba(6, 6, 8, 0.55) 26%,
+    rgba(6, 6, 8, 0) 58%,
+    rgba(6, 6, 8, 0) 76%,
+    rgba(6, 6, 8, 0.52) 100%
+  );
+}
+
+.carteIndex {
+  position: absolute;
+  top: clamp(18px, 2vw, 30px);
+  left: clamp(18px, 2vw, 30px);
+  font-size: var(--t0);
+  font-weight: var(--aj-w-gras);
+  letter-spacing: var(--aj-ls-prix);
+}
+
+.carteAction {
+  position: absolute;
+  top: clamp(18px, 2vw, 30px);
+  right: clamp(18px, 2vw, 30px);
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--aj-filet-fort);
+  font-size: var(--t0);
+  font-weight: var(--aj-w-gras);
+  letter-spacing: var(--aj-ls-action);
+  text-transform: uppercase;
+  opacity: 0.82;
+  transform: translate3d(0, 0, 0);
+  transition:
+    opacity var(--aj-d-court) var(--e1),
+    transform var(--aj-d-court) var(--e1);
+}
+
+.carteBas {
+  position: absolute;
+  right: clamp(18px, 2vw, 30px);
+  bottom: clamp(20px, 2.4vw, 32px);
+  left: clamp(18px, 2vw, 30px);
+  display: grid;
+  gap: clamp(10px, 1.2vw, 16px);
+}
+
+.carteNom {
+  display: block;
+  font-family: var(--disp);
+  font-optical-sizing: auto;
+  font-size: var(--t4);
+  font-weight: var(--aj-w-fin);
+  letter-spacing: var(--aj-ls-titre);
+  line-height: 0.96;
+}
+
+.carteLigne {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.carteTon {
+  color: var(--aj-encre-84);
+  font-size: var(--t0);
+  font-weight: var(--aj-w-moyen);
+  letter-spacing: var(--aj-ls-label);
+  text-transform: uppercase;
+}
+
+.cartePrix {
+  font-size: var(--t1);
+  font-weight: var(--aj-w-moyen);
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+}
+
+.carteTailles {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.carteTailles span {
+  min-width: 46px;
+  padding: 7px 8px;
+  border: 1px solid var(--aj-filet-bouton);
+  color: var(--aj-encre-84);
+  font-size: var(--t0);
+  font-weight: var(--aj-w-moyen);
+  letter-spacing: 0.08em;
+  text-align: center;
+}
+
+/* Le filet d'accent : la couleur du coloris, jamais inventée — elle descend
+   du swatch produit par --bq-accent. */
+.carteFilet {
+  position: absolute;
+  z-index: 3;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  background: var(--bq-accent, var(--aj-encre));
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 700ms var(--e1);
+}
+
+@media (hover: hover) {
+  .carteLien:hover .carteMedia {
+    transform: scale(1.04);
+  }
+
+  .carteLien:hover .carteAction {
+    opacity: 1;
+    transform: translate3d(6px, 0, 0);
+  }
+}
+
+.carteLien:hover .carteFilet,
+.carteLien:focus-visible .carteFilet {
+  transform: scaleX(1);
+}
+
+/* --- 03 · La matière ------------------------------------------------------
+   L'écho de #matiere : une colonne d'image en parallaxe, une colonne de
+   chiffres. Les deux nombres sont l'argument produit, pas une décoration. */
+
+.matiere {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+  margin-top: 2px;
+  background: var(--aj-noir);
+}
+
+.matiereFrame {
+  position: relative;
+  min-height: clamp(420px, 82vh, 900px);
+  overflow: hidden;
+  background: var(--aj-noir-media);
+}
+
+.matiereMedia {
+  position: absolute;
+  inset: -6% 0;
+  height: 112%;
+  will-change: transform;
+}
+
+.matiereMedia img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 45%;
+}
+
+.matiereTexte {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: clamp(28px, 4.6vh, 54px);
+  padding: clamp(64px, 11vh, 128px) var(--gut);
+}
+
+.composition {
+  display: flex;
+  align-items: baseline;
+  gap: clamp(16px, 2.2vw, 38px);
+  flex-wrap: wrap;
+}
+
+.chiffre {
+  font-family: var(--disp);
+  font-optical-sizing: auto;
+  font-variation-settings: "opsz" 72;
+  font-size: var(--t6);
+  font-weight: var(--aj-w-normal);
+  letter-spacing: var(--aj-ls-grand);
+  line-height: 0.86;
+}
+
+.compositionLabel {
+  font-size: var(--t0);
+  font-weight: var(--aj-w-moyen);
+  letter-spacing: var(--aj-ls-label);
+  text-transform: uppercase;
+}
+
+.matierePhrase {
+  max-width: 30ch;
+  margin: 0;
+  color: var(--aj-encre-90);
+  font-size: var(--t2);
+  font-weight: var(--aj-w-fin);
+  letter-spacing: var(--aj-ls-sous);
+  line-height: 1.4;
+}
+
+.matiereSignature {
+  color: var(--aj-encre-84);
+  font-size: var(--t0);
+  font-weight: var(--aj-w-moyen);
+  letter-spacing: var(--aj-ls-nav);
+  text-transform: uppercase;
+}
+
+/* --- Focus --------------------------------------------------------------- */
+
+.carteLien:focus-visible {
+  outline: 1px solid var(--aj-encre);
+  outline-offset: -5px;
+}
+
+/* --- Mouvement réduit -----------------------------------------------------
+   Variante statique lisible : les transitions tombent, rien ne disparaît. */
+
+@media (prefers-reduced-motion: reduce) {
+  .carteMedia,
+  .carteAction,
+  .carteFilet {
+    transition: none;
+  }
+
+  .carteFilet {
+    transform: scaleX(1);
+  }
+}

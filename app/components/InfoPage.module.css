@@ -1,200 +1,340 @@
+/* ==========================================================================
+   AJ Luxury — le gabarit des pages légales
+   --------------------------------------------------------------------------
+   Sept routes passent par ici : contact, mentions légales, CGV,
+   confidentialité, cookies, livraison-retours, rétractation. Une seule
+   intervention les met toutes au niveau.
+
+   Deux principes, un seul but — qu'on croie ce qu'on lit :
+
+   1. LE PAPIER. Le reste du site est un mur noir. Un document juridique se lit
+      sur du papier. Le contraste entre les deux n'est pas une incohérence,
+      c'est ce qui dit « ceci est un document, pas une vitrine ». Le blanc est
+      volontairement chaud (#f2f1ed), pas clinique : le marbre de la marque.
+
+   2. LE PLANCHER. C'était l'endroit le plus fautif du site — surtitre et ligne
+      d'état à 10px, tableaux à 13px, définitions à 14px. Tout est remonté au
+      socle : --t0 (15px) est le plus petit corps autorisé, --t1 pour le corps
+      de lecture. Aucune exception.
+
+   Les tokens du socle ne sont jamais redéfinis ici. Ce qui est propre à ce
+   gabarit est préfixé --info-.
+   ========================================================================== */
+
 .page {
+  /* --- tokens locaux -------------------------------------------------- */
+  --info-papier: #f2f1ed;
+  --info-encre: #101014;
+  --info-encre-douce: #45454c;
+  --info-encre-faible: #71717a;
+  --info-filet: rgba(16, 16, 20, 0.18);
+  --info-filet-fin: rgba(16, 16, 20, 0.1);
+  --info-voile: rgba(255, 255, 255, 0.66);
+
   min-height: 100svh;
-  background: #f4f3f0;
-  color: #0c0c0e;
+  background: var(--info-papier);
+  color: var(--info-encre);
+  font-family: var(--disp);
 }
 
-.main {
-  width: min(1180px, 92vw);
-  min-height: 68svh;
-  margin: 0 auto;
-  padding: clamp(120px, 14vw, 210px) 0 clamp(90px, 11vw, 160px);
+/* ==========================================================================
+   Gabarit
+   --------------------------------------------------------------------------
+   Au-delà de 1040px : le titre à gauche, collant, la lecture à droite. On sait
+   toujours quel document on lit, même au milieu de l'article 12. En dessous :
+   une seule colonne, le titre d'abord. Ce n'est pas une version amputée, c'est
+   le même document dans un autre gabarit.
+   ========================================================================== */
+
+.article {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: clamp(38px, 5vw, 60px);
+  width: min(1240px, 100%);
+  margin-inline: auto;
+  padding: clamp(52px, 7vw, 96px) var(--gut) clamp(76px, 9vw, 136px);
+}
+
+@media (min-width: 1040px) {
+  .article {
+    grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+    align-items: start;
+    gap: clamp(48px, 6vw, 108px);
+  }
+
+  /* L'en-tête est collant lui aussi et peut se dérober : on garde de l'air
+     au-dessus du titre plutôt que de le caler sous une hauteur qui bouge. */
+  .tete {
+    position: sticky;
+    top: clamp(104px, 13vh, 152px);
+  }
 }
 
 .eyebrow {
-  margin: 0 0 24px;
-  color: #6b6b70;
-  font-size: 10px;
-  font-weight: 650;
-  letter-spacing: 0.18em;
+  margin: 0 0 clamp(16px, 2vw, 26px);
+  color: var(--info-encre-faible);
+  font-size: var(--t0);
+  font-weight: var(--aj-w-gras);
+  letter-spacing: var(--aj-ls-label);
+  line-height: 1.4;
   text-transform: uppercase;
 }
 
-.main h1 {
-  max-width: 900px;
+/* Le titre ne crie pas. Un document sérieux n'a pas besoin de 118px : --t5
+   suffit, en graisse livre, très resserré — la signature typographique de la
+   marque appliquée à un texte qui doit rester un texte. */
+.titre {
   margin: 0;
-  overflow-wrap: anywhere;
+  font-family: var(--disp);
+  font-optical-sizing: auto;
+  font-size: var(--t5);
+  font-weight: var(--aj-w-livre);
+  letter-spacing: var(--aj-ls-grand);
+  line-height: 0.98;
+  text-wrap: balance;
+  overflow-wrap: break-word;
   hyphens: auto;
-  font-size: clamp(46px, 8vw, 118px);
-  font-weight: 420;
-  letter-spacing: -0.065em;
-  line-height: 0.92;
 }
+
+/* ==========================================================================
+   La colonne de lecture
+   --------------------------------------------------------------------------
+   70 caractères : au-delà, l'œil perd le début de la ligne suivante. C'est la
+   seule contrainte qui compte vraiment sur une page de texte long.
+   ========================================================================== */
 
 .copy {
   display: grid;
-  max-width: 780px;
-  gap: 20px;
-  margin: clamp(56px, 8vw, 110px) 0 0 auto;
-  padding-top: 28px;
-  border-top: 1px solid rgba(12, 12, 14, 0.2);
+  gap: clamp(24px, 3vw, 34px);
+  max-width: 70ch;
 }
 
 .copy p {
   margin: 0;
-  color: #3d3d42;
-  font-size: clamp(15px, 1.3vw, 18px);
-  line-height: 1.65;
+  color: var(--info-encre-douce);
+  font-size: var(--t1);
+  font-weight: var(--aj-w-livre);
+  line-height: 1.7;
+  text-wrap: pretty;
 }
 
+/* Chaque section s'ouvre sur un filet : la structure du document est visible
+   avant même d'être lue. */
 .copy section {
   display: grid;
-  gap: 16px;
-  margin-top: 24px;
+  gap: clamp(13px, 1.5vw, 18px);
+  padding-top: clamp(22px, 2.8vw, 34px);
+  border-top: 1px solid var(--info-filet-fin);
 }
 
 .copy h2 {
   margin: 0;
-  color: #1c1c20;
-  font-size: clamp(20px, 2vw, 28px);
-  font-weight: 520;
-  letter-spacing: -0.025em;
-  line-height: 1.2;
+  color: var(--info-encre);
+  font-size: var(--t2);
+  font-weight: var(--aj-w-normal);
+  letter-spacing: var(--aj-ls-sous);
+  line-height: 1.24;
+  text-wrap: balance;
 }
 
-.copy dl {
-  display: grid;
-  gap: 0;
+.copy h3 {
   margin: 0;
-  border-top: 1px solid rgba(12, 12, 14, 0.14);
+  color: var(--info-encre);
+  font-size: var(--t1);
+  font-weight: var(--aj-w-gras);
+  letter-spacing: 0.01em;
+  line-height: 1.4;
 }
 
-.copy dl div {
-  display: grid;
-  grid-template-columns: minmax(150px, 0.8fr) minmax(0, 1.2fr);
-  gap: 20px;
-  padding: 14px 0;
-  border-bottom: 1px solid rgba(12, 12, 14, 0.14);
-}
-
-.copy dt,
-.copy dd {
-  margin: 0;
-  font-size: clamp(14px, 1.15vw, 16px);
-  line-height: 1.5;
-}
-
-.copy dt {
-  color: #727278;
-}
-
-.copy dd {
-  color: #242428;
+.copy strong {
+  color: var(--info-encre);
+  font-weight: var(--aj-w-gras);
 }
 
 .copy a {
-  border-bottom: 1px solid currentColor;
+  border-bottom: 1px solid var(--info-filet);
   color: inherit;
+  text-decoration: none;
+  transition: border-color 260ms var(--e1);
+}
+
+.copy a:hover,
+.copy a:focus-visible {
+  border-bottom-color: currentColor;
+}
+
+.copy a:focus-visible {
+  outline: 1px solid currentColor;
+  outline-offset: 4px;
 }
 
 .copy ul,
 .copy ol {
   display: grid;
-  gap: 9px;
+  gap: 10px;
   margin: 0;
-  padding-left: 1.3rem;
+  padding-left: 1.35em;
 }
 
 .copy li {
-  color: #3d3d42;
-  font-size: clamp(15px, 1.3vw, 18px);
-  line-height: 1.6;
+  color: var(--info-encre-douce);
+  font-size: var(--t1);
+  font-weight: var(--aj-w-livre);
+  line-height: 1.65;
 }
 
-.copy strong {
-  color: #1c1c20;
-  font-weight: 650;
+.copy li::marker {
+  color: var(--info-encre-faible);
 }
+
+.copy code {
+  padding: 0.1em 0.4em;
+  background: rgba(16, 16, 20, 0.06);
+  /* --t0, pas un pourcentage du corps parent : 0.9em de --t1 tomberait à
+     14,4px et casserait le plancher. */
+  font-size: var(--t0);
+}
+
+/* --- Listes de définitions (mentions légales, identité du vendeur) ------- */
+
+.copy dl {
+  display: grid;
+  margin: 0;
+  border-top: 1px solid var(--info-filet);
+}
+
+.copy dl div {
+  display: grid;
+  grid-template-columns: minmax(160px, 0.8fr) minmax(0, 1.2fr);
+  gap: clamp(14px, 2vw, 30px);
+  padding: clamp(12px, 1.4vw, 16px) 0;
+  border-bottom: 1px solid var(--info-filet-fin);
+}
+
+.copy dt,
+.copy dd {
+  margin: 0;
+}
+
+.copy dt {
+  color: var(--info-encre-faible);
+  font-size: var(--t0);
+  font-weight: var(--aj-w-gras);
+  letter-spacing: 0.04em;
+  line-height: 1.5;
+}
+
+.copy dd {
+  color: var(--info-encre);
+  font-size: var(--t1);
+  font-weight: var(--aj-w-livre);
+  line-height: 1.55;
+}
+
+/* --- Encarts ------------------------------------------------------------ */
 
 .notice,
 .warning {
   display: grid;
-  gap: 10px;
-  padding: 20px 22px;
-  border-left: 3px solid #8e9299;
-  background: rgba(255, 255, 255, 0.64);
+  gap: 11px;
+  padding: clamp(18px, 2vw, 24px) clamp(20px, 2.2vw, 28px);
+  border-left: 2px solid var(--info-encre-faible);
+  background: var(--info-voile);
 }
 
 .warning {
-  border-left-color: #8c1b55;
+  border-left-color: var(--aj-accent-pourpre);
+  background: rgba(125, 15, 82, 0.05);
 }
 
 .notice p,
 .warning p {
-  color: #2f2f34;
+  color: var(--info-encre);
+  font-size: var(--t1);
+  line-height: 1.6;
 }
+
+/* --- Tableaux ----------------------------------------------------------- */
 
 .tableWrap {
   overflow-x: auto;
+  /* Le tableau peut déborder ; la page, jamais. */
+  overscroll-behavior-x: contain;
 }
 
 .copy table {
   width: 100%;
   border-collapse: collapse;
-  color: #2f2f34;
-  font-size: clamp(13px, 1.05vw, 15px);
+  color: var(--info-encre-douce);
+  font-size: var(--t0);
   line-height: 1.5;
 }
 
 .copy th,
 .copy td {
-  padding: 13px 12px;
-  border-bottom: 1px solid rgba(12, 12, 14, 0.14);
+  padding: clamp(11px, 1.2vw, 15px) clamp(10px, 1.1vw, 16px);
+  border-bottom: 1px solid var(--info-filet-fin);
   text-align: left;
   vertical-align: top;
 }
 
 .copy th {
-  color: #1c1c20;
-  font-weight: 650;
+  color: var(--info-encre);
+  font-weight: var(--aj-w-gras);
+  letter-spacing: 0.03em;
 }
 
-.copy code {
-  padding: 0.12rem 0.32rem;
-  background: rgba(12, 12, 14, 0.06);
-  font-size: 0.9em;
+.copy thead th {
+  border-bottom-color: var(--info-filet);
 }
+
+/* --- Ligne d'état ------------------------------------------------------- */
 
 .status {
-  margin-top: 26px;
-  padding-top: 18px;
-  border-top: 1px solid rgba(12, 12, 14, 0.14);
-  color: #74747a;
-  font-size: 10px;
-  font-weight: 650;
-  letter-spacing: 0.14em;
+  display: block;
+  margin-top: clamp(26px, 3.2vw, 40px);
+  padding-top: clamp(15px, 1.8vw, 21px);
+  border-top: 1px solid var(--info-filet);
+  color: var(--info-encre-faible);
+  font-size: var(--t0);
+  font-weight: var(--aj-w-gras);
+  letter-spacing: var(--aj-ls-label);
+  line-height: 1.55;
   text-transform: uppercase;
+  text-wrap: pretty;
 }
 
-@media (max-width: 760px) {
-  .main {
-    width: min(100% - 36px, 1180px);
-    padding-top: 110px;
-  }
+/* ==========================================================================
+   Étroit
+   ========================================================================== */
 
-  .main h1 {
-    font-size: clamp(2.45rem, 13vw, 4.35rem);
-    letter-spacing: -0.055em;
-    line-height: 0.96;
+@media (max-width: 760px) {
+  .titre {
+    font-size: var(--t4);
+    line-height: 1.02;
+    letter-spacing: var(--aj-ls-grand);
   }
 
   .copy dl div {
-    grid-template-columns: 1fr;
-    gap: 5px;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
   }
 
   .copy th,
   .copy td {
-    min-width: 150px;
+    min-width: 148px;
+  }
+}
+
+/* ==========================================================================
+   Mouvement réduit
+   --------------------------------------------------------------------------
+   Rien n'est masqué en CSS : sans JS, ou sous mouvement réduit, le document
+   entier est déjà lisible. On coupe seulement la transition du filet de lien.
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  .copy a {
+    transition: none;
   }
 }

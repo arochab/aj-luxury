@@ -1,0 +1,879 @@
+/* ==========================================================================
+   Recit.module.css — le langage du RÉCIT (/notre-histoire) et du COMPTE
+   --------------------------------------------------------------------------
+   Module possédé par l'agent « Récit ». Il ne redéfinit AUCUN token du socle
+   (app/design-system.css) : il les consomme. Les rares variables ajoutées ici
+   sont locales, préfixées --recit-, et n'existent que sous .recit / .compte.
+
+   Deux écrans, deux registres, un seul alphabet :
+     • /notre-histoire — le mur noir de la maquette, plein cadre, cinématique.
+       C'est le seul endroit où la marque parle, donc le seul endroit où elle
+       prend toute la place.
+     • /account — le papier des pages utilitaires. Sobre, tenu, mais à la même
+       échelle typographique.
+
+   Plancher dur : aucun corps de texte visible sous var(--t0) = 15px.
+
+   Règle de mouvement : rien de ce que GSAP révèle n'est masqué ici. Les états
+   de départ se posent en JS. Sans JS, la page est déjà lisible. Les seules
+   animations écrites en CSS sont les gestes d'ouverture, qui doivent partir
+   au premier paint — GSAP arrive par import dynamique, donc trop tard.
+   ========================================================================== */
+
+/* ==========================================================================
+   1. RÉCIT — enveloppe
+   ========================================================================== */
+
+.recit {
+  /* Hauteur du StoreHeader, qui est dans le flux (position: relative).
+     L'ouverture s'en déduit pour tenir exactement un écran. */
+  --recit-tete: 5.75rem;
+  --recit-air: clamp(88px, 12vh, 172px);
+  --recit-filet: var(--aj-filet);
+
+  min-height: 100svh;
+  background: var(--aj-noir);
+  color: var(--aj-encre);
+  font-family: var(--disp);
+  font-size: var(--t1);
+  line-height: 1.5;
+  /* Surtout PAS d'overflow ici : les scènes du récit sont collantes, et un
+     overflow sur un ancêtre transformerait ce conteneur en zone de
+     défilement, ce qui décrocherait le sticky et fausserait ScrollTrigger. */
+}
+
+@media (max-width: 900px) {
+  .recit {
+    /* Sous 900px le header passe sur deux rangées : marque + actions, puis nav. */
+    --recit-tete: 6.9rem;
+  }
+}
+
+/* Enveloppe du récit lui-même, hors chrome. Elle ne produit aucune boîte :
+   elle n'existe que pour porter une clé de rendu liée à la langue. Au
+   changement de langue, React remonte le bloc entier au lieu de réécrire des
+   nœuds de texte que SplitText a remplacés — sans quoi la page garderait le
+   texte de la langue précédente. */
+.recitCorps {
+  display: contents;
+}
+
+/* --- Plan média : le calque qui se déplace en parallaxe -------------------
+   Il déborde volontairement de son cadre (inset négatif) pour qu'aucune
+   translation ne découvre du vide. Le cadre parent porte l'overflow. */
+.plan {
+  position: absolute;
+  inset: -9% 0;
+  height: 118%;
+  will-change: transform;
+}
+
+.planImage {
+  object-fit: cover;
+}
+
+/* Voile de lecture posé sur les médias plein cadre. */
+.grade {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background: linear-gradient(
+    0deg,
+    rgba(6, 6, 8, 0.82) 0%,
+    rgba(6, 6, 8, 0.24) 42%,
+    rgba(6, 6, 8, 0) 62%,
+    rgba(6, 6, 8, 0.38) 100%
+  );
+}
+
+/* --- Les lignes de SplitText ----------------------------------------------
+   SplitText nomme le masque d'après la ligne : linesClass « recit-ligne »
+   produit « recit-ligne-mask ». Ces deux noms sont donc écrits en :global —
+   c'est GSAP qui les pose, sur des nœuds qu'il crée lui-même, hors de React,
+   et un nom haché de module ne lui servirait à rien. Le préfixe recit-
+   garantit qu'aucun autre écran ne peut les rencontrer. */
+:global(.recit-ligne) {
+  display: block;
+  will-change: transform;
+}
+
+/* GSAP pose overflow:clip en ligne sur le masque. Un interlignage serré y
+   couperait les descendantes (p, g, j) et les accents de capitale (É, À).
+   clip s'arrête à la boîte de PADDING : on rend donc la place par du padding,
+   et on la reprend par une marge négative. Le rythme vertical est inchangé,
+   la lettre entière est visible. C'est un rapport (em), jamais des pixels —
+   sinon le réglage serait faux à chaque corps de la palette. */
+:global(.recit-ligne-mask) {
+  display: block;
+  padding-block: 0.14em 0.2em;
+  margin-block: -0.14em -0.2em;
+}
+
+/* ==========================================================================
+   2. RÉCIT — 00 · Ouverture
+   ========================================================================== */
+
+.ouverture {
+  position: relative;
+  display: flex;
+  min-height: calc(100svh - var(--recit-tete));
+  overflow: hidden; /* sans danger : aucune scène collante à l'intérieur */
+  background: var(--aj-noir-media);
+  isolation: isolate;
+}
+
+/* Le cadre du média. Il porte l'overflow et sert de repère au plan, qui
+   déborde de part et d'autre. */
+.ouvertureMedia {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  overflow: hidden;
+}
+
+/* Volet d'ouverture : un bloc noir qui se rétracte vers le haut, plutôt qu'un
+   fondu — le fondu montre une image grise, le volet montre une image nette
+   d'emblée. Au repos il est INVISIBLE : si l'animation ne joue pas, il ne
+   cache rien. */
+.volet {
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  background: var(--aj-noir);
+  transform: scaleY(0);
+  transform-origin: 50% 0;
+  pointer-events: none;
+  animation: voletOuverture var(--aj-d-long) var(--aj-e-volet) both;
+}
+
+.ouvertureTexte {
+  position: absolute;
+  z-index: 4;
+  right: var(--gut);
+  bottom: clamp(28px, 5vh, 54px);
+  left: var(--gut);
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: clamp(24px, 4vw, 60px);
+  flex-wrap: wrap;
+}
+
+.ouvertureBloc {
+  display: flex;
+  min-width: min(100%, 20ch);
+  max-width: 46ch;
+  flex-direction: column;
+  gap: clamp(14px, 1.6vw, 24px);
+}
+
+.surtitre {
+  margin: 0;
+  color: var(--aj-encre-84);
+}
+
+.titreOuverture {
+  --aj-display-w: var(--aj-w-fin);
+  --aj-display-lh: 0.9;
+  --aj-display-ls: var(--aj-ls-titre);
+  margin: 0;
+  font-size: var(--t7);
+}
+
+.lead {
+  max-width: 26ch;
+  margin: 0;
+  color: var(--aj-encre-90);
+  font-size: var(--t2);
+  font-weight: var(--aj-w-fin);
+  letter-spacing: var(--aj-ls-sous);
+  line-height: 1.34;
+}
+
+.ouvertureBord {
+  display: flex;
+  align-items: flex-end;
+  gap: clamp(18px, 3vw, 44px);
+  flex-wrap: wrap;
+}
+
+.credit {
+  margin: 0;
+  color: var(--aj-encre-84);
+}
+
+/* --- Les gestes d'ouverture, en CSS et non en GSAP ------------------------
+   Ce sont des entrées de CHARGEMENT, pas des scènes de scroll. GSAP arrive
+   par import dynamique, donc après le premier paint : les piloter depuis le
+   JS donnerait « visible → recouvert → révélé ». En @keyframes elles partent
+   au premier paint, et elles ne touchent que transform et opacity. */
+@keyframes voletOuverture {
+  from {
+    transform: scaleY(1);
+  }
+  to {
+    transform: scaleY(0);
+  }
+}
+
+@keyframes monteeOuverture {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 26px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.surtitre,
+.titreOuverture,
+.lead,
+.ouvertureBord {
+  animation: monteeOuverture var(--aj-d-long) var(--e1) both;
+}
+
+.surtitre {
+  animation-delay: 0.46s;
+}
+
+.titreOuverture {
+  animation-delay: 0.58s;
+}
+
+.lead {
+  animation-delay: 0.7s;
+}
+
+.ouvertureBord {
+  animation-delay: 0.82s;
+}
+
+/* Sous 780px le plan quitte l'absolu et devient une bande de ratio fixe. Le
+   poster est en 16/9 : un plein écran de téléphone n'en montrerait qu'une
+   colonne centrale, et le décor d'Apollon — marbre, lyre, arc, laurier —
+   sortirait du cadre. Ce n'est pas une version amputée : c'est le même plan,
+   cadré pour l'écran qui le reçoit, et le texte reprend toute la largeur au
+   lieu de se serrer dans un coin. */
+@media (max-width: 780px) {
+  .ouverture {
+    display: block;
+    min-height: 0;
+    overflow: visible;
+  }
+
+  .ouvertureMedia {
+    position: relative;
+    inset: auto;
+    aspect-ratio: 3 / 2;
+  }
+
+  .ouvertureTexte {
+    position: static;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: clamp(26px, 6vw, 40px);
+    padding: clamp(30px, 7vw, 48px) var(--gut) clamp(44px, 10vw, 68px);
+  }
+
+  .ouvertureBloc {
+    max-width: none;
+  }
+}
+
+/* ==========================================================================
+   3. RÉCIT — lien d'action, repris du filet de nav de la maquette
+   --------------------------------------------------------------------------
+   Le filet sort par la droite et rentre par la gauche. Deux origines, une
+   seule transition : au moment du basculement scaleX vaut 1, donc le
+   changement d'origine ne produit aucun saut. Pas besoin de JS pour ça.
+   ========================================================================== */
+
+.action {
+  position: relative;
+  display: inline-flex;
+  min-height: 48px;
+  align-items: center;
+  gap: clamp(12px, 1.6vw, 26px);
+  color: var(--aj-encre);
+  font-size: var(--t0);
+  font-weight: var(--aj-w-gras);
+  letter-spacing: var(--aj-ls-action);
+  text-transform: uppercase;
+}
+
+.actionTexte {
+  position: relative;
+  padding-bottom: 7px;
+}
+
+.actionFilet {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 1px;
+  background: currentColor;
+  transform: scaleX(1);
+  transform-origin: right;
+  transition: transform 380ms var(--aj-e-nav);
+}
+
+.actionDiscrete .actionFilet {
+  transform: scaleX(0);
+}
+
+.action:hover .actionFilet,
+.action:focus-visible .actionFilet {
+  transform: scaleX(1);
+  transform-origin: left;
+}
+
+.fleche {
+  font-size: var(--t2);
+  font-weight: var(--aj-w-livre);
+  line-height: 1;
+}
+
+/* ==========================================================================
+   4. RÉCIT — chapitres
+   ========================================================================== */
+
+.chapitre {
+  position: relative;
+  padding-block: var(--recit-air);
+  border-top: 1px solid var(--recit-filet);
+}
+
+.chapitreGrille {
+  display: grid;
+  gap: clamp(34px, 4vw, 92px);
+  padding-inline: var(--gut);
+}
+
+@media (min-width: 900px) {
+  .chapitreGrille {
+    grid-template-columns: minmax(0, 0.4fr) minmax(0, 0.6fr);
+  }
+}
+
+/* La tête de chapitre reste accrochée pendant qu'on lit son corps : le lecteur
+   ne perd jamais de vue à quel acte du récit il se trouve. */
+.chapitreAncre {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: clamp(16px, 2vw, 30px);
+}
+
+@media (min-width: 900px) {
+  .chapitreAncre {
+    position: sticky;
+    top: clamp(96px, 15vh, 172px);
+    align-self: start;
+  }
+}
+
+.index {
+  margin: 0;
+  color: var(--aj-encre-72);
+}
+
+/* Le filet de chapitre : tracé plein par défaut, donc visible sans JS. GSAP le
+   redessine de gauche à droite à mesure que le chapitre se lit. */
+.filet {
+  width: min(100%, 220px);
+  height: 1px;
+  background: var(--aj-encre);
+  transform-origin: 0 50%;
+  will-change: transform;
+}
+
+.titreChapitre {
+  --aj-display-w: var(--aj-w-fin);
+  --aj-display-lh: 0.98;
+  --aj-display-ls: -0.05em;
+  max-width: 16ch;
+  margin: 0;
+  color: var(--aj-encre);
+  font-size: var(--t4);
+}
+
+.corps {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: clamp(24px, 3vh, 44px);
+}
+
+.corps p {
+  max-width: 48ch;
+  margin: 0;
+  color: var(--aj-encre-90);
+  font-size: var(--t1);
+  font-weight: var(--aj-w-livre);
+  line-height: 1.64;
+}
+
+/* La ligne de bascule d'un chapitre : elle ne raconte plus, elle conclut.
+   C'est un <p>, donc « .corps p » la viserait aussi, à spécificité égale. On
+   reprend d'un cran pour que l'ordre de déclaration ne décide pas du corps. */
+.corps .punch {
+  --aj-display-w: var(--aj-w-fin);
+  --aj-display-lh: 1.04;
+  --aj-display-ls: -0.045em;
+  max-width: 20ch;
+  margin: 0;
+  padding-top: clamp(18px, 3vh, 40px);
+  border-top: 1px solid var(--recit-filet);
+  color: var(--aj-encre);
+  font-size: var(--t4);
+  font-weight: var(--aj-w-fin);
+  line-height: 1.04;
+}
+
+/* ==========================================================================
+   5. RÉCIT — 02 · la scène de parité
+   --------------------------------------------------------------------------
+   PARITÉ STRICTE, contrainte dure du client. Elle est inscrite dans le CSS,
+   pas seulement dans le JS :
+     • une grille 1fr 1fr, jamais 1.2fr / 0.8fr ;
+     • une seule règle .portrait pour les deux cellules — aucune ne peut
+       diverger sans que l'autre bouge ;
+     • aucune classe « principal » / « secondaire » ;
+     • même légende, même graisse, même position.
+   Le décalage (stagger) entre les deux portraits est interdit côté JS : un
+   ordre d'arrivée est déjà une hiérarchie.
+   ========================================================================== */
+
+.duoScene {
+  position: relative;
+  border-top: 1px solid var(--recit-filet);
+}
+
+@media (min-width: 900px) {
+  .duoScene {
+    /* Course de défilement de la scène collante. La hauteur EST la durée. */
+    height: 250svh;
+  }
+}
+
+.duoCadre {
+  display: grid;
+  align-content: center;
+  gap: clamp(22px, 3.4vh, 46px);
+  padding: var(--recit-air) var(--gut);
+}
+
+@media (min-width: 900px) {
+  .duoCadre {
+    position: sticky;
+    top: 0;
+    height: 100svh;
+    padding-block: clamp(72px, 10vh, 116px) clamp(48px, 7vh, 84px);
+  }
+}
+
+.duoTete {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: clamp(18px, 3vw, 48px);
+  flex-wrap: wrap;
+}
+
+.titreDuo {
+  --aj-display-w: var(--aj-w-fin);
+  --aj-display-lh: 0.96;
+  --aj-display-ls: var(--aj-ls-titre);
+  margin: 0;
+  font-size: var(--t4);
+}
+
+.duoGrille {
+  display: grid;
+  min-height: 0;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+}
+
+.portrait {
+  position: relative;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  aspect-ratio: 2 / 3;
+  background: var(--aj-noir-media);
+}
+
+@media (min-width: 900px) {
+  .portrait {
+    height: clamp(280px, 50svh, 600px);
+    aspect-ratio: auto;
+  }
+}
+
+.legende {
+  position: absolute;
+  z-index: 3;
+  bottom: clamp(14px, 2vh, 24px);
+  left: clamp(14px, 1.6vw, 22px);
+  color: var(--aj-encre);
+  text-shadow: 0 1px 18px rgba(0, 0, 0, 0.55);
+}
+
+.duoDeclaration {
+  max-width: 62ch;
+  margin: 0;
+  color: var(--aj-encre-90);
+  font-size: var(--t1);
+  font-weight: var(--aj-w-livre);
+  line-height: 1.6;
+}
+
+/* Le plan large : les deux dans le même cadre, aucune découpe. */
+.duoPleine {
+  position: relative;
+  height: clamp(420px, 88svh, 940px);
+  margin: 0;
+  overflow: hidden;
+  background: var(--aj-noir-media);
+}
+
+/* ==========================================================================
+   6. RÉCIT — 03 · La matière
+   Reprise directe de l'écran « 04 La matière » de la maquette.
+   ========================================================================== */
+
+.matiere {
+  display: grid;
+  border-top: 1px solid var(--recit-filet);
+  background: var(--aj-noir);
+}
+
+@media (min-width: 860px) {
+  .matiere {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+
+.matiereMedia {
+  position: relative;
+  min-height: clamp(360px, 62svh, 720px);
+  overflow: hidden;
+  background: var(--aj-noir-media);
+}
+
+@media (min-width: 860px) {
+  .matiereMedia {
+    min-height: 100svh;
+  }
+}
+
+.matiereTexte {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: clamp(28px, 5vh, 56px);
+  padding: var(--recit-air) var(--gut);
+}
+
+.matiereTete {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(16px, 2vw, 30px);
+}
+
+.chiffres {
+  display: flex;
+  align-items: baseline;
+  gap: clamp(14px, 2.2vw, 38px);
+  flex-wrap: wrap;
+  margin: 0;
+}
+
+.chiffre {
+  font-family: var(--disp);
+  font-optical-sizing: auto;
+  font-variation-settings: "opsz" 72;
+  font-size: var(--t6);
+  font-weight: var(--aj-w-normal);
+  letter-spacing: var(--aj-ls-grand);
+  line-height: 0.86;
+}
+
+.mesure {
+  color: var(--aj-encre-84);
+}
+
+.finitions {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(10px, 1.4vw, 20px);
+  margin: 0;
+  padding: clamp(16px, 2.4vh, 30px) 0 0;
+  border-top: 1px solid var(--recit-filet);
+  color: var(--aj-encre-84);
+  list-style: none;
+}
+
+/* ==========================================================================
+   7. RÉCIT — 04 · Clôture
+   ========================================================================== */
+
+.cloture {
+  display: grid;
+  min-height: 82svh;
+  place-items: center;
+  padding: clamp(88px, 14vh, 190px) var(--gut);
+  border-top: 1px solid var(--recit-filet);
+}
+
+.clotureBloc {
+  display: flex;
+  width: 100%;
+  max-width: 1100px;
+  flex-direction: column;
+  gap: clamp(40px, 7vh, 88px);
+}
+
+/* Le titre de clôture porte le métal. Il n'est donc JAMAIS découpé par
+   SplitText : background-clip:text peint le dégradé sur la boîte du titre et
+   le découpe à la forme des glyphes. Si les lignes étaient translatées dans
+   des masques, la forme bougerait et le dégradé resterait — les lettres
+   traverseraient le métal, puis le peindraient hors du masque. Ce titre se
+   révèle donc en bloc, opacité et translation. */
+.clotureTitre {
+  --aj-display-w: var(--aj-w-normal);
+  --aj-display-lh: 0.94;
+  --aj-display-ls: -0.028em;
+  max-width: 22ch;
+  margin: 0;
+  font-size: var(--t6);
+}
+
+/* Le lien de clôture. Il ne prend que la largeur de son texte : sans cela, un
+   conteneur en colonne l'étirerait sur 1100px et sa zone cliquable irait
+   jusqu'au bord droit de l'écran, loin du mot. */
+.clotureAction {
+  align-self: flex-start;
+}
+
+/* ==========================================================================
+   8. COMPTE — /account
+   --------------------------------------------------------------------------
+   Registre papier, comme les pages d'information. La page reste claire pour
+   une raison structurelle : son intérieur (AccountClient, ProductionAccount-
+   Client) est stylé par CommerceShell.module.css, que cet agent ne possède
+   pas. Basculer le fond en noir rendrait ces composants illisibles.
+
+   Deux contraintes portées par cette section :
+
+   1. .shell RESTE sur le <main>. CommerceShell contient une feuille
+      d'impression bâtie sur « .shell > :not(.accountMain) » : elle masque
+      tout sauf la fiche de préparation d'une commande. Retirer .shell, ou
+      glisser un conteneur entre le <main> et .accountMain, casserait cette
+      impression. On AJOUTE .compte à côté, on ne remplace rien, et les
+      composants commerce restent enfants directs du <main>.
+
+   2. Le plancher de 15px. CommerceShell descend à 9, 10 et 11px. Ses
+      sélecteurs les plus spécifiques atteignent (0,3,0), et ses classes sont
+      hachées à la compilation : impossible de les nommer depuis l'extérieur.
+      La répétition de .compte est donc le seul levier de spécificité
+      disponible, et il reste strictement borné à cette page.
+      Sont exclus : l'en-tête et le pied de site, qui doivent garder
+      exactement la même échelle que sur les autres pages, et le bloc
+      « commerce fermé » ci-dessous, entièrement possédé ici.
+   ========================================================================== */
+
+.compte.compte {
+  min-height: 100svh;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--disp);
+}
+
+.compte.compte.compte
+  :is(
+    p,
+    li,
+    span,
+    a,
+    button,
+    label,
+    strong,
+    em,
+    small,
+    dt,
+    dd,
+    th,
+    td,
+    input,
+    select,
+    textarea,
+    legend,
+    figcaption,
+    time
+  ):not(header *):not(footer *):not(.compteFerme *) {
+  font-size: var(--t0);
+  line-height: 1.6;
+}
+
+.compte.compte.compte
+  :is(h1, h2, h3):not(header *):not(footer *):not(.compteFerme *) {
+  font-family: var(--disp);
+}
+
+.compte.compte.compte h1:not(header *):not(footer *):not(.compteFerme *) {
+  font-size: var(--t6);
+  font-weight: var(--aj-w-fin);
+  letter-spacing: var(--aj-ls-grand);
+  line-height: 0.94;
+}
+
+.compte.compte.compte h2:not(header *):not(footer *):not(.compteFerme *) {
+  font-size: var(--t2);
+  font-weight: var(--aj-w-normal);
+  letter-spacing: var(--aj-ls-sous);
+}
+
+.compte.compte.compte h3:not(header *):not(footer *):not(.compteFerme *) {
+  font-size: var(--t1);
+  font-weight: var(--aj-w-gras);
+  letter-spacing: var(--aj-ls-sous);
+}
+
+.compteAvis {
+  margin: 0;
+  padding: 14px var(--gut);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+  background: var(--aj-noir);
+  color: var(--aj-encre-84);
+  text-align: center;
+}
+
+/* --- État « commerce fermé » : la seule vue entièrement possédée ici ------ */
+.compteFerme {
+  width: min(1180px, 92vw);
+  margin: 0 auto;
+  padding: clamp(96px, 12vw, 190px) 0 clamp(80px, 10vw, 150px);
+}
+
+.compteSurtitre {
+  margin: 0 0 clamp(20px, 2.6vw, 34px);
+  color: #6b6b70;
+}
+
+.compteTitre {
+  --aj-display-w: var(--aj-w-fin);
+  --aj-display-lh: 0.92;
+  --aj-display-ls: var(--aj-ls-grand);
+  max-width: 14ch;
+  margin: 0;
+  font-size: var(--t6);
+}
+
+.compteLead {
+  max-width: 34ch;
+  margin: clamp(26px, 3.4vw, 44px) 0 0;
+  color: #3b3b41;
+  font-size: var(--t2);
+  font-weight: var(--aj-w-livre);
+  letter-spacing: var(--aj-ls-sous);
+  line-height: 1.4;
+}
+
+/* Grille à filets : le fond de la grille traverse les gouttières d'1px et
+   dessine les séparations. Aucune bordure sur les cartes, donc aucun filet
+   doublé aux jonctions. */
+.compteCartes {
+  display: grid;
+  gap: 1px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  margin-top: clamp(56px, 7vw, 104px);
+  border: 1px solid rgba(17, 17, 18, 0.16);
+  background: rgba(17, 17, 18, 0.16);
+}
+
+.compteCarte {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: clamp(26px, 2.8vw, 42px);
+  background: var(--paper);
+}
+
+.compteCarteLabel {
+  color: #6b6b70;
+  font-size: var(--t0);
+  font-weight: var(--aj-w-gras);
+  letter-spacing: var(--aj-ls-label);
+  text-transform: uppercase;
+}
+
+.compteCarte h2 {
+  margin: 0;
+  font-size: var(--t2);
+  font-weight: var(--aj-w-normal);
+  letter-spacing: var(--aj-ls-sous);
+  line-height: 1.16;
+}
+
+.compteCarte p {
+  margin: 0;
+  color: #3b3b41;
+  font-size: var(--t0);
+  font-weight: var(--aj-w-livre);
+  line-height: 1.62;
+}
+
+.compteLiens {
+  display: flex;
+  gap: clamp(20px, 3vw, 46px);
+  flex-wrap: wrap;
+  margin-top: clamp(44px, 5vw, 78px);
+  padding-top: clamp(22px, 2.6vw, 34px);
+  border-top: 1px solid rgba(17, 17, 18, 0.16);
+}
+
+.compteLiens .action {
+  color: var(--ink);
+}
+
+.compteNote {
+  margin: clamp(24px, 3vw, 38px) 0 0;
+  color: #6b6b70;
+  font-size: var(--t0);
+  letter-spacing: var(--aj-ls-sous);
+}
+
+/* ==========================================================================
+   9. Mouvement réduit
+   --------------------------------------------------------------------------
+   Doctrine : une variante statique LISIBLE, jamais une page vide.
+   Le JS ne pose alors aucun état de départ. Ne restent que les gestes
+   d'ouverture écrits en CSS : on les neutralise ici, ce qui laisse le volet
+   à scaleY(0) — invisible — et les blocs de texte à leur opacité pleine.
+   ========================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  .volet,
+  .surtitre,
+  .titreOuverture,
+  .lead,
+  .ouvertureBord {
+    animation: none;
+  }
+
+  .actionFilet {
+    transition: none;
+  }
+
+  .plan,
+  .filet,
+  :global(.recit-ligne) {
+    will-change: auto;
+  }
+}
