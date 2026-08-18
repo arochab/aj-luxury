@@ -173,7 +173,7 @@ for gras, texte in [
     ("Brancher la livraison et les retours.", "Pour créer les étiquettes et suivre les colis."),
     ("Brancher les e-mails automatiques.",
      "Confirmation de commande, avis d'expédition, confirmation de retour."),
-    ("Installer le site sur votre adresse définitive.", "À la place de l'adresse de test ci-dessus."),
+    ("Installer le site sur ton adresse définitive.", "À la place de l'adresse de test ci-dessus."),
     ("Tester une vraie commande, du début à la fin.", "Avant d'ouvrir la boutique au public."),
 ]:
     y = ligne(c, y, texte, gras=gras, couleur_puce=AMBRE)
@@ -187,22 +187,22 @@ c.showPage()
 y = H - 26 * mm
 
 # ── Bloc 4 : les questions
-y = titre_bloc(c, y, "4", "Ce dont nous avons besoin de vous", ENCRE)
+y = titre_bloc(c, y, "4", "Ce dont nous avons besoin de toi", ENCRE)
 y = ligne(c, y, "Cinq réponses. Ce sont elles qui déclenchent tout le reste.", puce=False)
 y -= 2 * mm
 
 for num, gras, texte in [
-    ("1", "Le site vous convient-il ?",
-     "Votre accord et celui d'Alex, par écrit, sur ce que vous voyez en ligne."),
+    ("1", "Le site te convient-il ?",
+     "Ton accord écrit sur ce que tu vois en ligne."),
     ("2", "Combien d'unités mettons-nous en vente ?",
-     "Vous avez 756 unités. Dites-nous combien vous gardez de côté pour les cadeaux, les "
+     "Tu as 756 unités. Dis-nous combien tu gardes de côté pour les cadeaux, les "
      "influenceurs et la sécurité. Nous mettrons le reste en vente."),
-    ("3", "Quel prestataire de paiement choisissez-vous ?",
-     "Nous pouvons vous conseiller, mais le compte doit être ouvert à votre nom."),
+    ("3", "Quel prestataire de paiement choisis-tu ?",
+     "Nous pouvons te conseiller, mais le compte doit être ouvert à ton nom."),
     ("4", "Quelle est la composition exacte du boxer et son pays de fabrication ?",
      "C'est obligatoire pour expédier hors de l'Union européenne."),
-    ("5", "Confirmez-vous l'identité de la société et les conditions de vente ?",
-     "Les pages légales sont écrites. Il ne manque que votre validation."),
+    ("5", "Confirmes-tu l'identité de la société et les conditions de vente ?",
+     "Les pages légales sont écrites. Il ne manque que ta validation."),
 ]:
     c.setFont("Helvetica-Bold", 10)
     c.setFillColor(AMBRE)
@@ -229,7 +229,7 @@ y -= 30 * mm
 
 # ── Bloc 5
 y = titre_bloc(c, y, "5", "Ce qui se passe ensuite", VERT)
-y = ligne(c, y, "Dès que nous avons vos réponses, nous branchons le paiement et la livraison. "
+y = ligne(c, y, "Dès que nous avons tes réponses, nous branchons le paiement et la livraison. "
                 "Nous testons une commande réelle du début à la fin. Puis nous ouvrons la boutique.",
           puce=False)
 
