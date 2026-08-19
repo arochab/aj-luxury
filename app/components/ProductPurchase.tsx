@@ -98,6 +98,17 @@ export default function ProductPurchase({
         : t("product.onlyLeft").replace("{count}", String(stock.remaining));
     }
 
+    /* Commerce fermé : le stock est peut-être là, mais rien n'est
+       achètable. Annoncer « Disponible » sous chacune des quatre tailles pendant
+       que la même colonne déclare la vente non ouverte est la contradiction la
+       plus nette du parcours — le site déclare disponible un stock qu'il refuse
+       de vendre. On annonce donc l'échéance, pas une disponibilité. Le libellé
+       alimente aussi l'aria-label de la taille : « Taille S, disponibilité à
+       l'ouverture » reste une phrase complète pour un lecteur d'écran. */
+    if (runtimeMode === "closed") {
+      return t("product.availabilityAtOpeningShort");
+    }
+
     return simulated ? t("product.available") : t("product.availableLive");
   }
 
@@ -365,7 +376,14 @@ export default function ProductPurchase({
                 type="button"
                 key={size}
                 aria-pressed={selectedSize === size}
-                aria-label={`${t("product.size")} ${size}, ${label}`}
+                /* Le libellé visible est court pour que les quatre boîtes de
+                   taille tiennent chacune sur une ligne ; l'assistance reçoit la
+                   phrase entière, qui dit ce que « À l'ouverture » sous-entend. */
+                aria-label={`${t("product.size")} ${size}, ${
+                  runtimeMode === "closed"
+                    ? t("product.availabilityAtOpening")
+                    : label
+                }`}
                 /* aria-disabled et non disabled : la taille en rupture reste
                    atteignable au clavier et annoncée par le lecteur d'écran,
                    au lieu de disparaître de l'ordre de tabulation. */
@@ -435,32 +453,14 @@ export default function ProductPurchase({
       )}
 
       {/*
-        `aria-disabled`, jamais `disabled`. Un bouton nativement désactivé sort
-        de l'ordre de tabulation, n'est pas annoncé par les lecteurs d'écran et
-        n'émet aucun événement : le refus de vente devenait muet à l'instant
-        exact où l'acheteur décide. Le commentaire de `selectSize` (l. 72)
-        décrivait déjà ce contrat — le bouton ne l'appliquait pas. Le refus se
-        joue donc dans `onClick`, et `aria-describedby` rattache au bouton la
-        phrase qui en donne la raison, qu'elle soit à l'écran ou non.
+        LE REFUS AVANT LA PROMESSE. Cette phrase était placée APRÈS le bouton :
+        on lisait le prix, les tailles annoncées disponibles, un bouton
+        « Ajouter au panier », et seulement ensuite qu'il ne se passerait rien.
+        L'ordre du document donnait l'espoir avant le refus. Il est inversé.
+        `aria-describedby` continue de la rattacher au bouton, donc un lecteur
+        d'écran l'entend au moment où il atteint la commande, quelle que soit
+        sa position visuelle.
       */}
-      <button
-        className={styles.purchaseButton}
-        type="button"
-        aria-disabled={purchaseBlocked}
-        aria-describedby={NOTICE_ID}
-        onClick={() => {
-          if (purchaseBlocked) return;
-          void addToCart();
-        }}
-        aria-busy={cartBusy}
-      >
-        {cartBusy
-          ? t("product.adding")
-          : selectedSize
-            ? t("product.addDemo")
-            : t("product.selectSizePrompt")}
-      </button>
-
       <p
         id={NOTICE_ID}
         className={
@@ -475,6 +475,39 @@ export default function ProductPurchase({
       >
         {cartFeedbackText()}
       </p>
+
+      {/*
+        `aria-disabled`, jamais `disabled`. Un bouton nativement désactivé sort
+        de l'ordre de tabulation, n'est pas annoncé par les lecteurs d'écran et
+        n'émet aucun événement : le refus de vente devenait muet à l'instant
+        exact où l'acheteur décide. Le refus se joue donc dans `onClick`, et
+        `aria-describedby` rattache au bouton la phrase qui en donne la raison.
+
+        Le libellé : commerce fermé, le bouton n'a aucune action à promettre.
+        « Ajouter au panier » puis rien était un CTA qui promet ce qu'il ne rend
+        pas ; « Sélectionnez une taille » envoyait même l'acheteur vers un geste
+        sans issue. Le bouton nomme donc l'état réel. Les deux autres modes
+        gardent leurs libellés d'achat, qui sont exacts.
+      */}
+      <button
+        className={styles.purchaseButton}
+        type="button"
+        aria-disabled={purchaseBlocked}
+        aria-describedby={NOTICE_ID}
+        onClick={() => {
+          if (purchaseBlocked) return;
+          void addToCart();
+        }}
+        aria-busy={cartBusy}
+      >
+        {runtimeMode === "closed"
+          ? t("product.openingSoon")
+          : cartBusy
+            ? t("product.adding")
+            : selectedSize
+              ? t("product.addDemo")
+              : t("product.selectSizePrompt")}
+      </button>
 
       {feedback?.kind === "success" && (
         <Link

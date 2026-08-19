@@ -15,7 +15,7 @@ import styles from "../components/Boutique.module.css";
 export const metadata: Metadata = {
   title: "Boutique | AJ Luxury",
   description:
-    "Découvrez Apollon, le boxer AJ Luxury décliné en Rose Velours, Lilas Céleste et Pourpre Impérial.",
+    "Apollon, premier modèle AJ Luxury, décliné en Rose Velours, Lilas Céleste et Pourpre Impérial.",
 };
 
 /*
@@ -41,8 +41,20 @@ export default function ShopPage() {
       */}
       <AjScrollReveal className={styles.scene}>
         <section className={styles.ouverture} aria-labelledby="boutique-titre">
+          {/*
+            RETOUR ADAM DU 19/08 — « le site donne l'impression qu'il n'y aura
+            JAMAIS qu'un produit ». La boutique était le mécanisme exact du
+            problème : eyebrow « BOUTIQUE · LA COLLECTION » puis titre
+            « Apollon », donc aucun niveau où un deuxième modèle pourrait un
+            jour s'inscrire. L'eyebrow nomme maintenant le rang d'Apollon —
+            premier modèle — et le chapô le dit en toutes lettres.
+            Le mot « premier » fait tout le travail : il est vrai aujourd'hui,
+            il ne promet aucune date et il n'annonce aucune disponibilité.
+            Aucune formulation du site ne laisse entendre qu'un autre modèle
+            serait déjà achetable.
+          */}
           <p className={styles.eyebrow} data-aj-reveal>
-            <T id="nav.shop" /> · <T id="shop.title" />
+            <T id="nav.shop" /> · <T id="shop.firstModel" />
           </p>
 
           <h1
@@ -54,58 +66,54 @@ export default function ShopPage() {
           </h1>
 
           <p className={styles.chapo} data-aj-reveal>
-            <T id="home.incarnationBody" />
+            <T id="shop.intro" />
           </p>
 
-          <dl className={styles.faits} data-aj-reveal>
-            <div className={styles.fait}>
-              <dt>
-                <T id="nav.apollon" />
-              </dt>
-              <dd className={styles.prix}>
-                <LocalizedPrice amountCents={prixCents} />
-              </dd>
-              {runtimeMode !== "production" && (
-                <dd className={styles.prixNote}>
-                  <T id="product.priceLabel" />
-                </dd>
-              )}
-            </div>
+          {/*
+            RETOUR ADAM DU 19/08 — « la boutique est encore trop sombre et mal
+            foutue ».
 
-            <div className={styles.fait}>
-              <dt>
-                <T id="home.colors" />
-              </dt>
-              {/*
-                Chaque nom de coloris est insécable : dans une colonne de
-                335 px, « Rose Velours · Lilas Céleste · Pourpre Impérial »
-                laissait « Impérial » orphelin sur une seconde ligne. La césure
-                doit tomber sur les séparateurs, jamais au milieu d'un nom.
-              */}
-              <dd>
-                {products.map((product, index) => (
-                  <span key={product.slug}>
-                    {index > 0 ? " · " : null}
-                    <span className={styles.insecable}>{product.name}</span>
-                  </span>
-                ))}
-              </dd>
-            </div>
+            « MAL FOUTUE », PREMIER MÉCANISME : la page ouvrait sur une fiche
+            technique. Le bandeau de quatre colonnes APOLLON / COLORIS /
+            TAILLES / COMPOSITION mesurait 117 px et repoussait la première
+            photographie à y=592 dans un écran de 900. Le premier écran de la
+            boutique ne montrait donc AUCUN produit : trois torses recadrés, un
+            tableau de spécifications, et le boxer à 390 px sous la ligne de
+            flottaison. Une boutique qui ne montre pas ce qu'elle vend.
 
-            <div className={styles.fait}>
-              <dt>
-                <T id="home.sizes" />
-              </dt>
-              <dd>{sizes.join(" · ")}</dd>
-            </div>
+            Les faits matière — coloris, tailles — descendent à la section
+            « matière », dont la colonne de droite était vide à 82 % : un seul
+            déplacement règle les deux défauts. Ne subsiste ici que ce qui
+            décide d'entrer : le prix, et le statut commercial réel.
+          */}
+          <div className={styles.statut} data-aj-reveal>
+            <p className={styles.prix}>
+              <LocalizedPrice amountCents={prixCents} />
+            </p>
 
-            <div className={styles.fait}>
-              <dt>
-                <T id="product.composition" />
-              </dt>
-              <dd>94 % modal · 6 % élasthanne</dd>
-            </div>
-          </dl>
+            {/*
+              « Prix fictif, non commercial » était affiché ici, en clair, sous
+              le prix de la marque. Une boutique qui déclare ses propres prix
+              faux détruit sa crédibilité en une ligne — et elle ne disait
+              toujours pas l'essentiel : que la vente n'est pas encore ouverte.
+              Une seule phrase remplace les deux, formulée comme une ouverture
+              à venir et non comme un aveu de maquette. Elle ne promet aucune
+              date et n'annonce aucune disponibilité.
+
+              Aucun champ de collecte n'est posé ici : il n'existe ni endpoint
+              d'inscription ni mention RGPD associée, et un formulaire inerte
+              serait exactement le CTA qui promet une action qu'il ne rend pas.
+              Le lien mène à la seule voie réellement ouverte aujourd'hui.
+            */}
+            {runtimeMode !== "production" && (
+              <p className={styles.statutNote}>
+                <T id="shop.saleNotice" />{" "}
+                <Link className={styles.statutLien} href="/contact">
+                  <T id="shop.notify" />
+                </Link>
+              </p>
+            )}
+          </div>
         </section>
 
         {/* role="list" : Safari retire les sémantiques de liste dès que
@@ -144,22 +152,20 @@ export default function ShopPage() {
                 <span className={styles.carteVoile} aria-hidden="true" />
 
                 {/*
-                  La numérotation suit l'ordre de déclaration de
-                  lib/products.ts, qui est l'ordre canonique rose, lilas,
-                  pourpre — le même que ORDRE_COLORIS sur l'accueil. Les deux
-                  écrans numérotent donc les trois coloris identiquement.
+                  Les pastilles 01/02/03 sont retirées. Trois noms de teinte
+                  sont le seul capital narratif d'une gamme à un modèle ; les
+                  faire précéder d'un numéro les range en références de
+                  catalogue. C'est aussi le motif que la veille documente comme
+                  plafonnant la note d'un e-commerce mode en 2026. Le nom porte
+                  seul l'identité, en bas de carte, au corps le plus grand.
                 */}
-                <span className={styles.carteIndex} aria-hidden="true">
-                  {String(index + 1).padStart(2, "0")}
-                </span>
-
                 <span className={styles.carteAction}>
                   <T id="shop.discover" />
                   <span aria-hidden="true">→</span>
                 </span>
 
                 <span className={styles.carteBas}>
-                  <span className={`${styles.carteNom} aj-metal`}>
+                  <span className={styles.carteNom}>
                     {product.name}
                   </span>
 
@@ -172,11 +178,14 @@ export default function ShopPage() {
                     </span>
                   </span>
 
-                  <span className={styles.carteTailles} aria-hidden="true">
-                    {sizes.map((size) => (
-                      <span key={size}>{size}</span>
-                    ))}
-                  </span>
+                  {/*
+                    Les quatre tailles vivaient ici en `aria-hidden`, donc
+                    décoratives, et faisaient de chaque carte une pile de six
+                    couches : numéro, « Découvrir », nom, ton, prix, tailles.
+                    Le corpus mode primé 2026 en pose une ou deux. Elles
+                    rejoignent la section matière, où elles sont un fait produit
+                    et non un ornement de vignette.
+                  */}
                 </span>
 
                 <span className={styles.carteFilet} aria-hidden="true" />
@@ -199,20 +208,60 @@ export default function ShopPage() {
           </div>
 
           <div className={styles.matiereTexte}>
-            <h2 className={styles.composition} id="boutique-matiere" data-aj-reveal>
-              <span className={styles.chiffre}>94</span>
-              <span className={styles.compositionLabel}>
-                <T id="home.materialModal" />
-              </span>
-              <span className={styles.chiffre}>6</span>
-              <span className={styles.compositionLabel}>
-                <T id="home.materialElastane" />
-              </span>
-            </h2>
+            <div className={styles.matiereBloc}>
+              <h2
+                className={styles.composition}
+                id="boutique-matiere"
+                data-aj-reveal
+              >
+                <span className={styles.chiffre}>94</span>
+                <span className={styles.compositionLabel}>
+                  <T id="home.materialModal" />
+                </span>
+                <span className={styles.chiffre}>6</span>
+                <span className={styles.compositionLabel}>
+                  <T id="home.materialElastane" />
+                </span>
+              </h2>
 
-            <p className={styles.matierePhrase} data-aj-reveal>
-              <T id="home.apollonStatement" />
-            </p>
+              <p className={styles.matierePhrase} data-aj-reveal>
+                <T id="home.apollonStatement" />
+              </p>
+
+              {/*
+                La colonne de droite de cette section était remplie à 18 % —
+                233 px de contenu dans 1289 px à 1920, un vide né de deux hauteurs
+                incompatibles, que l'AGENTS compte explicitement comme un défaut.
+                Les deux faits qui encombraient l'ouverture le remplissent : ils
+                décrivent la pièce, ils sont donc à leur place ici, contre la
+                matière. La composition n'est pas répétée — le 94 / 6 ci-dessus
+                la dit déjà, au corps le plus grand de la page.
+              */}
+              <dl className={styles.faits} data-aj-reveal>
+                <div className={styles.fait}>
+                  <dt>
+                    <T id="home.colors" />
+                  </dt>
+                  {/* Un nom de coloris ne se coupe jamais en deux : la césure
+                      tombe sur les séparateurs. */}
+                  <dd>
+                    {products.map((product, index) => (
+                      <span key={product.slug}>
+                        {index > 0 ? " · " : null}
+                        <span className={styles.insecable}>{product.name}</span>
+                      </span>
+                    ))}
+                  </dd>
+                </div>
+
+                <div className={styles.fait}>
+                  <dt>
+                    <T id="home.sizes" />
+                  </dt>
+                  <dd>{sizes.join(" · ")}</dd>
+                </div>
+              </dl>
+            </div>
 
             <span className={styles.matiereSignature} data-aj-reveal>
               <T id="nav.material" /> · <T id="product.feature.5" />

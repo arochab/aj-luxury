@@ -14,16 +14,37 @@ import styles from "../components/Recit.module.css";
    --------------------------------------------------------------------------
    Sur l'accueil, l'histoire tenait sur un tiers d'écran, moins que le pied de
    page. Ici elle occupe six mouvements et environ sept écrans : ouverture,
-   trois chapitres numérotés, un plan large, une clôture. Le scroll est la
+   trois mouvements nommés, un plan large, une clôture. Le scroll est la
    seule horloge de tout ce qui se déroule ; il n'y a ni minuteur ni
    auto-avance.
 
+   CE QUI TIENT LE RYTHME — retour d'Adam du 19/08 : « supprimer les numéros
+   de chapitre ». Les index 01, 02, 03 sont retirés, mais pas remplacés par
+   rien : ils ne tenaient déjà aucun rythme, puisqu'ils flottaient à trois
+   abscisses différentes (à gauche dans le chapitre 01, à droite dans le duo,
+   à gauche dans la matière) et à des intervalles verticaux du simple au
+   quadruple. Le rythme vient désormais d'une grammaire répétée à l'identique
+   trois fois : NOM DU MOUVEMENT → filet → titre, dans une tête de chapitre
+   construite sur la même règle CSS partout (.chapitreAncre, .duoTete et
+   .matiereTete partagent la même colonne et le même gap). Les trois noms
+   sont les objets d'Apollon que les images portent déjà — le marbre, la
+   lyre, le laurier — et ils font enfin entrer ce vocabulaire dans le TEXTE,
+   où il était totalement absent.
+
+   L'ARC DU RÉCIT — origine, tension, conviction, promesse. Le marbre pose le
+   constat et l'objection ; la lyre donne la parole aux deux fondateurs, une
+   seule fois, signée ; le laurier descend dans la matière ; la clôture tient
+   la promesse. Aucune idée n'est énoncée deux fois : les quatre
+   reformulations de « le confort donne confiance » relevées le 19/08 ont été
+   ramenées à zéro.
+
    PARITÉ STRICTE — contrainte dure du client. Jérémy et Alex sont nommés dans
-   le texte visible dès le premier écran, et le chapitre 02 les montre dans
-   deux cellules rigoureusement identiques : même grille 1fr 1fr, même règle
-   CSS pour les deux, même légende, et surtout AUCUN décalage d'arrivée. Un
-   ordre d'entrée est déjà une hiérarchie ; les deux portraits se révèlent
-   donc exactement en même temps.
+   le texte visible dès le premier écran, et le mouvement de la lyre les
+   montre dans deux cellules rigoureusement identiques : même grille 1fr 1fr,
+   même règle CSS pour les deux, même légende, et surtout AUCUN décalage
+   d'arrivée. Un ordre d'entrée est déjà une hiérarchie ; les deux portraits
+   se révèlent donc exactement en même temps. L'ordre de nomination est
+   « Jérémy et Alex » partout, y compris dans l'ordre des deux cellules.
 
    POURQUOI CE FICHIER EST UN COMPOSANT CLIENT
    Le scrollytelling a besoin de GSAP, donc du navigateur. Next interdit
@@ -206,8 +227,11 @@ export default function NotreHistoirePage() {
             tous(`${styles.corps} > p`).forEach((p) => revelerLignes(p, 0.06));
             revelerLignes(un(styles.titreDuo));
             revelerLignes(un(styles.duoDeclaration), 0.05);
+            // La signature suit la citation, jamais l'inverse : c'est une
+            // attribution, elle n'a de sens qu'après la phrase.
+            revelerBloc([un(styles.duoSignature)], 0);
 
-            // ── 02 · La scène de parité ────────────────────────────────────
+            // ── La lyre · la scène de parité ───────────────────────────────
             const scene = un(styles.duoScene);
             const portraits = tous(styles.portrait);
             if (scene && portraits.length) {
@@ -344,13 +368,21 @@ export default function NotreHistoirePage() {
               >
                 <T id="story.title" />
               </h1>
+              {/* Le lead appartient à cette page. Il servait jusqu'au 19/08
+                  la clé home.apollonStatement, déjà lue sur l'accueil et sur
+                  /shop : la même phrase ouvrait donc trois écrans. */}
               <p className={styles.lead}>
-                <T id="home.apollonStatement" />
+                <T id="story.lead" />
               </p>
             </div>
 
             <div className={styles.ouvertureBord}>
-              <p className={`${styles.credit} aj-label`}>Jérémy et Alex</p>
+              {/* Un seul ordre de nomination, une seule clé : la conjonction doit
+                  suivre la langue (« e » en italien, « and » en anglais). Trois
+                  endroits de cette page l'écrivaient en dur, en français. */}
+              <p className={`${styles.credit} aj-label`}>
+                <T id="story.founders" />
+              </p>
               <a className={styles.action} href="#recit-01">
                 <span className={styles.actionTexte}>
                   <T id="hero.discover" />
@@ -364,7 +396,7 @@ export default function NotreHistoirePage() {
           </div>
         </section>
 
-        {/* ── 01 · Le point de départ ─────────────────────────────────── */}
+        {/* ── Le marbre · l'origine et l'objection ─────────────────────── */}
         <section
           className={styles.chapitre}
           aria-labelledby="recit-01-titre"
@@ -372,7 +404,9 @@ export default function NotreHistoirePage() {
         >
           <div className={styles.chapitreGrille}>
             <div className={styles.chapitreAncre}>
-              <p className={`${styles.index} aj-label`}>01</p>
+              <p className={`${styles.mouvement} aj-label`}>
+                <T id="story.movementOrigin" />
+              </p>
               <span aria-hidden="true" className={styles.filet} />
               <h2
                 className={`${styles.titreChapitre} aj-display`}
@@ -393,58 +427,92 @@ export default function NotreHistoirePage() {
           </div>
         </section>
 
-        {/* ── 02 · Jérémy et Alex, à parité stricte ───────────────────── */}
+        {/* ── La lyre · Jérémy et Alex, à parité stricte ───────────────── */}
         <section
           className={styles.duoScene}
           aria-labelledby="recit-02-titre"
           id="recit-02"
         >
           <div className={styles.duoCadre}>
+            {/* Même grammaire que les deux autres têtes de chapitre : nom du
+                mouvement, filet, titre. Avant le 19/08 cette tête était une
+                ligne en space-between, avec le titre à gauche et l'index à
+                droite — donc la seule des trois à ne pas suivre la règle. */}
             <div className={styles.duoTete}>
+              <p className={`${styles.mouvement} aj-label`}>
+                <T id="story.movementFounders" />
+              </p>
+              <span aria-hidden="true" className={styles.filet} />
               <h2
                 className={`${styles.titreDuo} aj-display`}
                 id="recit-02-titre"
               >
-                Alex &amp; Jérémy
+                <T id="story.founders" />
               </h2>
-              <p className={`${styles.index} aj-label`}>02</p>
             </div>
 
+            {/* L'ordre des deux cellules suit l'ordre de nomination retenu
+                pour tout le site, « Jérémy et Alex » : le titre, la mention
+                de l'ouverture et la grille disent désormais la même chose.
+                La parité, elle, ne dépend pas de l'ordre — les deux cellules
+                sont identiques et se révèlent simultanément. */}
             <div className={styles.duoGrille}>
+              {/* LES DEUX PORTRAITS SONT LA RÉFÉRENCE NOMINATIVE DU SITE :
+                  c'est le seul écran qui écrit un prénom SOUS un visage. Ils
+                  disaient jusqu'ici Jérémy en Rose et Alex en Lilas, soit
+                  l'inverse exact de ce que montrent la séquence guidée de
+                  l'accueil, les cartes et les fiches. La page qui fait
+                  autorité contredisait donc tout le reste.
+                  Chacun porte désormais SON coloris — Jérémy le Lilas, Alex
+                  le Pourpre — et les deux sources gardent le 1731x2600 des
+                  cadres 2/3 : aucun rognage, aucun crâne coupé, la contrainte
+                  qui avait déjà décapité ce duo le 18/08. */}
               <figure className={styles.portrait}>
                 <div className={styles.plan}>
                   <Image
-                    alt="AJ Luxury — Alex — Apollon Lilas Céleste"
+                    alt="AJ Luxury — Jérémy — Apollon Lilas Céleste"
                     className={styles.planImage}
                     fill
                     sizes="(max-width: 899px) 50vw, 44vw"
-                    src="/images/client/product-lilas-model.webp"
-                  />
-                </div>
-                <figcaption className={`${styles.legende} aj-label`}>
-                  Alex
-                </figcaption>
-              </figure>
-
-              <figure className={styles.portrait}>
-                <div className={styles.plan}>
-                  <Image
-                    alt="AJ Luxury — Jérémy — Apollon Rose Velours"
-                    className={styles.planImage}
-                    fill
-                    sizes="(max-width: 899px) 50vw, 44vw"
-                    src="/images/client/story-jeremy-retouched.jpeg"
+                    src="/images/client/editorial-lilas-chair.webp"
                   />
                 </div>
                 <figcaption className={`${styles.legende} aj-label`}>
                   Jérémy
                 </figcaption>
               </figure>
+
+              <figure className={styles.portrait}>
+                <div className={styles.plan}>
+                  <Image
+                    alt="AJ Luxury — Alex — Apollon Pourpre Impérial"
+                    className={styles.planImage}
+                    fill
+                    sizes="(max-width: 899px) 50vw, 44vw"
+                    src="/images/client/hero-pourpre-model.webp"
+                  />
+                </div>
+                <figcaption className={`${styles.legende} aj-label`}>
+                  Alex
+                </figcaption>
+              </figure>
             </div>
 
-            <p className={styles.duoDeclaration}>
-              <T id="story.peopleStatement" />
-            </p>
+            {/* La seule prise de parole directe du site, et le seul endroit
+                où le double rôle fondateurs/mannequins est explicité. Elle
+                remplace l'encart « à propos de nous » en deux phrases plates
+                (story.peopleStatement, supprimée). Elle pose aussi Apollon
+                comme le premier modèle : c'est une intention, jamais une
+                disponibilité — aucun autre modèle n'est présenté comme
+                achetable nulle part sur le site. */}
+            <blockquote className={styles.duoCitation}>
+              <p className={styles.duoDeclaration}>
+                <T id="story.foundersQuote" />
+              </p>
+              <footer className={styles.duoSignature}>
+                <T id="story.foundersSignature" />
+              </footer>
+            </blockquote>
           </div>
         </section>
 
@@ -452,7 +520,7 @@ export default function NotreHistoirePage() {
         <figure className={styles.duoPleine}>
           <div className={styles.plan}>
             <Image
-              alt="AJ Luxury — Alex et Jérémy — Apollon Pourpre Impérial"
+              alt="AJ Luxury — Jérémy et Alex — Apollon Pourpre Impérial"
               className={styles.planImage}
               fill
               sizes="100vw"
@@ -460,12 +528,14 @@ export default function NotreHistoirePage() {
             />
           </div>
           <span aria-hidden="true" className={styles.grade} />
+          {/* Un seul ordre de nomination sur tout le site, « Jérémy et Alex ».
+              Cette page en portait quatre à elle seule. */}
           <figcaption className={`${styles.legende} aj-label`}>
-            Alex et Jérémy
+            <T id="story.founders" />
           </figcaption>
         </figure>
 
-        {/* ── 03 · La matière ─────────────────────────────────────────── */}
+        {/* ── Le laurier · la matière ─────────────────────────────────── */}
         <section
           className={styles.matiere}
           aria-labelledby="recit-03-titre"
@@ -485,7 +555,9 @@ export default function NotreHistoirePage() {
 
           <div className={styles.matiereTexte}>
             <div className={styles.matiereTete}>
-              <p className={`${styles.index} aj-label`}>03</p>
+              <p className={`${styles.mouvement} aj-label`}>
+                <T id="story.movementMaterial" />
+              </p>
               <span aria-hidden="true" className={styles.filet} />
               <h2
                 className={`${styles.titreChapitre} aj-display`}

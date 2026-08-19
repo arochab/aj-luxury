@@ -10,7 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import { useI18n } from "@/lib/i18n/I18nProvider";
-import type { ProductMedia } from "@/lib/products";
+import { wearerNames, wearerOf, type ProductMedia } from "@/lib/products";
 import { useAjMotion } from "./useAjMotion";
 import styles from "./ProductPage.module.css";
 
@@ -77,7 +77,22 @@ export function AjScrollReveal({ className, children }: AjScrollRevealProps) {
          * l'état de départ que sur ce qui est encore sous la ligne de
          * flottaison ; le reste est laissé tel qu'il a été peint.
          */
-        const seuil = window.innerHeight * 0.92;
+        /*
+         * Le seuil valait 0,92 x la hauteur d'écran, et le déclencheur
+         * « top 92% ». Les deux étaient alignés, mais trop haut : tout bloc
+         * situé entre 92 et 100 % était masqué alors qu'il n'avait pas encore
+         * atteint son déclencheur, et le restait pendant l'anim de 0,75 s.
+         * Conséquence mesurée le 19/08 : après un saut de défilement, une
+         * section entière restait invisible près d'une seconde, et une capture
+         * pleine page — exactement ce que produit une soumission ou un jury
+         * qui parcourt vite — rendait des bandes noires de plus de 1200 px.
+         * Sur /shop, la colonne de droite de la section matière sortait vide.
+         * On ne masque donc plus que ce qui est ENTIÈREMENT sous la ligne de
+         * flottaison, et on révèle juste avant l'entrée dans le cadre. Un bloc
+         * déjà visible n'est jamais masqué : c'est la même règle qu'avant,
+         * appliquée au bon seuil.
+         */
+        const seuil = window.innerHeight;
         const blocs = Array.from(
           noeud.querySelectorAll<HTMLElement>("[data-aj-reveal]"),
         ).filter((bloc) => bloc.getBoundingClientRect().top > seuil);
@@ -85,14 +100,18 @@ export function AjScrollReveal({ className, children }: AjScrollRevealProps) {
         if (blocs.length > 0) {
           gsap.set(blocs, { autoAlpha: 0, y: 28 });
           ScrollTrigger.batch(blocs, {
-            start: "top 92%",
+            start: "top 99%",
             once: true,
             onEnter: (lot) => {
               gsap.to(lot, {
                 autoAlpha: 1,
                 y: 0,
-                duration: 0.75,
-                stagger: 0.09,
+                /* 0,75 s et 0,09 de décalage : le dernier bloc d'un lot de
+                   trois finissait 0,93 s après l'entrée. Raccourci pour que la
+                   section soit peinte au moment où elle entre, sans perdre la
+                   détente d'expo.out. */
+                duration: 0.5,
+                stagger: 0.06,
                 // expo.out est l'équivalent GSAP le plus proche de --e1
                 // (cubic-bezier(.16,1,.3,1)) : sortie très longue, arrivée
                 // sans rebond.
@@ -372,9 +391,15 @@ export default function ProductGalleryZoom({
     return styles.galleryPortrait;
   }
 
+  /* Le prénom vient de la table d'attribution de lib/products, plus d'un
+     `includes()` sur un nom de fichier. Deux gains : la fiche cesse de
+     réduire un cofondateur à « un mannequin adulte » là où l'accueil et
+     /notre-histoire le nomment, et l'alt ne peut plus mentir si le visuel
+     change — c'est la même table qui décide de l'image et du nom. */
   function getImageAlt(image: ProductMedia, index: number) {
-    if (image.src.includes("editorial-pourpre-chair")) {
-      return `Jérémy — ${model} ${color}`;
+    const porteur = wearerOf(image.src);
+    if (porteur && porteur !== "duo") {
+      return `${wearerNames[porteur]} — ${model} ${color}`;
     }
 
     return index === 0

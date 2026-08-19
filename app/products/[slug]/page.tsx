@@ -74,10 +74,27 @@ export default async function ProductPage({ params }: ProductPageProps) {
 
       {/* display:contents — la scène n'est qu'une portée de sélecteurs GSAP. */}
       <AjScrollReveal className={styles.scene}>
+        {/*
+          Le fil d'Ariane porte quatre paliers depuis le 19/08, et non trois.
+          Deux raisons, toutes deux issues des retours d'Adam :
+          — le libellé « Collection » ouvrait /shop, dont le titre est
+            « Apollon » : l'étiquette contredisait sa destination. Elle devient
+            « Boutique », qui est bien la page visée ;
+          — il n'existait aucun palier « Apollon ». Le modèle est maintenant un
+            niveau à part entière, entre la boutique et le coloris. C'est la
+            façon la moins chère et la plus honnête de montrer qu'Apollon est
+            UN modèle et non LE catalogue : l'emplacement d'un futur modèle
+            frère existe visuellement, sans qu'une seule promesse commerciale
+            soit écrite.
+          Le palier du modèle n'est pas un lien : il n'a pas encore de page à
+          lui, et un second lien vers /shop dans le même fil serait un leurre.
+        */}
         <nav className={styles.breadcrumb} aria-label="Breadcrumb">
           <Link href="/"><T id="nav.home" /></Link>
           <span aria-hidden="true">/</span>
-          <Link href="/shop"><T id="common.collection" /></Link>
+          <Link href="/shop"><T id="nav.shop" /></Link>
+          <span aria-hidden="true">/</span>
+          <span>{product.model}</span>
           <span aria-hidden="true">/</span>
           <span aria-current="page">{product.name}</span>
         </nav>
@@ -115,13 +132,28 @@ export default async function ProductPage({ params }: ProductPageProps) {
                 data-aj-reveal
                 style={{ "--pdp-accent": item.swatch } as CSSProperties}
               >
+                {/* LE PLATEAU, PAS LE CORPS — retour n°4, 19/08.
+                    Deux coloris sur trois sont portés par Alex : sur la fiche
+                    du troisième, les deux recommandations montraient donc
+                    fatalement deux fois le même homme. C'était le cas mesuré
+                    sur /products/lilas-bleu-clair, et sur /products/pourpre la
+                    paire allait jusqu'à deux Jérémy décapités par le cadre.
+                    Aucun réordonnancement ne pouvait le résoudre : le défaut
+                    est arithmétique, deux hommes pour trois coloris.
+                    On montre donc la NATURE MORTE du coloris — marbre, lyre,
+                    arc, laurier, carquois — qui ne porte aucun corps, ne pose
+                    aucune question de parité, ne coupe aucun visage, et dit la
+                    couleur mieux qu'un buste recadré. C'est aussi le plan
+                    « Seul » que la séquence guidée de l'accueil a déjà appris
+                    à lire. Ratio natif 1024x1536, soit exactement le 2/3 du
+                    cadre : aucun rognage. */}
                 <span className={styles.otherColorImage}>
                   <span className={styles.otherColorMedia}>
                     <img
-                      src={item.image}
-                      alt={`${item.model} ${item.name}`}
-                      width={1600}
-                      height={2000}
+                      src={item.still}
+                      alt={`${item.model} ${item.name} — le plateau`}
+                      width={1024}
+                      height={1536}
                       loading="lazy"
                       fetchPriority="low"
                       decoding="async"

@@ -427,7 +427,17 @@
   }
 }
 
-.index {
+/* Le nom du mouvement. Il remplace les index 01 / 02 / 03, supprimés le 19/08
+   sur retour d'Adam. Ce n'est pas une suppression sèche : les numéros ne
+   tenaient déjà aucun rythme (trois abscisses différentes, intervalles
+   verticaux du simple au quadruple), et le corpus mode primé en 2026 nomme
+   ses sections au lieu de les numéroter. Le repère devient donc un nom tiré
+   du monde d'Apollon — marbre, lyre, laurier — posé au MÊME endroit dans les
+   trois têtes de chapitre, au-dessus du filet et du titre. C'est la
+   répétition de cette grammaire qui tient le rythme.
+   Même corps, même graisse et même opacité que l'index qu'il remplace : le
+   contraste mesuré reste celui qui avait été validé (7,7:1 sur .chapitre). */
+.mouvement {
   margin: 0;
   color: var(--aj-encre-72);
 }
@@ -523,6 +533,12 @@
 }
 
 .duoCadre {
+  /* Budget de hauteur du diptyque, remonté ici le 19/08 depuis .duoGrille :
+     la colonne de la citation s'accroche à la même valeur, donc les deux
+     doivent la partager. La largeur du diptyque en découle par le ratio natif
+     des sources (voir .duoGrille). */
+  --duo-h: clamp(320px, 64svh, 660px);
+
   display: grid;
   align-content: center;
   gap: clamp(22px, 3.4vh, 46px);
@@ -538,12 +554,44 @@
   }
 }
 
+/* Entre 900 et 1023 px la citation reste sous le diptyque : la scène est
+   collante et haute de 100svh, donc le budget du diptyque doit lui laisser sa
+   place. Mesuré à 1024x768 : 637 px utiles, 110 pour la tête, 47 de gouttières
+   et 124 pour la citation signée, soit 356 px disponibles. Sans cette borne,
+   la scène débordait de son écran et les portraits passaient PAR-DESSUS la
+   citation (défaut présent avant le 19/08, aggravé par la citation). */
+@media (min-width: 900px) and (max-width: 1023px) {
+  .duoCadre {
+    --duo-h: clamp(280px, 44svh, 460px);
+  }
+}
+
+/* À partir de 1024 px la citation quitte la pile et va occuper la colonne qui
+   restait vide à droite du diptyque — mesurée à 950 px de noir à 1920, soit la
+   moitié de l'écran. Le mouvement se lit alors comme il doit se lire : les
+   deux fondateurs à gauche, leur seule prise de parole à droite, alignée sur
+   le bas de leurs portraits. Le diptyque n'a plus à payer la place de la
+   citation et retrouve un budget de hauteur plein. */
+@media (min-width: 1024px) {
+  .duoCadre {
+    --duo-h: clamp(320px, 60svh, 620px);
+
+    grid-template-columns:
+      min(100%, calc(var(--duo-h) * 4 / 3 + 2px)) minmax(0, 1fr);
+    column-gap: clamp(40px, 5vw, 96px);
+  }
+}
+
+/* La tête du mouvement de la lyre. Elle était la seule des trois à suivre une
+   règle différente : une ligne en space-between, titre à gauche et index à
+   droite. Elle partage maintenant exactement la colonne de .chapitreAncre et
+   de .matiereTete — nom du mouvement, filet, titre — car c'est cette
+   répétition, et non la numérotation retirée, qui donne son rythme au récit. */
 .duoTete {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: clamp(18px, 3vw, 48px);
-  flex-wrap: wrap;
+  min-width: 0;
+  flex-direction: column;
+  gap: clamp(16px, 2vw, 30px);
 }
 
 .titreDuo {
@@ -566,8 +614,9 @@
      bas. Le produit disparaissait autant que les visages.
 
      On repart donc de la hauteur, et la largeur des deux cellules en
-     découle par le ratio natif des sources (1731/2600 ~ 2/3). */
-  --duo-h: clamp(320px, 64svh, 660px);
+     découle par le ratio natif des sources (1731/2600 ~ 2/3).
+     --duo-h est déclarée sur .duoCadre depuis le 19/08 : la citation signée
+     s'accroche au même budget. */
 
   display: grid;
   min-height: 0;
@@ -593,7 +642,15 @@
        `margin-inline: 0` (et non `auto`) le 19/08 : centré, il ne partageait
        d'arête ni avec le titre ni avec la légende, tous deux au fer sur la
        gouttière de page. Il flottait 305 px plus à droite qu'eux. Il part
-       maintenant de la même gouttière, portée par le padding de .duoCadre. */
+       maintenant de la même gouttière, portée par le padding de .duoCadre.
+
+       `height` explicite le 19/08. La largeur suivait déjà le budget, mais la
+       hauteur, elle, était laissée à la rangée de grille : mesurée à 1440x900,
+       la rangée valait 463 px pendant que les portraits, dimensionnés par leur
+       largeur (384 x 3/2), en faisaient 576. Les 113 px d'écart passaient
+       par-dessus ce qui suivait. Hauteur et largeur descendent maintenant
+       toutes deux de --duo-h : cellules de 2/3 exactes, aucun débordement. */
+    height: var(--duo-h);
     max-width: min(100%, calc(var(--duo-h) * 4 / 3 + 2px));
     margin-inline: 0;
   }
@@ -644,13 +701,59 @@
   text-shadow: 0 1px 18px rgba(0, 0, 0, 0.55);
 }
 
-.duoDeclaration {
-  max-width: 62ch;
+/* La citation signée. Le corpus mode 2026 place une seule prise de parole
+   attribuée, à un seul endroit du récit ; c'est ce qui sépare une maison d'une
+   page « à propos de nous ». Elle est donc traitée comme une citation et non
+   comme un paragraphe : un filet vertical au fer à gauche, la phrase, puis la
+   signature en dessous. */
+.duoCitation {
   margin: 0;
-  color: var(--aj-encre-90);
-  font-size: var(--t1);
+  border-left: 1px solid var(--aj-encre-72);
+  padding-left: clamp(18px, 2.4vw, 34px);
+}
+
+/* Colonne de droite : la citation s'aligne sur le BAS des portraits, jamais
+   sur leur milieu. C'est la ligne de base que le regard suit après avoir lu
+   les deux visages. */
+@media (min-width: 1024px) {
+  .duoTete {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .duoGrille {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .duoCitation {
+    grid-column: 2;
+    grid-row: 2;
+    align-self: end;
+  }
+}
+
+.duoDeclaration {
+  max-width: 40ch;
+  margin: 0;
+  color: var(--aj-encre);
+  font-size: var(--t2);
   font-weight: var(--aj-w-livre);
-  line-height: 1.6;
+  letter-spacing: var(--aj-ls-sous);
+  line-height: 1.34;
+}
+
+/* La signature n'est pas un label : c'est une phrase. Elle reste donc en bas
+   de casse, au plancher typographique du site (--t0 = 15px), et non en
+   capitales espacées comme les légendes de portrait juste au-dessus. */
+.duoSignature {
+  display: block;
+  max-width: 52ch;
+  margin-top: clamp(14px, 1.8vw, 22px);
+  color: var(--aj-encre-72);
+  font-size: var(--t0);
+  font-weight: var(--aj-w-moyen);
+  line-height: 1.5;
 }
 
 /* Le plan large : les deux dans le même cadre, aucune découpe. */

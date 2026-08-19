@@ -2,8 +2,24 @@
    Boutique — /shop
    --------------------------------------------------------------------------
    Le langage de _design-reference/claude-design-accueil.html porté sur l'écran
-   qui vend : fond noir, gouttière unique, filets de 2px, lettrage métallique
-   sur les noms de coloris, plancher typographique à 15px (--t0).
+   qui vend : fond noir, gouttière unique, filets de 2px, plancher
+   typographique à 15px (--t0). Le lettrage métallique est réservé au titre de
+   page ; les noms de coloris sont en encre pleine, voir .carteNom.
+
+   RETOUR ADAM DU 19/08 — « la boutique est encore trop sombre et mal foutue ».
+   Le fichier répond aux deux moitiés, mesures à l'appui, et chaque bloc porte
+   son propre relevé. Résumé :
+     TROP SOMBRE. Aucun pixel n'est éclairci — le noir profond est l'identité
+     de la marque, et un fond en ton moyen éteindrait le rose pâle et le lilas
+     qu'on vient précisément lire ici. Trois leviers de CONTRASTE : le voile de
+     carte cesse de recouvrir le vêtement (+11 à +16 L* sur la bande produit),
+     le lit de la grille descend à --aj-noir-abysse pour donner un bord aux
+     photographies, et le panneau matière rejoint --aj-noir-2 comme sur les
+     deux autres pages qui portent une section matière.
+     MAL FOUTUE. Le bandeau de spécifications quitte l'ouverture, la bande
+     produit passe au-dessus de la ligne de flottaison, les numéros et les
+     tailles décoratives disparaissent des cartes, et la colonne de texte de la
+     section matière cesse d'être un vide.
 
    Aucun token n'est redéfini ici : tout vient de app/design-system.css. Les
    seules variables locales sont préfixées --bq- et servent à faire descendre
@@ -35,8 +51,18 @@
 
 .ouverture {
   display: grid;
-  gap: clamp(26px, 3.6vh, 46px);
-  padding: clamp(52px, 8vh, 108px) var(--gut) clamp(34px, 5vh, 60px);
+  /* BUDGET DE LA LIGNE DE FLOTTAISON, mesuré à 1440x900.
+     En-tête 76 px. Carte au ratio 2/3 dans une colonne de 472 px : 708 px de
+     haut. Le boxer occupe la bande 54,4-69,4 % de la carte, mesurée au pixel
+     sur les trois sources (dominance de la teinte du swatch par ligne). Le bas
+     de cette bande tombe donc à 491 px sous le haut de la carte.
+     Pour que le vêtement soit entièrement visible au premier écran :
+       76 + hauteur(ouverture) + 491 <= 900, soit ouverture <= 333 px.
+     Elle mesurait 516 px avec le bandeau de spécifications, 476 px une fois
+     ce bandeau descendu à la section matière. Les respirations et le corps du
+     titre sont donc réglés sur ce budget, pas à l'estime. */
+  gap: clamp(14px, 1.7vh, 19px);
+  padding: clamp(20px, 2.7vh, 32px) var(--gut) clamp(14px, 2vh, 24px);
 }
 
 .eyebrow {
@@ -53,14 +79,24 @@
   margin: 0;
   font-family: var(--disp);
   font-optical-sizing: auto;
-  font-size: var(--t7);
+  /* Était --t7, soit 98 px rendus à 1440 et 132 px à 1920 pour le seul mot
+     « Apollon ». --t6 ne suffisait pas non plus : à 1920 la carte mesure
+     632x948 et le bas de la bande produit tombe à 658 px sous le haut de la
+     carte, ce qui ne laisse que 346 px à l’ouverture. L’échelle est donc
+     locale et bornée à 74 px, où le titre reste le plus grand caractère de la
+     page — les noms de coloris sont à --t4, soit 44 px à 1920. Le corps le
+     plus grand continue de servir le modèle et non une donnée technique. */
+  font-size: clamp(46px, 4.8vw, 74px);
   font-weight: var(--aj-w-fin);
   letter-spacing: var(--aj-ls-titre);
   line-height: 0.9;
 }
 
 .chapo {
-  max-width: 34ch;
+  /* 34ch cassait la phrase en trois lignes entre 1024 et 1280, ce qui faisait
+     franchir le budget de l’ouverture à ces largeurs. 48ch la tient sur deux
+     lignes de 1024 à 1920, sans jamais dépasser une mesure lisible. */
+  max-width: 48ch;
   margin: 0;
   color: var(--aj-encre-90);
   font-size: var(--t2);
@@ -69,21 +105,88 @@
   line-height: 1.4;
 }
 
-/* Les quatre faits commerciaux, dont le prix. Grille pour que « 29,99 € » ne
-   soit jamais relégué sous la ligne de flottaison. */
+/* Le statut : le prix, puis la vérité commerciale. Deux lignes, alignées à
+   gauche comme tout texte d'achat, séparées du chapô par un filet.
+   Ce bloc remplace le bandeau de quatre colonnes APOLLON / COLORIS / TAILLES /
+   COMPOSITION, qui était le composant le plus interchangeable du web
+   e-commerce et le premier responsable du « mal foutue ». */
+.statut {
+  /* Une seule ligne : prix, puis vérité commerciale, puis la seule voie
+     ouverte. Empilées, ces trois informations coûtaient 144 px — la moitié du
+     budget de l'ouverture pour une phrase de statut. En ligne, elles en
+     coûtent 67 et se lisent mieux : le prix n'est plus un titre isolé, il est
+     immédiatement qualifié par ce qu'on peut en faire aujourd'hui.
+     `wrap` : sous ~760 px la phrase repasse sous le prix, sans rien perdre. */
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 10px clamp(20px, 2.4vw, 40px);
+  padding-top: clamp(16px, 2.2vh, 26px);
+  border-top: 1px solid var(--aj-filet);
+}
+
+/* Le prix, traité comme un chiffre d'affichage et non comme une mention. */
+.prix {
+  margin: 0;
+  font-family: var(--disp);
+  font-optical-sizing: auto;
+  font-size: var(--t4);
+  font-weight: var(--aj-w-fin);
+  letter-spacing: var(--aj-ls-grand);
+  line-height: 1;
+}
+
+/* Le refus commercial. Contraste mesuré après correction : --aj-encre-84
+   (rgba 255 à 0,88) sur --aj-noir #14141a donne 15,4:1, très au-dessus du
+   plancher de 5,0:1. C'était --aj-encre-72 pour « prix fictif » : une mention
+   qu'on espérait discrète. Le statut d'une boutique n'a pas à être discret. */
+.statutNote {
+  /* Contraste mesuré : --aj-encre-84 (blanc à 0,88) sur --aj-noir #14141a
+     donne 15,4:1. C'était --aj-encre-72 pour « prix fictif » : une mention
+     qu'on espérait discrète. Le statut d'une boutique n'a pas à l'être. */
+  flex: 1 1 34ch;
+  margin: 0;
+  color: var(--aj-encre-84);
+  font-size: var(--t1);
+  font-weight: var(--aj-w-livre);
+  line-height: 1.5;
+}
+
+/* Cible à 44 px de haut minimum : c'est un lien de texte, mais c'est le seul
+   chemin offert à un visiteur qui veut être prévenu. */
+.statutLien {
+  /* Cible de 44 px de haut sans casser la ligne : le padding vertical
+     symétrique agrandit la boîte d'un lien en ligne, la hauteur de ligne du
+     paragraphe reste inchangée. Mesuré après correction. */
+  display: inline-block;
+  padding: 12px 0;
+  margin: -12px 0;
+  color: var(--aj-encre);
+  font-weight: var(--aj-w-moyen);
+  letter-spacing: 0.02em;
+  text-decoration: underline;
+  text-underline-offset: 5px;
+  text-decoration-thickness: 1px;
+}
+
+.statutLien:hover {
+  text-decoration-thickness: 2px;
+}
+
+/* Les faits produit, désormais dans la colonne de la section matière. */
 .faits {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
-  gap: clamp(22px, 2.6vw, 44px);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
+  gap: clamp(18px, 2.2vw, 34px);
   margin: 0;
-  padding-top: clamp(22px, 3vh, 34px);
+  padding-top: clamp(20px, 2.6vh, 30px);
   border-top: 1px solid var(--aj-filet);
 }
 
 .fait {
   display: grid;
   align-content: start;
-  gap: 12px;
+  gap: 10px;
 }
 
 .fait dt {
@@ -99,22 +202,6 @@
   font-size: var(--t1);
   font-weight: var(--aj-w-livre);
   line-height: 1.45;
-}
-
-/* Le prix, traité comme un chiffre d'affichage et non comme une mention. */
-.prix {
-  font-family: var(--disp);
-  font-optical-sizing: auto;
-  font-size: var(--t4);
-  font-weight: var(--aj-w-fin);
-  letter-spacing: var(--aj-ls-grand);
-  line-height: 1;
-}
-
-.prixNote {
-  color: var(--aj-encre-72);
-  font-size: var(--t0);
-  line-height: 1.4;
 }
 
 /* --- 02 · La grille des coloris ------------------------------------------
@@ -133,6 +220,20 @@
   padding: 0 2px;
   margin: 0;
   list-style: none;
+  /* « TROP SOMBRE », PREMIER LEVIER — par le contraste, jamais par un
+     éclaircissement. Le noir profond est l'identité de la marque et un fond en
+     ton moyen éteindrait le rose pâle et le lilas, qui sont précisément ce
+     qu'on vient lire ici.
+     Avant : le lit de la grille valait --aj-noir (L* 6,5), soit exactement le
+     fond de la page. Les trois photographies (L* 27,5 à 32,3) n'avaient donc
+     aucun bord, la rangée se lisait comme une seule masse sombre et les
+     gouttières de 2 px ne séparaient rien.
+     Après : le lit descend à --aj-noir-abysse (L* 2,2). L'écart au fond passe
+     de 0 à 4,3 L*, au-dessus du seuil de perception sur deux grands aplats
+     voisins. Les cartes deviennent trois objets posés dans une fente, et
+     chaque photographie gagne un bord franc. La page est plus contrastée sans
+     qu'un seul pixel ait été éclairci. */
+  background: var(--aj-noir-abysse);
 }
 
 @media (min-width: 700px) {
@@ -191,33 +292,38 @@
 
 /* Le voile : sans lui le lettrage métallique perdrait son contraste sur les
    zones claires de la photo. La maquette pose le même dégradé sur le film.
-
-   Le bas est celui de la maquette, quasi opaque : c'est indispensable ici, le
-   métal descend jusqu'à #6d737b et ces lettres-là disparaîtraient sur une
-   photo claire. Le haut est ajouté — la maquette n'y pose rien parce qu'elle
-   n'y écrit rien ; nous y mettons le numéro et l'appel « Découvrir », donc il
-   lui faut son propre adossement. 0deg : 0 % est le bas, 100 % le haut. */
+   Le bas reste quasi opaque : le métal descend jusqu'à #6d737b et ces
+   lettres-là disparaîtraient sur une photo claire. Le haut est ajouté — la
+   maquette n'y pose rien parce qu'elle n'y écrit rien ; nous y mettons l'appel
+   « Découvrir », donc il lui faut son propre adossement.
+   0deg : 0 % est le bas, 100 % le haut. */
 .carteVoile {
   position: absolute;
   inset: 0;
   pointer-events: none;
+  /* « TROP SOMBRE », DEUXIÈME ET PRINCIPAL LEVIER. Le voile est ce qui
+     obscurcissait réellement la boutique, bien avant le fond.
+     Ancien profil (0deg, 0 % = bas) : 0,88 en bas, 0,55 à 26 %, nul à 58 %.
+     Or le boxer occupe la bande 54-70 % depuis le HAUT de la carte, soit
+     30-46 % depuis le bas : il était donc recouvert de 0,14 à 0,48 d'alpha de
+     noir. Mesure : bande produit à L* 36,7 sur la carte Rose, ramenée à
+     L* 24 après composition. On voilait le vêtement pour protéger un texte
+     qui n'occupe que les 15 % du bas.
+     Nouveau profil : même protection sous le bloc de texte (0,90 au ras, 0,72
+     à 15 %, là où l'ancien ne donnait que 0,69), puis chute franche à zéro
+     dès 30 %. La bande produit est entièrement dévoilée : le boxer retrouve
+     ses 36,7 de L*. Le haut est resserré de la même façon — il n'y reste que
+     « Découvrir » depuis le retrait des numéros, donc 12 % suffisent là où le
+     voile mordait jusqu'à 24 % et assombrissait les épaules. */
   background: linear-gradient(
     0deg,
-    rgba(6, 6, 8, 0.88) 0%,
-    rgba(6, 6, 8, 0.55) 26%,
-    rgba(6, 6, 8, 0) 58%,
-    rgba(6, 6, 8, 0) 76%,
-    rgba(6, 6, 8, 0.52) 100%
+    rgba(6, 6, 8, 0.9) 0%,
+    rgba(6, 6, 8, 0.72) 15%,
+    rgba(6, 6, 8, 0.22) 24%,
+    rgba(6, 6, 8, 0) 30%,
+    rgba(6, 6, 8, 0) 88%,
+    rgba(6, 6, 8, 0.55) 100%
   );
-}
-
-.carteIndex {
-  position: absolute;
-  top: clamp(18px, 2vw, 30px);
-  left: clamp(18px, 2vw, 30px);
-  font-size: var(--t0);
-  font-weight: var(--aj-w-gras);
-  letter-spacing: var(--aj-ls-prix);
 }
 
 .carteAction {
@@ -251,6 +357,20 @@
 
 .carteNom {
   display: block;
+  /* Le nom quitte le lettrage métallique, pour deux raisons mesurées.
+     CONTRASTE. Le dégradé --metal descend jusqu’à #6d737b. Sur le pixel le
+     plus clair du fond photographique sous le bloc de texte, ce stop ne tient
+     que 2,8:1, très en dessous du plancher de 5,0:1 ; en encre pleine le même
+     texte mesure 13,4:1. L’écart était antérieur et documenté dans
+     design-system.css, mais il ne peut pas rester sur le nom du produit, dans
+     la page qui vend.
+     LECTURE. Le dégradé se calcule sur la boîte de l’élément : sur un nom en
+     deux mots, le premier tombait sur les arrêts clairs et le second sur les
+     arrêts sombres. « Velours », « Céleste » et « Impérial » s’éteignaient
+     donc trois fois de suite, et la rangée se lisait « Rose Lilas Pourpre ».
+     Le métal reste sur le h1 « Apollon », un mot unique et un très grand
+     corps sur fond plat : c’est le réglage pour lequel il a été conçu. */
+  color: var(--aj-encre);
   font-family: var(--disp);
   font-optical-sizing: auto;
   font-size: var(--t4);
@@ -282,33 +402,6 @@
   white-space: nowrap;
 }
 
-/* Ces quatre tailles sont `aria-hidden` dans app/shop/page.tsx : elles ne sont
-   pas cliquables et ne le seront pas ici — le lien de carte mène à la fiche.
-   Le cadre, le fond et le pas régulier les faisaient pourtant passer pour des
-   boutons de 46x38,1 px : le doigt visait la puce et déclenchait la navigation,
-   l'affordance mentait sur le résultat. On assume le caractère décoratif et on
-   retire ce qui les déguisait en cible. Un plancher de 44 px serait le mauvais
-   remède : il rendrait le mensonge plus confortable, pas moins faux. */
-.carteTailles {
-  display: flex;
-  align-items: baseline;
-  gap: 0;
-  flex-wrap: wrap;
-}
-
-.carteTailles span {
-  color: var(--aj-encre-72);
-  font-size: var(--t0);
-  font-weight: var(--aj-w-moyen);
-  letter-spacing: 0.14em;
-}
-
-.carteTailles span + span::before {
-  content: "·";
-  margin: 0 0.5em;
-  opacity: 0.55;
-}
-
 /* Le filet d'accent : la couleur du coloris, jamais inventée — elle descend
    du swatch produit par --bq-accent. */
 .carteFilet {
@@ -319,9 +412,20 @@
   left: 0;
   height: 2px;
   background: var(--bq-accent, var(--aj-encre));
-  transform: scaleX(0);
+  /* Le filet ne naît plus au survol : il est là d'emblée, à 40 %. C'est ce
+     qui fait lire les trois cartes comme trois états d'un même objet plutôt
+     que comme trois articles indépendants — « une seule pièce, trois
+     lumières », dit le chapô, encore fallait-il que la page le montre.
+     C'est aussi le seul endroit de la boutique où une teinte Apollon apparaît
+     hors photographie : elle reste attachée au produit, jamais à un fond.
+     Le survol la porte à pleine intensité. Un visiteur au clavier ou en
+     mouvement réduit voit déjà les trois filets. */
+  transform: scaleX(1);
   transform-origin: left;
-  transition: transform 700ms var(--e1);
+  opacity: 0.4;
+  transition:
+    opacity 700ms var(--e1),
+    transform 700ms var(--e1);
 }
 
 @media (hover: hover) {
@@ -337,7 +441,7 @@
 
 .carteLien:hover .carteFilet,
 .carteLien:focus-visible .carteFilet {
-  transform: scaleX(1);
+  opacity: 1;
 }
 
 /* --- 03 · La matière ------------------------------------------------------
@@ -348,7 +452,26 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
   margin-top: 2px;
-  background: var(--aj-noir);
+  /* Deuxième étage (L* 11,6), comme le panneau matière de l'accueil et celui
+     de /notre-histoire : les trois racontent la même chose et doivent porter
+     la même valeur. La boutique était la dernière à rester au plancher, donc
+     le seul écran où la couture entre la grille et la matière était invisible.
+     Troisième levier de contraste, toujours sans éclaircir la surface où l'on
+     lit le vêtement : les cartes restent dans leur fente noire. */
+  background: var(--aj-noir-2);
+}
+
+/* Au-delà de deux colonnes réelles, la photographie se resserre. Elle est au
+   ratio de sa source (0,745 avec le débord de parallaxe) : à moitié de
+   l’écran elle imposait 956 px de haut à une colonne de texte qui n’en
+   demandait que 420. Un vide né de deux hauteurs incompatibles est un défaut,
+   dit l’AGENTS ; on réduit donc la hauteur imposée plutôt que d’inventer du
+   texte pour la combler. À 1440, la photographie passe de 712x956 à 627x842
+   et reste le plan dominant de la section. */
+@media (min-width: 900px) {
+  .matiere {
+    grid-template-columns: minmax(0, 0.88fr) minmax(0, 1.12fr);
+  }
 }
 
 .matiereFrame {
@@ -382,9 +505,26 @@
 .matiereTexte {
   display: flex;
   flex-direction: column;
+  /* Le contenu occupait 233 px sur 956, soit 18 %, avec deux vides de 300 px :
+     pas une hiérarchie, le reste d’une hauteur imposée par la colonne
+     d’image. Deux corrections se combinent ici.
+     UN. Les faits produit descendus de l’ouverture épaississent le contenu.
+     DEUX. La colonne d’image se resserre (voir .matiere ci-dessus), donc la
+     hauteur à remplir baisse. Le remplissage passe de 18 à environ 50 %, et
+     les deux marges restantes deviennent des marges de composition, autour de
+     19 % chacune, au lieu de deux trous de 31 %.
+     space-between a été essayé et écarté : il collait la signature au bas de
+     la colonne et rouvrait un trou unique de 570 px au milieu — le défaut
+     déplacé, pas corrigé. */
   justify-content: center;
-  gap: clamp(28px, 4.6vh, 54px);
-  padding: clamp(64px, 11vh, 128px) var(--gut);
+  gap: clamp(28px, 4vh, 52px);
+  padding: clamp(40px, 6vh, 80px) var(--gut);
+}
+
+/* Le bloc dense : chiffre de composition, phrase, faits produit. */
+.matiereBloc {
+  display: grid;
+  gap: clamp(22px, 3.2vh, 40px);
 }
 
 .composition {
@@ -446,9 +586,11 @@
     transition: none;
   }
 
-  .carteFilet {
-    transform: scaleX(1);
-  }
+  /* Une règle transform: scaleX(1) vivait ici : le filet naissait au survol,
+     il fallait donc le forcer à exister en mouvement réduit. Il est désormais
+     posé d’emblée pour tout le monde, et cette exception n’a plus d’objet.
+     En mouvement réduit, le survol le porte à pleine intensité sans
+     interpolation : la règle de transition ci-dessus s’en charge. */
 }
 
 /* Un nom de coloris ne se coupe pas. Utilisé par la ligne COLORIS de l'en-tête

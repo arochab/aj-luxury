@@ -108,8 +108,13 @@ export default function Home() {
           id="coloris"
           aria-labelledby="aj-coloris-titre"
         >
+          {/* « La collection » laissait entendre que la maison tient tout
+              entière dans cette grille. Le titre nomme maintenant le rang
+              d'Apollon. La clé home.apollonEyebrow existait déjà dans les cinq
+              langues et n'était câblée nulle part ; elle portait un « 01 »
+              qu'elle ne porte plus. */}
           <h2 className="aj-sr-only" id="aj-coloris-titre">
-            <T id="shop.title" />
+            <T id="home.apollonEyebrow" />
           </h2>
 
           <div className={styles.colorisGrille}>
@@ -252,6 +257,13 @@ export default function Home() {
             >
               <T id="story.quote" />
             </h2>
+            {/* Ce paragraphe reprenait mot pour mot la phrase de clôture
+                juste au-dessus, enveloppée dans « Chez AJ Luxury, nous sommes
+                convaincus que » : la plus belle ligne du site était désamorcée
+                par sa propre redite. Il porte maintenant la seule information
+                que l'accueil ne donnait nulle part — le rang d'Apollon. C'est
+                une intention, pas un catalogue : rien n'y laisse croire qu'un
+                autre modèle est déjà achetable. */}
             <p className={`aj-reveal ${styles.clotureTexte}`}>
               <ClientCopyText copyKey="brandStory" />
             </p>

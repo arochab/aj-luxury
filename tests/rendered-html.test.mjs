@@ -729,12 +729,28 @@ test("server-renders the complete AJ Luxury story", async () => {
   assert.equal(response.status, 200);
   const html = await response.text();
   assert.match(html, /Notre histoire/);
-  assert.match(html, /Le point de départ/);
-  assert.match(html, /Alex &amp; Jérémy/);
+  // Les trois mouvements sont nommés, plus jamais numérotés (retour du 19/08).
+  assert.match(html, /Le marbre/);
+  assert.match(html, /La lyre/);
+  assert.match(html, /Le laurier/);
+  assert.doesNotMatch(html, /<p[^>]*>0[123]<\/p>/);
+  assert.match(html, /Le vêtement que personne ne voit/);
+  assert.match(html, /Jérémy et Alex/);
+  // La seule prise de parole signée du site, et le seul endroit où le double
+  // rôle fondateurs/mannequins est explicité.
+  assert.match(html, /Apollon est notre premier modèle\. Il ne sera pas le dernier\./);
+  assert.match(html, /et les deux corps de toutes ces images/);
   assert.match(html, /Pas d’excès\. Simplement la justesse des détails\./);
-  assert.match(html, /campaign-duo-lilas-seated\.webp/);
-  assert.match(html, /product-lilas-model\.webp/);
-  assert.match(html, /story-jeremy-retouched\.jpeg/);
+  // Retour n°4, 19/08. Les deux portraits sont la seule référence NOMINATIVE
+  // du site : un prénom écrit sous un visage. Ils portaient Jérémy en Rose et
+  // Alex en Lilas, soit l'inverse de ce que montrent l'accueil, /shop et les
+  // fiches. Chacun porte désormais son coloris, et cette page ne peut plus
+  // dériver sans casser ce test.
+  assert.match(html, /editorial-lilas-chair\.webp/); // Jérémy — Lilas Céleste
+  assert.match(html, /hero-pourpre-model\.webp/); // Alex — Pourpre Impérial
+  assert.doesNotMatch(html, /story-jeremy-retouched\.jpeg/);
+  assert.doesNotMatch(html, /product-lilas-model\.webp/);
+  assert.match(html, /campaign-duo-pourpre\.webp/);
   assert.match(html, /product-pourpre-detail\.webp/);
   assert.match(html, />Accueil</);
   assert.match(

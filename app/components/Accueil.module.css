@@ -400,11 +400,6 @@
    reste du site. À 1440 la colonne vaut déjà exactement la largeur du
    diptyque, donc rien n'y bouge. Sous 900 px le panneau passe en une seule
    colonne et le centrage reprend, à raison. */
-@media (min-width: 901px) {
-  .duo {
-    justify-content: flex-end;
-  }
-}
 
 /* `clip`, jamais `hidden` : la fenêtre du volet déborde de sa demi-boîte de
    100 % de sa largeur, donc `hidden` en ferait un conteneur de défilement de
@@ -453,6 +448,138 @@
   will-change: transform;
 }
 
+@media (min-width: 901px) {
+  .duo {
+    justify-content: flex-end;
+    /* Conteneur de dimensionnement pour `.demi`. Les deux axes de `.duo` sont
+       définis de l'extérieur — largeur par la colonne de grille, hauteur par
+       `height: 100%` sur la rangée — donc `container-type: size` est légitime
+       et ne crée aucune circularité. */
+    container-type: size;
+  }
+
+  /* ── RETOUR N°3 · « les photos sont trop petites » ──────────────────
+     Le diptyque était dimensionné par la SEULE hauteur libre du panneau, et
+     cette hauteur était mangée par 226,8 px de padding vertical à 1080. La
+     largeur en découlant, le geste central de l'accueil RÉTRÉCISSAIT quand
+     l'écran grandissait : 67,9 %vw à 1440, 60,8 %vw à 1920. Mesuré au
+     navigateur avant reprise : deux boîtes de 568x853, couple de 1158 px.
+
+     Trois leviers, tous nécessaires, aucun suffisant seul :
+       1. le padding vertical passe de clamp(88px,11vh,124px) /
+          clamp(80px,10vh,112px) à clamp(14px,2.2vh,28px) des deux côtés ;
+       2. la colonne fixe de 300 px réservée à la copie disparaît — elle
+          confisquait 400 px de largeur en permanence, soit 21 %vw à 1920 ;
+       3. la barre d'onglets cesse d'occuper sa propre bande et passe en
+          surimpression sur le bas du diptyque (voir `.plaqueBarre`).
+
+     Résultat mesuré après reprise, viewport utile hors barre de défilement :
+       • 1920x1080 → 687x1033 par moitié, couple 1397 px = 73,3 %vw, 95,6 %vh ;
+       • 1440x900  → 573x861 par moitié, couple 1163 px = 81,6 %vw, 95,6 %vh.
+     Soit +21 % de linéaire et +47 % de surface photographique à 1920, sans
+     toucher un seul fichier image ni un seul cadrage.
+
+     ── LA BORNE DE LARGEUR, ET POURQUOI ELLE EXISTE ────────────────
+     Une fois la hauteur libérée, c'est la LARGEUR qui devient limitante sur
+     les écrans peu larges et hauts : à 1024x768 la hauteur libre autorise
+     989 px de couple pour 927 px de colonne, donc débordement. Ni `max-width`
+     ni `flex-shrink` ne conviennent : l'un comme l'autre écrase la boîte sans
+     toucher sa hauteur, le rapport 2/3 est rompu et `object-fit: contain`
+     rend alors des bandes vides — exactement le défaut que l'AGENTS interdit.
+
+     La seule construction qui garde le rapport est de contraindre la HAUTEUR
+     par les deux côtés à la fois. `min()` sur des unités de conteneur le fait
+     en une ligne : la hauteur ne dépasse jamais celle de `.duo`, et jamais
+     celle qu'autorise la moitié de sa largeur. `aspect-ratio` dérive la
+     largeur, donc les deux boîtes restent identiques au pixel près.
+
+     Repli : sur un moteur sans unités de conteneur, la déclaration entière
+     est invalide et `height: 100%` — déclaré plus haut, conservé — reprend la
+     main. La page reste celle d'avant, jamais cassée. */
+  .demi {
+    height: min(
+      100cqh,
+      (100cqw - var(--duo-gouttiere)) / 2 * 1.50201
+    );
+  }
+
+  .panneau {
+    grid-template-columns: minmax(0, 1fr);
+    padding-top: clamp(14px, 2.2vh, 28px);
+    padding-bottom: clamp(14px, 2.2vh, 28px);
+  }
+
+  /* La copie quitte la grille et vient se poser dans la marge gauche, celle
+     que le diptyque laisse en s'ancrant sur la gouttière droite. Elle n'y
+     confisque plus de largeur : elle occupe un vide qui existait déjà.
+
+     Le fond translucide rectangulaire est supprimé — c'est lui qui faisait
+     lire le bloc comme une infobulle. Il est remplacé par un voile en
+     dégradé, ancré au bord gauche de la page : à 1920 la copie ne touche même
+     pas le cadre (bord gauche du couple à 440 px, copie de 68 à 368), à 1440
+     et en dessous elle mord sur le plateau et le voile garantit le contraste.
+     Un dégradé qui meurt dans le mur se lit comme une lumière, pas comme une
+     boîte de dialogue. */
+  .panneauCopie {
+    position: absolute;
+    left: var(--gut);
+    bottom: clamp(104px, 13vh, 168px);
+    z-index: 2;
+    isolation: isolate;
+    width: min(300px, 30vw);
+    padding: 0;
+    background: none;
+  }
+
+  /* Le voile doit fondre sur DEUX axes, sinon il redevient le rectangle qu'on
+     cherchait à supprimer, en plus discret : un dégradé horizontal seul laisse
+     deux arêtes franches en haut et en bas, un dégradé radial seul est coupé
+     par le bord de sa propre boîte dès que son rayon la dépasse. Les deux ont
+     été essayés et se voyaient à 1440.
+
+     La construction retenue sépare les rôles : le `background` porte la
+     course horizontale, le masque porte la course verticale. Les arrêts du
+     masque sont en PIXELS et non en pourcentage, pour que la zone pleinement
+     opaque reste exactement sous la copie quelle que soit la longueur de la
+     phrase — un pourcentage se déplacerait avec elle et découvrirait le
+     titre. Débords haut et bas calés sur ces arrêts. */
+  .panneauCopie::before {
+    content: "";
+    position: absolute;
+    inset: -92px -136px -98px calc(var(--gut) * -1);
+    z-index: -1;
+    background: linear-gradient(
+      90deg,
+      var(--voile) 0%,
+      var(--voile) 38%,
+      transparent 100%
+    );
+    -webkit-mask-image: linear-gradient(
+      to bottom,
+      transparent 0,
+      #000 88px,
+      #000 calc(100% - 94px),
+      transparent 100%
+    );
+    mask-image: linear-gradient(
+      to bottom,
+      transparent 0,
+      #000 88px,
+      #000 calc(100% - 94px),
+      transparent 100%
+    );
+    pointer-events: none;
+  }
+}
+
+/* La barre ne possède plus sa bande : elle passe SUR le bas du diptyque, qui
+   a récupéré la hauteur (voir le bloc `@media (min-width: 901px)` plus haut).
+   Une surimpression sans voile serait un pari sur le contenu de la photo — le
+   bas du plan porté est de la peau en demi-teinte, le bas du plateau du marbre
+   clair. Le dégradé ci-dessous garantit le contraste des deux libellés quelle
+   que soit la prise, sans peindre une barre opaque : il naît sous le texte et
+   meurt 40 px plus haut. `isolation: isolate` borne le `z-index: -1` à la
+   barre — sans lui le voile passerait derrière le mur de section. */
 .plaqueBarre {
   position: absolute;
   right: var(--gut);
@@ -463,7 +590,22 @@
   justify-content: space-between;
   gap: 20px;
   flex-wrap: wrap;
+  isolation: isolate;
   color: var(--aj-encre);
+}
+
+.plaqueBarre::before {
+  content: "";
+  position: absolute;
+  inset: -40px calc(var(--gut) * -1) calc(clamp(24px, 3.4vh, 42px) * -1 - 8px);
+  z-index: -1;
+  background: linear-gradient(
+    to top,
+    rgb(0 0 0 / 52%) 0%,
+    rgb(0 0 0 / 34%) 58%,
+    rgb(0 0 0 / 0%) 100%
+  );
+  pointer-events: none;
 }
 
 .onglets {

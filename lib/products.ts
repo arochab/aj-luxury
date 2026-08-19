@@ -16,6 +16,87 @@ export type ProductMedia = {
   sourceRatio?: string;
 };
 
+/* ==========================================================================
+   QUI PORTE QUOI — retour n°4 d'Adam, 19/08
+   --------------------------------------------------------------------------
+   « Jamais deux photos du même mannequin à la suite, nulle part », et un
+   coloris porté par le même homme partout. Les deux règles se tiennent, mais
+   elles ne se déduisent d'aucun nom de fichier : `product-rose-profile.webp`
+   montre Jérémy, `product-card-rose.webp` montre Alex, et rien dans les deux
+   noms ne le dit. C'est exactement ainsi que la séquence Jérémy / Jérémy /
+   Alex s'est installée sur l'accueil ET sur /shop sans être vue.
+
+   L'attribution est donc DÉCLARÉE ici, une fois, d'après le contenu observé
+   des images — jamais d'après leur nom — et tout le site la lit.
+
+   L'ARBITRAGE. Les trois plans portés de la séquence guidée
+   (apollon-world/*-model-color-v2) sont la seule série tournée d'un coup sur
+   les trois coloris, et ce sont les fichiers dont le décor généré vient
+   d'être nettoyé. Ils donnent Rose → Alex, Lilas → Jérémy, Pourpre → Alex.
+   C'est cette série qui fixe la règle : la contredire obligerait à changer le
+   geste central de l'accueil pour des sources non nettoyées.
+
+   CONSÉQUENCE ASSUMÉE. Deux coloris sur trois reviennent à Alex : sur une
+   gamme impaire, l'alternance stricte (Alex, Jérémy, Alex) impose ce partage.
+   Les photos qui contredisent l'attribution sortent du tunnel commercial —
+   product-rose-profile (Jérémy en Rose), product-lilas-model (Alex en Lilas),
+   editorial-pourpre-chair (Jérémy en Pourpre) et story-jeremy-retouched
+   (Jérémy en Rose) ne sont plus lues par aucune carte, aucune fiche, aucune
+   galerie. Elles restent dans le dépôt et, pour la première, dans la bande
+   éditoriale de l'accueil, qui est une campagne et non un catalogue. */
+export type Wearer = "alex" | "jeremy";
+
+/** Prénom affichable. Un seul endroit, pour qu'aucun alt ne le réécrive. */
+export const wearerNames: Readonly<Record<Wearer, string>> = Object.freeze({
+  alex: "Alex",
+  jeremy: "Jérémy",
+});
+
+/* Toutes les photographies du dépôt où un visage est reconnaissable, et qui
+   s'y trouve. « duo » signifie les deux dans le même cadre : une image duo ne
+   revendique aucune attribution de coloris et rompt toujours l'alternance,
+   quel que soit son voisin.
+   Renseigné à l'inspection des fichiers, planche-contact du 19/08. */
+export const wearerByAsset: Readonly<Record<string, Wearer | "duo">> =
+  Object.freeze({
+    // Les trois plans portés de la séquence guidée de l'accueil. C'est la
+    // série qui FIXE la règle : une seule session, les trois coloris, décor
+    // généré nettoyé le 18/08.
+    "apollon-world/apollon-rose-model-color-v2.webp": "alex",
+    "apollon-world/apollon-lilas-model-color-v2.webp": "jeremy",
+    "apollon-world/apollon-pourpre-model-color-v2.webp": "alex",
+    // Le film d'ouverture : les deux dans le même plan.
+    "hero-v4-desktop-1920x1080-poster.webp": "duo",
+    "hero-v4-portrait-720x934-poster.webp": "duo",
+    "hero-v4-portrait-480x623-poster.webp": "duo",
+    // Rose Velours
+    "raw/product-card-rose.webp": "alex",
+    "editorial-rose-profile.webp": "alex",
+    "raw/product-rose-profile.webp": "jeremy",
+    "story-jeremy-retouched.jpeg": "jeremy",
+    // Lilas Céleste
+    "editorial-lilas-chair.webp": "jeremy",
+    "raw/product-lilas-model.webp": "alex",
+    "product-lilas-model.webp": "alex",
+    // Pourpre Impérial
+    "raw/product-card-pourpre.webp": "alex",
+    "hero-pourpre-model.webp": "alex",
+    "editorial-pourpre-chair.webp": "jeremy",
+    // Les deux dans le même cadre
+    "campaign-duo-lilas-seated.webp": "duo",
+    "campaign-duo-pourpre.webp": "duo",
+  });
+
+/** Qui figure sur ce média, ou `null` s'il n'y a pas de visage (détails,
+ *  plans de dos serrés, natures mortes). Un `null` ne rompt ni ne satisfait
+ *  l'alternance : il n'entre tout simplement pas dans la séquence. */
+export function wearerOf(src: string): Wearer | "duo" | null {
+  const cle = Object.keys(wearerByAsset).find((suffixe) =>
+    src.endsWith(suffixe),
+  );
+  return cle ? wearerByAsset[cle] : null;
+}
+
 export type Product = {
   slug: string;
   modelId: "boxer-aj-luxury";
@@ -24,7 +105,17 @@ export type Product = {
   color: string;
   tone: string;
   swatch: string;
+  /** L'homme qui porte CE coloris, partout où il est porté. */
+  wearer: Wearer;
+  /* Le plan de carte, et le plan de tête de fiche : c'est le MÊME fichier.
+     Une carte qui ouvre sur un autre corps que celui qu'elle montrait était
+     le défaut relevé le 19/08 sur le Lilas — carte Jérémy, fiche Alex. */
   image: string;
+  /** La nature morte du plateau : marbre, lyre, arc, laurier, carquois.
+      Aucun corps, donc aucune question de parité — c'est ce qui permet aux
+      deux recommandations de bas de fiche d'exister sur les trois coloris
+      alors que deux d'entre eux partagent le même mannequin. */
+  still: string;
   gallery: ProductMedia[];
   tagline: string;
   description: string;
@@ -79,14 +170,22 @@ export const products: Product[] = deepFreeze([
     color: "Rose Velours",
     tone: "Doux et raffiné",
     swatch: "#dda9bd",
-    image: "/images/client/raw/product-rose-profile.webp",
+    wearer: "alex",
+    /* Était `product-rose-profile.webp`, c'est-à-dire JÉRÉMY, alors que le
+       Lilas juste après montrait lui aussi Jérémy : la rangée de l'accueil et
+       celle de /shop lisaient Jérémy, Jérémy, Alex. `product-card-rose.webp`
+       est le même plan de carte, tourné avec Alex, déjà dans le dépôt — et
+       accessoirement 13 points de L* plus clair que le profil, ce qui aligne
+       enfin l'exposition des trois cartes. */
+    image: "/images/client/raw/product-card-rose.webp",
+    still: "/images/editorial/isabelle-apollon/apollon-rose-lyre-v1.webp",
     gallery: [
       {
-        src: "/images/client/raw/product-rose-profile.webp",
+        src: "/images/client/raw/product-card-rose.webp",
         frame: "main",
         objectPosition: "center 30%",
       },
-      { src: "/images/client/raw/product-card-rose.webp", frame: "portrait" },
+      { src: "/images/client/editorial-rose-profile.webp", frame: "portrait" },
       {
         src: "/images/client/raw/product-rose-front.webp",
         frame: "portrait",
@@ -118,17 +217,24 @@ export const products: Product[] = deepFreeze([
     color: "Lilas Céleste",
     tone: "Délicat et lumineux",
     swatch: "#a9abd9",
+    wearer: "jeremy",
     image: "/images/client/editorial-lilas-chair.webp",
+    still: "/images/editorial/isabelle-apollon/apollon-lilas-lyre-v1.webp",
+    /* La carte montrait Jérémy et la fiche s'ouvrait sur Alex
+       (`product-lilas-model.webp`) : on cliquait sur un homme et on en
+       obtenait un autre, sur le même coloris. Le plan de tête est désormais
+       le plan de carte, et les deux vignettes qui suivent sont sans visage.
+       `product-lilas-front.webp` est retiré : il redit `-detail` de face, et
+       trois vignettes dans une grille à deux colonnes laisseraient une
+       demi-ligne vide, que l'AGENTS interdit. */
     gallery: [
       {
-        src: "/images/client/raw/product-lilas-model.webp",
+        src: "/images/client/editorial-lilas-chair.webp",
         frame: "main",
         objectPosition: "center 30%",
       },
-      { src: "/images/client/editorial-lilas-chair.webp", frame: "portrait" },
       { src: "/images/client/raw/product-lilas-detail.webp", frame: "portrait" },
       { src: "/images/client/raw/product-lilas-back.webp", frame: "portrait" },
-      { src: "/images/client/raw/product-lilas-front.webp", frame: "portrait" },
     ],
     tagline: "Délicat et lumineux",
     description:
@@ -153,7 +259,9 @@ export const products: Product[] = deepFreeze([
     color: "Pourpre Impérial",
     tone: "Profond et sophistiqué",
     swatch: "#7d0f52",
+    wearer: "alex",
     image: "/images/client/raw/product-card-pourpre.webp",
+    still: "/images/editorial/isabelle-apollon/apollon-pourpre-lyre-v1.webp",
     gallery: [
       {
         src: "/images/client/raw/product-card-pourpre.webp",
@@ -163,12 +271,13 @@ export const products: Product[] = deepFreeze([
       { src: "/images/client/raw/product-pourpre-detail.webp", frame: "portrait" },
       { src: "/images/client/raw/product-pourpre-back.webp", frame: "portrait" },
       { src: "/images/client/raw/product-pourpre-alt.webp", frame: "portrait" },
-      {
-        src: "/images/client/editorial-pourpre-chair.webp",
-        frame: "portrait",
-        /* 1864x2600 = 0,7169, contre 0,6658 pour les autres sources. */
-        sourceRatio: "1864 / 2600",
-      },
+      /* Était `editorial-pourpre-chair.webp`, c'est-à-dire JÉRÉMY dans le
+         coloris d'Alex — la seule galerie du site qui montrait deux hommes
+         différents pour un même vêtement. `hero-pourpre-model.webp` est le
+         même plan porté avec Alex, déjà dans le dépôt, et il rend au passage
+         le ratio commun 1731x2600 : l'exception de cadre à 1864x2600
+         disparaît avec lui. */
+      { src: "/images/client/hero-pourpre-model.webp", frame: "portrait" },
     ],
     tagline: "Profond et sophistiqué",
     description:

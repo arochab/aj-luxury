@@ -140,7 +140,7 @@ test("the client accepts the exact product slugs and color keys seeded by migrat
       colorKey: "rose",
       colorName: "Rose Velours",
       size: "M",
-      imageUrl: "/images/client/raw/product-rose-profile.webp",
+      imageUrl: "/images/client/raw/product-card-rose.webp",
     },
     {
       variantId: "variant_boxer_lilas-bleu-clair_m",
@@ -148,7 +148,7 @@ test("the client accepts the exact product slugs and color keys seeded by migrat
       colorKey: "lilas",
       colorName: "Lilas Céleste",
       size: "M",
-      imageUrl: "/images/client/raw/product-lilas-model.webp",
+      imageUrl: "/images/client/editorial-lilas-chair.webp",
     },
   ].map((line) => ({
     ...line,
