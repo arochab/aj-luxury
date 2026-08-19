@@ -12,8 +12,12 @@ import {
 const ORIGIN = "https://aj-luxury-preprod.example";
 const OWNER_EMAIL = "adam.chabbi94@gmail.com";
 const drizzleDirectory = fileURLToPath(new URL("../drizzle/", import.meta.url));
+// The preproduction cart gate proves its schema by exact inventory up to
+// 0014: 0011 supplies delivery_provider_reference_vault, 0012 and 0013 the
+// provider pricing contract triggers, 0014 late_payment_refund_intents.
+// Stopping short closes the gate with installation-proof-invalid.
 const migrations = readdirSync(drizzleDirectory)
-  .filter((name) => /^(?:000[0-9]|0010)_.+\.sql$/.test(name))
+  .filter((name) => /^(?:000[0-9]|001[0-4])_.+\.sql$/.test(name))
   .sort()
   .map((name) => `${drizzleDirectory}${name}`);
 
