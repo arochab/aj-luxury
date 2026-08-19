@@ -166,7 +166,7 @@ const PLATEAUX: readonly Plateau[] = [
     numero: "01",
     nomKey: "sequence.color.rose",
     still: "/images/editorial/isabelle-apollon/apollon-rose-lyre-v1.webp",
-    worn: "/images/client/apollon-world/apollon-rose-model-world-v1.webp",
+    worn: "/images/client/apollon-world/apollon-rose-model-color-v2.webp",
     mur: "var(--aj-mur-rose)",
     voile: "var(--aj-voile-rose)",
     phrase:
@@ -177,7 +177,7 @@ const PLATEAUX: readonly Plateau[] = [
     numero: "02",
     nomKey: "sequence.color.lilac",
     still: "/images/editorial/isabelle-apollon/apollon-lilas-lyre-v1.webp",
-    worn: "/images/client/apollon-world/apollon-lilas-model-world-v1.webp",
+    worn: "/images/client/apollon-world/apollon-lilas-model-color-v2.webp",
     mur: "var(--aj-mur-lilas)",
     voile: "var(--aj-voile-lilas)",
     phrase:
@@ -188,15 +188,38 @@ const PLATEAUX: readonly Plateau[] = [
     numero: "03",
     nomKey: "sequence.color.purple",
     still: "/images/editorial/isabelle-apollon/apollon-pourpre-lyre-v1.webp",
-    /* `-model-world-v1`, et surtout pas `-model-color-v1`. Mesuré au banc
-       `_design-reference/mesure-horizon.py` : horizon mur/marbre à 69,3 % au
-       bord DROIT du « seul » comme au bord GAUCHE du porté, contrastes 140 et
-       146 — 0,0 point de rupture, et l'arête la plus franche des trois
-       plateaux. La variante `-color` n'a AUCUN sol (luminance moyenne
-       du tiers bas : 42,9, contre 97,4 pour `-world` et 149,5 pour le
-       « seul ») — l'homme y flotte sur un aplat et le marbre s'arrête net à
-       la couture. */
-    worn: "/images/client/apollon-world/apollon-pourpre-model-world-v1.webp",
+    /* `-model-color-v2` depuis le 18/08. Adam demande que les décors générés
+       disparaissent du fond des trois photos portées : plus de lyre, plus de
+       laurier, plus de carquois, plus de sol de marbre. Le mur nu vient du même
+       shooting, même pose, même 1731x2600.
+
+       Ce qui est abandonné, sciemment : le raccord d'horizon mesuré au banc
+       `_design-reference/mesure-horizon.py` (mur/marbre à 69,3 % des deux côtés
+       de la couture) n'existe plus, puisqu'il n'y a plus de sol. Le diptyque
+       n'imite plus un panorama continu ; il pose côte à côte un plateau et un
+       homme. C'est la lecture que le jury du 18/08 recommandait déjà en B3.
+
+       Les `v2` sont dérivées des `-model-color-v1` : branche dorée retirée du
+       pourpre par reconstruction du mur, et 105 lignes de socle coupées en bas
+       des trois, rendues en haut par réflexion du mur nu — donc format et
+       ratio 1731x2600 strictement inchangés, ce dont dépendent les
+       `aspect-ratio: 2 / 3` posés sur toutes les vignettes.
+
+       PRÉCISION DU 19/08, à ne pas perdre : cette réflexion est un MIROIR
+       EXACT, pas une extension de mur. Les lignes 0 à 104 sont les lignes 105
+       à 209 retournées (écart moyen mesuré 0,08 sur le rose, 0,12 sur le
+       lilas, 0,90 sur le pourpre, contre 11,09 / 2,57 / 6,49 sur la bande de
+       contrôle suivante). Elle est invisible parce qu'elle ne couvre que du
+       mur nu — mais sur le Rose la chevelure commence à y≈220, soit 10 px
+       seulement sous la limite de la bande. Conséquences opposables :
+         • ne JAMAIS poser d'`object-position` vers le haut sur ces trois
+           vignettes, ni de cadre moins vertical que 2/3 — un crâne dupliqué à
+           l'envers apparaîtrait en haut du cadre ;
+         • `.prise` est en `object-fit: contain` : la source est rendue à
+           100 %, c'est ce qui rend la marge de 10 px acceptable aujourd'hui ;
+         • si de nouvelles sources doivent être fabriquées ainsi, générer le
+           haut par EXTENSION de mur, pas par miroir. */
+    worn: "/images/client/apollon-world/apollon-pourpre-model-color-v2.webp",
     mur: "var(--aj-mur-pourpre)",
     voile: "var(--aj-voile-pourpre)",
     phrase:
@@ -282,9 +305,25 @@ function mesureA(q: number): Mesure {
   return MESURES[0];
 }
 
-/** Où viser pour amener un coloris à son premier temps, scellé. */
+/** Où viser pour amener un coloris à son plan PORTÉ, volet ouvert.
+ *
+ *  Visait « seul » jusqu'au 19/08, c'est-à-dire la plaque scellée, en laissant
+ *  au défilement le soin de la dévoiler. C'est juste pour qui descend la page ;
+ *  c'est faux pour qui clique un onglet — et l'onglet est le SEUL chemin
+ *  d'accès aux plateaux 02 et 03, les liens des panneaux inactifs étant
+ *  `inert`. Mesuré après un clic sur l'onglet 03 à 1920x1080 : la nature morte
+ *  occupait x 834..1402 et il restait 503 px de bordeaux plat jusqu'au bord de
+ *  la fenêtre, soit 26,4 % de la largeur en aplat vide, le volet étant à
+ *  translateX(-568,03 px) — complètement fermé. Il fallait deviner qu'il
+ *  fallait continuer à faire défiler pour compléter la composition.
+ *
+ *  On vise donc le premier temps où le volet est ouvert et le vêtement porté
+ *  visible : la composition est entière à l'arrivée, et la révélation reste
+ *  disponible en remontant. Le repère continue de sortir de la partition, donc
+ *  la barre et le récit ne peuvent toujours pas diverger. */
 const REPERES: readonly number[] = PLATEAUX.map(
-  (_, i) => MESURES.find((m) => m.panneau === i && m.nom === "seul")?.debut ?? 0,
+  (_, i) =>
+    MESURES.find((m) => m.panneau === i && m.nom === "porte")?.debut ?? 0,
 );
 
 export type ColorisPlaque = {
@@ -534,9 +573,9 @@ export default function ApollonGuidedSequence({ coloris }: Props) {
   });
 
   // Les onglets déplacent le scroll : ils ne prennent jamais la main sur lui.
-  // La cible est le début du temps « Seul » du coloris visé — on arrive donc
-  // sur la plaque scellée, et c'est le scroll qui la dévoile. Le repère sort
-  // de la partition : la barre et le récit ne peuvent pas diverger.
+  // La cible est le temps « Porté » du coloris visé, volet ouvert — voir
+  // REPERES pour la mesure du défaut que cela corrige. Le repère sort de la
+  // partition : la barre et le récit ne peuvent pas diverger.
   const viser = (index: number) => {
     const section = racine.current;
     if (!section) return;

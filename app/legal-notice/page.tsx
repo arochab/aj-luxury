@@ -2,7 +2,7 @@ import InfoPage, { InfoNotice } from "../components/InfoPage";
 import {
   HOSTING_PROVIDER,
   LEGAL_CONTACT,
-  LEGAL_VERSION,
+  LEGAL_VERSION_DISPLAY,
   SELLER_IDENTITY,
 } from "@/lib/legal";
 import { T } from "@/lib/i18n/TranslatedText";
@@ -12,7 +12,7 @@ export const metadata = { title: "Mentions légales | AJ Luxury" };
 export default function LegalNoticePage() {
   return (
     <InfoPage
-      eyebrow={<T id="info.legal.eyebrow" values={{ version: LEGAL_VERSION }} />}
+      eyebrow={<T id="info.legal.eyebrow" values={{ version: LEGAL_VERSION_DISPLAY }} />}
       title={<T id="info.legal.title" />}
       status={<T id="info.legal.status" />}
       officialFrenchOnly

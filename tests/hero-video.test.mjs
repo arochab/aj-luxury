@@ -267,9 +267,19 @@ test("hero playback is accessible, resource-aware and subject-safe", async () =>
     stylesheet,
     /\.aj-film__hero-video--started \{[\s\S]*opacity: 1;/,
   );
+  /* `top: 96px` dégageait les visages quand l'en-tête poussait le film vers le
+     bas. Depuis le 18/08 la barre surplombe l'image et le film repart du tout
+     premier pixel : ce décalage ne protégeait plus rien et laissait voir le
+     fond de scène sous l'en-tête — la « bande grise » signalée par le client.
+     Le contrat épinglé est donc maintenant l'inverse : la scène part du haut,
+     et le média remplit le cadre au lieu de s'y poser en boîte à lettres. */
   assert.match(
     stylesheet,
-    /@media \(min-aspect-ratio: 801 \/ 1000\)[\s\S]*\.aj-film__hero-stage[\s\S]*top: 96px/,
+    /@media \(min-aspect-ratio: 801 \/ 1000\)[\s\S]*\.aj-film__hero-stage[\s\S]*top: 0/,
+  );
+  assert.match(
+    stylesheet,
+    /@media \(min-aspect-ratio: 801 \/ 1000\)[\s\S]*object-fit: cover/,
   );
   assert.match(stylesheet, /@media \(max-aspect-ratio: 4 \/ 5\)/);
   assert.match(stylesheet, /top: calc\(50% \+ 34px\)/);

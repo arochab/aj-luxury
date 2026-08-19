@@ -1,7 +1,7 @@
 import InfoPage, { InfoNotice } from "../components/InfoPage";
 import {
   LEGAL_CONTACT,
-  LEGAL_VERSION,
+  LEGAL_VERSION_DISPLAY,
   MEDIATOR,
   SELLER_IDENTITY,
 } from "@/lib/legal";
@@ -14,7 +14,7 @@ export const metadata = {
 export default function TermsPage() {
   return (
     <InfoPage
-      eyebrow={<T id="info.terms.eyebrow" values={{ version: LEGAL_VERSION }} />}
+      eyebrow={<T id="info.terms.eyebrow" values={{ version: LEGAL_VERSION_DISPLAY }} />}
       title={<T id="info.terms.title" />}
       status={<T id="info.terms.status" />}
       officialFrenchOnly

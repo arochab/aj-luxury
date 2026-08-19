@@ -120,13 +120,25 @@
 /* --- 02 · La grille des coloris ------------------------------------------
    Bord à bord, filets de 2px : le cadrage de la maquette (#coloris). */
 
+/* Même raison que .colorisGrille sur l'accueil : trois articles ne tombent
+   jamais juste sur deux colonnes. `auto-fit` en passait par là de ~600 à
+   ~899 px — à 768x1024, deux cartes en première rangée et la troisième seule,
+   suivie d'une cellule vide de la hauteur d'une carte. On choisit donc
+   explicitement une colonne ou trois, jamais deux. Les deux écrans qui
+   présentent les coloris se comportent désormais pareil à la même largeur. */
 .grille {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 2px;
   padding: 0 2px;
   margin: 0;
   list-style: none;
+}
+
+@media (min-width: 700px) {
+  .grille {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 .carte {
@@ -141,8 +153,20 @@
 .carteLien {
   position: relative;
   display: block;
-  min-height: clamp(430px, 74vh, 800px);
-  height: 100%;
+  /* Ratio natif des sources (1731/2600 ~ 2/3) : la hauteur de la photo est
+     alors intégralement visible, quelle que soit la largeur de la colonne.
+     À 472x666 (0.71) le hublot commençait à 3,7 % et rognait le haut du
+     crâne de `product-card-pourpre` (crâne à 3 %). */
+  aspect-ratio: 2 / 3;
+  /* min-height: 0 est OBLIGATOIRE à côté d'aspect-ratio sur un enfant de
+     grille. Le plancher en vh qui vivait ici redevenait une largeur : la
+     taille minimale automatique d'un item de grille se déduit du ratio et
+     de la hauteur, donc `min-height: 74vh` imposait une largeur de
+     74vh x 1.5 supérieure à la colonne. À 320x844 la carte faisait 416 px
+     dans une colonne de 316 : 98 px hors écran, coupés en silence par
+     main{overflow-x:clip}, soit 23,6 % de chaque photo perdus à droite.
+     La hauteur se déduit désormais de la largeur, jamais l'inverse. */
+  min-height: 0;
   overflow: hidden;
   color: inherit;
   text-decoration: none;
@@ -160,7 +184,9 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
-  object-position: center 60%;
+  /* Neutre : le cadre est au ratio de la source, il n'y a plus de hublot
+     vertical à faire coulisser. */
+  object-position: center;
 }
 
 /* Le voile : sans lui le lettrage métallique perdrait son contraste sur les
@@ -256,21 +282,31 @@
   white-space: nowrap;
 }
 
+/* Ces quatre tailles sont `aria-hidden` dans app/shop/page.tsx : elles ne sont
+   pas cliquables et ne le seront pas ici — le lien de carte mène à la fiche.
+   Le cadre, le fond et le pas régulier les faisaient pourtant passer pour des
+   boutons de 46x38,1 px : le doigt visait la puce et déclenchait la navigation,
+   l'affordance mentait sur le résultat. On assume le caractère décoratif et on
+   retire ce qui les déguisait en cible. Un plancher de 44 px serait le mauvais
+   remède : il rendrait le mensonge plus confortable, pas moins faux. */
 .carteTailles {
   display: flex;
-  gap: 8px;
+  align-items: baseline;
+  gap: 0;
   flex-wrap: wrap;
 }
 
 .carteTailles span {
-  min-width: 46px;
-  padding: 7px 8px;
-  border: 1px solid var(--aj-filet-bouton);
-  color: var(--aj-encre-84);
+  color: var(--aj-encre-72);
   font-size: var(--t0);
   font-weight: var(--aj-w-moyen);
-  letter-spacing: 0.08em;
-  text-align: center;
+  letter-spacing: 0.14em;
+}
+
+.carteTailles span + span::before {
+  content: "·";
+  margin: 0 0.5em;
+  opacity: 0.55;
 }
 
 /* Le filet d'accent : la couleur du coloris, jamais inventée — elle descend
@@ -317,7 +353,11 @@
 
 .matiereFrame {
   position: relative;
-  min-height: clamp(420px, 82vh, 900px);
+  /* Même correction que sur l'accueil : hauteur imposée + colonne étroite
+     donnaient un cadre de 0.45 en 768x1024, qui coupait les deux côtés du
+     boxer. Ratio de la source x le débord de parallaxe (112 %). */
+  aspect-ratio: 0.745;
+  min-height: 0;
   overflow: hidden;
   background: var(--aj-noir-media);
 }
@@ -333,7 +373,10 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
-  object-position: center 45%;
+  /* Le cadre porte désormais le ratio de la source : la photo y entre en
+     entier, il n'y a plus de hublot à faire coulisser. `center 45%` coupait
+     auparavant le bas des jambes du boxer. */
+  object-position: center;
 }
 
 .matiereTexte {
@@ -406,4 +449,10 @@
   .carteFilet {
     transform: scaleX(1);
   }
+}
+
+/* Un nom de coloris ne se coupe pas. Utilisé par la ligne COLORIS de l'en-tête
+   de /shop, où « Impérial » se retrouvait seul sur une seconde ligne. */
+.insecable {
+  white-space: nowrap;
 }

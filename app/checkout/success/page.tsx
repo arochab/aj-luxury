@@ -1,6 +1,7 @@
 import Link from "next/link";
 import StoreFooter from "../../components/StoreFooter";
 import StoreHeader from "../../components/StoreHeader";
+import { T } from "../../../lib/i18n/TranslatedText";
 import { getServerCommerceRuntimeMode } from "../../../lib/commerce/commerce-runtime.server";
 import styles from "../../cart/CommerceShell.module.css";
 import tunnel from "../../components/Tunnel.module.css";
@@ -44,6 +45,7 @@ function FilDEtapes({ etape }: { etape: 1 | 2 | 3 }) {
 
 export default function CheckoutSuccessPage() {
   const runtimeMode = getServerCommerceRuntimeMode();
+  const commerceOuvert = runtimeMode !== "closed";
   return (
     <main className={`${styles.shell} ${tunnel.sol}`}>
       <StoreHeader />
@@ -56,6 +58,35 @@ export default function CheckoutSuccessPage() {
       */}
       <div className={`${tunnel.tunnel} ${tunnel.moment}`}>
         <FilDEtapes etape={3} />
+
+        {/*
+          La barre de sortie, identique à celle de /checkout. Sans elle, la
+          jauge du fil (1 px) et le sceau (1 px) encadraient 46 px de large sur
+          1 310 px strictement vides : deux traits parallèles qui n'annonçaient
+          rien, en tout premier élément de la page censée rassurer. Le vide
+          n'était pas une respiration, c'était une ligne utilitaire à laquelle
+          on avait retiré son contenu. On lui rend le sien : par où l'on
+          repart, et dans quel état se trouve le commerce.
+        */}
+        <div className={tunnel.barre}>
+          <Link className={tunnel.lien} href="/shop">
+            <T id="common.backToCollection" />
+          </Link>
+          <span
+            className={
+              commerceOuvert ? `${tunnel.etat} ${tunnel.etatOuvert}` : tunnel.etat
+            }
+          >
+            {runtimeMode === "preproduction" ? (
+              <T id="checkout.preprodLabel" />
+            ) : runtimeMode === "production" ? (
+              "Paiement sécurisé"
+            ) : (
+              "Commerce fermé"
+            )}
+          </span>
+        </div>
+
         <span className={tunnel.sceau} aria-hidden="true" />
 
         {runtimeMode === "production" ? (

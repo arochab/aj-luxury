@@ -26,7 +26,12 @@
   --info-papier: #f2f1ed;
   --info-encre: #101014;
   --info-encre-douce: #45454c;
-  --info-encre-faible: #71717a;
+  /* #71717a donnait 4,28:1 sur le papier #f2f1ed — sous le 4,5:1 de l'AA pour
+     du 15 px en graisse 600, et ce jeton porte les surtitres, c'est-à-dire la
+     seule indication de ce qu'on est en train de lire. #5e5e67 remonte à
+     5,68:1 en restant un gris discret. Jeton local au gabarit clair : rien
+     n'est touché sur les fonds sombres. */
+  --info-encre-faible: #5e5e67;
   --info-filet: rgba(16, 16, 20, 0.18);
   --info-filet-fin: rgba(16, 16, 20, 0.1);
   --info-voile: rgba(255, 255, 255, 0.66);
@@ -50,14 +55,22 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: clamp(38px, 5vw, 60px);
-  width: min(1240px, 100%);
+  /* 1240px laissait 909 px (47,7 % de 1905) inutilisés à 1920, et surtout
+     écrasait la colonne de lecture à 597 px : le tableau à quatre colonnes de
+     /privacy y cassait chaque cellule sur quatre ou cinq lignes. La colonne de
+     texte reste bornée en CARACTÈRES plus bas (c'est elle qui doit rester
+     lisible), mais le gabarit, lui, a le droit de respirer. */
+  width: min(1440px, 100%);
   margin-inline: auto;
   padding: clamp(52px, 7vw, 96px) var(--gut) clamp(76px, 9vw, 136px);
 }
 
 @media (min-width: 1040px) {
   .article {
-    grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+    /* La colonne de titre ne porte qu'un surtitre et un titre : elle n'a pas
+       besoin de grandir avec l'écran. Tout le gain de largeur va à la lecture,
+       donc au tableau. */
+    grid-template-columns: minmax(260px, 22vw) minmax(0, 1fr);
     align-items: start;
     gap: clamp(48px, 6vw, 108px);
   }
@@ -103,9 +116,17 @@
    seule contrainte qui compte vraiment sur une page de texte long.
    ========================================================================== */
 
+/* Le plafond de 70 caractères était posé sur la COLONNE, donc il bridait aussi
+   les tableaux, qui n'ont rien à voir avec le confort de lecture d'une ligne de
+   prose. On le déplace sur la prose elle-même : le texte garde ses 70ch, le
+   tableau prend toute la colonne et cesse d'être écrasé. */
 .copy {
   display: grid;
   gap: clamp(24px, 3vw, 34px);
+  max-width: none;
+}
+
+.copy :is(p, h2, h3, h4, ul, ol, dl, blockquote, address) {
   max-width: 70ch;
 }
 
@@ -166,6 +187,20 @@
 .copy a:focus-visible {
   outline: 1px solid currentColor;
   outline-offset: 4px;
+}
+
+/* L'adresse de contact est une ACTION, pas un renvoi de prose : sur /contact
+   elle est même la seule de la page. Elle porte donc le plancher 44x44 de
+   l'AGENTS, que les liens insérés dans une phrase n'ont pas à porter (WCAG
+   2.5.8 les en exempte, et les gonfler tous casserait l'interlignage des pages
+   légales). `inline-flex` + `min-height` : la ligne s'ouvre un peu, la mise en
+   page ne bouge pas. */
+.copy a.actionMail {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  padding-inline: 0.15em;
+  font-weight: var(--aj-w-gras);
 }
 
 .copy ul,
@@ -256,10 +291,42 @@
 
 /* --- Tableaux ----------------------------------------------------------- */
 
+/* L'amorce de défilement, sans JavaScript et sans barre système : deux paires
+   de dégradés superposés. Les deux premiers, en `background-attachment: local`,
+   défilent AVEC le contenu et masquent l'ombre dès qu'on atteint le bord ; les
+   deux suivants, en `scroll`, restent collés aux bords du conteneur. Résultat :
+   l'ombre de droite n'est visible que tant qu'il reste du tableau à droite, et
+   celle de gauche que si l'on a déjà défilé. C'est l'indice qui manquait sur
+   /privacy, où « Base légale » et « Durée de référence » commencent hors champ. */
 .tableWrap {
   overflow-x: auto;
   /* Le tableau peut déborder ; la page, jamais. */
   overscroll-behavior-x: contain;
+
+  background-image:
+    linear-gradient(to right, var(--info-papier), rgba(242, 241, 237, 0) 28px),
+    linear-gradient(to left, var(--info-papier), rgba(242, 241, 237, 0) 28px),
+    linear-gradient(to right, rgba(16, 16, 20, 0.16), rgba(16, 16, 20, 0) 18px),
+    linear-gradient(to left, rgba(16, 16, 20, 0.16), rgba(16, 16, 20, 0) 18px);
+  background-repeat: no-repeat;
+  background-position:
+    left center,
+    right center,
+    left center,
+    right center;
+  background-size:
+    28px 100%,
+    28px 100%,
+    18px 100%,
+    18px 100%;
+  background-attachment: local, local, scroll, scroll;
+}
+
+/* La zone est focalisable (tabindex=0 dans InfoPage.tsx) : le focus doit se
+   voir, sinon on a rendu atteignable une région invisible au clavier. */
+.tableWrap:focus-visible {
+  outline: 2px solid var(--info-encre);
+  outline-offset: 3px;
 }
 
 .copy table {

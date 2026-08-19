@@ -2,7 +2,13 @@
 
 /* eslint-disable @next/next/no-img-element -- source pixels are pre-optimized and client runtime cost is intentionally avoided */
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import type { ProductMedia } from "@/lib/products";
 import { useAjMotion } from "./useAjMotion";
@@ -381,6 +387,16 @@ export default function ProductGalleryZoom({
       <figure
         className={`${styles.galleryItem} ${getFrameClass(image)}`}
         key={image.src}
+        /* Le ratio de la source voyage jusqu'au cadre, mais c'est le CSS qui
+           décide de s'en servir — uniquement là où la vignette est seule sur
+           sa ligne. Aucun object-position n'est posé en compensation. */
+        style={
+          image.sourceRatio
+            ? ({
+                "--frame-ratio": image.sourceRatio,
+              } as CSSProperties)
+            : undefined
+        }
         data-aj-reveal
         /* Seule la première vue reçoit le filet d'arrivée : c'est elle qui
            occupe la place qu'occupait la carte cliquée. */

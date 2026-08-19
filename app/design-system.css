@@ -94,21 +94,66 @@
     #ffffff 100%
   );
 
-  /* --- Fonds et encres --------------------------------------------------- */
-  --aj-noir: #08080a; /* fond de page, et couleur du volet d'ouverture */
-  --aj-noir-media: #101014; /* fond des cadres image avant décodage */
+  /* --- Fonds : les quatre étages de noir ----------------------------------
+     Retour client du 18/08 : « le site est un poil sombre quand même ».
+     Mesure avant correction — luminance L* (CIE, D65) de chaque fond :
+       .aj-film      #070709  L* 1,96
+       --aj-noir     #08080a  L* 2,23   (toutes les sections de récit)
+       .aj-home      #0a0a0b  L* 2,76
+       --aj-noir-media #101014 L* 4,80
+     Quatre noirs dans une plage de 2,8 L*. Le seuil de perception d'un écart
+     de clair sur deux grands aplats voisins est de l'ordre de 2 L* : l'œil ne
+     les sépare donc pas. Le site n'est pas trop sombre, il est MONOTONE en
+     sombre — onze sections lues comme un seul aplat noir, sans respiration.
 
+     La correction ne blanchit rien. Elle transforme un noir unique en une
+     échelle de quatre étages, chacun séparé du suivant par un écart
+     franchement perceptible (4 à 10 L*) :
+
+       --aj-noir-abysse  L*  2,2  le noir de marque, INCHANGÉ. Volets
+                                  d'ouverture, film, et les seules surfaces
+                                  qui portent un titre en métal (voir plus bas).
+       --aj-noir         L*  6,5  plancher des sections. Là où l'on LIT le
+                                  vêtement : cartes coloris, éditorial,
+                                  boutique, fiches produit.
+       --aj-noir-2       L* 11,6  les panneaux de matière.
+       --aj-gris-recit   L* 21,8  la respiration en ton moyen, réservée aux
+                                  deux surfaces de récit sans photographie.
+
+     Pourquoi --aj-noir-abysse ne bouge PAS : le dégradé --metal a un arrêt à
+     #6d737b, qui ne tient que 4,18:1 sur #08080a. Chaque point de L* rendu au
+     fond lui en coûte. Les trois titres en métal restent donc sur le noir
+     d'origine — le métal brille sur le plus profond, c'est aussi le bon
+     réglage plastique. Cet arrêt sous le plancher de 5,0:1 est un écart
+     ANTÉRIEUR, sur un actif de marque validé : il est signalé, pas réécrit.
+
+     Aucun fond moyen sur la boutique ni sur les fiches produit : ce sont les
+     seules surfaces où le rose pâle et le lilas du boxer doivent tenir. */
+  --aj-noir-abysse: #08080a; /* L* 2,2 — volets, film, titres métal */
+  --aj-noir: #14141a; /* L* 6,5 — plancher des sections */
+  --aj-noir-2: #1e1e26; /* L* 11,6 — panneaux de matière */
+  --aj-gris-recit: #34333e; /* L* 21,8 — respiration, récit sans photo */
+  --aj-noir-media: #17171d; /* L* 8,0 — cadres image avant décodage */
+
+  /* --- Encres -------------------------------------------------------------
+     Deuxième moitié du même retour. Sur fond quasi noir, c'est le texte gris
+     qui fabrique la sensation d'obscurité avant le fond : un paragraphe à
+     L* 75 sur un aplat à L* 2 se lit comme éteint même si son rapport de
+     contraste est confortable. Les quatre encres remontent donc de 3 à 8
+     points de opacité. Le contraste ne peut qu'y gagner.
+     Les noms gardent leur chiffre d'origine — ils sont cités dans cinq
+     modules ; les renommer serait un refactor sans rapport avec ce retour. */
   --aj-encre: #ffffff;
-  --aj-encre-94: rgba(255, 255, 255, 0.94); /* paragraphe sur mur coloré */
-  --aj-encre-90: rgba(255, 255, 255, 0.9);
-  --aj-encre-84: rgba(255, 255, 255, 0.84); /* labels secondaires */
-  --aj-encre-72: rgba(255, 255, 255, 0.72); /* mentions, pied de page */
+  --aj-encre-94: rgba(255, 255, 255, 0.95); /* paragraphe sur mur coloré */
+  --aj-encre-90: rgba(255, 255, 255, 0.93);
+  --aj-encre-84: rgba(255, 255, 255, 0.88); /* labels secondaires */
+  --aj-encre-72: rgba(255, 255, 255, 0.8); /* mentions, pied de page */
 
   --aj-filet: rgba(255, 255, 255, 0.14); /* bordure du header */
   --aj-filet-rail: rgba(255, 255, 255, 0.3); /* piste de progression */
   --aj-filet-bouton: rgba(255, 255, 255, 0.34); /* contour des tailles */
   --aj-filet-fort: rgba(255, 255, 255, 0.5); /* champ du formulaire */
-  --aj-header-fond: rgba(8, 8, 10, 0.86); /* header, avec blur(14px) */
+  --aj-header-fond: rgba(20, 20, 26, 0.86); /* header, avec blur(14px) */
 
   /* --- Les trois coloris -------------------------------------------------
      « mur » = la couleur du plateau, échantillonnée au pixel sur les plaques,

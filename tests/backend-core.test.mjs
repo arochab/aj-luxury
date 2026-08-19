@@ -36,6 +36,36 @@ const migrationPaths = readdirSync(drizzleDirectory)
   .sort()
   .map((name) => `${drizzleDirectory}${name}`);
 
+/* DEUX ORDRES, ET C'EST VOULU.
+
+   Le CATALOGUE suit l'ordre d'affichage — rose, lilas, pourpre — depuis le
+   commit 370334f du 18/08, pour que la numérotation 01/02/03 des coloris soit
+   la même sur l'accueil et sur /shop.
+
+   Le SEED et la colonne `sort_order` de la base gardent leur ordre d'origine —
+   pourpre, rose, lilas. C'est délibéré : un `sort_order` en base est une donnée
+   persistée, il ne doit pas changer parce qu'une page d'accueil a changé
+   d'avis. Les réaligner imposerait une migration de données pour un bénéfice
+   nul.
+
+   Les douze identifiants et les douze références internes sont rigoureusement
+   les mêmes des deux côtés. Seule leur énumération diffère, et chaque ordre est
+   épinglé strictement de son côté. */
+const expectedCatalogueIdentity = [
+  { id: "variant_boxer_rose-pale_s", productId: "product_apollon", sku: "AJ-APO-ROS-S" },
+  { id: "variant_boxer_rose-pale_m", productId: "product_apollon", sku: "AJ-APO-ROS-M" },
+  { id: "variant_boxer_rose-pale_l", productId: "product_apollon", sku: "AJ-APO-ROS-L" },
+  { id: "variant_boxer_rose-pale_xl", productId: "product_apollon", sku: "AJ-APO-ROS-XL" },
+  { id: "variant_boxer_lilas-bleu-clair_s", productId: "product_apollon", sku: "AJ-APO-LIL-S" },
+  { id: "variant_boxer_lilas-bleu-clair_m", productId: "product_apollon", sku: "AJ-APO-LIL-M" },
+  { id: "variant_boxer_lilas-bleu-clair_l", productId: "product_apollon", sku: "AJ-APO-LIL-L" },
+  { id: "variant_boxer_lilas-bleu-clair_xl", productId: "product_apollon", sku: "AJ-APO-LIL-XL" },
+  { id: "variant_boxer_pourpre_s", productId: "product_apollon", sku: "AJ-APO-POU-S" },
+  { id: "variant_boxer_pourpre_m", productId: "product_apollon", sku: "AJ-APO-POU-M" },
+  { id: "variant_boxer_pourpre_l", productId: "product_apollon", sku: "AJ-APO-POU-L" },
+  { id: "variant_boxer_pourpre_xl", productId: "product_apollon", sku: "AJ-APO-POU-XL" },
+];
+
 const expectedLaunchVariantIdentity = [
   { id: "variant_boxer_pourpre_s", productId: "product_apollon", sku: "AJ-APO-POU-S" },
   { id: "variant_boxer_pourpre_m", productId: "product_apollon", sku: "AJ-APO-POU-M" },
@@ -465,7 +495,7 @@ test("migration applies locally and launch seed replay keeps inventory and ledge
     validated: 0,
   });
   assert.deepEqual({ ...seedLedger }, { count: 12, quantity: 756 });
-  assert.deepEqual(catalogIdentity, expectedLaunchVariantIdentity);
+  assert.deepEqual(catalogIdentity, expectedCatalogueIdentity);
   assert.deepEqual(seedIdentity, expectedLaunchVariantIdentity);
   assert.deepEqual(databaseIdentity, expectedLaunchVariantIdentity);
   assert.deepEqual(

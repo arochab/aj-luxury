@@ -20,6 +20,11 @@ import { formatPrice, sizes } from "../../lib/products";
 import styles from "./ProductPage.module.css";
 import type { CommerceRuntimeMode } from "../../lib/commerce/commerce-runtime";
 
+/* Un seul panneau d'achat par page : un identifiant constant suffit et reste
+   stable entre le rendu serveur et l'hydratation, ce qu'un id généré ne
+   garantirait pas pour une cible d'`aria-describedby`. */
+const NOTICE_ID = "aj-purchase-notice";
+
 type ProductPurchaseProps = {
   product: Product;
   products: Product[];
@@ -255,8 +260,26 @@ export default function ProductPurchase({
         ? availability
           ? "Paiement sécurisé."
           : `Paiement sécurisé. ${t("product.stockCheckedAtAdd")}.`
-        : t("product.cartUnavailable");
+        : /*
+             Commerce fermé : la boutique n'est pas en panne, elle n'est pas
+             encore ouverte. `product.cartUnavailable` (« momentanément
+             indisponible, réessayez dans un instant ») racontait une panne
+             passagère et contredisait /cart et /checkout, qui disent tous deux
+             qu'il s'agit d'une démonstration. app/cart/page.tsx l. 73-81 refuse
+             déjà de monter CartClient pour cette raison exacte ; la fiche
+             produit applique enfin le même garde-fou. `cartUnavailable` reste
+             réservé aux vraies pannes de preproduction/production.
+           */
+          t("product.cartClosed");
   }
+
+  /* Une seule lecture du refus, partagée par l'attribut ARIA et par le
+     gestionnaire de clic : les deux ne peuvent pas diverger. */
+  const purchaseBlocked =
+    !selectedSize ||
+    isSoldOut(selectedSize) ||
+    cartBusy ||
+    runtimeMode === "closed";
 
   return (
     <aside
@@ -308,7 +331,10 @@ export default function ProductPurchase({
                 style={{ backgroundColor: variant.swatch }}
                 aria-hidden="true"
               />
-              <span>{variant.name}</span>
+              {/* Deux lignes réservées à tous les libellés : voir .variantName.
+                  « Pourpre Impérial » se casse en deux là où « Rose Velours » et
+                  « Lilas Céleste » tiennent sur une ligne. */}
+              <span className={styles.variantName}>{variant.name}</span>
             </Link>
           ))}
         </div>
@@ -408,16 +434,24 @@ export default function ProductPurchase({
         </div>
       )}
 
+      {/*
+        `aria-disabled`, jamais `disabled`. Un bouton nativement désactivé sort
+        de l'ordre de tabulation, n'est pas annoncé par les lecteurs d'écran et
+        n'émet aucun événement : le refus de vente devenait muet à l'instant
+        exact où l'acheteur décide. Le commentaire de `selectSize` (l. 72)
+        décrivait déjà ce contrat — le bouton ne l'appliquait pas. Le refus se
+        joue donc dans `onClick`, et `aria-describedby` rattache au bouton la
+        phrase qui en donne la raison, qu'elle soit à l'écran ou non.
+      */}
       <button
         className={styles.purchaseButton}
         type="button"
-        disabled={
-          !selectedSize ||
-          isSoldOut(selectedSize) ||
-          cartBusy ||
-          runtimeMode === "closed"
-        }
-        onClick={() => void addToCart()}
+        aria-disabled={purchaseBlocked}
+        aria-describedby={NOTICE_ID}
+        onClick={() => {
+          if (purchaseBlocked) return;
+          void addToCart();
+        }}
         aria-busy={cartBusy}
       >
         {cartBusy
@@ -428,6 +462,7 @@ export default function ProductPurchase({
       </button>
 
       <p
+        id={NOTICE_ID}
         className={
           feedback?.kind === "error"
             ? `${styles.notice} ${styles.purchaseError}`

@@ -76,8 +76,19 @@ export default function ShopPage() {
               <dt>
                 <T id="home.colors" />
               </dt>
+              {/*
+                Chaque nom de coloris est insécable : dans une colonne de
+                335 px, « Rose Velours · Lilas Céleste · Pourpre Impérial »
+                laissait « Impérial » orphelin sur une seconde ligne. La césure
+                doit tomber sur les séparateurs, jamais au milieu d'un nom.
+              */}
               <dd>
-                {products.map((product) => product.name).join(" · ")}
+                {products.map((product, index) => (
+                  <span key={product.slug}>
+                    {index > 0 ? " · " : null}
+                    <span className={styles.insecable}>{product.name}</span>
+                  </span>
+                ))}
               </dd>
             </div>
 

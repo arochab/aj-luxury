@@ -50,8 +50,33 @@ export function InfoNotice({
   );
 }
 
-export function InfoTable({ children }: { children: React.ReactNode }) {
-  return <div className={styles.tableWrap}>{children}</div>;
+/*
+  Le tableau déborde de sa colonne et défile dans son propre conteneur : aucune
+  information n'est perdue, mais la barre est masquée et rien ne signalait que
+  « Base légale » et « Durée de référence » commençaient après le bord droit de
+  l'écran. Deux manques, deux corrections : l'amorce visuelle est en CSS
+  (ombre portée sur le bord tant qu'il reste à défiler), et la zone devient
+  atteignable au clavier — `tabindex="0"` sur une région nommée, sans quoi un
+  utilisateur au clavier ne peut pas faire défiler ce qu'il ne peut pas
+  atteindre.
+*/
+export function InfoTable({
+  children,
+  label,
+}: {
+  children: React.ReactNode;
+  label: string;
+}) {
+  return (
+    <div
+      className={styles.tableWrap}
+      role="region"
+      aria-label={label}
+      tabIndex={0}
+    >
+      {children}
+    </div>
+  );
 }
 
 export default function InfoPage({

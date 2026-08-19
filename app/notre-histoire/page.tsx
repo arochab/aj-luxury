@@ -168,16 +168,15 @@ export default function NotreHistoirePage() {
             const ampleur = large ? 6 : 4;
 
             // ── 00 · Ouverture ─────────────────────────────────────────────
-            // Elle est en haut de page : « top bottom » serait déjà dépassé au
-            // chargement et la course partirait au milieu. On la cale donc sur
-            // le haut du viewport.
-            const ouverture = un(styles.ouvertureMedia);
-            profondeur(
-              ouverture?.querySelector<HTMLElement>(`.${styles.plan}`) ?? null,
-              ouverture,
-              ampleur,
-              { start: "top top", end: "bottom top" },
-            );
+            /* AUCUNE parallaxe sur l'ouverture, à aucune largeur. Le pendant
+               CSS est `.ouvertureMedia .plan { inset: 0; height: 100% }`, lui
+               aussi devenu inconditionnel : ni la source portrait du téléphone
+               (crâne à 3,2 %) ni le poster 16/9 du bureau (crânes à 8,15 %)
+               n'ont le mou qu'une course exige. Le jury du 19/08 a mesuré la
+               bande visible à 13,63 % en 1280, 1440 et 1920 : les deux
+               fondateurs étaient amputés du sommet du crâne. Les deux
+               neutralisations vont ensemble, sinon la course découvre le
+               fond. */
 
             // ── Les filets de chapitre ─────────────────────────────────────
             // Tracés pleins par défaut : sans JS le filet est là. GSAP les
@@ -226,42 +225,26 @@ export default function NotreHistoirePage() {
                 },
               });
 
-              // La profondeur porte sur les plans INTÉRIEURS, jamais sur les
-              // cadres : les cadres bougeraient l'un par rapport à l'autre et
-              // la parité visuelle serait rompue. Même course, même sens,
-              // même amplitude pour les deux.
-              const plansDuo = portraits
-                .map((cadre) => cadre.querySelector<HTMLElement>(`.${styles.plan}`))
-                .filter((plan): plan is HTMLElement => Boolean(plan));
-
-              if (plansDuo.length) {
-                gsap.fromTo(
-                  plansDuo,
-                  { yPercent: -7 },
-                  {
-                    yPercent: 7,
-                    ease: "none",
-                    scrollTrigger: {
-                      trigger: scene,
-                      // Sur large, la scène est collante et haute de 250svh :
-                      // la course de la parallaxe EST la durée du pin CSS.
-                      start: large ? "top top" : "top bottom",
-                      end: large ? "bottom bottom" : "bottom top",
-                      scrub: true,
-                      invalidateOnRefresh: true,
-                    },
-                  },
-                );
-              }
+              // PAS de parallaxe interne sur ces deux plans — retrait du
+              // 18/08 sur retour client « il y a encore des moments où c'est
+              // cropped ». Une parallaxe est un recadrage qui se déplace :
+              // elle retire à la source, en haut comme en bas, la valeur de
+              // son amplitude. Les deux portraits n'ont pas ce mou — sur
+              // story-jeremy-retouched la bande utile va du haut du crâne
+              // (2 %) au bas du boxer (100 %, déjà rogné par la source). La
+              // course y coupait donc soit la tête, soit le produit.
+              // Le pendant CSS est `.portrait .plan { inset: 0; height: 100% }`
+              // dans Recit.module.css : les deux doivent rester solidaires,
+              // sinon la course découvrirait le fond.
+              // La profondeur reste sur l'ouverture et la matière, dont les
+              // sources ont de la marge au-dessus et au-dessous du sujet.
             }
 
             // ── Le plan large, puis la matière ─────────────────────────────
-            const pleine = un(styles.duoPleine);
-            profondeur(
-              pleine?.querySelector<HTMLElement>(`.${styles.plan}`) ?? null,
-              pleine,
-              ampleur,
-            );
+            // Le plan large ne porte pas non plus de parallaxe : sa source
+            // (campaign-duo-pourpre) est occupée de 1 % à 93 % par les deux
+            // corps. Le cadre est passé à son ratio natif dans
+            // Recit.module.css ; toute course rognerait de nouveau les têtes.
 
             const matiere = un(styles.matiereMedia);
             profondeur(
@@ -325,14 +308,27 @@ export default function NotreHistoirePage() {
         <section className={styles.ouverture} aria-labelledby="recit-titre">
           <div className={styles.ouvertureMedia}>
             <div className={styles.plan}>
-              <Image
-                alt="AJ Luxury — Jérémy et Alex dans l’univers Apollon : marbre, métal liquide, lyre, arc et laurier"
-                className={styles.planImage}
-                fill
-                priority
-                sizes="100vw"
-                src="/images/client/hero-v4-desktop-1920x1080-poster.webp"
-              />
+              {/* Art direction, pas simple redimensionnement : sous 780 px le
+                  cadre est portrait (720/934 en CSS) et la source 16/9 du
+                  bureau y perdait 28,4 % de sa largeur. Le poster portrait de
+                  l'échelle hero v4 existe déjà (lib/hero-video.ts l'utilise
+                  pour la vidéo d'accueil) ; on le sert ici pour l'image. */}
+              <picture>
+                <source
+                  media="(max-width: 780px)"
+                  srcSet="/images/client/hero-v4-portrait-480x623-poster.webp 480w, /images/client/hero-v4-portrait-720x934-poster.webp 720w"
+                  sizes="100vw"
+                />
+                <img
+                  alt="AJ Luxury — Jérémy et Alex dans l’univers Apollon : marbre, métal liquide, lyre, arc et laurier"
+                  className={styles.planMedia}
+                  src="/images/client/hero-v4-desktop-1920x1080-poster.webp"
+                  width={1920}
+                  height={1080}
+                  fetchPriority="high"
+                  decoding="async"
+                />
+              </picture>
             </div>
             <span aria-hidden="true" className={styles.grade} />
           </div>

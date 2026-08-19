@@ -8,6 +8,12 @@ export type ProductMedia = {
   src: string;
   frame: "main" | "portrait" | "landscape";
   objectPosition?: string;
+  /* Ratio NATIF de la source, à ne renseigner que lorsqu'il diffère du cadre
+     de sa famille. Il n'est appliqué que là où la vignette est seule sur sa
+     ligne (sous 560 px, cf. ProductPage.module.css) : ailleurs, la règle
+     d'appariement de l'AGENTS impose un cadre commun aux deux vignettes
+     d'une même ligne, et c'est le cadre commun qui gagne. */
+  sourceRatio?: string;
 };
 
 export type Product = {
@@ -81,7 +87,12 @@ export const products: Product[] = deepFreeze([
         objectPosition: "center 30%",
       },
       { src: "/images/client/raw/product-card-rose.webp", frame: "portrait" },
-      { src: "/images/client/raw/product-rose-front.webp", frame: "portrait" },
+      {
+        src: "/images/client/raw/product-rose-front.webp",
+        frame: "portrait",
+        /* 2000x2571 = 0,7779, contre 0,6658 pour les autres sources. */
+        sourceRatio: "2000 / 2571",
+      },
       { src: "/images/client/raw/product-rose-detail.webp", frame: "landscape" },
     ],
     tagline: "Doux et raffiné",
@@ -152,7 +163,12 @@ export const products: Product[] = deepFreeze([
       { src: "/images/client/raw/product-pourpre-detail.webp", frame: "portrait" },
       { src: "/images/client/raw/product-pourpre-back.webp", frame: "portrait" },
       { src: "/images/client/raw/product-pourpre-alt.webp", frame: "portrait" },
-      { src: "/images/client/editorial-pourpre-chair.webp", frame: "portrait" },
+      {
+        src: "/images/client/editorial-pourpre-chair.webp",
+        frame: "portrait",
+        /* 1864x2600 = 0,7169, contre 0,6658 pour les autres sources. */
+        sourceRatio: "1864 / 2600",
+      },
     ],
     tagline: "Profond et sophistiqué",
     description:

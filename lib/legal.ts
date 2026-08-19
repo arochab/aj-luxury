@@ -1,5 +1,18 @@
 export const LEGAL_VERSION = "2026-07-30";
 
+/*
+  La même date, mais avec des traits d'union INSÉCABLES (U+2011) pour
+  l'affichage. Dans le surtitre des six pages du gabarit d'information, la
+  colonne de titre fait ~415 px : le navigateur coupait la ligne sur le trait
+  d'union ISO et laissait « 07-30 » seul sur une seconde ligne, sous
+  « … version du 2026- ». Un numéro de version cassé en son milieu se lit mal
+  au-dessus de pages qui doivent inspirer confiance. La césure se fait
+  désormais avant « version ». La constante brute reste la valeur de référence
+  pour toute comparaison ou tout export.
+*/
+export const LEGAL_VERSION_DISPLAY = LEGAL_VERSION.replace(/-/g, "‑");
+
+
 export const LEGAL_CONTACT = {
   brand: "AJ Luxury",
   email: "contact@ajluxurystore.com",

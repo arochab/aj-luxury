@@ -75,6 +75,76 @@
   opacity: 0.55;
 }
 
+/* ==========================================================================
+   EN-TÊTE — variante ACCUEIL : superposée au film
+   --------------------------------------------------------------------------
+   Retour client, 18/08 : « il ne faut pas voir la bande grise vide, l'écran
+   doit prendre tout le screen ». Le film part maintenant du premier pixel
+   (globals.css, `.aj-film { margin-top: calc(-1 * var(--aj-tete-h)) }`) et
+   passe SOUS la barre. La barre doit donc s'effacer sur l'image au repos, puis
+   redevenir opaque dès qu'on a défilé — le motif classique du luxe, et celui
+   de la maquette validée.
+
+   Scopé à `:global(.aj-home)` : les quatorze autres routes gardent la barre
+   pleine dès le premier pixel, leur contenu ne passe pas dessous.
+   `.headerPose` est posé par StoreHeader.tsx dès que y > 8 (ligne 135).
+   ========================================================================== */
+:global(.aj-home) > .header {
+  /* Pas d'aplat : il salirait le marbre. Un dégradé qui meurt avant le bas de
+     la barre, plus une ombre portée sur le texte — le `backdrop-filter` déjà
+     présent fait le reste du travail de lisibilité sur le haut clair. */
+  --chrome-fond: transparent;
+
+  /* Les arrêts mesurés le 19/08 : à 0.46 / 0.16@64%, le dégradé ne valait plus
+     que ~0.23 d'opacité à la hauteur des glyphes (y≈38 sur 76 px de barre).
+     ACCUEIL tombait à 3,48:1 et 2,80:1 dans son décile clair, sur le marbre du
+     film — sous le 4,5:1 exigé pour du 15 px en graisse 600. COMPTE (8,53:1) et
+     PANIER (14,29:1) tombent sur une zone sombre et n'étaient pas concernés.
+     0.62 au départ et le second arrêt repoussé à 85 % maintiennent le voile
+     sous toute la hauteur du lettrage sans poser d'aplat sur le marbre. */
+  background-image: linear-gradient(
+    180deg,
+    rgba(6, 6, 8, 0.62),
+    rgba(6, 6, 8, 0.34) 85%,
+    transparent
+  );
+  border-bottom-color: transparent;
+  text-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.62),
+    0 0 16px rgba(0, 0, 0, 0.4);
+  transition:
+    background-color var(--aj-d-court) var(--e1),
+    border-bottom-color var(--aj-d-court) var(--e1),
+    text-shadow var(--aj-d-court) var(--e1);
+}
+
+/* Le logo est un .webp : le text-shadow ne l'atteint pas. */
+:global(.aj-home) > .header .brandImage {
+  filter: drop-shadow(0 1px 4px rgba(0, 0, 0, 0.55));
+  transition: filter var(--aj-d-court) var(--e1);
+}
+
+/* Défilement engagé : on rend à la barre son fond plein. Le voile
+   `.headerPose::before` (0.55 de noir) reste et s'y ajoute. */
+:global(.aj-home) > .header.headerPose {
+  --chrome-fond: var(--aj-header-fond);
+
+  background-image: none;
+  border-bottom-color: var(--chrome-filet);
+  text-shadow: none;
+}
+
+:global(.aj-home) > .header.headerPose .brandImage {
+  filter: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :global(.aj-home) > .header,
+  :global(.aj-home) > .header .brandImage {
+    transition: none;
+  }
+}
+
 .headerMinimal {
   grid-template-columns: 1fr auto;
 }
@@ -322,12 +392,16 @@
   gap: 0;
 }
 
+/* 2.75rem = 44px, la valeur déjà utilisée par .navLink et .actionLink : ce sont
+   des cibles de navigation principales, pas des liens insérés dans une phrase,
+   donc le plancher 44x44 de l'AGENTS s'y applique. Le 2.3rem précédent les
+   plafonnait à 36,8 px sur les seize routes et aux six tailles contrôlées. */
 .footerLink,
 .footerMail {
   position: relative;
   display: inline-flex;
   align-items: center;
-  min-height: 2.3rem;
+  min-height: 2.75rem;
   color: var(--chrome-pied-encre);
   font-size: var(--t0);
   font-weight: var(--aj-w-livre);
@@ -392,14 +466,22 @@
    Focus — un seul liseré, partout, celui de la maquette.
    ========================================================================== */
 
+/* Le liseré de la maquette faisait 1 px de `currentColor`. Sur les quinze
+   routes sombres il se voit ; sur le marbre clair du film d'accueil il tombait
+   à 2,80:1 (luminance de fond mesurée jusqu'à 0,358), sous les 3:1 attendus
+   d'un indicateur de focus, et pour 0,8 px de trait rendu. On garde le trait
+   de la maquette mais on l'épaissit à 2 px et on lui adosse un halo sombre :
+   le même anneau reste lisible sur le marbre ET sur les fonds noirs, sans
+   inventer une seconde couleur de marque. */
 .navLink:focus-visible,
 .actionLink:focus-visible,
 .brand:focus-visible,
 .footerLink:focus-visible,
 .footerMail:focus-visible,
 .languageSwitcher select:focus-visible {
-  outline: 1px solid currentColor;
+  outline: 2px solid currentColor;
   outline-offset: 4px;
+  box-shadow: 0 0 0 7px rgba(0, 0, 0, 0.72);
 }
 
 /* ==========================================================================

@@ -3095,7 +3095,11 @@ footer:not([class]) > p {
      direct de ce bloc : `clip` n'est pas dans la liste que
      estDansUnConteneurDeDefilement() (StoreHeader.tsx:62) considère bloquante. */
   overflow-x: clip;
-  background: #0a0a0b;
+  /* Le fond de page passe du plancher des sections (jeton, L* 6,5) au lieu du
+     #0a0a0b littéral (L* 2,8) : il n'est visible que dans les rares filets
+     entre deux blocs, et une valeur plus sombre que les sections qu'il porte y
+     dessinait une ligne noire parasite. */
+  background: var(--aj-noir);
   color: #fff;
 }
 
@@ -3159,14 +3163,37 @@ footer:not([class]) > p {
   position: relative;
   /* L'en-tête n'est plus DANS cette section (c'était le bloquant B1 : son
      `overflow: hidden` annulait le `position: sticky` de la barre et la
-     navigation mourait sur onze hauteurs d'écran). Il la précède maintenant
-     dans le flux, donc le film doit rendre à l'écran la hauteur que la barre
-     occupe, sinon la signature et « Découvrir ↓ » tombent sous la ligne de
-     flottaison — mesuré : 39px de perte à 1440×900, 76px à 390×844. */
-  min-height: calc(100svh - var(--aj-tete-h));
+     navigation mourait sur onze hauteurs d'écran). Il la PRÉCÈDE donc dans le
+     flux et y occupe --aj-tete-h.
+
+     Tour 2 payait ce décalage en rognant le film (`100svh - --aj-tete-h`).
+     Résultat vu par le client : la barre poussait le film vers le bas, on
+     voyait le fond de scène sous elle, et le premier écran ne remplissait plus
+     la fenêtre. Tour 3 remonte le film de la hauteur exacte de la barre : il
+     repart du tout PREMIER PIXEL et reprend une hauteur d'écran pleine.
+     L'en-tête, resté collant donc toujours vivant, passe PAR-DESSUS l'image —
+     c'est le motif de la maquette (_design-reference/claude-design-accueil.html,
+     barre `fixed` hors flux), obtenu sans repasser en `fixed` ni replonger la
+     barre dans le `overflow: hidden` ci-dessous.
+     La transparence de la barre au repos et son fond opaque après défilement
+     sont posés dans StoreChrome.module.css (bloc « Accueil »).
+
+     Les 2px de rab : --aj-tete-h est un jeton, la barre est du CONTENU, sa
+     hauteur réelle dérive (mesuré 110,8px sous 900px pour un jeton à 6,9rem =
+     110,4px). Sans marge de sécurité, ce delta laissait une ligne de fond de
+     page crème au tout premier pixel. On mord 2px de plus — ils passent
+     derrière la barre, jamais à l'écran — et on les rend au `min-height` pour
+     que le bas du film tombe pile sur la ligne de flottaison. */
+  margin-top: calc(-1 * var(--aj-tete-h) - 2px);
+  min-height: calc(100svh + 2px);
   overflow: hidden;
   border-bottom: 1px solid var(--aj-border);
-  background: #070709;
+  /* #070709 (L* 1,96) était le point le plus sombre du site et n'était même
+     pas le noir de marque : trois dixièmes de L* en dessous, pour un fond
+     entièrement recouvert par la vidéo. Il rejoint --aj-noir-abysse (#08080a,
+     L* 2,23), donc exactement la valeur du volet qui le recouvre à
+     l'ouverture — la transition du volet ne montre plus de saut de fond. */
+  background: var(--aj-noir-abysse);
   isolation: isolate;
 }
 
@@ -3296,14 +3323,26 @@ footer:not([class]) > p {
     transform: scale(1.08);
   }
 
+  /* `top: 96px` dégageait les visages de la barre quand celle-ci poussait le
+     film vers le bas. La barre surplombe désormais l'image : ce décalage ne
+     protégeait plus rien et laissait 67,6px de flou de fond visibles sous elle
+     à 1440×900 — la « bande grise » du retour client. Le média part du haut. */
   .aj-film__hero-stage {
-    top: 96px;
+    top: 0;
     bottom: 0;
     height: auto;
   }
 
+  /* `contain` laissait le média se poser en boîte à lettres dans une scène plus
+     large que lui : 66,8px de flou de fond restaient nus au bas de l'écran une
+     fois le décalage du haut supprimé. `cover` remplit la scène entière — le
+     cadrage reste centré horizontalement et ancré en haut, donc les visages ne
+     bougent pas ; seules les marges de décor sont rognées (≈4,5% par côté à
+     1440×900). Le fond flou survit comme filet de sécurité pendant les échelles
+     intermédiaires de GSAP. */
   .aj-film__hero-poster img,
   .aj-film__hero-video {
+    object-fit: cover;
     object-position: center top;
   }
 }
@@ -3374,10 +3413,22 @@ footer:not([class]) > p {
   bottom: calc(clamp(26px, 4vh, 44px) + 88px);
   min-width: 6.5rem;
   min-height: 44px;
-  padding: 12px 0 5px;
+  /* Le padding latéral tient le fond ci-dessous : sans lui, le voile
+     s'arrêterait au ras des lettres. */
+  padding: 12px 14px 5px;
   border: 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.62);
-  background: transparent;
+  /* Une ombre portée ne garantit rien : elle dépend de ce qu'il y a dessous.
+     Mesuré par le jury du 19/08 sur les pixels réellement rendus, 20,9 % de la
+     surface de ce libellé tombait sous 5,0:1 quand il passait sur un reflet
+     métallique clair, pire pixel 2,12:1. Un voile sombre propre à l'étiquette
+     rend le rapport indépendant de l'image : il est calculé, plus subi.
+     Le flou d'arrière-plan garde la lecture du métal derrière, donc le voile
+     peut rester léger. */
+  background: rgba(6, 6, 8, 0.46);
+  backdrop-filter: blur(7px) saturate(112%);
+  -webkit-backdrop-filter: blur(7px) saturate(112%);
+  border-radius: 2px;
   color: rgba(255, 255, 255, 0.98);
   cursor: pointer;
   font-size: var(--t0);

@@ -107,7 +107,12 @@
 
 .galleryMain {
   height: auto;
-  aspect-ratio: 1;
+  /* Le grand plan produit était CARRÉ pour des sources 1731x2600 : `cover`
+     n'y montrait que 67 % de la photo et `center 30%` plaçait ce hublot de
+     10 % à 76,6 %. Résultat : mannequin décapité ET boxer tranché sous
+     l'entrejambe, sur l'image principale de la fiche. Le ratio natif rend la
+     tête, la ceinture, le logo et le bas du boxer. */
+  aspect-ratio: 2 / 3;
 }
 
 .galleryLandscape {
@@ -115,6 +120,36 @@
   aspect-ratio: 3 / 2;
 }
 
+/* Les vignettes secondaires vont par deux sur une même ligne, et l'AGENTS
+   impose que deux médias appariés partagent le même cadre et finissent à la
+   même hauteur. Le cadre de la paire est donc UNIQUE, et c'est 2/3 : le ratio
+   natif de treize des quinze sources de galerie (1731x2600 = 0,6658).
+
+   DEUX SOURCES Y FONT EXCEPTION, mesurées le 19/08, et l'exception est
+   volontaire faute de pouvoir satisfaire les deux règles à la fois :
+     • product-rose-front.webp — 2000x2571 (0,7779), vue 3 de /products/
+       rose-pale. `cover` en retire 7,15 % de chaque côté. Contrôle pixel de
+       la source : le vêtement rose occupe x 18,85 %..80 % et la bande perdue
+       de gauche (0..7,15 %) ne contient AUCUN pixel de vêtement (2 pixels sur
+       1 094 223, bruit de seuil). La ceinture et son logo sont au centre,
+       intacts, et cette source n'a pas de visage : c'est un plan de buste.
+       Ce qui disparaît est du fond et l'extrémité des mains.
+     • editorial-pourpre-chair.webp — 1864x2600 (0,7169), dernière vue de
+       /products/pourpre et bloc éditorial de l'accueil. 3,5 % de chaque côté,
+       du fond uniquement : corps x 15..90 %, boxer x 35..75 %, logo
+       x 52..58 %, tous à l'intérieur de la bande visible.
+
+   Ce qu'il ne faut PAS faire pour « corriger » cela :
+     • poser un `object-position` — le cadre serait toujours faux et la marge
+       n'existe pas ;
+     • donner son ratio natif à une seule des deux vignettes d'une ligne — les
+       deux cesseraient de finir à la même hauteur ;
+     • rendre le cadre commun moins vertical — les treize sources en 2/3 se
+       feraient alors rogner en haut, où se trouvent les visages (crâne à 3 %
+       sur product-card-pourpre).
+   La seule correction propre est en amont : recadrer ces deux sources en 2/3
+   à la photo, pour que la décision de cadrage soit prise par un humain et non
+   par le navigateur. Arbitrage d'Adam. */
 .galleryPortrait {
   aspect-ratio: 2 / 3;
 }
@@ -157,8 +192,12 @@
   z-index: 1;
 }
 
+/* Le cadre étant au ratio de la source, la hauteur est entièrement visible :
+   ce décalage n'a plus lieu d'être et coupait auparavant le bas du boxer.
+   `objectPosition: "center 30%"` reste porté par lib/products.ts pour les
+   cadres qui, eux, recadrent réellement. */
 .galleryMain .zoomTrigger img {
-  object-position: center 30%;
+  object-position: center;
 }
 
 .zoomLabel {
@@ -365,6 +404,23 @@
     color var(--aj-d-court) var(--e1);
 }
 
+/* Les trois cartes doivent être CONSTRUITES pareil, pas seulement mesurer
+   pareil. « Pourpre Impérial » passe sur deux lignes quand « Rose Velours » et
+   « Lilas Céleste » tiennent sur une : à hauteur de carte égale et contenu
+   centré, la ligne de base des textes décrochait et la pastille du troisième
+   coloris remontait par rapport aux deux autres — le premier geste d'achat
+   paraissait de travers. On réserve donc deux lignes à tous les libellés et on
+   les cale en haut : la pastille est au même y sur les trois, quel que soit le
+   nom, et rien ne bouge quand un coloris est renommé. */
+.variantName {
+  display: flex;
+  min-height: calc(2 * 1.3em);
+  align-items: flex-start;
+  justify-content: center;
+  line-height: 1.3;
+  text-wrap: balance;
+}
+
 .variant:hover {
   border-color: var(--aj-filet-fort);
   color: var(--aj-encre);
@@ -488,7 +544,12 @@
     color var(--aj-d-court) var(--e1);
 }
 
-.purchaseButton:disabled {
+/* `aria-disabled` remplace `disabled` sur ce bouton (voir ProductPurchase.tsx) :
+   il reste focusable et annonçable, donc l'apparence d'indisponibilité doit
+   suivre l'attribut ARIA et non plus l'état natif. Le sélecteur `:disabled` est
+   conservé au cas où un autre bouton de la fiche l'utiliserait. */
+.purchaseButton:disabled,
+.purchaseButton[aria-disabled="true"] {
   border-color: var(--aj-filet-bouton);
   background: transparent;
   color: var(--aj-encre-72);
@@ -750,7 +811,9 @@
 .otherColorImage {
   position: relative;
   display: block;
-  aspect-ratio: 4 / 5;
+  /* Les autres coloris : à 4/5 avec `center 62%`, le hublot allait de 10,4 %
+     à 93,6 % et coupait le crâne des deux mannequins. Ratio natif. */
+  aspect-ratio: 2 / 3;
   overflow: hidden;
   background: var(--aj-noir-media);
 }
@@ -768,7 +831,7 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
-  object-position: center 62%;
+  object-position: center;
 }
 
 .otherColorFilet {
@@ -822,7 +885,13 @@
   display: grid;
   overflow: hidden;
   place-items: center;
-  background: rgba(8, 8, 10, 0.98);
+  /* Les 2 % résiduels de l'ancien 0.98 suffisaient à laisser transparaître en
+     fantôme, derrière la photo, la barre de navigation (z-index 50), « FR »,
+     « COMPTE » et le titre de la fiche. Une visionneuse plein écran doit
+     couper le fond, pas le teinter : fond opaque, plus un flou de sécurité
+     pour les navigateurs qui composent la couche en transparence. */
+  backdrop-filter: blur(18px) saturate(0.6);
+  background: rgb(8, 8, 10);
   color: var(--aj-encre);
 }
 
@@ -964,7 +1033,9 @@
   .galleryMain {
     order: 1;
     height: auto;
-    aspect-ratio: 4 / 5;
+    /* Même raison qu'en large : 4/5 rognait 17 % de la hauteur de la source
+       et décapitait deux des trois coloris. */
+    aspect-ratio: 2 / 3;
     margin-top: 0;
   }
 
@@ -976,7 +1047,12 @@
   }
 
   .otherColorsGrid {
-    grid-auto-columns: min(78vw, 32rem);
+    /* 78vw ne laissait apparaître la carte suivante qu'à 20,7 % (63 px sur 370
+       à 390x844), barre de défilement masquée et aucune autre amorce : le
+       troisième coloris se manquait au doigt. 70vw porte l'amorce à ~35 %,
+       assez franche pour se lire comme « ça continue ». On ne rétablit pas la
+       barre système, qui jurerait avec le reste. */
+    grid-auto-columns: min(70vw, 32rem);
     grid-auto-flow: column;
     grid-template-columns: none;
     overflow-x: auto;
@@ -1004,6 +1080,17 @@
     grid-template-columns: 1fr;
   }
 
+  /* Une seule colonne : aucune vignette n'a plus de jumelle sur sa ligne,
+     donc plus de cadre commun à respecter. Chacune peut enfin porter le ratio
+     de SA source — c'est la règle « un cadre porte le ratio de sa source »
+     appliquée partout où elle n'entre en conflit avec rien.
+     `--frame-ratio` n'est posé que sur les deux sources hors famille
+     (product-rose-front 2000/2571, editorial-pourpre-chair 1864/2600) ; les
+     treize autres retombent sur 2/3, qui est déjà leur ratio natif. */
+  .galleryItem.galleryPortrait {
+    aspect-ratio: var(--frame-ratio, 2 / 3);
+  }
+
   .galleryItem.galleryLandscape {
     aspect-ratio: 3 / 2;
   }
@@ -1028,10 +1115,28 @@
 
 /* Panneau plus haut que l'écran : il défile d'abord, puis son bas reste
    visible. Évite à la fois une barre de défilement imbriquée et une colonne
-   morte. */
-@media (max-height: 55rem) and (min-width: 901px) {
+   morte.
+
+   Réécrit le 19/08. L'intention était juste, le déclenchement non. L'ancienne
+   règle supposait un panneau de 55rem (880 px) et ne s'armait qu'en dessous de
+   cette hauteur de fenêtre. Or le panneau mesure 1 219,89 px : à 1440x900 la
+   règle ne se déclenchait pas, et c'est exactement là que le défaut se produit.
+   Collé par le haut à 21,6 px, le bouton « Ajouter au panier » se trouvait à
+   867..927 px — 26,99 px de ses 60 px coupés — et la phrase qui explique le
+   refus de vente à 941..986 px, hors écran de scrollY 200 à 1550, soit un écran
+   et demi de défilement pendant lequel l'acheteur voyait un bouton inerte sans
+   sa raison. À 1920x1080 la même page est saine, le seuil ne doit donc pas y
+   toucher.
+
+   On ancre le collage en BAS tant que la fenêtre est trop courte pour exposer
+   le bas du panneau : il suit la page jusqu'à ce que son bas affleure la
+   fenêtre, puis s'y fixe. La décision d'achat et sa raison restent à l'écran,
+   sans barre de défilement imbriquée et sans dépendre d'une hauteur de panneau
+   codée en dur. */
+@media (max-height: 63rem) and (min-width: 901px) {
   .purchasePanel {
-    top: calc(100svh - 55rem);
+    top: auto;
+    bottom: clamp(16px, 2.4vh, 30px);
   }
 }
 

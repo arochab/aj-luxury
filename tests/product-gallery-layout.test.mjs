@@ -54,11 +54,18 @@ test("secondary media reflows from paired tablet rows to one mobile column", () 
   );
 });
 
-test("the lead media uses stable breakpoint ratios", () => {
-  assert.match(css, /\.galleryMain\s*\{[^}]*aspect-ratio:\s*1\s*;/s);
+/* Retour client du 18/08 : « il y a encore des moments où c'est cropped sur
+   les images des mannequins ». Ce test épinglait justement les deux ratios
+   fautifs du grand plan produit — 1/1 en large, 4/5 en petit — pour des
+   sources 1731x2600. `cover` n'y montrait que 67 % puis 83 % de la hauteur :
+   tête coupée et bas du boxer tranché sur l'image principale de la fiche.
+   Le contrat n'est plus « un ratio stable » mais « le ratio de la source »,
+   seul cadrage qui garantisse tête, ceinture, logo AJ et boxer entiers. */
+test("the lead media keeps the source ratio at every breakpoint", () => {
+  assert.match(css, /\.galleryMain\s*\{[^}]*aspect-ratio:\s*2\s*\/\s*3/s);
   assert.match(
     css,
-    /@media \(max-width:\s*900px\)[\s\S]*?\.galleryMain\s*\{[^}]*aspect-ratio:\s*4\s*\/\s*5/s,
+    /@media \(max-width:\s*900px\)[\s\S]*?\.galleryMain\s*\{[^}]*aspect-ratio:\s*2\s*\/\s*3/s,
   );
 });
 

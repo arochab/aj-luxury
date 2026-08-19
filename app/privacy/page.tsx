@@ -2,7 +2,7 @@ import InfoPage, { InfoNotice, InfoTable } from "../components/InfoPage";
 import {
   HOSTING_PROVIDER,
   LEGAL_CONTACT,
-  LEGAL_VERSION,
+  LEGAL_VERSION_DISPLAY,
   SELLER_IDENTITY,
 } from "@/lib/legal";
 import { T } from "@/lib/i18n/TranslatedText";
@@ -14,7 +14,7 @@ export const metadata = {
 export default function PrivacyPage() {
   return (
     <InfoPage
-      eyebrow={<T id="info.privacy.eyebrow" values={{ version: LEGAL_VERSION }} />}
+      eyebrow={<T id="info.privacy.eyebrow" values={{ version: LEGAL_VERSION_DISPLAY }} />}
       title={<T id="info.privacy.title" />}
       status={<T id="info.privacy.status" />}
       officialFrenchOnly
@@ -43,7 +43,7 @@ export default function PrivacyPage() {
 
       <section>
         <h2>2. Données, finalités et durées</h2>
-        <InfoTable>
+        <InfoTable label="Données, finalités et durées de conservation">
           <table>
             <thead>
               <tr>

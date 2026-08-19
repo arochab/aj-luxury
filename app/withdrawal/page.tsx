@@ -1,13 +1,16 @@
 import InfoPage, { InfoNotice } from "../components/InfoPage";
-import { LEGAL_CONTACT, LEGAL_VERSION } from "@/lib/legal";
+import { LEGAL_CONTACT, LEGAL_VERSION_DISPLAY } from "@/lib/legal";
 import { T } from "@/lib/i18n/TranslatedText";
 
-export const metadata = { title: "Renoncer au contrat | AJ Luxury" };
+/* Aligné sur le libellé servi après hydratation (footer.withdrawal) et sur le
+   lien du pied de page : une seule formulation par page. « Renoncer au
+   contrat » n'apparaissait nulle part ailleurs sur le site. */
+export const metadata = { title: "Droit de rétractation | AJ Luxury" };
 
 export default function WithdrawalPage() {
   return (
     <InfoPage
-      eyebrow={<T id="info.withdrawal.eyebrow" values={{ version: LEGAL_VERSION }} />}
+      eyebrow={<T id="info.withdrawal.eyebrow" values={{ version: LEGAL_VERSION_DISPLAY }} />}
       title={<T id="info.withdrawal.title" />}
       status={<T id="info.withdrawal.status" />}
       officialFrenchOnly

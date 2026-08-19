@@ -72,6 +72,36 @@
   object-fit: cover;
 }
 
+/* Le plan d'ouverture est à ras de son cadre, à TOUTES les largeurs.
+   Une parallaxe est un recadrage qui se déplace, et cette source n'a pas de
+   mou : le sommet des deux crânes est à 8,15 % de la hauteur du poster bureau
+   (hero-v4-desktop-1920x1080), or le débord de 9 % du plan plus la course
+   faisaient démarrer la bande visible à 13,63 % — 59 px pris dans les visages
+   à 1080, jusqu'à ne laisser à Alex que les yeux et la barbe en 1920.
+   Le correctif existait déjà, mais borné à `max-width: 780px` : au-dessus, le
+   même défaut vivait toujours. Il est désormais inconditionnel, comme sur
+   `.portrait .plan` et `.duoPleine .plan`, pour la même raison.
+   Le tween `profondeur()` correspondant est retiré de
+   app/notre-histoire/page.tsx : les deux vont ensemble, sinon la course
+   découvrirait le fond. La profondeur reste sur le volet d'ouverture et sur le
+   plan matière, dont la source a du mou. */
+.ouvertureMedia .plan {
+  inset: 0;
+  height: 100%;
+}
+
+/* L'équivalent de `fill` de next/image pour l'<img> nu du <picture>
+   d'ouverture. next/image ne sait pas faire d'art direction par media query :
+   il sert une seule source et laisse `cover` décider du recadrage. Ici c'est
+   la source qui doit changer avec le cadre, donc <picture>. */
+.planMedia {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 /* Voile de lecture posé sur les médias plein cadre. */
 .grade {
   position: absolute;
@@ -140,7 +170,8 @@
   position: absolute;
   z-index: 3;
   inset: 0;
-  background: var(--aj-noir);
+  /* Même raison que sur l'accueil : un rideau doit rester le plus profond. */
+  background: var(--aj-noir-abysse);
   transform: scaleY(0);
   transform-origin: 50% 0;
   pointer-events: none;
@@ -267,7 +298,14 @@
   .ouvertureMedia {
     position: relative;
     inset: auto;
-    aspect-ratio: 3 / 2;
+    /* Ratio de la source servie ici, et d'elle seule : le poster PORTRAIT de
+       l'échelle hero v4 (720x934), choisi par le <picture> de page.tsx.
+       Avant, un cadre 3/2 recevait la source 16/9 du bureau : `cover` en
+       supprimait 28,4 % de la largeur et 12 % de la hauteur, et tout le décor
+       de colonnes, de lyre et d'arc qui donne son sens au plan disparaissait
+       des deux côtés. Ce n'était pas un défaut de centrage — c'était une
+       différence de ratio, qu'aucun object-position ne rattrape. */
+    aspect-ratio: 720 / 934;
   }
 
   .ouvertureTexte {
@@ -346,6 +384,18 @@
   position: relative;
   padding-block: var(--recit-air);
   border-top: 1px solid var(--recit-filet);
+  /* LA RESPIRATION (2 sur 2), pendant de .matiereTexte sur l'accueil.
+     Le récit alternait onze surfaces à L* 2,2 : un chapitre entièrement
+     typographique, coincé entre l'ouverture et le duo qui sont deux plans
+     photographiques, ne se distinguait d'eux par rien d'autre que l'absence
+     d'image. Il porte maintenant sa propre valeur, L* 21,8, et devient la
+     seule page de texte du récit — c'est le rôle qu'il joue déjà dans la
+     lecture, il est simplement rendu visible.
+     Aucune photographie ici, et aucun titre en métal : le titre de chapitre
+     est en blanc pur (12,6:1 sur ce fond) et l'index à 0,80 d'opacité
+     (7,7:1). Le filet de séparation du haut devient superflu — on le garde,
+     il ne coûte rien et sert de repère si le fond est désactivé. */
+  background: var(--aj-gris-recit);
 }
 
 .chapitreGrille {
@@ -456,8 +506,19 @@
 
 @media (min-width: 900px) {
   .duoScene {
-    /* Course de défilement de la scène collante. La hauteur EST la durée. */
-    height: 250svh;
+    /* Course de défilement de la scène collante. La hauteur EST la durée.
+
+       Ramenée de 250svh à 130svh le 19/08. Le retrait de la parallaxe interne
+       — justifié, les deux portraits n'ont pas la marge nécessaire pour être
+       recadrés — a supprimé tout mouvement de cette scène, mais la course était
+       restée. Mesuré à 1440x900 : le portrait d'Alex gardait exactement
+       top=195 px et 348x522 px de scrollY 1400 à 2728, soit 1 349 px de
+       défilement strictement immobile (1,5 écran) ; deux captures prises à
+       scrollY 1700 et 2600 ne diffèrent d'aucun pixel sur la zone de la scène.
+       Un geste de défilement sans retour se lit comme une page bloquée. La
+       durée doit correspondre à ce qu'il y a à animer : ici, le temps de lire
+       un diptyque, pas une course morte. */
+    height: 130svh;
   }
 }
 
@@ -494,10 +555,48 @@
 }
 
 .duoGrille {
+  /* Le cadre suit la photo, jamais l'inverse.
+     ------------------------------------------------------------------
+     Retour client du 18/08 : les deux fondateurs étaient décapités ici.
+     La cause n'était pas un object-position mal réglé, c'était le cadre :
+     `height: 50svh` + `aspect-ratio: auto` donnait une cellule de 654x450,
+     soit un cadre PAYSAGE (1.45) rempli par une source PORTRAIT (0.666).
+     `cover` n'y montrait plus que 54 % de la hauteur de la photo, pris au
+     centre — c'est-à-dire le torse : tête coupée en haut, boxer coupé en
+     bas. Le produit disparaissait autant que les visages.
+
+     On repart donc de la hauteur, et la largeur des deux cellules en
+     découle par le ratio natif des sources (1731/2600 ~ 2/3). */
+  --duo-h: clamp(320px, 64svh, 660px);
+
   display: grid;
   min-height: 0;
   grid-template-columns: 1fr 1fr;
   gap: 2px;
+}
+
+/* Sous 420 px les deux cellules tombaient à 139 px de large : le boxer restait
+   identifiable mais le logo de ceinture ne faisait plus que 11 px et devenait
+   illisible, au seul endroit du site où les deux fondateurs sont présentés
+   ensemble. La règle d'appariement reste tenue : deux cellules successives,
+   même cadre, même hauteur — elles sont simplement empilées. */
+@media (max-width: 419px) {
+  .duoGrille {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (min-width: 900px) {
+  .duoGrille {
+    /* Deux cellules en 2/3 plus le filet de 2 px, bornées par un budget de
+       hauteur (--duo-h) pour que le diptyque ne dépasse jamais l'écran.
+       `margin-inline: 0` (et non `auto`) le 19/08 : centré, il ne partageait
+       d'arête ni avec le titre ni avec la légende, tous deux au fer sur la
+       gouttière de page. Il flottait 305 px plus à droite qu'eux. Il part
+       maintenant de la même gouttière, portée par le padding de .duoCadre. */
+    max-width: min(100%, calc(var(--duo-h) * 4 / 3 + 2px));
+    margin-inline: 0;
+  }
 }
 
 .portrait {
@@ -511,9 +610,29 @@
 
 @media (min-width: 900px) {
   .portrait {
-    height: clamp(280px, 50svh, 600px);
-    aspect-ratio: auto;
+    /* Surtout PAS `aspect-ratio: auto` : c'est lui qui laissait le cadre
+       devenir paysage.
+       La hauteur fixe a été retirée le 19/08 : dès que .duoGrille est bornée
+       par `100%` plutôt que par le budget de hauteur, une hauteur imposée
+       rendait le cadre plus étroit que 2/3 et `cover` se mettait à rogner les
+       côtés du boxer. Le ratio 2/3 de la règle de base reprend la main : la
+       hauteur se déduit de la largeur, à toute taille, sans exception. */
+    height: auto;
   }
+}
+
+/* Les deux cellules de la parité ne portent AUCUNE parallaxe interne.
+   Une parallaxe est un recadrage qui se déplace : elle ampute la source de
+   son amplitude, en haut comme en bas. Or `story-jeremy-retouched` a une
+   bande utile qui va de 2 % (haut du crâne) à 100 % (bas du boxer, déjà
+   rogné par la source elle-même). Il n'y a rien à donner à la course.
+   Le plan est donc à ras du cadre, et le tween yPercent correspondant a été
+   retiré de app/notre-histoire/page.tsx — les deux vont ensemble, sinon la
+   course découvrirait le fond. La profondeur reste sur l'ouverture et la
+   matière, dont les sources ont du mou. */
+.portrait .plan {
+  inset: 0;
+  height: 100%;
 }
 
 .legende {
@@ -537,10 +656,33 @@
 /* Le plan large : les deux dans le même cadre, aucune découpe. */
 .duoPleine {
   position: relative;
-  height: clamp(420px, 88svh, 940px);
+  /* Même faute que la grille du duo, en plus large encore : une bande de
+     1425x792 (1.80) pour une source de 2000x1882 (1.06). Elle coupait les
+     deux têtes ET le bas des deux boxers. La bande utile de cette photo va
+     de 1 % à 93 % : aucun format plus large ne peut la contenir. Ratio
+     natif = zéro recadrage, à toute largeur, sans object-position à régler. */
+  aspect-ratio: 2000 / 1882;
   margin: 0;
   overflow: hidden;
   background: var(--aj-noir-media);
+}
+
+/* Le ratio natif est juste — zéro recadrage, têtes et boxers entiers — mais
+   étendu à toute la page il transformait la photo en un bloc de 1355 px à
+   1440x900, soit 1,51 hauteur d'écran (1806 px à 1920). On borne donc la
+   LARGEUR par un budget de hauteur, au lieu d'étirer le cadre : le ratio
+   reste natif, la photo cesse d'occuper une screen et demie. */
+@media (min-width: 900px) {
+  .duoPleine {
+    max-width: calc(78svh * 2000 / 1882);
+    margin-inline: auto;
+  }
+}
+
+/* Même raison que .portrait .plan : pas de course sur une photo sans marge. */
+.duoPleine .plan {
+  inset: 0;
+  height: 100%;
 }
 
 /* ==========================================================================
@@ -551,7 +693,11 @@
 .matiere {
   display: grid;
   border-top: 1px solid var(--recit-filet);
-  background: var(--aj-noir);
+  /* Deuxième étage (L* 11,6), comme le panneau matière de l'accueil : les deux
+     racontent la même chose et doivent porter la même valeur. Le puits
+     d'image de la moitié gauche (--aj-noir-media, L* 8,0) reste plus sombre
+     que ce fond, donc la photo garde son cadre. */
+  background: var(--aj-noir-2);
 }
 
 @media (min-width: 860px) {
@@ -562,15 +708,15 @@
 
 .matiereMedia {
   position: relative;
-  min-height: clamp(360px, 62svh, 720px);
+  /* Ici le plan déborde de 118 % (.plan), donc le ratio du cadre vaut celui
+     de la source x 1.18 = 0.6657 x 1.18. En dessous de 860 px le bloc passe
+     sur une seule colonne : `min-height` y donnait un cadre PAYSAGE de 1.19
+     qui coupait le bas des jambes du boxer, et au-delà un cadre trop étroit
+     qui en coupait les côtés. */
+  aspect-ratio: 0.785;
+  min-height: 0;
   overflow: hidden;
   background: var(--aj-noir-media);
-}
-
-@media (min-width: 860px) {
-  .matiereMedia {
-    min-height: 100svh;
-  }
 }
 
 .matiereTexte {
@@ -630,6 +776,10 @@
   place-items: center;
   padding: clamp(88px, 14vh, 190px) var(--gut);
   border-top: 1px solid var(--recit-filet);
+  /* Titre en métal ici aussi : fond au noir de marque exact, sans un point de
+     L* en plus. Le récit se referme donc sur le plus profond, juste après le
+     panneau matière à L* 11,6 — la descente est franche et voulue. */
+  background: var(--aj-noir-abysse);
 }
 
 .clotureBloc {
