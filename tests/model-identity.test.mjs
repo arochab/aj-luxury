@@ -155,13 +155,19 @@ test("la séquence guidée de l'accueil alterne", () => {
   exigerAlternance(suite, "séquence guidée");
 });
 
-test("la grille de coloris et les cartes de /shop alternent", () => {
-  // Les deux lisent la même source, dans le même ordre : rose, lilas, pourpre.
+test("les cartes de /shop alternent", () => {
+  /* L'accueil ne rend plus de grille de coloris depuis le 20/08 : elle
+     rejouait en vignettes ce que la séquence guidée étale sur neuf écrans, et
+     elle a été retirée. Son ordre de lecture reste néanmoins contraint ici,
+     parce que `ORDRE_COLORIS` alimente toujours les trois panneaux de la
+     séquence — c'est lui qui décide de la suite Alex / Jérémy / Alex sur
+     l'accueil, et la séquence a son propre test juste au-dessus.
+     La parité des cartes reste vérifiée là où des cartes existent : /shop. */
   assert.match(
     accueil,
     /ORDRE_COLORIS = \["rose-pale", "lilas-bleu-clair", "pourpre"\]/,
   );
-  assert.match(accueil, /src=\{item\.image\}/);
+  assert.doesNotMatch(accueil, /src=\{item\.image\}/);
   assert.match(boutique, /src=\{[a-zA-Z]+\.image\}/);
 
   const suite = ["rose-pale", "lilas-bleu-clair", "pourpre"].map((slug) => {
@@ -173,7 +179,7 @@ test("la grille de coloris et les cartes de /shop alternent", () => {
     suite.map((entree) => entree.qui),
     ["alex", "jeremy", "alex"],
   );
-  exigerAlternance(suite, "cartes de coloris");
+  exigerAlternance(suite, "cartes de /shop");
 });
 
 test("la bande éditoriale de l'accueil alterne", () => {

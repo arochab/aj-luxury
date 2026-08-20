@@ -109,6 +109,27 @@
     transparent
   );
   border-bottom-color: transparent;
+
+  /* Pas de flou de fond au repos sur l'accueil.
+     Le film couvre désormais le tout premier pixel a toutes les tailles
+     (globals.css, branche « Portrait — le média EST le premier écran »). La
+     barre ne survole donc plus du marbre vide : sous 900px elle fait 110,4px
+     de haut et, à 768x1024 comme à 390x844, elle survole les DEUX VISAGES.
+     Or un `backdrop-filter` n'a pas de bord doux : il floute exactement sa
+     boîte et s'arrête net. Mesuré à 390x844 avant correction : une couture
+     rectiligne à y=110,4 traversant le nez d'Alex et les yeux de Jérémy, tout
+     ce qui était au-dessus étant rendu à `blur(14px)`. Ce n'est pas une
+     matière, c'est un visage effacé — et c'est exactement l'arête que cette
+     boucle devait supprimer.
+     Le dégradé ci-dessus, lui, meurt en transparence : il assombrit sans
+     laisser d'arête. Il porte donc seul la lisibilité au repos ; ses arrêts
+     (0.62 / 0.34@85%) avaient déjà été calés le 19/08 sur la luminance du
+     marbre, et un flou ne change pas une luminance moyenne, seulement sa
+     variance. Le flou revient avec `.headerPose`, quand la barre a repris son
+     aplat et qu'il n'y a plus d'image derrière. */
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+
   text-shadow:
     0 1px 3px rgba(0, 0, 0, 0.62),
     0 0 16px rgba(0, 0, 0, 0.4);
@@ -131,6 +152,12 @@
 
   background-image: none;
   border-bottom-color: var(--chrome-filet);
+
+  /* La barre a repris son aplat : le flou de fond redevient sans risque —
+     il n'y a plus de visage derrière lui, seulement du contenu défilant. */
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+
   text-shadow: none;
 }
 

@@ -49,8 +49,15 @@ const HERO_POSTER_MEDIA = {
 } as const;
 
 const PORTRAIT_POSTER_SRC_SET = `${HERO_VIDEO_ASSETS.portrait.posterCompact} 480w, ${HERO_VIDEO_ASSETS.portrait.poster} 720w`;
+/* Le poster portrait est passe en `object-fit: cover` plein cadre
+   (globals.css, branche « Portrait — le média EST le premier écran »). Sa
+   largeur rendue n'est donc plus la largeur de la boîte mais celle du média
+   mis à l'échelle pour la couvrir : max(largeur de boîte, hauteur x 720/934).
+   Avec l'ancien `min(...)`, 390x844 demandait 390px et recevait la variante
+   480w, étirée ensuite à ~651px sur le premier écran — un flou net à l'oeil.
+   Le `max(...)` demande 651px et fait choisir la 720w. */
 const PORTRAIT_POSTER_SIZES =
-  "min(100vw, calc(70svh * 720 / 934))";
+  "max(100vw, calc(100svh * 720 / 934))";
 
 type HeroPosterProps = {
   className: string;

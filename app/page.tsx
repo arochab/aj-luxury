@@ -1,7 +1,6 @@
 /* eslint-disable @next/next/no-img-element -- médias client déjà optimisés : aucun runtime d'image à charger */
 
 import Link from "next/link";
-import type { CSSProperties } from "react";
 import HeroComposition from "./components/HeroComposition";
 import StoreFooter from "./components/StoreFooter";
 import StoreHeader from "./components/StoreHeader";
@@ -55,15 +54,15 @@ export default function Home() {
   const produits = getProducts();
   /* Un seul prix pour les trois coloris — même lecture que app/shop/page.tsx:31. */
   const prixCents = produits[0]?.priceCents ?? null;
+  /* Ce que la séquence guidée consomme, et rien de plus. `image`, `nom` et
+     `swatch` alimentaient la grille de trois cartes qui vient d'être retirée :
+     les garder ici laisserait croire que l'accueil rejoue encore le catalogue. */
   const coloris = ORDRE_COLORIS.map((slug) => {
     const produit = produits.find((item) => item.slug === slug) ?? produits[0];
     return {
       slug: produit.slug,
-      nom: produit.name,
       tagline: produit.tagline,
       prix: formatPrice(produit.priceCents),
-      image: produit.image,
-      accent: produit.swatch,
     };
   });
 
@@ -78,14 +77,36 @@ export default function Home() {
           <HeroComposition />
           <div className="aj-film__grade" aria-hidden="true" />
 
+          {/* Le premier écran parlait à 15px, en anglais, dans un coin : le seul
+              h1 du site était « AJ Luxury — Reveal Your Inner Beauty », une ligne
+              que n'importe quelle marque de lingerie pourrait reprendre telle
+              quelle. Pendant ce temps la seule phrase qui n'appartient qu'à cette
+              maison — story.quote — fermait la page, dix écrans plus bas.
+
+              La hiérarchie est remise à l'endroit : la phrase devient le h1 et
+              le plus grand signe du site (98px à 1920 contre 86px pour l'ancien
+              titre de clôture) ; la signature de marque reste, en surtitre, à sa
+              typographie d'avant (--t0, capitales, --aj-ls-signature) — elle perd
+              son rang, pas sa place. Aucune clé nouvelle : story.quote existe
+              déjà dans les cinq dictionnaires, donc rien à traduire. */}
           <div className={styles.signature}>
-            <h1 className={styles.signatureTitre} id="aj-signature">
+            <p className={styles.surtitre}>
               <span className="aj-sr-only">AJ Luxury — </span>
+              <span lang="en">Reveal Your Inner Beauty</span>
+            </p>
+
+            <h1
+              className={`aj-display ${styles.signatureTitre}`}
+              id="aj-signature"
+            >
               <span className={styles.signatureLigne}>
-                <span lang="en">Reveal Your Inner Beauty</span>
+                <span className={styles.signatureTexte}>
+                  <T id="story.quote" />
+                </span>
+                <span className={styles.signatureEclat} aria-hidden="true" />
               </span>
-              <span className={styles.signatureEclat} aria-hidden="true" />
             </h1>
+
             <a className={styles.decouvrir} href="#plaque">
               <span className={styles.decouvrirMot}>
                 <T id="hero.discover" />
@@ -108,41 +129,31 @@ export default function Home() {
           id="coloris"
           aria-labelledby="aj-coloris-titre"
         >
-          {/* « La collection » laissait entendre que la maison tient tout
+          {/* ── LA GRILLE DE TROIS CARTES A ÉTÉ RETIRÉE ─────────────────
+              Elle montrait les trois coloris portés, leur nom, leur prix et
+              leur lien vers la fiche — c'est-à-dire, mot pour mot, ce que les
+              trois panneaux de la séquence guidée viennent de dire sur neuf
+              écrans. Mesuré au navigateur le 20/08 à 1920x1080, avant reprise :
+              la grille faisait 1905x948, soit 100 %vw et 87,8 %vh, avec des
+              cartes de 632x948 quand la prise de la séquence fait 687x1033. Le
+              bloc le plus générique de la page rendait donc le produit à 92 %
+              de la taille du geste central, et prenait plus de largeur d'écran
+              que lui.
+
+              Rien n'est perdu. Chaque panneau de la séquence porte le nom du
+              coloris, sa phrase, sa ligne « tagline · prix » et son lien
+              « Découvrir » vers `/products/<slug>` ; les onglets 01/02/03
+              donnent accès aux trois, et `/shop` reste à un clic ci-dessous.
+              Ce qui suit est ce que la séquence ne dit pas : la plage de
+              tailles, le prix seul, la composition, l'entrée en boutique.
+
+              « La collection » laissait entendre que la maison tient tout
               entière dans cette grille. Le titre nomme maintenant le rang
               d'Apollon. La clé home.apollonEyebrow existait déjà dans les cinq
-              langues et n'était câblée nulle part ; elle portait un « 01 »
-              qu'elle ne porte plus. */}
+              langues et n'était câblée nulle part. */}
           <h2 className="aj-sr-only" id="aj-coloris-titre">
             <T id="home.apollonEyebrow" />
           </h2>
-
-          <div className={styles.colorisGrille}>
-            {coloris.map((item) => (
-              <Link
-                className={styles.carte}
-                href={`/products/${item.slug}`}
-                key={item.slug}
-                style={{ "--accent": item.accent } as CSSProperties}
-              >
-                <img
-                  src={item.image}
-                  alt={`Boxer Apollon ${item.nom}`}
-                  width={1731}
-                  height={2600}
-                  loading="lazy"
-                  fetchPriority="low"
-                  decoding="async"
-                  sizes="(max-width: 760px) 100vw, 33vw"
-                />
-                <span className={styles.carteLegende}>
-                  <span className={styles.carteNom}>{item.nom}</span>
-                  <span className={styles.cartePrix}>{item.prix}</span>
-                </span>
-                <span className={styles.carteFilet} aria-hidden="true" />
-              </Link>
-            ))}
-          </div>
 
           <div className={styles.colorisPied}>
             {/* Ligne de spécification, PAS un sélecteur. Le choix de taille
@@ -251,11 +262,18 @@ export default function Home() {
         <span id="histoire" aria-hidden="true" />
         <section className={styles.cloture} aria-labelledby="aj-cloture-titre">
           <div className={styles.clotureBloc}>
+            {/* story.quote est monté au premier écran : le garder ici en ferait
+                la même phrase dite deux fois, à deux corps proches, sur la même
+                page — et la clôture, arrivant après dix écrans, gagnerait contre
+                l'ouverture. La clôture prend donc l'énoncé de maison, story.lead,
+                qui existe déjà dans les cinq dictionnaires et qui ne redit ni la
+                phrase du haut ni le paragraphe d'en dessous (« Apollon ouvre la
+                collection »). */}
             <h2
               className={`aj-reveal aj-metal aj-display ${styles.clotureTitre}`}
               id="aj-cloture-titre"
             >
-              <T id="story.quote" />
+              <T id="story.lead" />
             </h2>
             {/* Ce paragraphe reprenait mot pour mot la phrase de clôture
                 juste au-dessus, enveloppée dans « Chez AJ Luxury, nous sommes

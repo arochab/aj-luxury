@@ -97,6 +97,34 @@ export function wearerOf(src: string): Wearer | "duo" | null {
   return cle ? wearerByAsset[cle] : null;
 }
 
+/* ==========================================================================
+   LES TROIS LIGNES DE COLORIS — retour d'Adam, 20/08
+   --------------------------------------------------------------------------
+   « Les taglines sont des paires d'adjectifs interchangeables — DOUX ET
+   RAFFINÉ, DÉLICAT ET LUMINEUX, PROFOND ET SOPHISTIQUÉ — sans un mot
+   d'Apollon. » Le reproche est exact et il est structurel : on pouvait
+   permuter les trois lignes entre les trois coloris sans que rien ne sonne
+   faux, ce qui est la définition d'une ligne qui ne dit rien.
+
+   LE SYSTÈME QUI LES REMPLACE. Le chapô de la boutique dit déjà « une seule
+   pièce, trois lumières ». Apollon est le dieu de la lumière ; chaque coloris
+   reçoit donc SON heure, et une seule :
+     Rose Velours      l'aube        rose pâle et chaud
+     Lilas Céleste     le zénith     bleu-violet froid, la couleur du plein ciel
+     Pourpre Impérial  le crépuscule pourpre profond
+   Les trois lignes deviennent impermutables : on ne déplace pas une aube sur
+   un pourpre. Le mot constant est « Apollon », la variable est l'heure —
+   la même mécanique que l'étalon secondaire, qui répète le nom de collection
+   sur chacune de ses 16 cartes et ne fait varier que ce qui suit.
+
+   Aucune de ces lignes n'affirme un fait invérifiable : ni client, ni chiffre,
+   ni distinction, ni date, ni disponibilité d'un autre modèle. « Apollon »
+   reste non traduit dans les cinq langues : c'est un nom de modèle, pas un mot.
+
+   Ces deux champs alimentent la carte de /shop, la fiche produit et la
+   séquence guidée de l'accueil. Une seule source, trois écrans.
+   ========================================================================== */
+
 export type Product = {
   slug: string;
   modelId: "boxer-aj-luxury";
@@ -168,7 +196,7 @@ export const products: Product[] = deepFreeze([
     model: "Apollon",
     name: "Rose Velours",
     color: "Rose Velours",
-    tone: "Doux et raffiné",
+    tone: "Apollon à l’aube",
     swatch: "#dda9bd",
     wearer: "alex",
     /* Était `product-rose-profile.webp`, c'est-à-dire JÉRÉMY, alors que le
@@ -194,7 +222,7 @@ export const products: Product[] = deepFreeze([
       },
       { src: "/images/client/raw/product-rose-detail.webp", frame: "landscape" },
     ],
-    tagline: "Doux et raffiné",
+    tagline: "Apollon à l’aube",
     description:
       "Découvrez Apollon Rose Velours, une pièce qui réinvente le sous-vêtement masculin avec subtilité et sophistication.",
     details: [
@@ -215,7 +243,7 @@ export const products: Product[] = deepFreeze([
     model: "Apollon",
     name: "Lilas Céleste",
     color: "Lilas Céleste",
-    tone: "Délicat et lumineux",
+    tone: "Apollon au zénith",
     swatch: "#a9abd9",
     wearer: "jeremy",
     image: "/images/client/editorial-lilas-chair.webp",
@@ -236,7 +264,7 @@ export const products: Product[] = deepFreeze([
       { src: "/images/client/raw/product-lilas-detail.webp", frame: "portrait" },
       { src: "/images/client/raw/product-lilas-back.webp", frame: "portrait" },
     ],
-    tagline: "Délicat et lumineux",
+    tagline: "Apollon au zénith",
     description:
       "Découvrez Apollon Lilas Céleste, un boxer masculin où la douceur rencontre l’élégance contemporaine.",
     details: [
@@ -257,7 +285,7 @@ export const products: Product[] = deepFreeze([
     model: "Apollon",
     name: "Pourpre Impérial",
     color: "Pourpre Impérial",
-    tone: "Profond et sophistiqué",
+    tone: "Apollon au crépuscule",
     swatch: "#7d0f52",
     wearer: "alex",
     image: "/images/client/raw/product-card-pourpre.webp",
@@ -279,7 +307,7 @@ export const products: Product[] = deepFreeze([
          disparaît avec lui. */
       { src: "/images/client/hero-pourpre-model.webp", frame: "portrait" },
     ],
-    tagline: "Profond et sophistiqué",
+    tagline: "Apollon au crépuscule",
     description:
       "Découvrez Apollon Pourpre Impérial, un boxer masculin pensé pour ceux qui recherchent l’alliance parfaite entre élégance, confort et raffinement.",
     details: [

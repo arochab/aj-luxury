@@ -70,25 +70,46 @@
   }
 }
 
+/* Le champ de texte du premier écran. Trois places, une grille, jamais un
+   flex qui se réordonne tout seul :
+
+     ligne 1  surtitre (colonne 1)          — la signature de marque
+     ligne 2  h1 (colonne 1)                — la phrase, le plus grand signe
+              découvrir (colonne 2, en bas) — l'appel au défilement
+
+   Découvrir reste en colonne 2 : c'est ce qui garde le bas de la phrase à
+   gauche du bouton « Figer le métal », posé par globals.css à 88px au-dessus
+   du bas de ce bloc. Sans cette colonne, la deuxième ligne du h1 passait
+   dessous à 1440.
+
+   L'ancre reste le BAS : c'est la seule arête sur laquelle le voile de
+   globals.css (.aj-film__grade) peut être calé. Le haut du bloc dérive avec le
+   nombre de lignes, le bas ne bouge pas. */
 .signature {
   position: absolute;
   z-index: 3;
   right: var(--gut);
   bottom: clamp(26px, 4vh, 44px);
   left: var(--gut);
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 24px;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  column-gap: clamp(20px, 3vw, 56px);
+  row-gap: clamp(14px, 2.2vh, 26px);
   color: var(--aj-encre);
 }
 
-/* La signature est au plancher typographique (15px), très ouverte. */
-.signatureTitre {
-  position: relative;
+/* La signature de marque garde EXACTEMENT la typographie qu'elle avait quand
+   elle était le h1 — --t0, capitales, --aj-ls-signature, graisse 600. Elle
+   change de rang, pas d'apparence : c'est un déclassement, pas une refonte. */
+.surtitre {
+  grid-column: 1;
+  grid-row: 1;
+  /* La boîte épouse son encre. Sans ça elle occupait toute la colonne, soit
+     1551px pour 289px de lettres : un banc de mesure de contraste y lisait
+     4,54:1 sur du vide, à 1220px de la dernière lettre. */
+  justify-self: start;
   margin: 0;
-  overflow: hidden;
   font-family: var(--disp);
   font-size: var(--t0);
   font-weight: var(--aj-w-gras);
@@ -97,19 +118,77 @@
   text-transform: uppercase;
 }
 
+/* Le plus grand signe du site. Il emprunte le registre d'affichage déjà en
+   service à la clôture (.clotureTitre : --aj-display-w 400, ls -0,028em) —
+   même voix, rang supérieur : 104px à 1920 contre 86px là-bas. On ne crée ni
+   famille, ni graisse, ni casse supplémentaire, et l'interlettre reste celle
+   du registre : chez l'étalon le tracking ne fait rien, c'est l'échelle qui
+   crée la hiérarchie.
+
+   UNE MESURE, PAS UN RUBAN. La version précédente laissait la phrase courir sur
+   1551px, soit 80,8 % de la largeur d'écran, en deux lignes collées au sol :
+   une bande de sous-titre. Le plus grand signe de l'étalon, son logotype, fait
+   43,9 % de la largeur. Ici la mesure est fixée à 64vw : trois lignes pleines,
+   et 30 % de largeur rendus au cadre à droite — l'arc, le carquois, la colonne
+   et le sol éclairé restent visibles, l'image garde une moitié claire.
+
+   L'ÉCHELLE ET LA MESURE SONT LA MÊME UNITÉ. Le corps est en 5,417vw et la
+   mesure en 64vw : leur rapport, 11,8, ne dépend pas de la largeur d'écran,
+   donc le nombre de lignes non plus. Trois lignes à 1920, 1440, 1280, 1024 et
+   768. C'est la leçon d'échelle de l'étalon, dont les sections se comptent en
+   écrans et non en pixels. Sous 760px la mesure passe à 100 % (voir plus bas) :
+   la colonne y est déjà étroite, la borner deux fois donnerait cinq lignes.
+
+   POURQUOI 64vw ET 104px, ET PAS UN COUPLE PLUS SERRÉ. Le nombre de lignes est
+   une fonction en escalier : le mot « commence » fait basculer la première
+   ligne d'un seul coup. Balayage au navigateur, mesure x corps, nombre de
+   lignes obtenu : à 58vw et 60vw, tout corps au-delà de 100px passe à quatre
+   lignes ; à 62vw le basculement est à 108px. Le plateau à trois lignes qui
+   tient de 92px à 108px commence à 64vw. 104px est donc pris au MILIEU d'un
+   plateau, pas au bord : une métrique de fonte légèrement différente, un
+   fallback pendant le chargement ou un zoom navigateur ne font pas apparaître
+   une quatrième ligne, qui remonterait le bloc au-dessus de l'ourlet du boxer.
+
+   Plancher 34px, très au-dessus du plancher dur de 15px. Rapport du plus petit
+   texte du champ au plus grand : 15 → 104, soit 6,9:1.
+
+   Pas de .aj-metal ici : le dégradé métallique est clipé sur le texte et son
+   rapport de contraste dépendrait alors de l'image sous-jacente. Sur une photo,
+   l'encre reste pleine. */
+.signatureTitre {
+  --aj-display-w: var(--aj-w-normal);
+  --aj-display-ls: -0.028em;
+  --aj-display-lh: 0.9;
+  grid-column: 1;
+  grid-row: 2;
+  max-width: min(100%, 64vw);
+  margin: 0;
+  font-size: clamp(34px, 5.417vw, 104px);
+  /* L'ombre ne remplace pas le voile — le rapport 5,0:1 est tenu par
+     .aj-film__grade et mesuré sur les pixels rendus. Elle ne sert qu'à détacher
+     l'arête des glyphes du grain métallique. */
+  text-shadow: 0 2px 26px rgba(3, 3, 6, 0.5);
+}
+
 /* Le masque doit contenir l'extent complet du glyphe, pas la boîte de ligne :
    une interlettre serrée donne une boîte plus courte que les glyphes et les
    descendantes seraient tranchées. La marge négative rend la hauteur au flux
    pour ne pas décaler le rythme. C'est le rapport boîte/extent qui est
-   corrigé, pas une valeur en pixels — sinon le défaut revient à chaque corps. */
+   corrigé, pas une valeur en pixels — sinon le défaut revient à chaque corps.
+
+   C'est aussi lui, et non plus le h1, qui borne la brillance : à une seule
+   ligne de 15px les deux boîtes se confondaient ; à trois lignes d'affichage
+   avec un interligne sous 1, `overflow: hidden` posé sur le h1 aurait tranché
+   les descendantes de la dernière ligne. */
 .signatureLigne {
+  position: relative;
   display: block;
   overflow: hidden;
   padding-bottom: 0.3em;
   margin-bottom: -0.3em;
 }
 
-.signatureLigne > span {
+.signatureTexte {
   display: block;
   animation: ajMontee var(--aj-d-long) var(--e1) 0.14s both;
 }
@@ -151,6 +230,10 @@
 }
 
 .decouvrir {
+  grid-column: 2;
+  grid-row: 2;
+  justify-self: end;
+  align-self: end;
   display: inline-flex;
   align-items: center;
   gap: clamp(14px, 2vw, 30px);
@@ -184,6 +267,31 @@
   }
 }
 
+/* Sous 760px la colonne de droite ne tient plus : « Découvrir ↓ » mesure 160px
+   et la phrase, à 29px, réclame toute la largeur pour ne pas tomber à cinq
+   lignes. Le champ passe en une seule colonne et le lien descend sous le
+   titre — il reste la dernière chose lue, donc le bas du bloc, donc l'ancre du
+   voile ne bouge pas. */
+@media (max-width: 760px) {
+  .signature {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: clamp(10px, 1.6vh, 18px);
+  }
+
+  /* La mesure de 64vw ne vaut que pour les écrans larges, où elle sert à
+     laisser respirer la droite du cadre. Ici la colonne fait déjà toute la
+     largeur utile : la borner une seconde fois donnerait cinq lignes de 34px. */
+  .signatureTitre {
+    max-width: 100%;
+  }
+
+  .decouvrir {
+    grid-column: 1;
+    grid-row: 3;
+    justify-self: start;
+  }
+}
+
 /* ==========================================================================
    02 · #plaque — le diptyque Apollon
    --------------------------------------------------------------------------
@@ -212,9 +320,23 @@
    pourpre. La valeur est posée en style inline par le composant au
    changement de panneau : trois fois par session, jamais par frame. Ce
    n'est pas une couleur animée, c'est un repli qui suit le récit. */
+/* ── LA SECTION SE MESURE EN ÉCRANS, PAS EN PIXELS ─────────────────────
+   Mesuré au navigateur sur oryzo.ai le 20/08 : les hauteurs de section y sont
+   IDENTIQUES à 1920, 1440, 768 et 390 — 1 / 8 / 13,25 / 10,5 écrans. L'unité
+   de composition n'est pas le pixel, c'est l'écran ; et la section
+   d'observation d'objet est la plus longue de la page, 13,25 écrans.
+
+   La hauteur n'est donc plus une constante de 420svh posée à la main. Elle est
+   CALCULÉE depuis la partition : `--plaque-temps` est la somme des durées de
+   ApollonGuidedSequence, écrite en style inline par le composant. Avec l'écran
+   collant, `1 + somme` donne une course où UNE UNITÉ DE PARTITION VAUT
+   EXACTEMENT UN ÉCRAN PLEIN. Les deux ne peuvent plus diverger : changer une
+   durée déplace la hauteur, et il n'y a plus rien à resynchroniser.
+
+   Repli 3,2 : la valeur d'avant, 420svh, si le style inline n'arrivait pas. */
 .plaque {
   position: relative;
-  height: 420svh;
+  height: calc((1 + var(--plaque-temps, 3.2)) * 100svh);
   background: var(--mur-courant, var(--aj-mur-rose));
 }
 
@@ -391,20 +513,50 @@
   overflow: clip;
 }
 
-/* Le diptyque est dimensionné par la HAUTEUR du panneau : dès que la colonne
-   est plus large que ce que cette hauteur autorise, le reste est du mou.
-   Centré dans ce mou, le bloc ne partageait d'arête avec rien — à 1920 il
-   laissait 539 px à gauche et 207 px à droite, alors que la gouttière de page
-   (logo, pagination, pied de page) vaut 68 px. On l'ancre donc sur cette
-   gouttière : son bord droit est celui de la colonne, c'est-à-dire celui du
-   reste du site. À 1440 la colonne vaut déjà exactement la largeur du
-   diptyque, donc rien n'y bouge. Sous 900 px le panneau passe en une seule
-   colonne et le centrage reprend, à raison. */
+/* ── POURQUOI LE DIPTYQUE EST DE NOUVEAU CENTRÉ ────────────────────────
+   Une passe l'avait ancré à droite, sur la gouttière de page, pour lui donner
+   une arête commune avec le reste du site. Mesuré au navigateur le 20/08, à
+   1920x1080, sur le temps « Seul » — celui où le volet est fermé et où UNE
+   seule prise est visible : la prise occupait x 795..1482, laissant 795 px
+   d'aplat bordeaux à sa gauche, et son centre tombait 178 px à droite du
+   centre de l'écran. Le cadre tenu le plus longtemps de l'accueil était donc
+   un plan décentré posé sur un demi-écran vide.
+
+   La cause est arithmétique, pas esthétique. Le recentrage écrit par
+   `piloter()` translate la PAIRE de (moitié d'une boîte + moitié de la
+   gouttière) quand le volet est fermé. Cette compensation centre exactement
+   la prise visible SI la paire est centrée — (W−2b−g)/2 + b/2 + g/2 = (W−b)/2,
+   identité vraie pour tout W. Elle ne vaut plus rien dès que la paire est
+   collée à droite. L'ancrage à droite et le recentrage se contredisaient.
+
+   ON GARDE L'ANCRAGE À DROITE, ET ON CORRIGE LE RECENTRAGE. Centrer la paire
+   ferait tomber la copie sur le socle de marbre : mesuré à 1920x1080, texte
+   masqué, sur les pixels rendus, la luminance maximale sous le titre passait à
+   Y = 0,466, soit 2,03:1 en blanc sur fond — très en dessous du plancher de
+   5,0:1 que nous nous imposons. L'ancrage à droite laisse au contraire 445 px
+   de mur à gauche pour une copie de 300 px posée à 68 : 77 px de dégagement.
+
+   Le recentrage devient donc l'écart entre la position ancrée à droite et la
+   position CENTRÉE DANS L'ÉCRAN : 1,5 boîte + gouttière − la moitié de la
+   scène, soit `calc(150% + var(--duo-gouttiere) - 50cqw)`. Vérifié à 1920 :
+   prise seule à x 593..1312, centre 952,5 pour un centre d'écran à 952,5.
+
+   Sous 901 px il n'y a plus de mou du tout — les deux boîtes remplissent
+   exactement la colonne — et l'ancien écart, `50% + gouttière / 2`, redevient
+   le bon. Les deux valeurs vivent donc dans `--duo-recentrage`, une par
+   régime, et le JS n'écrit plus qu'un facteur. */
 
 /* `clip`, jamais `hidden` : la fenêtre du volet déborde de sa demi-boîte de
    100 % de sa largeur, donc `hidden` en ferait un conteneur de défilement de
    plus — même piège que `.plaqueScene`. */
 .demi {
+  /* L'écart dont `piloter()` translate la PAIRE quand le volet est fermé, pour
+     que la seule prise visible soit centrée dans l'écran. Ici, la paire remplit
+     exactement sa colonne : centrer la prise visible revient à décaler d'une
+     demi-boîte plus une demi-gouttière. Le pourcentage est celui de la boîte
+     elle-même — aucune mesure en JS, donc rien à réinvalider au
+     redimensionnement. Le régime bureau le redéfinit plus bas. */
+  --duo-recentrage: calc(50% + var(--duo-gouttiere) / 2);
   position: relative;
   flex: 0 1 auto;
   height: 100%;
@@ -421,6 +573,45 @@
   width: 100%;
   height: 100%;
   object-fit: contain;
+}
+
+/* ── LA BANDE : LES VOISINES TIENNENT LES MARGES ───────────────────────
+   Le défaut corrigé ici est le seul qui restait STRUCTUREL plutôt que
+   d'actifs. Mesuré au navigateur le 20/08 à 1920x1080, en balayant la
+   partition de u=0 à u=8,5 par pas de 0,05 : sur les trois paliers « Seul »
+   et pendant les transits, la plus large colonne d'écran ne contenant AUCUN
+   pixel de prise valait 608 px — 31,7 % de la largeur, une bande de mur nu
+   de chaque côté de l'unique prise visible, tenue pendant le tiers de la
+   section. À 1440x900 : 449 px.
+
+   L'étalon ne connaît pas cet état. Vérifié sur oryzo.ai le 20/08 dans sa
+   section « social-content » : à chaque pas de son défilement, une bande
+   d'images traverse l'écran d'un bord à l'autre — cadre central plein, cadres
+   voisins de part et d'autre, gouttières de 18 à 40 px, et zéro colonne vide.
+   Balayé sur 14 positions : colonne vide maximale = 0 px.
+
+   CE QUI NE SE TRANSPOSE PAS : chez lui les cadres voisins sont COUPÉS par le
+   bord de l'écran. Ici un cadre coupé est un boxer coupé, et c'est interdit.
+   Les voisines sont donc entières et RÉDUITES — même cadre 1731/2600, même
+   `object-fit: contain`, hauteur moindre, arête haute partagée avec la prise
+   centrale. Un seul bord commun, trois tailles : c'est la règle de l'étalon
+   (« le cadre est la constante »), pas son gabarit.
+
+   CE QUE MONTRE UNE VOISINE : la nature morte du coloris ADJACENT, déjà
+   chargée par la séquence elle-même — aucun fichier nouveau, aucun sujet
+   inventé, aucun aplat décoratif tenant lieu d'image. Le rang est cyclique :
+   le premier panneau a le troisième à sa gauche, le troisième a le premier à
+   sa droite. La bande a donc deux bords partout, comme une bande de film.
+
+   AUCUN CORPS N'Y FIGURE, et c'est structurel : les trois `still` sont des
+   plateaux — marbre, lyre, arc, laurier. La parité Alex / Jérémy / Alex de
+   `tests/model-identity.test.mjs` ne peut pas bouger, et le JSX ne cite aucun
+   chemin littéral neuf : il relit le tableau PLATEAUX. */
+.voisine {
+  /* Repli, et régime replié : sous 901 px la bande n'existe pas. La colonne
+     est trop étroite pour porter autre chose que le diptyque, et le mandat de
+     cette passe s'arrête au bureau. */
+  display: none;
 }
 
 /* Le volet, en deux transforms contra-rotatifs : la fenêtre glisse, le
@@ -456,6 +647,97 @@
        `height: 100%` sur la rangée — donc `container-type: size` est légitime
        et ne crée aucune circularité. */
     container-type: size;
+
+    /* ── LA BOÎTE, ÉCRITE UNE FOIS ────────────────────────────────────
+       La hauteur de la demi-boîte vivait en dur dans `.demi`. Elle est
+       désormais un JETON, parce que la bande a besoin du MÊME nombre : la
+       largeur d'une voisine se déduit de la largeur de la prise centrale, et
+       deux formules recopiées finiraient par diverger d'un clamp.
+
+       Les unités de conteneur y sont légitimes : ces variables ne sont jamais
+       LUES sur `.duo` — qui n'est pas son propre conteneur — mais sur ses
+       enfants `.demi` et `.voisine`, dont le conteneur de requête est `.duo`.
+
+       1,50201 = 2600 / 1731, le rapport du cadre. Il apparaît deux fois et
+       une seule fois en littéral : la largeur en est la division. */
+    --boite-h: min(
+      100cqh,
+      (100cqw - var(--copie-reserve) - var(--duo-gouttiere)) / 2 * 1.50201
+    );
+    --boite-l: calc(var(--boite-h) / 1.50201);
+
+    /* ── L'ÉCART DE LA BANDE, ET POURQUOI IL PILOTE TOUT ──────────────
+       La marge libre d'un côté de la prise centrée vaut exactement
+       (largeur de scène − largeur de boîte) / 2 : identité vraie à toute
+       taille, puisque `piloter()` centre la prise visible. La voisine occupe
+       cette marge MOINS un écart, donc l'écart EST la colonne vide, par
+       construction et non par réglage. Le critère de recette — 12 %vw — porte
+       directement sur ce seul nombre.
+
+       8,6 %vw est choisi bien sous le plafond : il laisse 65 px de marge à
+       1920 et 49 px à 1440, et surtout il garde la voisine assez basse pour
+       que son arête inférieure passe AU-DESSUS du bloc de copie. Un écart
+       plus serré grandirait la voisine jusqu'à toucher le titre du coloris.
+
+       Le `min()` est un garde-fou de débordement, pas un réglage : sur un
+       écran très large et court, la marge à combler dépasserait la hauteur
+       disponible et la voisine serait rognée par `.duo` — c'est-à-dire un
+       boxer coupé. Elle plafonne donc à 68 % de la hauteur d'écran et laisse
+       la colonne vide grandir plutôt que de couper l'image. Dans la plage
+       901–1920 px de large, ce plafond n'est jamais atteint.
+
+       LIMITE CONNUE, MESURÉE PLUTÔT QUE DEVINÉE. En 21:9 il est atteint, et la
+       bande ne suffit alors plus : relevé à 2560x1080, voisine plafonnée à
+       489x734, colonne vide maximale 595 px pour un plancher de 307. Trois
+       cadres de rapport 2/3 ne peuvent pas traverser un écran deux fois et
+       demie plus large que haut sans qu'on rogne l'un d'eux, et le
+       non-recadrage passe avant. Il y faudrait un QUATRIÈME cadre par marge,
+       donc une quatrième nature morte : c'est un besoin d'actifs, pas un
+       réglage. Aucune des tailles de recette n'est concernée. */
+    --bande-ecart: clamp(72px, 8.6vw, 180px);
+    --voisine-l: min(
+      (100cqw - var(--boite-l)) / 2 - var(--bande-ecart),
+      calc(68cqh / 1.50201)
+    );
+  }
+
+  /* Même cadre que la prise centrale, même `contain`, ARÊTE HAUTE COMMUNE.
+     C'est la seule arête que trois cadres de hauteurs différentes peuvent
+     partager, et elle est calculée, pas posée à 0 : quand la scène est plus
+     haute que la boîte — c'est le cas dès que la largeur devient limitante,
+     donc à 1440x900 déjà — `align-items: center` centre la paire et lui laisse
+     de l'air au-dessus. Une bande calée sur le haut de l'écran dépasserait
+     alors la prise centrale de cet air-là (31,8 px à 1440). La bande part donc
+     du haut de la BOÎTE, où qu'elle soit. */
+  .voisine {
+    position: absolute;
+    top: calc((100cqh - var(--boite-h)) / 2);
+    z-index: 0;
+    display: block;
+    width: var(--voisine-l);
+    aspect-ratio: 1731 / 2600;
+    overflow: clip;
+    pointer-events: none;
+  }
+
+  .voisineGauche {
+    left: 0;
+  }
+
+  .voisineDroite {
+    right: 0;
+  }
+
+  /* Secondaire par la lumière, pas par le flou ni par un aplat posé dessus :
+     la prise reste une photographie lisible, simplement tenue dans l'ombre.
+     La saturation n'est qu'à demi retirée — la bande doit continuer de dire
+     qu'il y a TROIS coloris, ce qu'un gris ne dirait plus. */
+  .priseVoisine {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    filter: saturate(0.56) brightness(0.47);
   }
 
   /* ── RETOUR N°3 · « les photos sont trop petites » ──────────────────
@@ -497,16 +779,43 @@
      est invalide et `height: 100%` — déclaré plus haut, conservé — reprend la
      main. La page reste celle d'avant, jamais cassée. */
   .demi {
-    height: min(
-      100cqh,
-      (100cqw - var(--duo-gouttiere)) / 2 * 1.50201
-    );
+    /* Voir le commentaire de `.duo` : ici la paire est ancrée à droite et il
+       reste du mou à gauche, donc l'écart de recentrage est la distance entre
+       le bord gauche de la paire ancrée et celui de la prise centrée. */
+    --duo-recentrage: calc(150% + var(--duo-gouttiere) - 50cqw);
+    /* La formule a quitté cette ligne pour `--boite-h` sur `.duo`, où la bande
+       la lit aussi. Valeur strictement inchangée. */
+    height: var(--boite-h);
   }
 
+  /* Plus aucune marge : le diptyque prend la hauteur d'écran entière et sort
+     par la droite. Les 2 x 24 px de padding vertical et les 2 x 68 px de
+     gouttière étaient les derniers pixels que la photographie ne recevait pas.
+     Mesuré à 1920x1080 : 687x1033 par prise avant, 719x1080 après — +9,4 % de
+     surface photographique et 100 % de la hauteur d'écran, sans toucher un
+     fichier ni un cadrage.
+
+     ── LA COLONNE DE COPIE EST RÉSERVÉE, ET C'EST UNE CONTRAINTE DURE ──
+     La copie ne peut pas se poser sur la nature morte. Mesuré sur les pixels
+     rendus à 1440x900, texte masqué et voile neutralisé : la luminance MAXIMALE
+     sous le bloc de copie vaut Y = 0,949 — le socle de marbre blanc. Il faudrait
+     un voile noir à 85 % d'opacité pour ramener du blanc sur ce fond à 5,0:1,
+     c'est-à-dire exactement la plaque opaque que cette composition refuse.
+     Déplacer la copie ne sauve rien : le profil de luminance de la bande
+     recouverte, relevé par tranches de 75 px, ne descend sous 0,26 que dans les
+     150 px du haut, et seulement sur le Rose.
+
+     La largeur de la colonne est donc RETRANCHÉE de la largeur disponible avant
+     que la hauteur des boîtes n'en soit déduite. Le diptyque ne peut plus entrer
+     dans la colonne de copie, à aucune largeur, et le contraste cesse de dépendre
+     de ce qu'il y a sur la photo. Coût mesuré : nul à 1920 — la hauteur d'écran
+     reste la contrainte active — et 3,1 % de hauteur à 1440. */
   .panneau {
+    --copie-colonne: clamp(176px, 15vw, 300px);
+    --copie-air: clamp(16px, 1.4vw, 28px);
+    --copie-reserve: calc(var(--gut) + var(--copie-colonne) + var(--copie-air));
     grid-template-columns: minmax(0, 1fr);
-    padding-top: clamp(14px, 2.2vh, 28px);
-    padding-bottom: clamp(14px, 2.2vh, 28px);
+    padding: 0;
   }
 
   /* La copie quitte la grille et vient se poser dans la marge gauche, celle
@@ -515,18 +824,51 @@
 
      Le fond translucide rectangulaire est supprimé — c'est lui qui faisait
      lire le bloc comme une infobulle. Il est remplacé par un voile en
-     dégradé, ancré au bord gauche de la page : à 1920 la copie ne touche même
-     pas le cadre (bord gauche du couple à 440 px, copie de 68 à 368), à 1440
-     et en dessous elle mord sur le plateau et le voile garantit le contraste.
-     Un dégradé qui meurt dans le mur se lit comme une lumière, pas comme une
-     boîte de dialogue. */
+     dégradé, ancré au bord gauche de la page ; un dégradé qui meurt dans le mur
+     se lit comme une lumière, pas comme une boîte de dialogue.
+
+     ── CE QUE LA BANDE CHANGE ICI, ET CE QU'ELLE NE CHANGE PAS ────────
+     Cette note affirmait, le 20/08 au matin, que « la copie se lit toujours sur
+     le mur de section, jamais sur une prise ». Ce n'est plus littéralement vrai
+     et il faut le dire : la voisine gauche de la bande passe DERRIÈRE le bloc
+     de copie dès que l'écran raccourcit. Chevauchement mesuré au navigateur :
+     nul sur les trois panneaux à 1920x1080 — voisine 0..642 px, copie à partir
+     de 687 au plus haut, donc 45 px de dégagement au pire — et nul sur deux
+     panneaux à 1440x900 ; 30 px sur le Pourpre à 1440, 54 px sur le Pourpre à
+     1280x800, 80 px à 1024x768.
+
+     LA CONTRAINTE RÉELLE EST TENUE, ET C'EST ELLE QUI COMPTE. La décision
+     d'origine visait un plancher de 5,0:1, motivé par une mesure : la luminance
+     MAXIMALE sous le bloc valait Y = 0,949 sur le socle de marbre, donc un voile
+     à 85 % d'opacité aurait été nécessaire. Cette mesure portait sur une prise à
+     PLEINE lumière. La voisine, elle, est à `brightness(0.47)`, sous le voile.
+     Reprise du même banc — texte masqué, luminance relevée sur les pixels rendus
+     de la boîte de copie, contraste du blanc pur sur le pixel le plus clair :
+       • 1440x900  Rose    Ymax 0,085 →  7,78:1   (médiane 11,79:1)
+       • 1440x900  Lilas   Ymax 0,067 →  9,01:1
+       • 1440x900  Pourpre Ymax 0,032 → 12,86:1   (17,95:1 sans la bande)
+       • 1280x800  Pourpre Ymax 0,032 → 12,74:1
+       • 1024x768  Pourpre Ymax 0,040 → 11,70:1
+       • 1024x768  Rose    Ymax 0,073 →  8,53:1
+     Plancher observé 7,78:1, soit 56 % au-dessus du seuil que nous nous imposons.
+     La colonne reste RÉSERVÉE dans la largeur — le diptyque ne peut toujours pas
+     entrer dans la copie — et c'est ce qui garde la marge : ce qui passe derrière
+     est une image tenue dans l'ombre, jamais une nature morte en pleine lumière.
+
+     Le repli est sûr dans le mauvais sens aussi : si une traduction allonge la
+     phrase et fait descendre le haut du bloc, elle descend VERS le mur nu, pas
+     vers la voisine. Le pire cas est celui qui vient d'être mesuré.
+
+     Le voile ne porte donc toujours pas la charge de contraste : il détache le
+     bloc, et il reste utile en régime replié sous 901 px, où la copie a sa
+     propre rangée et où la bande n'existe pas. */
   .panneauCopie {
     position: absolute;
     left: var(--gut);
     bottom: clamp(104px, 13vh, 168px);
     z-index: 2;
     isolation: isolate;
-    width: min(300px, 30vw);
+    width: var(--copie-colonne);
     padding: 0;
     background: none;
   }
@@ -674,8 +1016,12 @@
    à `max-width: 900px` (globals.css:3105). Un pas d'écart laissait la plaque en
    mise en page bureau alors que la barre avait déjà pris sa hauteur mobile. */
 @media (max-width: 900px) {
+  /* Même partition, écran plus court : une unité vaut 0,6 écran au lieu d'un
+     écran plein. Sur un téléphone le pouce parcourt un écran en un geste, et
+     la scène n'a plus de marge latérale à donner à la copie ; garder l'unité
+     à 1 y allongerait la section sans rien y montrer de plus. */
   .plaque {
-    height: 380svh;
+    height: calc((1 + var(--plaque-temps, 2.8) * 0.6) * 100svh);
   }
 
   .panneau {
@@ -688,6 +1034,19 @@
        sur .panneauTexte — c'est-à-dire sur le nom du coloris. */
     padding-top: calc(var(--aj-tete-h) + clamp(14px, 2vh, 24px));
     padding-bottom: clamp(86px, 13vh, 116px);
+    /* Ici la paire est contrainte par la LARGEUR — voir `.demi` juste en
+       dessous — donc chaque pixel de gouttière est un pixel de photographie en
+       moins, et il en coûte une fois et demie en hauteur. Le panneau rend donc
+       sa gouttière latérale aux prises. Mesuré : 163x244 par prise à 390x844
+       avant, 182x274 après, soit +26 % de surface ; 341x512 à 768x1024 avant,
+       371x557 après. La copie, elle, garde la sienne : c'est une plaque de
+       texte, pas une image, et elle continue de partager son alignement avec
+       la barre d'onglets et le reste du site. */
+    padding-inline: 0;
+  }
+
+  .panneauCopie {
+    margin-inline: var(--gut);
   }
 
   /* Ici la contrainte s'inverse : la colonne est étroite et la ligne est
@@ -707,113 +1066,29 @@
    03 · #coloris
    ========================================================================== */
 
+/* ── LA GRILLE DE TROIS CARTES A ÉTÉ SUPPRIMÉE ─────────────────────────
+   Elle rejouait, en 87,8 %vh et 100 %vw à 1920, ce que la séquence guidée
+   venait d'étaler sur neuf écrans : trois coloris portés, leur nom, leur prix,
+   leur lien vers la fiche. Mesuré au navigateur le 20/08, avant reprise :
+   carte 632x948, prise de la séquence 687x1033 — le bloc le plus générique de
+   la page rendait le produit à 92 % de la taille du geste central, et il
+   occupait plus de largeur d'écran que lui. Un lecteur qui venait de traverser
+   la révélation la revoyait en vignettes.
+
+   Aucune information ni aucune route n'est perdue : chaque panneau de la
+   séquence porte déjà le nom du coloris, sa phrase, sa ligne « tagline · prix »
+   et son lien « Découvrir » vers `/products/<slug>` ; les onglets 01/02/03
+   donnent accès aux trois. Ce qui reste ici est ce que la séquence ne dit pas —
+   la plage de tailles, le prix seul, la composition, et l'entrée en boutique.
+
+   La section devient donc une BANDE, pas un écran : après neuf écrans de
+   contemplation, le rythme se brise net. C'est le contraste de l'étalon entre
+   ses 3 577 px sans un mot nouveau et son pied de page qui parle tous les
+   163 px — un écart voulu, pas un accident. */
 .coloris {
   background: var(--aj-noir);
   color: var(--aj-encre);
-  padding: clamp(60px, 9vh, 120px) 0 0;
-}
-
-/* La collection compte STRUCTURELLEMENT trois coloris : une grille à deux
-   colonnes ne peut donc jamais tomber juste. `auto-fit` en passait pourtant par
-   là entre ~526 et ~999 px — à 768x1024, deux cartes en première rangée, une
-   seule en seconde, et à sa droite un aplat noir de la hauteur d'une carte.
-   Ce vide ne servait ni la hiérarchie ni le focus : il signalait seulement que
-   le compte ne tombait pas juste, ce que l'AGENTS compte comme un défaut.
-   On choisit donc explicitement : une colonne, ou trois. Jamais deux. */
-.colorisGrille {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 2px;
-  padding: 0 2px;
-}
-
-@media (min-width: 700px) {
-  .colorisGrille {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-
-.carte {
-  position: relative;
-  display: block;
-  /* Le cadre porte le ratio natif des sources (1731/2600 ~ 2/3). Avant, il
-     n'était défini que par une hauteur : la largeur venait de la colonne, et
-     à 1440 la carte tombait à 472x576, soit 0.82. `cover` n'y montrait plus
-     que 81 % de la photo et `center 62%` descendait encore ce hublot : les
-     trois mannequins y perdaient le haut du crâne. Avec le ratio natif il
-     n'y a plus rien à recadrer verticalement.
-     Le plancher en vh a été retiré le 19/08 : sur un enfant de grille il ne
-     rendait pas le cadre plus vertical, il le rendait plus LARGE. La taille
-     minimale automatique se déduit du ratio et de la hauteur, donc 64vh
-     imposait une largeur de 64vh x 1.5. À 320x844 la carte faisait 360 px
-     dans une colonne de 316 : 11,7 % de la photo perdus à droite et le prix
-     coupé. `min-height: 0` rend la hauteur déductible de la largeur. */
-  aspect-ratio: 2 / 3;
-  min-height: 0;
-  overflow: hidden;
-  background: var(--aj-noir-media);
-  color: var(--aj-encre);
-}
-
-.carte img {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  /* Le cadre étant au ratio de la source, la hauteur est intégralement
-     visible : ce réglage ne déplace plus rien verticalement. On le laisse
-     neutre pour qu'aucune reprise future ne croie devoir le compenser. */
-  object-position: center;
-  transition: transform 1.1s var(--e1);
-}
-
-.carte:hover img,
-.carte:focus-visible img {
-  transform: scale(1.04);
-}
-
-.carteLegende {
-  position: absolute;
-  right: 20px;
-  bottom: 22px;
-  left: 20px;
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 14px;
-}
-
-.carteNom {
-  font-family: var(--disp);
-  font-optical-sizing: auto;
-  font-size: var(--t2);
-  font-weight: var(--aj-w-normal);
-  letter-spacing: var(--aj-ls-sous);
-}
-
-.cartePrix {
-  font-size: var(--t0);
-  font-weight: var(--aj-w-moyen);
-  letter-spacing: 0.1em;
-}
-
-.carteFilet {
-  position: absolute;
-  z-index: 3;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  height: 2px;
-  background: var(--accent);
-  transform: scaleX(0);
-  transform-origin: left;
-  transition: transform 700ms var(--e1);
-}
-
-.carte:hover .carteFilet,
-.carte:focus-visible .carteFilet {
-  transform: scaleX(1);
+  padding: clamp(48px, 7vh, 96px) 0 0;
 }
 
 .colorisPied {
@@ -873,7 +1148,7 @@
 .matiere {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
-  /* Deuxième étage (L* 11,6). Les cartes coloris juste au-dessus et
+  /* Deuxième étage (L* 11,6). La bande commerciale juste au-dessus et
      l'éditorial juste en dessous restent au plancher (L* 6,5) : ce sont les
      deux surfaces où l'on lit le vêtement. Le panneau matière s'intercale
      donc entre elles comme un palier plus clair, et les deux coutures se
@@ -983,7 +1258,7 @@
   padding: 0 2px;
 }
 
-/* Même arbitrage que .colorisGrille, et pour la même raison : `auto-fit` avec
+/* Trois figures, donc une colonne ou trois, jamais deux : `auto-fit` avec
    un minimum de 280 px tombait à DEUX colonnes entre 700 et 900 px de large.
    Trois figures dans deux colonnes laissent une cellule vide — mesurée à
    373,4 x 560,1 px en 768x1024 — qui ne sert ni la hiérarchie, ni la
@@ -1004,11 +1279,11 @@
 .editorialFigure {
   position: relative;
   margin: 0;
-  /* Même règle que .carte : le ratio vient des sources, pas de la colonne.
+  /* Le ratio vient des sources, pas de la colonne.
      À 472x648 (0.73) le hublot commençait à 4,3 % et coupait le haut du
      crâne d'`editorial-rose-profile` (crâne à 3 %). */
   aspect-ratio: 2 / 3;
-  /* Voir .carte : le plancher en vh se retournait en largeur minimale.
+  /* Le plancher en vh se retournait en largeur minimale.
      À 768x1024 il valait 737 px, soit 492 px de large pour des colonnes de
      373 : les trois figures se chevauchaient de 117 px et Alex était tranché
      au bord droit de l'écran, sous une légende qui annonce les deux
@@ -1122,7 +1397,7 @@
   }
 
   .surCadrage,
-  .signatureLigne > span,
+  .signatureTexte,
   .decouvrir {
     animation: none;
   }
@@ -1176,15 +1451,6 @@
   .plaqueBarre,
   .piste {
     display: none;
-  }
-
-  .carte img,
-  .carteFilet {
-    transition: none;
-  }
-
-  .carteFilet {
-    transform: scaleX(1);
   }
 
   .matiereCadre img {

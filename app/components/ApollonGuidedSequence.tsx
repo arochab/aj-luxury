@@ -251,21 +251,37 @@ const ETATS = ["Seul", "Se dévoile", "Porté"] as const;
    coloris a ses trois temps ; entre deux coloris, un transit pendant lequel
    le rail seul travaille, volets figés. Les durées sont relatives : leur
    somme est ramenée à 1, donc la partition ne dépend pas de la hauteur de la
-   section et le point de rupture mobile (380svh) la resserre sans la
-   déformer.
+   section et le régime mobile, qui ramène l'unité à 0,6 écran, la resserre
+   sans la déformer.
 
-   Sur 320svh, ce tableau donne : 17svh de plan « Seul », 50svh de dévoilement,
-   17svh de plan « Porté », puis 34svh de transit — trois fois, deux transits.
-   3 × 84 + 2 × 34 = 320. Plus une seule hauteur d'écran de rail immobile.
+   ── LES DURÉES SONT DÉSORMAIS DES ÉCRANS ──────────────────────────
+   Le jeu précédent — transit 1,1 / seul 0,55 / dévoile 1,6 / porté 0,55, somme
+   10,3, étalé sur les 320svh de course de la section — donnait une unité de
+   31svh. Le PALIER PORTÉ, c'est-à-dire le seul moment où la composition est
+   entière et immobile, tenait donc 17svh : un sixième d'écran. Le lecteur
+   traversait la révélation sans jamais s'y arrêter.
+
+   L'étalon fait l'inverse et c'est son trait le plus net : ses sections
+   d'observation d'objet durent 4 à 13,25 écrans, et le bloc de copie y reste
+   épinglé sur exactement un écran pendant que l'objet travaille. Mesuré le
+   20/08 sur oryzo.ai : un plan par écran et demi sur la section « wearable ».
+
+   Les durées ci-dessous sont donc lues EN ÉCRANS, et la hauteur de la section
+   en découle : `.plaque` vaut `(1 + somme) × 100svh`, l'écran collant plus la
+   course. Une unité = un écran plein. Somme = 3 × (0,5 + 1 + 1) + 2 × 0,5 =
+   8,5, donc 950svh au lieu de 420svh, et par coloris : un demi-écran de plan
+   scellé, un écran de dévoilement, UN ÉCRAN PLEIN de diptyque immobile, un
+   demi-écran de transit. Le palier porté passe de 17svh à 100svh, ×5,9.
    ========================================================================== */
 
 type NomTemps = "transit" | "seul" | "devoile" | "porte";
 
+/** En ÉCRANS. La somme pilote la hauteur de la section, cf. SOMME_TEMPS. */
 const DUREES: Record<NomTemps, number> = {
-  transit: 1.1,
-  seul: 0.55,
-  devoile: 1.6,
-  porte: 0.55,
+  transit: 0.5,
+  seul: 0.5,
+  devoile: 1,
+  porte: 1,
 };
 
 type Mesure = {
@@ -295,6 +311,15 @@ function partition(n: number): readonly Mesure[] {
 }
 
 const MESURES = partition(PLATEAUX.length);
+
+/* La somme brute des durées, en écrans. Elle part en style inline vers
+   `--plaque-temps`, d'où Accueil.module.css tire `(1 + somme) × 100svh`.
+   Elle est DÉRIVÉE du même tableau que la partition : une durée modifiée
+   déplace la hauteur de la section du même geste, et le palier ne peut pas
+   se retrouver plus court que ce que la partition annonce. */
+const SOMME_TEMPS =
+  PLATEAUX.length * (DUREES.seul + DUREES.devoile + DUREES.porte) +
+  (PLATEAUX.length - 1) * DUREES.transit;
 
 /** Trouve la mesure en cours. Onze entrées : un balayage suffit, et il évite
     de garder un index en cache que le scroll inversé rendrait faux. */
@@ -476,11 +501,21 @@ export default function ApollonGuidedSequence({ coloris }: Props) {
             // seule prise visible — et cette compensation fond à zéro au
             // rythme du volet. Le diptyque s'élargit depuis un cadre
             // équilibré au lieu de se remplir dans un cadre troué.
-            //   Les 50 % sont un pourcentage de la demi-boîte elle-même :
-            // aucune mesure, aucune valeur en cache, donc rien à réinvalider
-            // au redimensionnement ni quand la hauteur dynamique du viewport
-            // bouge sans qu'un refresh soit déclenché.
-            const recentrage = `translate3d(calc((50% + var(--duo-gouttiere) / 2) * ${(
+            //   L'ÉCART LUI-MÊME EST EN CSS, pas ici : `--duo-recentrage`,
+            // défini deux fois dans Accueil.module.css, une par régime de mise
+            // en page. Écrit en dur ici, il valait `50% + gouttière / 2`, ce
+            // qui centre la prise visible SI la paire est centrée — identité
+            // (W−2b−g)/2 + b/2 + g/2 = (W−b)/2, vraie pour tout W. La paire
+            // ayant été ancrée à droite entre-temps, cet écart ne centrait plus
+            // rien : mesuré à 1920x1080 sur le temps « Seul », la prise
+            // occupait x 795..1482, centre à 1138 contre 952 pour l'écran, et
+            // 795 px d'aplat restaient à sa gauche. Le JS n'écrit donc plus que
+            // le FACTEUR ; la géométrie appartient à la feuille de style, seule
+            // à savoir où la paire est posée. Le pourcentage reste celui de la
+            // demi-boîte : aucune mesure, rien à réinvalider au
+            // redimensionnement ni quand la hauteur dynamique du viewport bouge
+            // sans qu'un refresh soit déclenché.
+            const recentrage = `translate3d(calc(var(--duo-recentrage) * ${(
               1 - ouverture
             ).toFixed(4)}),0,0)`;
             const paire = paires[i];
@@ -602,8 +637,18 @@ export default function ApollonGuidedSequence({ coloris }: Props) {
          mobile dont la barre d'URL se rétracte — une bande de section se
          découvre sous la scène, et elle restait rose sous un mur pourpre.
          Ce n'est pas une couleur animée : elle change avec `actif`, donc
-         deux fois par traversée, jamais par frame. */
-      style={{ "--mur-courant": PLATEAUX[actif].mur } as CSSProperties}
+         deux fois par traversée, jamais par frame.
+
+         `--plaque-temps` porte la somme des durées de la partition, en
+         écrans. C'est le CSS qui en tire la hauteur de la section — voir
+         `.plaque` dans Accueil.module.css. La partition et la course ne
+         peuvent donc plus diverger. */
+      style={
+        {
+          "--mur-courant": PLATEAUX[actif].mur,
+          "--plaque-temps": SOMME_TEMPS,
+        } as CSSProperties
+      }
     >
       <h2 className="aj-sr-only" id="aj-plaque-titre">
         {t("home.incarnationTitle")}
@@ -656,6 +701,53 @@ export default function ApollonGuidedSequence({ coloris }: Props) {
                 </div>
 
                 <div className={styles.duo}>
+                  {/* La bande : les deux coloris voisins tiennent les marges.
+                      Voir `.voisine` dans Accueil.module.css pour la mesure du
+                      défaut et la géométrie. Le rang est CYCLIQUE, donc chaque
+                      panneau a bien deux bords.
+
+                      `PLATEAUX[...]` et jamais un chemin écrit à la main : le
+                      contrat de parité relit les littéraux `/images/...` de ce
+                      fichier dans l'ordre du document, et deux stills recopiés
+                      ici les décaleraient. Aucun corps sur ces plateaux, de
+                      toute façon — mais le contrat ne le sait pas.
+
+                      `aria-hidden` et `alt=""` : ces deux prises sont déjà
+                      nommées, avec leur coloris, sur leur propre panneau. Les
+                      redire ferait lire trois fois la même nature morte. */}
+                  {[-1, 1].map((sens) => {
+                    const voisin =
+                      PLATEAUX[
+                        (index + sens + PLATEAUX.length) % PLATEAUX.length
+                      ];
+                    return (
+                      <div
+                        aria-hidden="true"
+                        className={`${styles.voisine} ${
+                          sens === -1 ? styles.voisineGauche : styles.voisineDroite
+                        }`}
+                        key={`${plateau.cle}-${voisin.cle}`}
+                      >
+                        <img
+                          alt=""
+                          className={styles.priseVoisine}
+                          src={voisin.still}
+                          width={1024}
+                          height={1536}
+                          /* Les deux voisines du premier panneau chargent tôt :
+                             ce sont elles qui tiennent les marges à l'instant
+                             où la section arrive, et elles amènent au passage
+                             les trois stills en cache pour les panneaux 02 et
+                             03. `low` les garde hors du chemin critique du
+                             film d'ouverture. */
+                          loading={index === 0 ? "eager" : "lazy"}
+                          fetchPriority="low"
+                          decoding="async"
+                        />
+                      </div>
+                    );
+                  })}
+
                   {/* Prise 1 — le vêtement seul, sur le plateau. */}
                   <div className={styles.demi}>
                     <img

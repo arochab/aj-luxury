@@ -42,157 +42,146 @@ export default function ShopPage() {
       <AjScrollReveal className={styles.scene}>
         <section className={styles.ouverture} aria-labelledby="boutique-titre">
           {/*
-            RETOUR ADAM DU 19/08 — « le site donne l'impression qu'il n'y aura
-            JAMAIS qu'un produit ». La boutique était le mécanisme exact du
-            problème : eyebrow « BOUTIQUE · LA COLLECTION » puis titre
-            « Apollon », donc aucun niveau où un deuxième modèle pourrait un
-            jour s'inscrire. L'eyebrow nomme maintenant le rang d'Apollon —
-            premier modèle — et le chapô le dit en toutes lettres.
-            Le mot « premier » fait tout le travail : il est vrai aujourd'hui,
-            il ne promet aucune date et il n'annonce aucune disponibilité.
-            Aucune formulation du site ne laisse entendre qu'un autre modèle
-            serait déjà achetable.
+            L'OUVERTURE ET LA GRILLE NE FONT QU'UNE SEULE SECTION, ET LEUR
+            ORDRE CHANGE À 900 px.
+
+            Au-delà de 900 px : bande à deux colonnes — l'identité à gauche, ce
+            qu'on en dit à droite —, puis les trois photographies dessous.
+            C'est le geste du premier écran de l'étalon principal, qui pose son
+            logotype à gauche et sa phrase produit en colonne droite au lieu
+            d'empiler quatre blocs.
+
+            SOUS 900 px, LA MÊME PILE COÛTAIT UN ÉCRAN ENTIER. Mesuré le 20/08
+            à 390x844 : en-tête 110 px, puis étiquette, titre, chapô, filet,
+            prix, mention de vente et lien, soit 455 px — 54 % de l'écran —
+            avant la première photographie, laquelle était ensuite coupée de
+            14 px par la ligne de flottaison, son nom tombant 91 px dessous.
+            L'étalon secondaire, lui, ouvre sa boutique à 118 px sur 844, soit
+            14 %, sans une ligne de discours au-dessus de la grille.
+
+            Le bloc commercial — chapô, filet, prix, mention et lien — passe
+            donc SOUS la bande des trois photographies. Il ne reste au-dessus
+            que l'étiquette et « Apollon ». Rien n'est retiré, rien n'est
+            réécrit : c'est un ordre, pas une coupe.
+
+            L'ORDRE DU DOM EST CELUI DU TÉLÉPHONE, PAS CELUI DU BUREAU. Le
+            bloc commercial est écrit ici après la liste, et c'est le bureau
+            qui le replace en colonne droite par grid-row. L'inverse aurait
+            envoyé le focus clavier sur un lien situé hors écran, sous les
+            trois photographies ; ici le saut de focus reste à l'intérieur du
+            premier écran.
           */}
-          <p className={styles.eyebrow} data-aj-reveal>
-            <T id="nav.shop" /> · <T id="shop.firstModel" />
-          </p>
-
-          <h1
-            className={`${styles.titre} aj-metal`}
-            id="boutique-titre"
-            data-aj-reveal
-          >
-            Apollon
-          </h1>
-
-          <p className={styles.chapo} data-aj-reveal>
-            <T id="shop.intro" />
-          </p>
-
-          {/*
-            RETOUR ADAM DU 19/08 — « la boutique est encore trop sombre et mal
-            foutue ».
-
-            « MAL FOUTUE », PREMIER MÉCANISME : la page ouvrait sur une fiche
-            technique. Le bandeau de quatre colonnes APOLLON / COLORIS /
-            TAILLES / COMPOSITION mesurait 117 px et repoussait la première
-            photographie à y=592 dans un écran de 900. Le premier écran de la
-            boutique ne montrait donc AUCUN produit : trois torses recadrés, un
-            tableau de spécifications, et le boxer à 390 px sous la ligne de
-            flottaison. Une boutique qui ne montre pas ce qu'elle vend.
-
-            Les faits matière — coloris, tailles — descendent à la section
-            « matière », dont la colonne de droite était vide à 82 % : un seul
-            déplacement règle les deux défauts. Ne subsiste ici que ce qui
-            décide d'entrer : le prix, et le statut commercial réel.
-          */}
-          <div className={styles.statut} data-aj-reveal>
-            <p className={styles.prix}>
-              <LocalizedPrice amountCents={prixCents} />
+          <div className={styles.identite}>
+            <p className={styles.eyebrow} data-aj-reveal>
+              <T id="nav.shop" /> · <T id="shop.firstModel" />
             </p>
 
-            {/*
-              « Prix fictif, non commercial » était affiché ici, en clair, sous
-              le prix de la marque. Une boutique qui déclare ses propres prix
-              faux détruit sa crédibilité en une ligne — et elle ne disait
-              toujours pas l'essentiel : que la vente n'est pas encore ouverte.
-              Une seule phrase remplace les deux, formulée comme une ouverture
-              à venir et non comme un aveu de maquette. Elle ne promet aucune
-              date et n'annonce aucune disponibilité.
-
-              Aucun champ de collecte n'est posé ici : il n'existe ni endpoint
-              d'inscription ni mention RGPD associée, et un formulaire inerte
-              serait exactement le CTA qui promet une action qu'il ne rend pas.
-              Le lien mène à la seule voie réellement ouverte aujourd'hui.
-            */}
-            {runtimeMode !== "production" && (
-              <p className={styles.statutNote}>
-                <T id="shop.saleNotice" />{" "}
-                <Link className={styles.statutLien} href="/contact">
-                  <T id="shop.notify" />
-                </Link>
-              </p>
-            )}
-          </div>
-        </section>
-
-        {/* role="list" : Safari retire les sémantiques de liste dès que
-            list-style vaut none. */}
-        <ul className={styles.grille} role="list" aria-label="Apollon">
-          {products.map((product, index) => (
-            <li
-              className={styles.carte}
-              id={product.slug}
-              key={product.slug}
+            <h1
+              className={`${styles.titre} aj-metal`}
+              id="boutique-titre"
               data-aj-reveal
-              /* L'accent descend du swatch produit : jamais une couleur inventée. */
-              style={{ "--bq-accent": product.swatch } as CSSProperties}
             >
-              {/*
-                data-aj-presse : la moitié « départ » du relais vers la fiche.
-                Le geste est posé par GSAP dans AjScrollReveal — rien ici
-                n'intercepte le clic, <Link> navigue et précharge comme
-                d'habitude.
-              */}
-              <Link
-                className={styles.carteLien}
-                href={`/products/${product.slug}`}
-                data-aj-presse
+              Apollon
+            </h1>
+          </div>
+
+          {/* role="list" : Safari retire les sémantiques de liste dès que
+              list-style vaut none. */}
+          <ul className={styles.grille} role="list" aria-label="Apollon">
+            {products.map((product, index) => (
+              <li
+                className={styles.carte}
+                id={product.slug}
+                key={product.slug}
+                data-aj-reveal
+                /* L'accent descend du swatch produit : jamais une couleur inventée. */
+                style={{ "--bq-accent": product.swatch } as CSSProperties}
               >
-                <span className={styles.carteMedia}>
-                  <Image
-                    unoptimized
-                    src={product.image}
-                    alt={`${product.model} ${product.name}`}
-                    fill
-                    sizes="(max-width: 760px) 100vw, 33vw"
-                    priority={index === 0}
-                  />
-                </span>
-                <span className={styles.carteVoile} aria-hidden="true" />
-
                 {/*
-                  Les pastilles 01/02/03 sont retirées. Trois noms de teinte
-                  sont le seul capital narratif d'une gamme à un modèle ; les
-                  faire précéder d'un numéro les range en références de
-                  catalogue. C'est aussi le motif que la veille documente comme
-                  plafonnant la note d'un e-commerce mode en 2026. Le nom porte
-                  seul l'identité, en bas de carte, au corps le plus grand.
-                */}
-                <span className={styles.carteAction}>
-                  <T id="shop.discover" />
-                  <span aria-hidden="true">→</span>
-                </span>
+                  LA STRUCTURE DE L'ÉTALON SECONDAIRE, PRISE À LA LETTRE.
+                  Sur ses 16 cartes, la photographie ne porte AUCUN texte : ni
+                  appel, ni pastille, ni prix. La métadonnée vit sous l'image, sur
+                  le sol de la page, en trois lignes courtes. Nos cartes faisaient
+                  l'inverse — « Découvrir » en haut, nom, ton et prix en bas, tout
+                  posé sur le vêtement, et donc un voile de noir obligatoire pour
+                  que ce texte reste lisible.
 
-                <span className={styles.carteBas}>
-                  <span className={styles.carteNom}>
-                    {product.name}
+                  CONSÉQUENCE MESURABLE SUR « TROP SOMBRE » : plus un seul mot sur
+                  la photo, donc plus de voile du tout. `.carteVoile` est supprimé.
+                  Chaque pixel du vêtement est désormais rendu à sa luminance
+                  réelle, y compris la ceinture et la plaque métal.
+
+                  CONSÉQUENCE SUR LA LIGNE DE FLOTTAISON : le nom n'est plus
+                  arrimé au BAS d'une photographie de 708 px, il suit le cadre à
+                  16 px. Le cadre, lui, est devenu une constante réglée sur la
+                  hauteur d'écran (voir --bq-h dans Boutique.module.css).
+                */}
+                <Link
+                  className={styles.carteLien}
+                  href={`/products/${product.slug}`}
+                  data-aj-presse
+                >
+                  <span className={styles.carteCadre}>
+                    <Image
+                      unoptimized
+                      src={product.image}
+                      alt={`${product.model} ${product.name}`}
+                      fill
+                      sizes="(max-width: 700px) 100vw, 33vw"
+                      priority={index === 0}
+                    />
+                    <span className={styles.carteFilet} aria-hidden="true" />
                   </span>
 
-                  <span className={styles.carteLigne}>
+                  <span className={styles.carteBas}>
+                    {/*
+                      La ligne constante puis la variable, dans cet ordre : c'est
+                      la mécanique de l'étalon, qui répète « UNIFORM » sur chaque
+                      carte et ne fait varier que le nom. Ici le constant est
+                      « APOLLON », le variable est l'heure de la lumière, et le
+                      nom du coloris porte seul le corps d'affichage.
+                    */}
                     <span className={styles.carteTon}>
                       <LocalizedProductText slug={product.slug} field="tone" />
                     </span>
-                    <span className={styles.cartePrix}>
-                      <LocalizedPrice amountCents={product.priceCents} />
-                    </span>
+
+                    <span className={styles.carteNom}>{product.name}</span>
                   </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
 
-                  {/*
-                    Les quatre tailles vivaient ici en `aria-hidden`, donc
-                    décoratives, et faisaient de chaque carte une pile de six
-                    couches : numéro, « Découvrir », nom, ton, prix, tailles.
-                    Le corpus mode primé 2026 en pose une ou deux. Elles
-                    rejoignent la section matière, où elles sont un fait produit
-                    et non un ornement de vignette.
-                  */}
-                </span>
+          <div className={styles.dire}>
+            <p className={styles.chapo} data-aj-reveal>
+              <T id="shop.intro" />
+            </p>
 
-                <span className={styles.carteFilet} aria-hidden="true" />
-              </Link>
-            </li>
-          ))}
-        </ul>
+            <div className={styles.statut} data-aj-reveal>
+              <p className={styles.prix}>
+                <LocalizedPrice amountCents={prixCents} />
+              </p>
+
+              {/*
+                Le prix reste ICI, collé à la vérité commerciale, et n'est pas
+                répété sur les trois cartes. L'étalon secondaire porte un prix
+                par carte parce que ses 35 pièces ont 35 prix ; les nôtres ont
+                le même. Répété trois fois, le prix devient un gabarit — et
+                surtout il se détacherait de la phrase qui dit que la vente
+                n'est pas ouverte, qui est la seule raison pour laquelle on
+                peut afficher un prix sans mentir.
+              */}
+              {runtimeMode !== "production" && (
+                <p className={styles.statutNote}>
+                  <T id="shop.saleNotice" />{" "}
+                  <Link className={styles.statutLien} href="/contact">
+                    <T id="shop.notify" />
+                  </Link>
+                </p>
+              )}
+            </div>
+          </div>
+        </section>
 
         <section className={styles.matiere} aria-labelledby="boutique-matiere">
           <div className={styles.matiereFrame}>

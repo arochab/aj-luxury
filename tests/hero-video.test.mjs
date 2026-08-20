@@ -281,10 +281,40 @@ test("hero playback is accessible, resource-aware and subject-safe", async () =>
     stylesheet,
     /@media \(min-aspect-ratio: 801 \/ 1000\)[\s\S]*object-fit: cover/,
   );
+  /* PORTRAIT — meme contrat que le paysage, applique le 20/08.
+     Ce test epinglait l'inverse : un cadre de 70svh au ratio 720/934, centre,
+     et le reste de l'ecran rempli par le meme visuel floute. Mesure a ce
+     moment-la : la boite rendue du media couvrait 50,4 % de l'aire du premier
+     ecran a 768x1024 et 57,7 % a 390x844, et la couture entre la photo nette
+     et le remplissage flou traversait le h1. Le premier ecran n'etait pas une
+     image, il en CONTENAIT une.
+     Le contrat epingle est desormais : la scene remplit la boite (aucune regle
+     `.aj-film__hero-stage` dans la branche portrait, donc `inset: 0` de base),
+     le media est en `cover`, et son `object-position` horizontal est CALCULE —
+     57 %, la valeur qui garde les deux visages et les deux boxers dans la
+     fenetre a 768, 430, 390, 360 et jusqu'a 320 de large. Voir le commentaire
+     de globals.css pour la mesure de la boite de surete dans l'espace source.
+     Les trois marqueurs de l'ancien cadre sont donc interdits DANS cette
+     branche ; `blur(18px)` reste legitime en paysage, ou la scene et le media
+     n'ont pas le meme ratio. */
   assert.match(stylesheet, /@media \(max-aspect-ratio: 4 \/ 5\)/);
-  assert.match(stylesheet, /top: calc\(50% \+ 34px\)/);
-  assert.match(stylesheet, /aspect-ratio: 720 \/ 934/);
-  assert.match(stylesheet, /width: min\(100%, calc\(70svh \* 720 \/ 934\)\)/);
+  const depuisPortrait = stylesheet.slice(
+    stylesheet.indexOf("@media (max-aspect-ratio: 4 / 5)"),
+  );
+  /* La branche s'arrete a sa premiere accolade fermante en colonne 0. */
+  const portrait = depuisPortrait.slice(
+    0,
+    depuisPortrait.indexOf("\n}\n"),
+  );
+  assert.match(portrait, /object-fit: cover/);
+  assert.match(portrait, /object-position: 57% 0%/);
+  assert.doesNotMatch(portrait, /top: calc\(50% \+ 34px\)/);
+  assert.doesNotMatch(portrait, /aspect-ratio: 720 \/ 934/);
+  assert.doesNotMatch(portrait, /70svh/);
+  /* `filter: blur`, pas `blur(18px)` : le commentaire de la branche cite la
+     valeur pour expliquer pourquoi elle a disparu. C'est la DECLARATION qui
+     est interdite, pas le mot. */
+  assert.doesNotMatch(portrait, /filter: blur/);
   assert.match(stylesheet, /filter: blur\(18px\) brightness\(0\.44\)/);
   assert.match(stylesheet, /object-position: center top/);
   assert.match(identityComponent, /hero-identity-overlay-landscape-v1\.png/);

@@ -3347,42 +3347,78 @@ footer:not([class]) > p {
   }
 }
 
+/* Portrait — le média EST le premier écran.
+   --------------------------------------------------------------------------
+   Ce qu'il y avait avant : le média se posait dans un cadre de 70svh au ratio
+   720/934, centré, avec une ombre portée, et le reste de l'écran était rempli
+   par le même visuel flouté à 18px. Mesuré : la boîte rendue faisait 50,4 % de
+   l'aire du premier écran à 768x1024 et 57,7 % à 390x844, et la couture entre
+   la photo nette et le remplissage flou traversait le h1. Le premier écran
+   n'était pas une image, il en CONTENAIT une.
+
+   L'etalon (oryzo.ai) tient un seul canvas a 100 % de l'aire aux quatre
+   tailles et pose toute la copie dessus. La regle qui s'en transpose n'est pas
+   « mettre du plein cadre » mais « l'objet reste entier, et c'est la MISE EN
+   PAGE qui plie ». Chez eux la camera 3D recule ; chez nous la photo est fixe,
+   donc le recul se joue sur la fenetre de recadrage — d'ou un `object-position`
+   CALCULE, et non centre par defaut.
+
+   MESURE DE LA BOÎTE DE SÛRETÉ, dans l'espace source 720x934, par masque
+   colorimétrique (peau : r-g>=22 et r>b+18 ; lilas du boxer : b-g>=32 et
+   b-r>=24), union de 12 images de la vidéo portrait plus l'affiche :
+
+     silhouette pleine   x 10,56 % -> 82,22 %   y 7,71 % -> 100,00 %
+     visages + boxers    x 30,56 % -> 76,81 %   y 7,71 % ->  66,81 %
+
+   Deux faits en sortent :
+     • la source elle-même coupe déjà le tibia de Jérémy au bord bas (y1 =
+       100,00 %). Aucune valeur de `object-position` ne peut rendre un pied qui
+       n'a jamais été photographié : la marge basse est nulle par construction
+       de l'actif, pas par cadrage CSS ;
+     • la silhouette pleine mesure 71,66 % de large. À 390x844 le rapport de la
+       fenêtre (0,4621) contre celui de la source (0,7709) ne laisse voir que
+       59,94 % de la largeur. 71,66 > 59,94 : garder les deux bras entiers est
+       arithmétiquement impossible. Le rapport minimal qui le permettrait, avec
+       3 % de marge de chaque côté, est 0,609. Voir le rapport de boucle.
+
+   CE QUI EST DONC PROTÉGÉ : la boîte visages + boxers, 46,25 % de large. Elle
+   tient dans les 59,94 % disponibles avec de la marge. Ce qui est sacrifié à
+   390 est l'avant-bras gauche tendu de Jérémy — un membre, jamais un visage,
+   jamais un boxer.
+
+   POURQUOI 57 %. `object-position: X%` épingle le point X % de la SOURCE sur
+   le point X % de la BOÎTE : le repère tient donc à tous les rapports, alors
+   qu'une marge en pixels dérive. Le centre de la boîte critique est à 53,7 %.
+   On la décale à 57 % pour racheter le coude d'Alex (82,22 %) qui, centré,
+   sortait du cadre à 390. Marges obtenues sur les visages et les boxers :
+   7,7 / 6,0 à 390x844 ; 6,8 / 5,3 à 360x800 ; 3,1 / 2,5 à 320x800 (le pire
+   cas praticable) ; 9,0 / 22,0 à 768x1024.
+
+   Le 0 % vertical ancre le sommet du crâne : entre 0,771 et 0,800 de rapport,
+   `cover` rogne jusqu'à 3,6 % en hauteur, et ces 3,6 % doivent être pris en
+   bas, sur la jambe déjà coupée par l'actif, jamais en haut sur les têtes. */
 @media (max-aspect-ratio: 4 / 5) {
   .aj-film__hero-media {
     background: #09090b;
   }
 
-  .aj-film__hero-backdrop {
-    opacity: 1;
-  }
+  /* Le fond flou est retiré, pas masqué. C'était LUI la couture : la scène est
+     désormais couverte à 100 % par le média, donc ce calque ne peut plus
+     apparaître nulle part — et une passe de `blur(18px)` sur une image de
+     720x934 disparaît du budget mobile. Il reste à `opacity: 0` par la règle
+     de base ; le filet de sécurité pendant les échelles GSAP n'est utile que
+     dans la branche paysage, où la scène et le média n'ont pas le même ratio. */
 
-  .aj-film__hero-backdrop img {
-    filter: blur(18px) brightness(0.44) saturate(0.72);
-    object-position: center;
-    transform: scale(1.08);
-  }
-
-  .aj-film__hero-stage {
-    top: calc(50% + 34px);
-    left: 50%;
-    width: min(100%, calc(70svh * 720 / 934));
-    height: auto;
-    aspect-ratio: 720 / 934;
-    box-shadow:
-      inset 0 1px rgba(255, 255, 255, 0.18),
-      inset 0 -1px rgba(255, 255, 255, 0.18),
-      0 22px 70px rgba(0, 0, 0, 0.42);
-    transform: translate(-50%, -50%);
-  }
+  /* Aucune règle `.aj-film__hero-stage` ici : la scène reprend la règle de
+     base, `inset: 0` sur 100 % de la boîte. Le cadre, l'ombre portée et le
+     `translate` sont supprimés, pas neutralisés — c'est la suppression qui
+     garantit qu'aucune arête ne subsiste. */
 
   .aj-film__hero-poster img,
-  .aj-film__hero-video {
-    object-position: center;
-  }
-
+  .aj-film__hero-video,
   .aj-film__identity img {
-    object-fit: contain;
-    object-position: center;
+    object-fit: cover;
+    object-position: 57% 0%;
   }
 }
 
@@ -3442,17 +3478,120 @@ footer:not([class]) > p {
   display: none;
 }
 
+/* L'étalonnage du film. C'est le SOL sur lequel la phrase du premier écran est
+   posée, et rien d'autre : ni bandeau, ni carte, ni encadré. Le premier écran
+   de l'étalon est image à 100 %, toute la copie posée dessus ; un aplat opaque
+   sous le texte rendrait cette règle fausse.
+
+   L'ENVELOPPE DU PRODUIT, mesurée sur la trame réellement rendue (960x540,
+   détection des pixels lilas) : les boxers occupent 41,3 % à 66,3 % de la
+   hauteur et 41,8 % à 61,4 % de la largeur. La rampe verticale reste donc
+   rigoureusement transparente jusqu'à 67 %, et le dégradé latéral s'éteint à
+   28 % de la largeur, avant le bord du corps de Jérémy (x ≈ 32 %). Aucun
+   centième de voile ne touche le vêtement, ni les visages, qui sont plus haut.
+
+   POURQUOI IL A ÉTÉ DIVISÉ PAR PRÈS DE DEUX. La version précédente montait à
+   0,92 au pied de l'écran. Mesure au banc sur les pixels composités : le pire
+   pixel sous la phrase donnait 9,41:1 et la médiane 19,14:1, pour un seuil de
+   5,0:1. Le voile était donc 3,8 fois plus fort que nécessaire au pire point,
+   et ce surplus se payait en image — le sol, la flaque de métal et les pieds
+   des deux hommes disparaissaient sous un aplat noir large de 1920px, c'est-
+   à-dire exactement le bandeau que l'étalon n'a jamais.
+
+   La rampe est recalculée à partir de la boîte de texte, ligne par ligne, pour
+   viser 5,0:1 au 95e centile et non 19:1 à la médiane :
+     67 %  0     — sous l'ourlet du boxer (66,3 %), rien ;
+     70 %  0,40  — la première ligne de la phrase commence à 69,9 % ;
+     74 %  0,50  — elle traverse le tabouret de métal poli, le point le plus
+                   clair de toute la moitié basse ;
+     80 %  0,54  — deuxième ligne, sur le sol et la flaque ;
+     90 %  0,57  — troisième ligne, sur le sol déjà sombre ;
+    100 %  0,58.
+
+   Le segment 70-74 % a été relevé deux fois, chaque fois sur une mesure et non
+   sur une impression : 0,30 puis 0,34 donnaient 4,64:1 et 5,45:1 au 95e centile
+   sur la première ligne à 1920, et le surtitre tombait à 4,85:1 à 1024x768 —
+   format court où le champ de texte, ancré au bas, descend à 71,5 % au lieu de
+   65,8 %. Le voile est bâti pour le plus défavorable des huit formats vérifiés,
+   pas pour le plus large.
+
+   Le dégradé latéral (0,42 au bord) donne une direction à la scène et couvre
+   le surtitre, qui est le plus petit texte du champ et le plus haut placé. */
 .aj-film__grade {
   z-index: -2;
   background:
     linear-gradient(
+      90deg,
+      rgba(3, 3, 6, 0.42) 0,
+      rgba(3, 3, 6, 0.24) 12%,
+      rgba(3, 3, 6, 0.07) 21%,
+      transparent 28%
+    ),
+    linear-gradient(
       180deg,
       rgba(2, 2, 4, 0.34) 0,
       transparent 18%,
-      transparent 72%,
-      rgba(2, 2, 4, 0.4) 100%
+      transparent 67%,
+      rgba(3, 3, 6, 0.4) 70%,
+      rgba(3, 3, 6, 0.5) 74%,
+      rgba(3, 3, 6, 0.54) 80%,
+      rgba(3, 3, 6, 0.57) 90%,
+      rgba(3, 3, 6, 0.58) 100%
     );
   pointer-events: none;
+}
+
+/* Sous 900px le média passe en `contain` : l'objet recule au lieu d'être rogné,
+   exactement comme la caméra de l'étalon recule à 768 au lieu de réorganiser la
+   page. Le cadre est alors prolongé par une reprise floutée et sombre du même
+   plan — le champ de texte est donc posé sur une image continue, jamais sur une
+   bande ajoutée sous la photo.
+
+   Deux mesures fixent cette rampe, prises sur la trame telle qu'elle est
+   RÉELLEMENT affichée à chaque taille :
+     • 768x1024 — surtitre à 80,7 %, phrase à 85 % ;
+     • 390x844  — surtitre à 70,5 %, phrase à 74,6 %.
+
+   CORRECTION DU 20/08, PREMIER ARRÊT SEUL. Ces deux lignes portaient aussi un
+   « bas des boxers à 64,7 % / 63,4 % » et un premier arrêt à 66 %, tous deux
+   relevés quand le média se posait en `contain` dans un cadre de 70svh. Le
+   média est passé en `cover` plein cadre : la source couvre exactement la
+   hauteur de l'écran, donc l'ourlet du boxer n'est plus à deux valeurs mais à
+   UNE SEULE, celle de la source — 66,81 %. Mesuré après bascule : 66,67 % de
+   l'écran à 390x844 comme à 768x1024. Le premier arrêt à 66 % passait donc
+   sous l'ourlet et reposait du voile sur le vêtement, exactement le défaut que
+   la version précédente avait corrigé. Il est remonté à 67 %, la valeur que la
+   branche large utilise déjà et qui est désormais juste à toutes les tailles.
+   AUCUN arrêt de contraste n'est touché : 70 %, 80 % et 100 % gardent 0,54,
+   0,60 et 0,63, mesurés et inchangés.
+
+   POURQUOI ELLE MONTE VITE, ET PLUS HAUT QU'À 1920. C'est le format qui
+   l'impose, pas le goût. En `contain` le média est réduit et le texte remonte
+   dans l'écran : à 390 le surtitre est à 70,5 %, soit à peine sous l'ourlet,
+   et il tombe sur la flaque de métal poli — le point le plus clair de la moitié
+   basse. Trois essais mesurés au même point : 0,34 donnait 3,11:1 au 95e
+   centile, 0,46 donnait 5,11:1 et 0,50 donnait 5,31:1 avec encore 3,7 % de
+   pixels sous le seuil. 0,54 dès 70 % laisse enfin de la marge.
+
+   Elle reste plus légère que l'ancienne (0,63 au lieu de 0,95 au pied), dont la
+   mesure sous le bloc de texte à 768 donnait 20,36:1 à la médiane et 16,43:1 au
+   pire pixel, pour un seuil de 5,0:1 : on payait en image un contraste dont on
+   avait quatre fois le compte.
+
+   Pas de dégradé latéral ici : à 390 la colonne de texte fait toute la largeur,
+   une direction gauche-droite n'y servirait à rien. */
+@media (max-width: 900px) {
+  .aj-film__grade {
+    background: linear-gradient(
+      180deg,
+      rgba(2, 2, 4, 0.34) 0,
+      transparent 18%,
+      transparent 67%,
+      rgba(3, 3, 6, 0.54) 70%,
+      rgba(3, 3, 6, 0.6) 80%,
+      rgba(3, 3, 6, 0.63) 100%
+    );
+  }
 }
 
 .aj-film__header {
