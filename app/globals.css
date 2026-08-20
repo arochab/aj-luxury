@@ -4261,10 +4261,18 @@ footer:not([class]) > p {
      lignes. Aucune constante `bottom` ne dégage les deux sans pousser la
      commande au milieu de l'image ; mesuré, le carré chevauchait le titre de
      16px à 375px. La gouttière reste celle de la signature. */
+  /* Le bouton vivait en HAUT À DROITE sous 900 px, exactement là où la barre
+     pose PANIER. Recouvrement mesuré par le jury du 20/08 : 44 x 37,4 px, soit
+     la totalité de la cible. Sur un téléphone, toucher le panier mettait la
+     vidéo en pause — le glyphe de pause était visible À L'INTÉRIEUR du mot
+     PANIER. Défaut présent sur HEAD, donc antérieur, et invisible pour trois
+     boucles parce qu'aucune n'avait touché le panier au doigt.
+     Il redescend donc au bas du film, comme sur bureau, au-dessus du bloc
+     signature et jamais dans la zone de l'en-tête. */
   .aj-film__motion-toggle {
-    top: clamp(14px, 2.2vh, 24px);
+    top: auto;
     right: var(--gut);
-    bottom: auto;
+    bottom: calc(clamp(26px, 4vh, 44px) + 96px);
     width: 44px;
     min-width: 44px;
     min-height: 44px;
