@@ -377,6 +377,11 @@ const HeroBackgroundVideo = forwardRef<
           width={asset?.width ?? HERO_VIDEO_ASSETS.desktop.width}
           height={asset?.height ?? HERO_VIDEO_ASSETS.desktop.height}
           autoPlay={playing}
+          /* v5 : le master est un aller-retour, sa derniere image et sa
+             premiere sont consecutives. Le raccord structurel mesure descend
+             de 3,83 a 0,50 niveau de gris moyen, et de 231 a 5,5 au pire
+             pixel. La boucle est donc admissible, ce qu'interdisait la v4. */
+          loop
           muted
           playsInline
           preload="none"

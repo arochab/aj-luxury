@@ -3,6 +3,7 @@
 /* eslint-disable @next/next/no-img-element -- the fixed local logo needs no image-loader runtime */
 
 import Link from "next/link";
+import { useCallback, useEffect, useId, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import type { TranslationKey } from "@/lib/i18n/dictionaries";
@@ -77,6 +78,58 @@ export default function StoreHeader({
 }: StoreHeaderProps) {
   const pathname = usePathname();
   const { t } = useI18n();
+
+  /* ── LE MENU DU TÉLÉPHONE ────────────────────────────────────────────
+     Sous 560px, la barre passait sur DEUX rangées — marque + actions, puis
+     les trois liens de nav sous un filet — soit 110,4px mesurés à 390x844,
+     13,1 % du premier écran pris par du chrome. Elle revient à UNE rangée de
+     56px et les six cibles (trois liens de nav, le sélecteur de langue,
+     Compte, Panier) passent derrière ce bouton unique.
+
+     Le repli est en CSS seul : au-dessus de 560px le bouton n'est pas rendu
+     dans la mise en page (`display: none`) et la nav comme les actions
+     reprennent leur place. Rien n'est conditionné au JS pour le bureau, donc
+     rien ne peut disparaître si le JS échoue.
+
+     AUCUNE CLÉ DE COPIE N'EST CRÉÉE. Le bouton n'a pas de libellé visible :
+     son signe est un double filet, la même ligne incisée que le film. Son nom
+     accessible réutilise `nav.mainLabel` fermé et `product.close` ouvert —
+     deux clés déjà présentes dans les cinq dictionnaires et leurs jumeaux
+     public/i18n. */
+  const [menuOuvert, setMenuOuvert] = useState(false);
+  const menuId = useId();
+
+  const basculerMenu = useCallback(() => {
+    setMenuOuvert((ouvert) => !ouvert);
+  }, []);
+
+  /* Une navigation referme le menu : sans ça, la barre garderait son panneau
+     ouvert par-dessus la page d'arrivée.
+
+     L'ajustement se fait PENDANT LE RENDU, pas dans un effet. Un
+     `useEffect(() => setMenuOuvert(false), [pathname])` provoque un second
+     rendu en cascade — c'est le motif que `react-hooks/set-state-in-effect`
+     refuse, et il a raison : la page d'arrivée serait peinte une fois avec le
+     panneau encore ouvert. En comparant le chemin rendu au chemin courant on
+     obtient le bon état dès le premier rendu. Le retour arrière du navigateur
+     est couvert par la même comparaison. */
+  const [cheminRendu, setCheminRendu] = useState(pathname);
+  if (cheminRendu !== pathname) {
+    setCheminRendu(pathname);
+    setMenuOuvert(false);
+  }
+
+  /* Échap referme, comme partout ailleurs sur le site (AGENTS.md, « Responsive
+     et interactions »). Écouté sur le document : la touche doit répondre même
+     si le focus est reparti dans la page. */
+  useEffect(() => {
+    if (!menuOuvert) return;
+    const surTouche = (evenement: KeyboardEvent) => {
+      if (evenement.key === "Escape") setMenuOuvert(false);
+    };
+    document.addEventListener("keydown", surTouche);
+    return () => document.removeEventListener("keydown", surTouche);
+  }, [menuOuvert]);
 
   const racine = useAjMotion<HTMLElement>(
     ({ gsap, ScrollTrigger, racine: tete, mm }) => {
@@ -164,6 +217,7 @@ export default function StoreHeader({
   return (
     <header
       ref={racine}
+      data-menu={menuOuvert ? "ouvert" : "ferme"}
       className={`${styles.header} ${
         variant === "minimal"
           ? styles.headerMinimal
@@ -189,6 +243,18 @@ export default function StoreHeader({
         />
       </Link>
 
+      <button
+        type="button"
+        className={styles.menuBouton}
+        aria-controls={menuId}
+        aria-expanded={menuOuvert}
+        aria-label={menuOuvert ? t("product.close") : t("nav.mainLabel")}
+        onClick={basculerMenu}
+      >
+        <span className={styles.menuSigne} aria-hidden="true" />
+      </button>
+
+      <div className={styles.menuPanneau} id={menuId}>
       {variant !== "minimal" ? (
         <nav className={styles.desktopNav} aria-label={t("nav.mainLabel")}>
           {navigation.map((item) => (
@@ -215,6 +281,7 @@ export default function StoreHeader({
             {t(item.labelKey)}
           </Link>
         ))}
+      </div>
       </div>
     </header>
   );

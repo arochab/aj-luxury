@@ -240,9 +240,13 @@
   }
 }
 
+/* Encre pleine depuis le 20/08 : le dégradé métallique donnait 4,18:1 ici,
+   mesuré sur #08080a, et aucun fond ne peut le porter à 5,0:1. Voir
+   app/design-system.css, section « Lettrage métallique ». */
 .titre {
   max-width: 14ch;
   margin: 0;
+  color: var(--aj-encre);
   font-family: var(--disp);
   font-optical-sizing: auto;
   /* 74 px valaient 67 px de hauteur de ligne pour un seul mot, dans une bande

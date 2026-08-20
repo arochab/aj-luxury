@@ -270,10 +270,13 @@
   line-height: 0.9;
 }
 
-/* Le nom du coloris porte le métal, comme les titres de coloris de l'accueil.
-   .aj-metal interdit un background-color sur cet élément. */
+/* Le nom du coloris portait le métal jusqu'au 20/08. Il ne le porte plus :
+   l'arrêt le plus sombre du dégradé plafonne à 4,79:1 sur le meilleur fond
+   possible, donc sous le plancher de 5,0:1 — démonstration dans
+   app/design-system.css, section « Lettrage métallique ». Encre pleine. */
 .colorName {
   margin: 0;
+  color: var(--aj-encre);
   font-family: var(--disp);
   font-optical-sizing: auto;
   font-size: var(--t4);
@@ -856,7 +859,9 @@
   padding: 18px 2px 0;
 }
 
+/* Encre pleine depuis le 20/08, pour la raison donnée sur .colorName. */
 .otherColorName {
+  color: var(--aj-encre);
   font-family: var(--disp);
   font-optical-sizing: auto;
   font-size: var(--t2);

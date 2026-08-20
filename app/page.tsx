@@ -77,6 +77,14 @@ export default function Home() {
           <HeroComposition />
           <div className="aj-film__grade" aria-hidden="true" />
 
+          {/* LE MUR — téléphone uniquement, `display: none` partout ailleurs.
+              C'est la continuation photographique de la plaque au-dessus des
+              têtes : la même image, le même mur de métal, agrandi et étalonné.
+              Elle remplace l'aplat noir qui occupait 32,4 % du premier écran.
+              Aucun texte, aucun rôle : `aria-hidden`, et le lecteur d'écran
+              garde la seule légende du film, celle de HeroComposition. */}
+          <span className={styles.mur} aria-hidden="true" />
+
           {/* Le premier écran parlait à 15px, en anglais, dans un coin : le seul
               h1 du site était « AJ Luxury — Reveal Your Inner Beauty », une ligne
               que n'importe quelle marque de lingerie pourrait reprendre telle
@@ -94,6 +102,29 @@ export default function Home() {
               <span className="aj-sr-only">AJ Luxury — </span>
               <span lang="en">Reveal Your Inner Beauty</span>
             </p>
+
+            {/* LE MOT-SIGNE ET LE FILET — téléphone uniquement.
+                `display: none` hors de la branche portrait étroite : le premier
+                écran de bureau n'est pas touché par cette reprise.
+
+                AUCUNE COPIE N'EST CRÉÉE NI MODIFIÉE. `nav.apollon` vaut
+                « Apollon » dans les cinq dictionnaires et dans leurs jumeaux
+                public/i18n — c'est un nom propre, il ne se traduit pas. Le
+                seul autre texte du champ, « Reveal Your Inner Beauty », ne
+                bouge pas d'un caractère. La règle des cinq dictionnaires est
+                donc tenue par construction, pas par une passe de traduction.
+
+                PAS d'aria-hidden. « Apollon » n'est annoncé nulle part
+                ailleurs en haut de cette page : le masquer retirerait une
+                information au lecteur d'écran au lieu d'éviter un doublon.
+                L'ordre entendu reste juste — la promesse de marque, le nom du
+                modèle, puis le h1, qui demeure la phrase de la maison. Le rang
+                sémantique ne suit pas la taille : le plus grand signe de
+                l'écran n'est pas le titre du document, et c'est voulu. */}
+            <p className={styles.motSigne}>
+              <T id="nav.apollon" />
+            </p>
+            <span className={styles.filet} aria-hidden="true" />
 
             <h1
               className={`aj-display ${styles.signatureTitre}`}
@@ -270,7 +301,7 @@ export default function Home() {
                 phrase du haut ni le paragraphe d'en dessous (« Apollon ouvre la
                 collection »). */}
             <h2
-              className={`aj-reveal aj-metal aj-display ${styles.clotureTitre}`}
+              className={`aj-reveal aj-display ${styles.clotureTitre}`}
               id="aj-cloture-titre"
             >
               <T id="story.lead" />

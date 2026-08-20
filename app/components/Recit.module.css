@@ -49,6 +49,15 @@
   }
 }
 
+@media (max-width: 560px) {
+  .recit {
+    /* Sous 560px il revient à une rangée de 56px derrière un bouton menu
+       unique. Le récit suit la barre réelle, sinon son ouverture réserverait
+       54px de vide sous elle. */
+    --recit-tete: 3.5rem;
+  }
+}
+
 /* Enveloppe du récit lui-même, hors chrome. Elle ne produit aucune boîte :
    elle n'existe que pour porter une clé de rendu liée à la langue. Au
    changement de langue, React remonte le bloc entier au lieu de réécrire des
@@ -191,12 +200,73 @@
   flex-wrap: wrap;
 }
 
+/* ── LE VOILE DE LECTURE DU BLOC D'OUVERTURE ──────────────────────────
+   Défaut mesuré au navigateur le 20/08 à 1920x1080, texte masqué, sur les
+   pixels rendus de la boîte du titre : luminance MAXIMALE Y = 0,2041 sous
+   « Notre histoire ». C'est l'architecture de marbre argenté du plan, en
+   pleine lumière. Le titre y était en `.aj-metal` : 1,01:1. En encre pleine
+   il ne remonte qu'à 2,44:1. Le plancher du projet est 5,0:1.
+
+   Le `.grade` général ne suffit pas ICI, et le calcul dit pourquoi : il court
+   de 0,82 en bas du plan à 0 à 62 % de sa hauteur, et le titre occupe la
+   bande 14,7 %–38,8 % à partir du bas, où l'opacité est déjà retombée entre
+   0,617 et 0,284. Renforcer `.grade` corrigerait le titre en assombrissant la
+   photographie entière — or c'est elle, le premier écran de cette page.
+
+   Le voile est donc LOCAL, et il reprend au caractère près le dispositif déjà
+   éprouvé sur les panneaux de l'accueil (`.panneauCopie::before`) : course
+   horizontale portée par le fond, course verticale portée par le masque,
+   opacité pleine sous la colonne de texte puis extinction dans l'image. Un
+   dégradé qui meurt dans le plan se lit comme une lumière, pas comme une
+   boîte de dialogue.
+
+   LE DÉBORD DROIT VAUT UNE GOUTTIÈRE, PAS 136 px. L'accueil se permet 136 px
+   parce que son voile ne vit que dans `@media (min-width: 901px)`, où la
+   colonne de copie est étroite. Ici le bloc occupe toute la colonne dès que
+   l'écran se resserre : un débord fixe de 136 px sortait du document et
+   produisait un défilement horizontal — mesuré à 390 px de large,
+   `scrollWidth` 491 pour un `innerWidth` de 390. Une gouttière de débord est
+   sûre à toute largeur : le conteneur `.ouvertureTexte` est déjà encastré
+   d'une gouttière de chaque côté, donc bord du bloc + une gouttière tombe au
+   plus loin sur le bord de la page, jamais au-delà.
+
+   Le masque tient la course verticale en PIXELS pour que la zone pleine reste
+   sous le bloc quelle que soit la longueur de la traduction. */
 .ouvertureBloc {
+  position: relative;
   display: flex;
   min-width: min(100%, 20ch);
   max-width: 46ch;
   flex-direction: column;
   gap: clamp(14px, 1.6vw, 24px);
+}
+
+.ouvertureBloc::before {
+  content: "";
+  position: absolute;
+  inset: -88px calc(var(--gut) * -1) -72px calc(var(--gut) * -1);
+  z-index: -1;
+  background: linear-gradient(
+    90deg,
+    rgba(6, 6, 8, 0.74) 0%,
+    rgba(6, 6, 8, 0.74) 72%,
+    transparent 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 84px,
+    #000 calc(100% - 68px),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 84px,
+    #000 calc(100% - 68px),
+    transparent 100%
+  );
+  pointer-events: none;
 }
 
 .surtitre {

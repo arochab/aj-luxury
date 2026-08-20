@@ -23,6 +23,41 @@
      on ne recharge rien : un second chargement doublerait le poids réseau. */
   --disp: var(--font-manrope), "Manrope", "Helvetica Neue", Helvetica, sans-serif;
 
+  /* --- Fonte d'inscription -----------------------------------------------
+     LE SITE ENTIER TOURNAIT SUR UNE SEULE FONTE. Manrope portait le mot le
+     plus grand comme la mention la plus petite : un géométrique neutre, qui
+     ne dit rien de la maison. Le jury du 20/08 : « Quelqu'un a dessiné ce
+     téléphone. Le nôtre survit. » Une hiérarchie d'affichage est le levier
+     le moins cher et le plus visible du premier écran.
+
+     LE REGISTRE N'EST PAS CHOISI ICI, IL EST DÉJÀ DÉCIDÉ. L'audit du 17/08
+     (docs/internal/AUDIT-FRONT-JURY-2026-08-17.md:94, repris par le brief
+     BRIEF-CLAUDE-DESIGN-2026-08-17.md:269) désigne Bodoni Moda VF : Didone,
+     Paris 1798, néoclassicisme — « exactement le registre marbre/lyre/laurier
+     que la marque possède déjà ». On ne rouvre pas cette décision.
+
+     CE QUE CE JETON EST, ET CE QU'IL N'EST PAS. Il n'ajoute AUCUN octet :
+     aucun @font-face, aucun preload, aucune requête. Il empile les membres
+     de cette même famille Didone déjà présents dans les systèmes :
+       • iOS et macOS  — « Bodoni 72 » livré avec l'OS, puis Didot ;
+       • Windows       — « Bodoni MT » (livré avec Office), puis Georgia ;
+       • Android       — pas de Didone système : `serif` tombe sur Noto Serif,
+                         une transitionnelle. Le contraste de graisse est plus
+                         faible, la composition tient quand même — elle ne
+                         repose sur AUCUNE métrique précise (voir
+                         Accueil.module.css, « POURQUOI 17,4vw ET PAS UN
+                         CALAGE AU PIXEL »).
+     Le vrai palier reste l'auto-hébergement de Bodoni Moda VF (OFL) : quand
+     le fichier entrera dans public/fonts, il se déclare ici en tête de pile
+     et AUCUN site d'appel ne bouge. C'est la raison d'être du jeton.
+
+     Réservé au rôle d'AFFICHAGE, un seul signe par écran. Tout le reste du
+     site reste en --disp : deux fontes, pas trois, et le contraste vient de
+     l'écart entre les deux, pas de leur nombre. */
+  --aj-inscription:
+    "Bodoni 72", "Bodoni MT", Didot, "Didot LT STD", "Hoefler Text",
+    "Playfair Display", Garamond, "Times New Roman", Times, serif;
+
   /* --- Échelle typographique --------------------------------------------
      Plancher dur : aucun texte visible sous 15px. --t0 EST ce plancher.
      t0/t1/t2/t4/t6/t7 sont les paliers de la maquette, valeurs exactes.
@@ -185,7 +220,43 @@
    Contraintes : l'élément ne peut plus porter de background-color, et le
    dégradé se calcule sur sa boîte — un titre sur trois lignes reçoit donc UN
    seul balayage de métal, ce qui est le rendu voulu.
-   L'animer en opacity ou en transform reste sans danger. */
+   L'animer en opacity ou en transform reste sans danger.
+
+   ── RÉSERVÉ AU MOT-MARQUE. LA DÉMONSTRATION, PAS UNE PRÉFÉRENCE ────────
+   Le 20/08, `.aj-metal` habillait sept textes de contenu. Trois mesures au
+   navigateur les donnaient sous le plancher de 5,0:1 que ce projet s'impose :
+   les noms de coloris de l'accueil à 1,01:1 sur le mur rose nu, le titre de
+   clôture à 4,18:1 sur #08080a, « Notre histoire » à 1,01:1 sur la photo
+   d'ouverture. Le réflexe aurait été de renforcer les voiles.
+
+   IL N'Y A PAS DE VOILE QUI SAUVE. Le dégradé porte neuf arrêts, et le plus
+   sombre, #6d737b, a une luminance relative Y = 0,16943. Le rapport de
+   contraste d'une encre de luminance Y contre un fond de luminance F vaut
+   (max+0,05)/(min+0,05). Le meilleur cas possible pour cet arrêt est donc :
+     • sur le NOIR PUR   (F = 0)  →  (0,16943 + 0,05) / 0,05  =  4,39:1
+     • sur le BLANC PUR  (F = 1)  →  1,05 / (0,16943 + 0,05)  =  4,79:1
+   Les deux bornes sont sous 5,0. Aucun fond, d'aucune couleur, d'aucune
+   opacité, ne peut porter ce dégradé au-dessus du plancher : le maximum
+   atteignable est 4,79:1. La contrainte est arithmétique, pas graphique.
+
+   CE QUI EST DÉCIDÉ. `.aj-metal` reste sur le MOT-MARQUE « AJ Luxury » du
+   pied de page, et là seulement. WCAG 1.4.3 exempte de contraste le texte qui
+   fait partie d'un logotype ou d'un nom de marque : c'est exactement ce cas,
+   et c'est le seul du site. Tout autre texte — noms de coloris, titres de
+   clôture, titre de récit, nom de produit — passe à `var(--aj-encre)`.
+
+   CE QUI PORTE L'IDENTITÉ À LA PLACE. Le métal n'a pas quitté la page : il
+   est dans la plaque de ceinture sur chacune des photographies produit, dans
+   la lyre, l'arc et le carquois de bronze de chaque nature morte, dans le
+   mobilier de métal liquide de l'ouverture du récit, et dans le mot-marque.
+   Sept titres métallisés le diluaient en texture d'habillage ; un seul le
+   rend au logotype. Si un porteur typographique s'avérait nécessaire, la
+   piste à instruire est un FILET rempli de var(--metal) en tête du bloc de
+   copie : une décoration ne relève d'aucun seuil de contraste, contrairement
+   à un glyphe. Elle n'est pas écrite ici, faute de besoin démontré.
+
+   Ne pas réintroduire cet utilitaire sur du texte de contenu sans refaire le
+   calcul ci-dessus. `tests/rendered-html.test.mjs` en tient le compte. */
 .aj-metal {
   color: #f2f4f5;
 }

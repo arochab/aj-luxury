@@ -77,7 +77,7 @@ export default function ShopPage() {
             </p>
 
             <h1
-              className={`${styles.titre} aj-metal`}
+              className={styles.titre}
               id="boutique-titre"
               data-aj-reveal
             >

@@ -3111,6 +3111,17 @@ footer:not([class]) > p {
   }
 }
 
+/* Sous 560px la barre revient à UNE rangée et les six liens passent derrière
+   un bouton unique (StoreChrome.module.css, « TÉLÉPHONE — UNE SEULE RANGÉE »).
+   Le jeton suit la barre réelle, sinon la rangée 1 du film continuerait de
+   réserver 110,4px sous une barre qui n'en fait plus que 56 : le film
+   repartirait 54px trop bas et l'écart se lirait comme une bande. */
+@media (max-width: 560px) {
+  .aj-home {
+    --aj-tete-h: 3.5rem;
+  }
+}
+
 /* Corollaire du correctif B1 : la barre colle enfin, donc elle surplombe ce
    qui défile sous elle. Sans cette marge, « Découvrir ↓ » amènerait le haut de
    #plaque exactement sous l'en-tête. Les ancres de l'accueil sont nommées une
@@ -3419,6 +3430,203 @@ footer:not([class]) > p {
   .aj-film__identity img {
     object-fit: cover;
     object-position: 57% 0%;
+  }
+}
+
+/* ==========================================================================
+   TÉLÉPHONE — LE PREMIER ÉCRAN EST COMPOSÉ, PAS RECADRÉ
+   --------------------------------------------------------------------------
+   CE QUI PRÉCÈDE RESTE VRAI POUR LA TABLETTE. La branche ci-dessus couvre
+   tout ce qui est plus haut que large jusqu'au rapport 4/5, donc aussi
+   768x1024. Elle y garde son `cover` plein cadre et son `object-position: 57 %`.
+   Ce bloc-ci ne parle qu'au téléphone, sous 560px de large.
+
+   LE CONSTAT. Mesuré au navigateur à 390x844 sur l'état précédent : master
+   portrait 720x934, boîte rendue 375,2x845,2, échelle `cover` 1,0026, source
+   rendue 651,7px de large pour 375,2px de boîte — 42,4 % DE LA LARGEUR DU
+   CADRE ÉTAIT JETÉE. Le premier écran du téléphone était le cadre large
+   recadré, et l'avant-bras gauche de Jérémy sectionné au bord, en plein geste.
+
+   LA BOUCLE PRÉCÉDENTE AVAIT RAISON — DANS SON CADRE. Son calcul (voir le bloc
+   ci-dessus) est juste : à rapport de fenêtre 0,4621 contre 0,7709 de source,
+   la silhouette pleine, qui fait 71,66 % de large, ne rentre pas dans les
+   59,94 % visibles. Elle en concluait que garder les deux bras était
+   « arithmétiquement impossible ». Ça l'est — TANT QU'ON EXIGE QUE LA PHOTO
+   REMPLISSE L'ÉCRAN ENTIER. C'est cette exigence-là qui était le défaut, pas
+   l'arithmétique. On ne cherche plus le moins mauvais recadrage : on rend à la
+   photo une boîte à ses mesures et on DESSINE le reste de l'écran.
+
+   L'INVERSION. La photo ne perd plus de largeur, elle perd de la hauteur —
+   et la hauteur, elle, est gratuite : la source coupe DÉJÀ le tibia de Jérémy
+   à y = 100 %, et la boîte visages + boxers s'arrête à 66,81 %. Ce qu'on
+   sacrifie en bas est du mollet ; ce qu'on sacrifiait sur les côtés était un
+   avant-bras en plein geste. Le rognage horizontal tombe de 42,4 % à ZÉRO.
+
+   LA GARANTIE EST GÉOMÉTRIQUE, PAS UN RÉGLAGE. Avec `object-fit: cover`,
+   l'échelle vaut max(L/720, H/934). Le rognage horizontal est nul si et
+   seulement si L/720 >= H/934, c'est-à-dire H/L <= 934/720 = 1,2972. Le trio
+   `aspect-ratio` + `height: auto` + `max-height: 100 %` donne exactement
+   H = min(L x 1,2972 ; hauteur de la zone) :
+     • la hauteur préférée vient du ratio, donc du RATIO DE L'ACTIF ;
+     • `max-height: 100 %` la borne à la zone quand la copie au-dessus est
+       courte, et le dépassement se paie alors en rognage VERTICAL, jamais
+       horizontal.
+   Aucun `vw` là-dedans : `100vw` inclut la barre de défilement et vaut 390
+   quand la boîte en fait 375 — un cap exprimé en `vw` rouvrirait le rognage
+   horizontal de 3,9 %. Le cap est relatif à la boîte, pas à la fenêtre.
+
+   La borne basse est tenue elle aussi : montrer les boxers exige
+   H >= L x 1,2972 x 0,6681 = L x 0,8666. Mesures obtenues plus bas.
+
+   `object-position` repasse à 50 % : la ruse des 57 %, qui rachetait le coude
+   d'Alex dans une fenêtre trop étroite, n'a plus d'objet quand la fenêtre
+   contient toute la largeur. Le 0 % vertical reste, et pour la même raison
+   qu'avant — les 100 % du bas sont déjà coupés par l'actif, jamais les têtes.
+   ========================================================================== */
+@media (max-aspect-ratio: 4 / 5) and (max-width: 560px) {
+  /* LA GRILLE. Sept rangées, deux colonnes. Les rangées 2 à 5 sont la
+     composition typographique, la 6 est la photo, la 7 est le pied posé sur
+     son bas. La rangée 1 réserve la hauteur de la barre collante, qui passe
+     par-dessus le film : sans elle, le surtitre naissait sous le logo.
+
+     `auto` partout sauf la photo : c'est la COPIE qui fixe sa place, et la
+     photo prend ce qui reste. Une ligne de plus dans la phrase — l'allemand
+     est le cas long — repousse la photo sans jamais la rogner sur les côtés,
+     puisque le cap ci-dessous est géométrique et non chiffré. */
+  .aj-film {
+    /* Le film devient un CONTENEUR de requête. Le mot-signe se dimensionne en
+       `cqw`, donc sur la largeur RÉELLE de cette boîte, et non en `vw`, qui
+       compte la barre de défilement : à 320px de fenêtre avec barre, la boîte
+       n'en fait que 305 et un corps réglé en `vw` débordait de 5 %. Le `cqw`
+       supprime l'écart au lieu de le compenser à la main.
+       `inline-size` seulement : la hauteur reste dictée par le contenu et par
+       `min-height`, rien n'est contenu verticalement. */
+    container-type: inline-size;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows:
+      calc(var(--aj-tete-h) + 2px)
+      auto
+      auto
+      auto
+      auto
+      minmax(0, 1fr)
+      auto;
+  }
+
+  /* Le sur-cadrage passe de la SCÈNE au PLATEAU — voir Accueil.module.css,
+     bloc « LE SUR-CADRAGE CHANGE DE PORTEUR ». Il est traité là-bas et non
+     ici : la règle qu'il doit battre, `.surCadrage`, est une classe de module
+     de même spécificité, et les modules sont injectés APRÈS ce fichier. Un
+     `animation: none` posé ici perdrait au départage par l'ordre. */
+
+  .aj-film__hero-poster img,
+  .aj-film__hero-video,
+  .aj-film__identity img {
+    object-fit: cover;
+    object-position: 50% 0%;
+  }
+
+  /* LE FOND DE SECOURS DU MÉDIA REDEVIENT TRANSPARENT, AU TÉLÉPHONE SEUL.
+     Il valait #09090b — un filet de sécurité contre une bande vide si la
+     vidéo ne remplissait pas sa boîte. Au téléphone elle la remplit par
+     construction (`cover`, et le rognage horizontal est nul), donc ce fond
+     n'a plus rien à rattraper. Il avait en revanche un effet mesurable : le
+     bord haut de la plaque tombe sur y=357,29, la vidéo est composée sur sa
+     propre couche et s'aligne au pixel, et la fraction de rangée qui restait
+     découverte laissait voir ce noir. Relevé au navigateur : la rangée y=357
+     à 138,9 de luminance moyenne entre 197,1 au-dessus et 196,4 en dessous —
+     une ligne noire d'un pixel en travers de l'écran, exactement à la
+     jonction que ce tour devait faire disparaître.
+     Transparent, la même rangée laisse voir le mur, qui est la MÊME matière à
+     la MÊME luminance. La fente ne peut plus produire de contraste. */
+  .aj-film > .aj-film__hero-scene,
+  .aj-film__hero-scene .aj-film__hero-media,
+  .aj-film__hero-scene .aj-film__hero-stage,
+  .aj-film__hero-scene .aj-film__hero-poster {
+    background-color: transparent;
+  }
+
+  /* L'ÉTALONNAGE DEVIENT UN VOILE DE PIED, ET RIEN D'AUTRE.
+     Avant, il couvrait le film entier parce que la copie était posée sur toute
+     la hauteur de l'image. Désormais surtitre, mot-signe, filet et phrase sont
+     sur le fond plein --aj-noir-abysse : leur contraste est CALCULÉ, il ne
+     dépend plus d'un pixel de photo. Le seul texte encore posé sur l'image est
+     le pied. Le voile se réduit donc à ce qu'il couvre, et l'image reprend
+     tout le reste — c'est la même leçon que la réduction du 19/08, appliquée
+     jusqu'au bout.
+
+     Le haut du dégradé reste transparent jusqu'à 58 % : les boxers s'arrêtent
+     à 66,81 % de la SOURCE, soit ~62 % de la bande rendue au pire cas mesuré.
+     Aucun centième de voile ne les touche. */
+  /* `.aj-film > ` n'est pas décoratif. Deux règles plus BAS dans ce fichier
+     visent ces mêmes éléments — `@media (max-width: 900px)` pour le voile,
+     `@media (max-width: 900px)` pour le bouton — à spécificité égale (0,1,0).
+     À égalité, c'est l'ordre du fichier qui tranche, et elles gagnaient : le
+     voile reprenait sa rampe haute de 0,34 sur les têtes, et le bouton
+     redevenait `absolute` avec son `bottom`, ce qui le remontait de 130px hors
+     du pied. Mesuré avant correction : bouton à 291,644 au lieu du pied. Le
+     combinateur d'enfant porte la spécificité à (0,2,0) et rend le résultat
+     indépendant de l'ordre — donc stable si quelqu'un déplace un bloc.
+     Le voile reprend la géométrie EXACTE de la scène, sinon les deux boîtes
+     dérivent de 2px et le dégradé ne tombe plus où il est calculé. */
+  .aj-film > .aj-film__grade {
+    position: relative;
+    z-index: -2;
+    inset: auto;
+    grid-column: 1 / -1;
+    grid-row: 6 / 8;
+    align-self: end;
+    width: 100%;
+    height: auto;
+    max-height: 100%;
+    aspect-ratio: 720 / 934;
+    background: linear-gradient(
+      180deg,
+      transparent 0,
+      transparent 58%,
+      rgba(3, 3, 6, 0.42) 76%,
+      rgba(3, 3, 6, 0.72) 90%,
+      rgba(3, 3, 6, 0.82) 100%
+    );
+  }
+
+  /* LE BOUTON DE MOUVEMENT REÇOIT ENFIN UNE PLACE.
+     État précédent mesuré à 390x844 : bouton à 311,669 en 44x44, z-index 4 ;
+     h1 à 20,630 en 335x122. Le bouton tombait DANS la boîte du titre et le
+     glyphe « Ⅱ » se lisait au milieu des mots — visible sur la capture avant.
+     La boucle d'avant l'avait descendu là pour le sortir du mot PANIER, et il
+     est retombé sur le titre : c'est ce qu'on obtient en déplaçant un élément
+     absolu au lieu de lui donner une case. Il en a une maintenant, la colonne
+     2 du pied, et il ne peut plus recouvrir quoi que ce soit. */
+  .aj-film > .aj-film__motion-toggle {
+    position: relative;
+    inset: auto;
+    grid-column: 2;
+    grid-row: 7;
+    z-index: 4;
+    align-self: center;
+    justify-self: end;
+    margin: 0 var(--gut) clamp(20px, 3vh, 28px) 0;
+  }
+
+  /* LA PHOTO. Elle couvre les rangées 6 ET 7 : le pied est POSÉ dessus, il ne
+     lui vole pas de hauteur. `align-self: end` interdit l'étirement — sans
+     lui, la zone imposerait sa hauteur, `aspect-ratio` serait ignoré, et le
+     rognage horizontal rentrerait par la fenêtre de derrière.
+     `.aj-film > ` pour la même raison que ci-dessus : la scène est reprise par
+     une règle plus bas dans ce fichier, à spécificité égale. */
+  .aj-film > .aj-film__hero-scene {
+    position: relative;
+    z-index: -4;
+    inset: auto;
+    grid-column: 1 / -1;
+    grid-row: 6 / 8;
+    align-self: end;
+    width: 100%;
+    height: auto;
+    max-height: 100%;
+    aspect-ratio: 720 / 934;
   }
 }
 

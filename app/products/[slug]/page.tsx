@@ -164,7 +164,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
                 </span>
 
                 <span className={styles.otherColorLine}>
-                  <span className={`${styles.otherColorName} aj-metal`}>
+                  <span className={styles.otherColorName}>
                     {item.name}
                   </span>
                   <span className={styles.otherColorPrice}>

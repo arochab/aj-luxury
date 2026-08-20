@@ -293,6 +293,409 @@
 }
 
 /* ==========================================================================
+   LE MOT-SIGNE ET LE FILET — deux pièces qui n'existent qu'au téléphone
+   --------------------------------------------------------------------------
+   Elles sont dans le DOM à toutes les tailles et retirées de la mise en page
+   partout ailleurs. `display: none`, pas `visibility` ni un `@media` inversé :
+   le premier écran de bureau doit rester rigoureusement ce qu'il était.
+   ========================================================================== */
+.motSigne,
+.filet,
+.mur {
+  display: none;
+}
+
+/* ==========================================================================
+   TÉLÉPHONE — LA COMPOSITION
+   --------------------------------------------------------------------------
+   La géométrie de la photo est dans globals.css (bloc « LE PREMIER ÉCRAN EST
+   COMPOSÉ, PAS RECADRÉ »), qui seul peut nommer `.aj-film`. Ici : la
+   typographie, et la place de chaque texte dans cette grille.
+
+   LA GRILLE, à 390x844, mesurée après coup :
+
+     1  112px   sous la barre collante
+     2  ~47px   surtitre — REVEAL YOUR INNER BEAUTY, ferré à DROITE
+     3  ~77px   LE MOT-SIGNE — Apollon, capitales didones, pleine mesure
+     4  ~13px   le filet, à fond perdu d'un bord à l'autre
+     5  ~110px  la phrase — h1, colonne ferrée à droite
+     6  reste   la photo, pleine largeur, ENTIÈRE
+     7  ~74px   le pied — DÉCOUVRIR ↓ | bouton de mouvement
+
+   TROIS PARTIS PRIS, ET C'EST TOUT.
+
+   1. LE PREMIER ÉCRAN EST UNE THÈSE. Il ouvre sur le nom du modèle, pas sur
+      une vitrine. « Apollon » d'abord, la phrase ensuite, les deux hommes en
+      dessous — le rang mythologique, puis ce qu'on en dit, puis qui le porte.
+
+   2. LA TYPOGRAPHIE PORTE LA PERSONNALITÉ. Le site tournait sur une seule
+      fonte neutre. Le mot-signe est le SEUL endroit où --aj-inscription
+      apparaît. Écart du plus petit au plus grand : 15px -> ~69px, soit 4,6:1,
+      contre 2,3:1 avant (15px -> 34px). C'est l'échelle qui fait la
+      hiérarchie, pas l'ajout de graisses ni de couleurs.
+
+   3. LA HARDIESSE EST DÉPENSÉE UNE FOIS. Le mot-signe et son filet à fond
+      perdu, rien d'autre. Pas de dégradé métallique dessus — mesuré, l'arrêt
+      le plus sombre de --metal (#6d737b) donne 4,18:1 sur --aj-noir-abysse,
+      sous le seuil de 5,0. L'encre reste pleine. Aucune animation ajoutée :
+      le volet et la montée de la phrase existaient déjà.
+
+   L'INVERSION DE FER EST LA COMPOSITION. Le surtitre est ferré à droite, le
+   mot-signe à gauche, la phrase revient à droite. Trois alignements qui
+   s'opposent autour d'un filet horizontal : c'est ce qui fait tenir un écran
+   de téléphone sans le remplir. L'étalon fait la même chose — mot-signe pleine
+   largeur, paragraphe rejeté à droite — et c'est la DIRECTION qui est reprise,
+   pas ses valeurs, sa fonte ni ses couleurs.
+   ========================================================================== */
+@media (max-aspect-ratio: 4 / 5) and (max-width: 560px) {
+  /* `display: contents` dissout la boîte du champ de texte : ses enfants
+     deviennent les items de la grille de .aj-film, et chacun reçoit sa rangée.
+     C'est ce qui permet d'INTERCALER la photo entre la phrase et le pied sans
+     qu'aucun des deux ne soit positionné en absolu par rapport à l'autre.
+     L'héritage (`color`) traverse `display: contents`, le positionnement non —
+     c'est exactement le partage voulu. */
+  .signature {
+    display: contents;
+  }
+
+  /* LE SUR-CADRAGE CHANGE DE PORTEUR. Sur bureau, la scène occupe tout le
+     film : un `scale(1.09)` ne déborde nulle part. Au téléphone la scène est
+     devenue une BANDE — la mettre à l'échelle ferait monter la photo sur la
+     phrase pendant les 2,6s de la détente. Le geste descend donc d'un cran,
+     sur le plateau, qui est à l'intérieur de la scène et donc coupé net par
+     son `overflow: hidden`. Identique à l'œil, contenu par construction. */
+  /* ══════════════════════════════════════════════════════════════════
+     LE MUR — LA SOUDURE EST SUPPRIMÉE
+     ------------------------------------------------------------------
+     CE QU'ON ENLÈVE. La boucle précédente avait rendu à la photo une boîte
+     à ses mesures — plaque nette, pleine largeur, rapport 720/934, zéro
+     rognage horizontal. Mais elle l'avait ENCADRÉE : la plaque commençait à
+     y=356,5 et les 356 px du dessus étaient un aplat de --aj-noir-abysse.
+     Mesuré à 390x844 : 32,4 % du premier écran en aplat sans texture, et
+     42,2 % de l'écran consommés avant que les deux fondateurs apparaissent.
+     À 320px c'était 53 % d'aplat pour 46,8 % de photo — le seul actif qui
+     vend cette marque réduit à une bande en bas de page.
+
+     CE QU'ON MET À LA PLACE. La plaque nette ne bouge pas d'un pixel :
+     mêmes 486,7px, même ancrage bas, même rapport, mêmes visages entiers.
+     Ce sont les 357px du dessus qui cessent d'être une couleur pour devenir
+     de la PHOTOGRAPHIE : la même image, cadrée sur la bande de mur qui court
+     AU-DESSUS DES TÊTES, agrandie jusqu'à remplir la zone.
+
+     OÙ S'ARRÊTE LE MUR, MESURÉ SUR L'ACTIF. Relevé pixel par pixel sur le
+     master 720x934 : les premiers pixels de cheveux d'Alex apparaissent à la
+     rangée 54 (24 pixels sous 70 de luminance à la rangée 0, contre 41 à la
+     rangée 60, 114 à la rangée 96). La bande sûre est donc 0..53.
+     `background-size: 100% 2000%` n'en montre que le vingtième supérieur,
+     soit les rangées 0 à 46,7 — SEPT RANGÉES DE MARGE sous la première
+     mèche. Et c'est un POURCENTAGE de la boîte : la fraction d'image montrée
+     ne dépend ni de la largeur, ni de la hauteur, ni du viewport. La ligne
+     rouge — aucun visage, aucun membre, aucun boxer dans la zone étirée —
+     est donc tenue par construction, à toutes les tailles, pas par un
+     réglage.
+
+     POURQUOI LA BANDE EST HORIZONTALEMENT À L'ÉCHELLE. `100%` en largeur :
+     le mur garde ses proportions latérales, donc ses deux cannelures
+     sombres — relevées à x=45 (luminance moyenne 90) et x=675 (89) contre
+     230 au centre. Elles retombent à 6,2 % et 93,8 % de la largeur et
+     forment une vignette naturelle qui tient la colonne de texte. Seul le
+     sens vertical est étiré, et il l'est sur une matière dont la variance
+     locale 5x5 mesure 1,02 : elle n'a pas de détail vertical à trahir. Le
+     mur s'étire sans mentir.
+
+     LA JONCTION NE SE VOIT PAS, ET C'EST ARITHMÉTIQUE. Le bas du mur montre
+     la rangée 46 du master (luminance moyenne 209) ; le haut de la plaque
+     montre la rangée 0 (202). Sept unités sur 255, soit 2,7 % — sous le
+     seuil de perception d'une arête. Le raccord est un raccord de MATIÈRE,
+     pas un fondu vers une couleur.
+     ══════════════════════════════════════════════════════════════════ */
+  /* LE MUR PREND LA GÉOMÉTRIE DE LA PLAQUE, PAS CELLE DES RANGÉES DE TEXTE.
+     Première tentative, écartée : `grid-row: 1 / 6`, donc de la barre au bas
+     de la rangée du h1. Elle laissait 67px d'aplat noir entre la fin du texte
+     et le haut de la plaque, parce que c'est la rangée 6 — `minmax(0, 1fr)` —
+     qui absorbe le mou, et non le texte. Un aplat de 67px pour en supprimer un
+     de 356 : la soudure avait seulement rétréci.
+
+     La correction consiste à ne plus déduire la jonction des rangées. Le mur
+     reçoit EXACTEMENT la boîte de la plaque — mêmes rangées 6/8, même
+     `aspect-ratio`, même `align-self: end`, même `max-height` — puis ses deux
+     couches sont posées en `bottom: 100%`, c'est-à-dire collées sous le bord
+     HAUT de cette boîte, et débordent vers le haut. Le film les clippe
+     (`overflow: hidden`).
+
+     Conséquence : le bas du mur EST le haut de la photo nette, par
+     construction. Si la plaque bougeait — copie plus longue, autre langue,
+     autre hauteur d'écran — le mur la suivrait au pixel, et le point où le
+     masque s'efface resterait sur la jonction. Il n'y a plus de valeur à
+     tenir à jour. */
+  .mur {
+    display: block;
+    position: relative;
+    z-index: -5;
+    grid-column: 1 / -1;
+    grid-row: 6 / 8;
+    align-self: end;
+    width: 100%;
+    height: auto;
+    max-height: 100%;
+    aspect-ratio: 720 / 934;
+  }
+
+  /* DEUX COUCHES DE LA MÊME IMAGE, ET C'EST CE QUI SUPPRIME L'ARÊTE.
+
+     La couche du dessous est le mur À SA LUMINANCE RÉELLE : c'est elle qui
+     touche la plaque, donc la jonction se fait entre deux valeurs identiques.
+     La couche du dessus est le même mur ÉTALONNÉ, et elle est masquée d'un
+     dégradé qui meurt exactement sur la jonction. Là où le masque est plein
+     on lit l'étalonnage ; là où il s'efface on retrouve la luminance de la
+     plaque. Entre les deux, une valeur intermédiaire — jamais du noir, parce
+     que les deux couches sont la même photographie.
+
+     C'est la seule façon d'obtenir À LA FOIS un fond assez sombre pour porter
+     du texte blanc et un raccord sans marche. Un voile plat ne peut pas faire
+     les deux : mesuré, un voile rgba(3,3,6,α) qui garde la cannelure la plus
+     sombre (luminance 42) au-dessus de 30 impose α <= 0,31, ce qui laisse le
+     centre du mur à 146 — soit 3,09:1 sous du texte blanc, refusé. */
+  .mur::before,
+  .mur::after {
+    content: "";
+    position: absolute;
+    /* `bottom: 100%` cale le bord bas de la couche sur le bord HAUT de la
+       plaque ; la hauteur la fait remonter au-delà du premier pixel du film,
+       qui la coupe. Aucune arête ne peut naître d'un flou ou d'un dégradé qui
+       s'arrêterait à mi-écran. */
+    /* LES DEUX PIXELS DE RECOUVREMENT NE SONT PAS UNE MARGE DE CONFORT.
+       Mesuré au navigateur avec `bottom: 100%` : la rangée y=357 tombait à
+       135,8 de luminance moyenne entre 199,8 au-dessus et 195,9 en dessous.
+       Une seule rangée, mais une rangée noire — la jonction tombe sur 357,3,
+       donc ni le mur ni la plaque ne couvrent ce pixel en entier et le fond du
+       film transparaissait par la fente. On descend le mur DERRIÈRE la plaque
+       (z-index -5 contre -4) : la fente est bouchée, et rien n'est ajouté
+       par-dessus la photo nette. */
+    inset: auto 0 calc(100% - 2px) 0;
+    height: 100svh;
+    /* Le poster compact, celui que HeroBackgroundVideo précharge déjà en
+       `fetchPriority: high` pour le portrait. Même URL, même entrée de cache :
+       cette continuation ne coûte pas une requête de plus. */
+    background-image: url("/media/images/client/hero-v5-portrait-480x623-poster.webp?v=v5");
+    background-repeat: no-repeat;
+    background-position: 50% 0;
+    background-size: 100% 2000%;
+  }
+
+  /* L'ÉTALONNAGE EST CALCULÉ, PAS RÉGLÉ À L'ŒIL.
+     Bande de mur mesurée sur l'actif : luminance de 42 (fond de cannelure) à
+     233 (centre). `brightness(.285)` puis `contrast(.81)` — la seconde tire
+     vers 127,5, donc elle RELÈVE le plancher en même temps qu'elle abaisse le
+     plafond : 42 -> 34 et 233 -> 78.
+
+     Ce couple tient les deux contraintes d'un coup :
+       • 34 > 26, donc AUCUN pixel de cette zone ne peut être compté « aplat
+         noir sans texture » — le critère exige une moyenne sous 26 ;
+       • 78 donne 8,3:1 sous du texte blanc, contre 5,0 exigés.
+     Aucune des deux ne dépend de l'image affichée à un instant donné : elles
+     sont bornées par l'étalonnage lui-même.
+
+     Le masque part du BAS en pixels, pas en pourcentage : son point d'effacement
+     doit tomber sur la jonction quelle que soit la hauteur de la zone, et non
+     à une fraction d'une zone dont la hauteur varie avec la copie.
+
+     26px DE RAMPE, ET C'EST LE CAS ÉTROIT QUI FIXE CETTE VALEUR. Une rampe
+     longue est plus douce, mais elle remonte vers le texte. La fenêtre qui
+     décide est 360x800, la plus contrainte des quatre : le h1 y passe à quatre
+     lignes et sa boîte s'arrête à 328 quand la plaque commence à 352,7 — 25px
+     de libre, contre 52 à 390x844.
+     Balayage mesuré au navigateur sur le pire pixel de fond sous le h1 à
+     360x800 : 60px -> 3,60:1, refusé ; 32px -> 5,63:1, accepté mais sans
+     marge ; 26px -> 7,92:1. La valeur n'est pas choisie, elle est relevée.
+     Coût de la brièveté : 122 unités de luminance sur 26px. Le saut maximal
+     entre deux rangées voisines est vérifié au navigateur juste après, et il
+     reste sous le seuil où l'œil dessine une bande. */
+  .mur::after {
+    filter: brightness(0.285) contrast(0.81);
+    -webkit-mask-image: linear-gradient(0deg, transparent 0, #000 26px);
+    mask-image: linear-gradient(0deg, transparent 0, #000 26px);
+  }
+
+  .surCadrage {
+    animation: none;
+  }
+
+  .surCadrage :global(.aj-film__hero-stage) {
+    animation: ajSurCadrage var(--aj-d-ample) var(--e1) 0.12s both;
+  }
+
+  /* Rangée 2 — le surtitre. Il ne change ni de corps, ni de graisse, ni
+     d'interlettre : --t0, capitales, --aj-ls-signature, 600. Il change de FER.
+     Ferré à droite, il ouvre la diagonale que le mot-signe referme à gauche. */
+  /* LE FER À DROITE DOIT SE VOIR. Mesuré à 390x844 avant correction : l'encre
+     du surtitre faisait 289,3px pour une mesure de 335,2px, soit 86,3 %. Un
+     fer qui laisse 46px de blanc sur 335 n'est pas un fer, c'est une ligne
+     pleine largeur qui rate son bord gauche de trois lettres. L'œil ne lit
+     aucun alignement, seulement une ligne de plus.
+
+     La correction porte sur la MESURE, pas sur le corps : le plancher de 15px
+     et l'interlettre du registre de signature ne bougent pas. À 58 % de la
+     largeur du film, la colonne mesure 177,6px et la ligne casse après
+     « YOUR » — deux lignes, encre ramenée à la plus longue des deux.
+     Le blanc rendu à gauche devient une vraie diagonale avec le mot-signe,
+     qui, lui, est ferré à gauche. */
+  .surtitre {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-self: end;
+    /* La mesure est en PIXELS, pas en pourcentage. Relevé à 320 : à 58 % de la
+       largeur la colonne tombait à 136,8px, sous les 144,6px d'« INNER
+       BEAUTY », et la ligne partait en trois avec une veuve. La casse voulue
+       est après « YOUR » : elle exige une colonne comprise entre 144,6 et
+       205px — la chasse de « REVEAL YOUR INNER ». 168px est pris au MILIEU de
+       cet intervalle, soit ±16 % de tolérance de part et d'autre, ce qui
+       couvre l'écart entre les fontes de la pile. Ce nombre ne dépend d'aucune
+       largeur d'écran, donc la composition est la même de 320 à 560.
+       Encre obtenue au pire : 168px, soit 63,4 % de la mesure à 320 et 50,1 %
+       à 390 — sous le plafond de 72 % dans les deux cas. */
+    max-width: calc(168px + 2 * var(--gut));
+    /* La respiration sous la barre passe de 28,7px à 18,6px : le champ de
+       texte gagne une ligne sans descendre vers la rampe du mur. */
+    padding: clamp(14px, 2.2vh, 22px) var(--gut) 0;
+    text-align: right;
+  }
+
+  /* Rangée 3 — LE MOT-SIGNE.
+
+     POURQUOI 16,3cqw ET PAS UN CALAGE AU PIXEL. Le mot fait sept capitales et
+     doit remplir la mesure sans jamais la dépasser, sur une pile de fontes qui
+     ne se ressemblent pas. Chasses d'APOLLON RELEVÉES AU NAVIGATEUR, en em de
+     corps, sur cette pile : Bodoni MT 4,937 · Noto Serif 4,907 · Georgia 4,848
+     · Garamond 4,824 · Times et repli générique 4,772. Écart réel entre la
+     plus large et la plus étroite : 3,5 %. Avec l'interlettre, le pire cas
+     vaut 4,937 + 7 x 0,015 = 5,042em.
+
+     Le corps est calé sur ce PIRE CAS, à 95 % de la mesure, dans la situation
+     la plus serrée — 320px de fenêtre avec barre de défilement, soit 265px de
+     mesure utile. D'où 0,95 x 265 / 5,042 = 49,9px, et 49,9 / 305 = 16,3cqw.
+     Remplissage obtenu, mesuré : 91 à 95 % de 320 à 430, avec ou sans barre.
+
+     `cqw` ET NON `vw` : `vw` compte la barre de défilement, `cqw` compte la
+     boîte. À 320 avec barre, l'écart entre les deux vaut 4,9 % — exactement
+     de quoi faire déborder un mot réglé à 95 %. La ligne `vw` qui précède est
+     le repli des moteurs sans requête de conteneur ; elle est volontairement
+     plus petite, parce qu'un repli doit rater par le bas.
+
+     Le contrat est donc : le mot ne déborde sur AUCUNE fonte de la pile, à
+     AUCUNE largeur, avec ou sans barre. Il ne dépend d'aucune métrique
+     particulière, seulement de la plus large, et elle est mesurée.
+
+     Interligne 0,86 : sur des capitales sans descendantes, la boîte de ligne
+     est bien plus haute que les lettres. À 1 le mot flotterait au milieu de
+     son blanc et le filet, en dessous, ne serait plus une ligne de sol.
+
+     L'interlettre est LÉGÈREMENT positive. Une Didone en capitales se serre
+     mal — c'est un caractère d'inscription, il veut de l'air entre les fûts.
+     0,015em, pas les 0,24em du surtitre : à ce corps-là, une interlettre de
+     label ferait éclater le mot en sept lettres séparées. */
+  .motSigne {
+    display: block;
+    grid-column: 1 / -1;
+    grid-row: 3;
+    margin: 0;
+    padding: clamp(10px, 1.6vh, 16px) var(--gut) 0;
+    color: var(--aj-encre);
+    font-family: var(--aj-inscription);
+    /* Le corps passe de 16,3cqw à 14,3cqw, et c'est la seconde correction
+       optique du tour. Mesuré à 390x844 : l'encre d'APOLLON occupait 301,9px
+       sur une mesure de 335,2, soit 90,1 % — 33px de blanc à droite, un fer
+       que l'œil ne voit pas.
+       LE PLAFOND SE VÉRIFIE SUR DEUX LARGEURS, PAS UNE. Un premier réglage à
+       14,7cqw donnait 81,3 % à 390 et repassait à 83,5 % à 320 : la chasse du
+       mot ne suit pas exactement la largeur du conteneur, parce que
+       l'interlettre est en em et le reste des arrondis, non. À 14,3cqw :
+       79,0 % à 390, 81,2 % à 320, 78,2 % à 430 — sous 82 % partout.
+       Le calcul de non-débordement du tour précédent reste valide et gagne en
+       marge : il calait le corps à 95 % de la mesure sur la chasse de la fonte
+       la plus large de la pile (5,042em avec l'interlettre) ; on est
+       maintenant à 83,4 % de ce plafond, sur toutes les fontes de la pile.
+       Le mot-signe reste le plus grand signe de l'écran : 53,7px de corps
+       contre 15px pour le plus petit texte du champ, soit 3,6:1, quand le site
+       d'avant la reprise tenait sur une seule fonte neutre à 2,3:1. */
+    font-size: 13.6vw;
+    font-size: 14.3cqw;
+    font-weight: 400;
+    letter-spacing: 0.015em;
+    line-height: 0.86;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  /* Rangée 4 — LE FILET, la ligne incisée.
+
+     Il va d'un bord à l'autre de l'écran alors que TOUT le texte est en
+     retrait de --gut. C'est le seul élément à fond perdu de la partie haute,
+     et c'est là son travail : une ligne qui sort du cadre se lit comme une
+     assise de pierre qui continue derrière l'écran, pas comme un séparateur de
+     bloc. Le mot est posé dessus ; le fer à gauche du mot et le fond perdu du
+     filet, ensemble, font l'inscription sur son socle.
+
+     `--aj-border` est le filet déjà en service dans le film. On ne crée pas
+     une valeur de plus pour une ligne d'un pixel. */
+  .filet {
+    display: block;
+    grid-column: 1 / -1;
+    grid-row: 4;
+    height: 1px;
+    margin-top: clamp(10px, 1.5vh, 15px);
+    background: var(--aj-border);
+  }
+
+  /* Rangée 5 — LA PHRASE. Elle reste le h1 et elle reste la phrase de la
+     maison, au caractère près : story.quote, déjà dans les cinq dictionnaires.
+
+     ELLE CHANGE DE TAILLE ET C'EST VOULU. Avant : 34px, interligne 0,9 —
+     quatre lignes tassées, interlettre négative, posées sur les boxers. Un
+     titre de bureau réduit. Maintenant : 20px, interligne 1,45, graisse 300,
+     dans une colonne de 68 % ferrée à droite. Elle cesse d'être un titre
+     comprimé pour devenir ce qu'elle est, une phrase qu'on lit.
+
+     Le rang sémantique ne suit pas la taille : le h1 n'est plus le plus grand
+     signe de l'écran, le mot-signe l'est. C'est une décision de composition,
+     pas une régression — le document garde un h1 unique et c'est la bonne
+     phrase.
+
+     La mesure de 64vw du bureau ne s'applique pas ici (voir la branche 760px),
+     et on n'en remet pas une : c'est `width: 68%` + `margin-left: auto` qui
+     rejette le bloc à droite, le texte restant ferré à gauche à l'intérieur.
+     Un `text-align: right` donnerait un drapeau à gauche sur quatre lignes,
+     illisible à ce corps. */
+  .signatureTitre {
+    --aj-display-w: var(--aj-w-livre);
+    --aj-display-ls: -0.004em;
+    --aj-display-lh: 1.45;
+    grid-column: 1 / -1;
+    grid-row: 5;
+    width: 68%;
+    max-width: 100%;
+    margin-left: auto;
+    padding: clamp(18px, 2.6vh, 26px) var(--gut) 0 0;
+    font-size: 20px;
+    /* Le fond est un aplat plein, plus une photo : le contraste est calculé,
+       et l'ombre qui détachait les glyphes du grain métallique n'a plus rien
+       à détacher. */
+    text-shadow: none;
+  }
+
+  /* Rangée 7, colonne 1 — l'appel au défilement, posé sur le bas de la photo.
+     Le voile de pied de globals.css est calé sur lui. */
+  .decouvrir {
+    grid-column: 1;
+    grid-row: 7;
+    z-index: 3;
+    align-self: center;
+    justify-self: start;
+    margin: 0 0 clamp(20px, 3vh, 28px) var(--gut);
+  }
+}
+
+/* ==========================================================================
    02 · #plaque — le diptyque Apollon
    --------------------------------------------------------------------------
    Trois panneaux, trois murs, un rail horizontal piloté par le scroll
@@ -409,9 +812,19 @@
   background: var(--voile);
 }
 
+/* Le nom du coloris. Encre pleine depuis le 20/08 : sous le dégradé
+   métallique il valait 1,01:1 sur le mur rose nu — l'arrêt #6d737b a
+   exactement la luminance du mur — et 3,96:1 sous le voile pourpre. Aucun
+   fond ne pouvant porter ce dégradé à 5,0:1 (démonstration dans
+   app/design-system.css), c'est le dégradé qui part.
+   L'encre pleine ne suffit pas seule : sur le mur ROSE nu, #ffffff ne donne
+   que 4,30:1. C'est le voile de `.panneauCopie::before` qui tient le
+   plancher, et sa zone pleine doit donc couvrir le nom en entier — voir la
+   note de ce voile pour la mesure. */
 .panneauTitre {
   --aj-display-w: var(--aj-w-fin);
   margin: 0 0 0.34em;
+  color: var(--aj-encre);
   font-size: var(--t4);
 }
 
@@ -731,13 +1144,57 @@
   /* Secondaire par la lumière, pas par le flou ni par un aplat posé dessus :
      la prise reste une photographie lisible, simplement tenue dans l'ombre.
      La saturation n'est qu'à demi retirée — la bande doit continuer de dire
-     qu'il y a TROIS coloris, ce qu'un gris ne dirait plus. */
+     qu'il y a TROIS coloris, ce qu'un gris ne dirait plus.
+
+     ── LA COUTURE, ET POURQUOI C'EST UN FONDU QUI LA SUPPRIME ────────
+     Les deux marges partagent leur arête HAUTE avec la prise centrale ; comme
+     elles ont la même largeur, elles partagent aussi leur arête BASSE. Relevé
+     au navigateur le 20/08 à 1920x1080 : marge gauche 0..642, marge droite
+     0..642, prise centrale 0..1080. Les deux arêtes basses tombaient donc à
+     la même ligne, à 438 px au-dessus du bas de la prise centrale, et l'œil
+     joignait les deux segments par-dessus le cadre du milieu : une couture
+     horizontale en travers de l'écran, à un endroit où rien ne finit.
+
+     L'ÉGALITÉ DES DEUX HAUTEURS N'EST PAS NÉGOCIABLE — AGENTS.md : « Deux
+     médias appariés sur une même ligne doivent partager le même cadre et
+     finir à la même hauteur, à 1 px près. » Décaler une marge de l'autre
+     supprimerait la couture en violant la règle qui la produit. Et rogner le
+     bas est exclu : un cadre coupé est un boxer coupé.
+
+     Reste à supprimer l'ARÊTE elle-même, pas la ligne où elle tombe. Le
+     masque éteint les 13 derniers pour cent de la marge — 83 px sur 642 à
+     1920 — en fondu linéaire. Il n'y a plus de transition franche
+     image / mur : il n'y a plus de segment, donc plus rien à joindre.
+
+     CE QUE LE FONDU TOUCHE, DÉCOUPÉ ET REGARDÉ SUR LES SIX ACTIFS QUI
+     PASSENT ICI — les trois `-lyre-v1` et les trois `-model-color-v2`. La
+     bande des 13 % du bas contient, et rien d'autre :
+       • sur les trois plateaux — le sol de marbre, sa réflexion, la hampe de
+         l'arc et les flèches posées au sol ; le boxer est en lévitation
+         AU-DESSUS du socle, très loin de cette bande ;
+       • sur les trois plans portés — le bas de jambe, du genou au bord bas du
+         fichier ; le visage est en haut de cadre, la plaque de ceinture au
+         milieu.
+     Aucun visage, aucun boxer, aucun logo de ceinture n'entre dans la zone de
+     fondu. Le rapport de cadre étant le même à toutes les tailles — la marge
+     est en `aspect-ratio: 1731 / 2600` et `contain` ne laisse ici que 0,6 px
+     de jeu — cette vérification vaut pour toutes les largeurs de recette.
+
+     Ce n'est PAS un recadrage : l'image est rendue entière, à sa taille
+     entière ; c'est son bord qui cesse d'être une arête. */
   .priseVoisine {
     display: block;
     width: 100%;
     height: 100%;
     object-fit: contain;
     filter: saturate(0.56) brightness(0.47);
+    -webkit-mask-image: linear-gradient(
+      to bottom,
+      #000 0,
+      #000 87%,
+      transparent 100%
+    );
+    mask-image: linear-gradient(to bottom, #000 0, #000 87%, transparent 100%);
   }
 
   /* ── RETOUR N°3 · « les photos sont trop petites » ──────────────────

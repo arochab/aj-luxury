@@ -307,7 +307,7 @@ export default function ProductPurchase({
       <div className={styles.identity} data-aj-reveal>
         <p className={styles.eyebrow}>{t("product.status")}</p>
         <h1>{product.model}</h1>
-        <p className={`${styles.colorName} aj-metal`}>{product.name}</p>
+        <p className={styles.colorName}>{product.name}</p>
         <p className={styles.tone}>{localizedProduct.tone}</p>
       </div>
 

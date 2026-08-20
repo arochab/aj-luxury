@@ -139,6 +139,32 @@
     text-shadow var(--aj-d-court) var(--e1);
 }
 
+/* Voile local sous la navigation, au repos, sur l'accueil uniquement.
+
+   Le jury du 20/08 a mesure, a 1920x1080 et au premier ecran : ACCUEIL 2,13:1,
+   NOTRE HISTOIRE 2,18:1, BOUTIQUE 2,21:1, PANIER 3,68:1. Le plancher du projet
+   est 5,0:1 : trois libelles etaient sous la moitie. A 1440 le probleme
+   n'existe pas — c'est le cadrage `cover` qui, en 16/9 large, amene le mur de
+   metal brosse CLAIR sous la barre.
+
+   Pourquoi pas un degrade plus sombre : il faudrait porter l'opacite composite
+   a environ 0,80 a hauteur des glyphes pour passer de 2,13 a 5,0. A ce niveau
+   ce n'est plus un voile, c'est l'aplat que le retour client du 18/08 a
+   explicitement rejete — la « bande grise ».
+
+   Un voile LOCAL, lui, rend le rapport independant de l'image : il ne depend
+   plus de ce que le cadrage amene sous la barre. Le procede est deja valide
+   ailleurs sur ce site, sur l'etiquette « Figer le metal » et sur le titre
+   d'ouverture de /notre-histoire, ou le jury a constate qu'il fonctionne.
+   Le marbre reste visible partout ailleurs sur la barre. */
+:global(.aj-home) > .header:not(.headerPose) .desktopNav {
+  padding: 6px 18px;
+  border-radius: 2px;
+  background: rgba(6, 6, 8, 0.55);
+  backdrop-filter: blur(8px) saturate(108%);
+  -webkit-backdrop-filter: blur(8px) saturate(108%);
+}
+
 /* Le logo est un .webp : le text-shadow ne l'atteint pas. */
 :global(.aj-home) > .header .brandImage {
   filter: drop-shadow(0 1px 4px rgba(0, 0, 0, 0.55));
@@ -584,6 +610,171 @@
   .actionLink::after {
     bottom: 0.42rem;
   }
+}
+
+/* ==========================================================================
+   TÉLÉPHONE — UNE SEULE RANGÉE, ET UN SEUL BOUTON
+   --------------------------------------------------------------------------
+   Mesuré à 390x844 avant reprise : la barre faisait 110,4px sur deux étages,
+   soit 13,1 % du premier écran mangés par du chrome, et elle poussait la
+   composition d'autant. L'étalon, à la même largeur, ne pose qu'une pastille
+   MENU et rend tout le reste de l'écran à l'image.
+
+   La barre revient donc à UNE rangée de 56px et les six cibles — ACCUEIL,
+   BOUTIQUE, NOTRE HISTOIRE, le sélecteur de langue, COMPTE, PANIER — passent
+   derrière un bouton unique de 44x44.
+
+   `display: contents` sur le panneau au repos : au-dessus de 560px il ne crée
+   AUCUNE boîte, donc la nav et les actions restent les items 2 et 3 de la
+   grille `1fr auto 1fr` de l'en-tête. Le bureau et la tablette ne voient pas
+   cette reprise passer.
+   ========================================================================== */
+
+.menuPanneau {
+  display: contents;
+}
+
+/* Le bouton existe dans le DOM à toutes les tailles et n'est retiré de la mise
+   en page que par cette règle : le rendu serveur et le rendu client posent le
+   même arbre, et rien n'attend le JS pour être correct. */
+.menuBouton {
+  display: none;
+}
+
+@media (max-width: 560px) {
+  .header {
+    /* Deux colonnes, une rangée : la marque, puis le bouton. Plus de filet
+       intérieur, plus de seconde rangée. */
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 0;
+    min-height: 0;
+  }
+
+  .brand {
+    grid-column: 1;
+    grid-row: 1;
+    /* 3,5rem = 56px. Le logo mesure 82px de large pour 42px de haut : il
+       respire encore, et la barre passe sous le plafond de 64px du jury. */
+    min-height: 3.5rem;
+  }
+
+  .menuBouton {
+    display: inline-flex;
+    grid-column: 2;
+    grid-row: 1;
+    align-items: center;
+    justify-content: flex-end;
+    align-self: center;
+    justify-self: end;
+    /* La cible tient 44x44 même si son signe n'en fait que 24 de haut. */
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    cursor: pointer;
+  }
+
+  /* LE SIGNE. Deux filets, pas trois : c'est la même ligne incisée que le
+     film pose sous le mot-signe, à l'échelle du chrome. On ne dessine pas un
+     hamburger de plus, on répète une matière déjà en service.
+     `currentColor` : il hérite du text-shadow de la barre d'accueil comme le
+     reste du lettrage, donc sa lisibilité sur l'image ne dépend d'aucune
+     valeur nouvelle. */
+  .menuSigne {
+    position: relative;
+    display: block;
+    width: 26px;
+    height: 1px;
+    background: currentColor;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.62);
+    transition: transform var(--aj-d-court) var(--e1);
+  }
+
+  .menuSigne::after {
+    content: "";
+    position: absolute;
+    top: 8px;
+    right: 0;
+    /* Le second filet est plus court : le bouton a un fer à droite, comme le
+       surtitre du film. Fermé il se lit comme deux lignes décalées ; ouvert,
+       les deux se rejoignent. */
+    width: 16px;
+    height: 1px;
+    background: currentColor;
+    box-shadow: inherit;
+    transition: width var(--aj-d-court) var(--e1);
+  }
+
+  .header[data-menu="ouvert"] .menuSigne::after {
+    width: 26px;
+  }
+
+  /* LE PANNEAU. Il ne s'ouvre qu'ici, et il porte son propre aplat : sur
+     l'accueil la barre est transparente au repos, donc les six liens seraient
+     posés sur la photo sans lui. */
+  .menuPanneau {
+    display: none;
+    grid-column: 1 / -1;
+    grid-row: 2;
+    margin-inline: calc(-1 * var(--chrome-pad));
+    padding: 6px var(--chrome-pad) 14px;
+    border-top: 1px solid var(--chrome-filet);
+    background: var(--aj-noir-abysse);
+  }
+
+  .header[data-menu="ouvert"] .menuPanneau {
+    display: block;
+  }
+
+  /* Dans le panneau, les six cibles sont empilées et ferrées à gauche : une
+     liste se lit, une rangée centrée se devine. */
+  .menuPanneau .desktopNav {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    gap: 0;
+    padding-inline: 0;
+    margin-inline: 0;
+    border-top: 0;
+  }
+
+  .menuPanneau .actions {
+    /* `justify-self: end` vient de la barre du bureau, où les actions sont le
+       troisième item d'une grille. Chromium applique désormais l'alignement de
+       boîte AUSSI en disposition de bloc : dans le panneau, la ligne se
+       réduisait à son contenu (208,2px mesurés) et se collait à droite, alors
+       que les trois liens de nav au-dessus tenaient la pleine largeur. Deux
+       fers opposés dans une même liste : on rend la ligne au bord gauche. */
+    justify-self: stretch;
+    justify-content: flex-start;
+    gap: clamp(14px, 4vw, 26px);
+    padding-top: 10px;
+    margin-top: 6px;
+    border-top: 1px solid var(--chrome-filet);
+  }
+
+  .menuPanneau .navLink,
+  .menuPanneau .actionLink {
+    justify-content: flex-start;
+    min-height: 44px;
+    padding-inline: 0;
+  }
+
+  .menuPanneau .navLink::after,
+  .menuPanneau .actionLink::after {
+    bottom: 0.6rem;
+  }
+}
+
+/* L'aplat du panneau doit gagner sur le dégradé transparent de l'accueil,
+   sinon les six liens restent posés sur la photo. Même spécificité que
+   `:global(.aj-home) > .header` (0,2,0) : c'est l'ordre du fichier qui
+   tranche, et cette règle est plus bas. */
+.header[data-menu="ouvert"] {
+  background-image: none;
 }
 
 /* Sous 380px trois mots capitales ne tiennent plus sur une ligne. Ils passent

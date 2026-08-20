@@ -5,6 +5,7 @@
 import Link from "next/link";
 import { useRef, useState, type CSSProperties } from "react";
 import type { TranslationKey } from "../../lib/i18n/dictionaries";
+import { wearerOf } from "../../lib/products";
 import { useI18n } from "../../lib/i18n/I18nProvider";
 import { useAjMotion } from "./useAjMotion";
 import styles from "./Accueil.module.css";
@@ -682,7 +683,7 @@ export default function ApollonGuidedSequence({ coloris }: Props) {
                 }
               >
                 <div className={styles.panneauCopie}>
-                  <h3 className={`aj-metal aj-display ${styles.panneauTitre}`}>
+                  <h3 className={`aj-display ${styles.panneauTitre}`}>
                     {nom}
                   </h3>
                   <p className={styles.panneauTexte} lang={enFrancais}>
@@ -708,18 +709,67 @@ export default function ApollonGuidedSequence({ coloris }: Props) {
 
                       `PLATEAUX[...]` et jamais un chemin écrit à la main : le
                       contrat de parité relit les littéraux `/images/...` de ce
-                      fichier dans l'ordre du document, et deux stills recopiés
-                      ici les décaleraient. Aucun corps sur ces plateaux, de
-                      toute façon — mais le contrat ne le sait pas.
+                      fichier dans l'ordre du document, et deux chemins recopiés
+                      ici les décaleraient. Les deux marges lisent donc le même
+                      tableau que les prises centrales, et n'ajoutent AUCUN
+                      littéral : `personnes(sequence)` reste alex / jeremy /
+                      alex, ce que `tests/model-identity.test.mjs` exige mot
+                      pour mot.
 
-                      `aria-hidden` et `alt=""` : ces deux prises sont déjà
-                      nommées, avec leur coloris, sur leur propre panneau. Les
-                      redire ferait lire trois fois la même nature morte. */}
+                      ── CE QUE MONTRE UNE MARGE, ET POURQUOI ────────────
+                      Elle montrait la nature morte du coloris adjacent. Défaut
+                      relevé au navigateur le 20/08, panneau 01 à 1920x1080 :
+                      pourpre-lyre en 428x642 à gauche, rose-lyre en 719x1080
+                      au centre, lilas-lyre en 428x642 à droite. Les trois
+                      fichiers `-lyre-v1` sont la MÊME prise — même socle, même
+                      lyre, même arc, même carquois, même cadrage — recolorée
+                      trois fois. La bande donnait donc trois tirages d'un seul
+                      plan, et le geste central de l'accueil se lisait comme
+                      une planche-contact.
+
+                      La marge montre désormais le plan PORTÉ du coloris
+                      voisin. Elle retombe sur son plateau dans le seul cas où
+                      le porté est interdit : quand ce coloris est porté par le
+                      MÊME homme que le panneau courant. La règle n'est pas un
+                      réglage, elle est lue dans `wearerOf` — la table
+                      d'attribution de lib/products, celle-là même que le
+                      contrat de parité relit — et elle rend l'alternance
+                      structurelle plutôt que surveillée.
+
+                      Ce qu'elle donne, panneau par panneau, dans l'ordre de
+                      lecture gauche → centre → droite :
+                        01 Rose (Alex)     plateau · rose · Jérémy en Lilas
+                        02 Lilas (Jérémy)  Alex en Rose · lilas · Alex en Pourpre
+                        03 Pourpre (Alex)  Jérémy en Lilas · pourpre · plateau
+                      Aucune suite ne répète un homme, y compris d'un panneau
+                      au suivant : 01 finit sur Jérémy, 02 ouvre sur Alex et
+                      finit sur Alex, 03 ouvre sur Jérémy.
+
+                      CE QUE ÇA NE RÉPARE PAS. Les panneaux 01 et 03 gardent
+                      deux tirages du plateau côte à côte, parce que le dépôt
+                      ne possède qu'UNE nature morte, déclinée en trois
+                      couleurs. Trois plans distincts par bande demanderaient
+                      deux marges portées sur chaque panneau, ce que la parité
+                      interdit : rose et pourpre sont tous deux portés par
+                      Alex, donc un panneau Alex ne peut pas avoir deux marges
+                      portées. C'est un manque d'actifs, pas un réglage.
+
+                      Aucun recadrage : `.voisine` est en 1731/2600 et les
+                      plans portés font exactement 1731x2600, donc `contain`
+                      les rend à 100 %.
+
+                      `aria-hidden` et `alt=""` : chacune de ces prises est
+                      déjà nommée, avec son coloris, sur son propre panneau. */}
                   {[-1, 1].map((sens) => {
                     const voisin =
                       PLATEAUX[
                         (index + sens + PLATEAUX.length) % PLATEAUX.length
                       ];
+                    const memeHomme =
+                      wearerOf(voisin.worn) === wearerOf(plateau.worn);
+                    const marge = memeHomme
+                      ? { src: voisin.still, l: 1024, h: 1536 }
+                      : { src: voisin.worn, l: 1731, h: 2600 };
                     return (
                       <div
                         aria-hidden="true"
@@ -731,9 +781,9 @@ export default function ApollonGuidedSequence({ coloris }: Props) {
                         <img
                           alt=""
                           className={styles.priseVoisine}
-                          src={voisin.still}
-                          width={1024}
-                          height={1536}
+                          src={marge.src}
+                          width={marge.l}
+                          height={marge.h}
                           /* Les deux voisines du premier panneau chargent tôt :
                              ce sont elles qui tiennent les marges à l'instant
                              où la section arrive, et elles amènent au passage

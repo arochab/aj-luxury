@@ -58,7 +58,7 @@ async function listFiles(directory) {
 }
 
 test("hero video asset selection is deterministic at every breakpoint", () => {
-  assert.equal(HERO_VIDEO_VERSION, "v4");
+  assert.equal(HERO_VIDEO_VERSION, "v5");
   assert.equal(selectHeroVideoAsset(390, 844), HERO_VIDEO_ASSETS.portrait);
   assert.equal(selectHeroVideoAsset(768, 1024), HERO_VIDEO_ASSETS.portrait);
   assert.equal(selectHeroVideoAsset(800, 1000), HERO_VIDEO_ASSETS.portrait);
@@ -100,7 +100,7 @@ test("the responsive HD MP4 set stays bounded and starts progressively", async (
     assert.ok(ftyp >= 0 && ftyp < 32, `${name} has no valid MP4 header`);
     assert.ok(moov > ftyp, `${name} has no moov atom`);
     assert.ok(mdat > moov, `${name} is not optimized for progressive start`);
-    assert.match(asset.src, /aj-luxury-hero-v4-[\w-]+\.mp4\?v=v4$/);
+    assert.match(asset.src, /aj-luxury-hero-v5-[\w-]+\.mp4\?v=v5$/);
   }
 });
 
@@ -117,7 +117,7 @@ test("responsive first-frame posters stay within explicit byte budgets", async (
       info.size <= V3_POSTER_BYTE_CEILINGS[role],
       `${role} poster exceeds its exact V3 byte ceiling`,
     );
-    assert.match(asset.poster, /hero-v4-[\w-]+-poster\.webp\?v=v4$/);
+    assert.match(asset.poster, /hero-v5-[\w-]+-poster\.webp\?v=v5$/);
   }
 
   for (const [role, asset] of Object.entries(HERO_VIDEO_ASSETS).filter(
@@ -136,7 +136,7 @@ test("responsive first-frame posters stay within explicit byte budgets", async (
       avifInfo.size <= webpInfo.size * 0.65,
       `${role} AVIF exceeds its WebP-relative byte budget`,
     );
-    assert.match(asset.posterAvif, /hero-v4-[\w-]+-poster\.avif\?v=v4$/);
+    assert.match(asset.posterAvif, /hero-v5-[\w-]+-poster\.avif\?v=v5$/);
   }
 
   const compactPortrait = HERO_VIDEO_ASSETS.portrait.posterCompact;
@@ -146,7 +146,7 @@ test("responsive first-frame posters stay within explicit byte budgets", async (
     compactInfo.size <= V3_COMPACT_PORTRAIT_POSTER_BYTE_CEILING,
     "compact portrait poster exceeds its exact V3 byte ceiling",
   );
-  assert.match(compactPortrait, /hero-v4-portrait-480x623-poster\.webp\?v=v4$/);
+  assert.match(compactPortrait, /hero-v5-portrait-480x623-poster\.webp\?v=v5$/);
 });
 
 test("public assets never contain temporary .tmp files", async () => {
@@ -214,7 +214,15 @@ test("hero playback is accessible, resource-aware and subject-safe", async () =>
   ]);
 
   assert.match(videoComponent, /muted/);
-  assert.doesNotMatch(videoComponent, /\sloop(?:\s|\/>)/);
+  /* CONTRAT INVERSE LE 2026-08-20. La v4 gelait definitivement sur sa
+     derniere image : `loop` etait interdit parce que son raccord fin -> debut
+     valait 3,83 niveaux de gris de difference STRUCTURELLE, soit 29,5 fois le
+     mouvement adjacent moyen, avec 231 niveaux au pire pixel. Le master v5 est
+     un aller-retour : images 0..84 puis 83..1, 168 images a 24 i/s. Sa
+     derniere image et sa premiere sont deux images CONSECUTIVES du master, donc
+     le raccord vaut 0,50 en moyenne et 5,5 au pire pixel. La boucle est
+     desormais OBLIGATOIRE ; c'est le gel qui est le defaut. */
+  assert.match(videoComponent, /\n\s+loop\n/);
   assert.match(videoComponent, /playsInline/);
   assert.match(videoComponent, /saveData/);
   assert.match(videoComponent, /shouldAttachHeroVideoSource/);

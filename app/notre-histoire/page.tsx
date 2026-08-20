@@ -363,7 +363,7 @@ export default function NotreHistoirePage() {
             <div className={styles.ouvertureBloc}>
               <p className={`${styles.surtitre} aj-label`}>AJ Luxury</p>
               <h1
-                className={`${styles.titreOuverture} aj-display aj-metal`}
+                className={`${styles.titreOuverture} aj-display`}
                 id="recit-titre"
               >
                 <T id="story.title" />
@@ -610,7 +610,7 @@ export default function NotreHistoirePage() {
         <section className={styles.cloture} aria-labelledby="recit-04-titre">
           <div className={styles.clotureBloc}>
             <h2
-              className={`${styles.clotureTitre} aj-display aj-metal`}
+              className={`${styles.clotureTitre} aj-display`}
               id="recit-04-titre"
             >
               <T id="story.quote" />
