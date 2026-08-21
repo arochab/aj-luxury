@@ -671,7 +671,12 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
 
   assert.match(html, /href="\/"[^>]*aria-current="page"[^>]*>Accueil</);
   assert.match(html, />Notre histoire</);
-  assert.match(html, /href="\/shop"[^>]*>Découvrir la collection</);
+  /* UN SEUL LIBELLE POUR /shop SUR TOUTE LA PAGE. Elle s'appelait « Voir
+     toute la boutique » dans #coloris et « Decouvrir la collection » en
+     cloture : deux noms pour une meme destination, sur un meme ecran. Le test
+     verrouille l'unicite, pas la formule. */
+  assert.match(html, /href="\/shop"[^>]*>Voir toute la boutique</);
+  assert.doesNotMatch(html, /Découvrir la collection/);
   assert.match(html, /94\s*%[\s\S]*modal/i);
   assert.match(html, /6\s*%[\s\S]*élasthanne/i);
   assert.match(
