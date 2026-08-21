@@ -57,7 +57,9 @@ export default function CheckoutSuccessPage() {
         les liens de sortie sont lisibles et cliquables dès le premier paint.
       */}
       <div className={`${tunnel.tunnel} ${tunnel.moment}`}>
-        <FilDEtapes etape={3} />
+        {/* Commerce fermé : aucun fil d'étapes — même règle que /cart et
+            /checkout, un parcours ne se dessine que s'il existe. */}
+        {commerceOuvert && <FilDEtapes etape={3} />}
 
         {/*
           La barre de sortie, identique à celle de /checkout. Sans elle, la

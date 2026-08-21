@@ -61,7 +61,11 @@ export default function CartPage() {
     <main className={`${styles.shell} ${tunnel.sol}`}>
       <StoreHeader />
       <div className={tunnel.tunnel}>
-        <FilDEtapes etape={1} />
+        {/* Commerce fermé : AUCUN fil d'étapes. Dessiner 01/02/03 promettrait
+            un parcours d'achat qui n'existe pas — le handoff du 21/08 le
+            comptait comme défaut, et l'intouchable « aucun tunnel simulé »
+            le proscrit. Le fil ne se montre qu'avec un vrai parcours. */}
+        {runtimeMode !== "closed" && <FilDEtapes etape={1} />}
 
         {runtimeMode === "preproduction" && (
           <aside className={tunnel.avis}>

@@ -151,24 +151,35 @@
   transition: filter var(--aj-d-court) var(--e1);
 }
 
-/* Défilement engagé : on rend à la barre son fond plein. Le voile
-   `.headerPose::before` (0.55 de noir) reste et s'y ajoute. */
+/* DÉFILEMENT ENGAGÉ — MÊME LANGAGE QU'AU REPOS, PLUS DENSE — 21/08.
+   L'état posé rendait à la barre son aplat plein : au retour vers le haut,
+   57 px de noir opaque se posaient sur la scène colorée de la séquence —
+   le défaut « mineur » du handoff, et le frère de la plaque grise refusée
+   à vue le 18/08. La barre garde désormais UNE seule grammaire : le dégradé
+   pleine largeur qui meurt en transparence, densifié pour porter la
+   lisibilité sur n'importe quel fond défilant.
+   Contraste au fil des glyphes (y≈38 sur 76 px, arrêt effectif ~0,70) sur
+   le pire fond du site — une couture à 245 de luminance : fond résultant
+   ~77, soit ~8,7:1 sous du texte blanc 15 px graisse 600, pour 4,5 exigés.
+   Sur le mur rose (~140) : ~46, largement au-dessus.
+   Pas de flou de fond : un backdrop-filter s'arrête net sur sa boîte et
+   dessine une couture rectiligne sur la scène qui défile dessous — c'est
+   l'arête qui traversait les visages au repos, même cause, même refus.
+   Le voile `.headerPose::before` (0,55 de noir) est neutralisé sur
+   l'accueil : c'est lui qui fabriquait l'aplat sous le dégradé. */
 :global(.aj-home) > .header.headerPose {
-  --chrome-fond: var(--aj-header-fond);
-
-  background-image: none;
-  border-bottom-color: var(--chrome-filet);
-
-  /* La barre a repris son aplat : le flou de fond redevient sans risque —
-     il n'y a plus de visage derrière lui, seulement du contenu défilant. */
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-
-  text-shadow: none;
+  background-image: linear-gradient(
+    180deg,
+    rgba(6, 6, 8, 0.92),
+    rgba(6, 6, 8, 0.68) 55%,
+    rgba(6, 6, 8, 0.26) 85%,
+    transparent
+  );
+  border-bottom-color: transparent;
 }
 
-:global(.aj-home) > .header.headerPose .brandImage {
-  filter: none;
+:global(.aj-home) > .header.headerPose::before {
+  opacity: 0;
 }
 
 @media (prefers-reduced-motion: reduce) {

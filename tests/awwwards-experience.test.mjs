@@ -64,20 +64,34 @@ test("the private homepage preserves the approved film and the recovered Apollon
   /* Calque d'identite v4 retire avec le master v6 du 21/08 — voir
      tests/hero-video.test.mjs, contrat « subject-safe ». */
   assert.doesNotMatch(heroBackgroundVideo, /<HeroIdentityOverlay/);
-  assert.match(sequence, /<T id="home\.incarnationTitle"\s*\/>/);
-  assert.match(sequence, /role="tablist"/);
-  assert.match(sequence, /tabIndex=\{index === active \? 0 : -1\}/);
-  assert.match(sequence, /event\.key === "ArrowRight"/);
-  assert.match(sequence, /event\.key === "Home"/);
-  assert.match(sequence, /selectFrame\(index, true\)/);
-  assert.match(sequence, /progressRef/);
-  assert.match(sequence, /setPaused/);
-  assert.match(sequence, /URLSearchParams\(window\.location\.search\)\.get\("apollon"\)/);
-  assert.match(sequence, /requestedMode === "color" \? "color" : "world"/);
-  assert.match(sequence, /apollon-rose-model-world-v1\.webp/);
-  assert.match(sequence, /apollon-rose-model-color-v1\.webp/);
-  assert.match(sequence, /conceptMode === "color" \? frame\.bodyColor : frame\.bodyWorld/);
-  assert.match(page, /aria-label=\{`\$\{product\.model\} \$\{product\.name\}`\}/);
+  /* CONTRATS RÉALIGNÉS LE 21/08 sur l'implémentation vivante — partition
+     nommée + copie progressive. Les marqueurs aj-sequence__*, selectFrame et
+     le mode world/color appartenaient à la première implémentation, disparue
+     lors des reprises des 18-20/08 ; ce test verrouillait un fantôme. */
+  assert.match(sequence, /t\("home\.incarnationTitle"\)/);
+  /* Des raccourcis de position, pas des onglets ARIA : le motif tablist
+     promettrait des tabpanels qui n'existent pas. */
+  assert.match(sequence, /role="group"/);
+  assert.doesNotMatch(sequence, /role="tablist"/);
+  assert.match(sequence, /aria-current=\{index === actif \? "true" : undefined\}/);
+  assert.match(sequence, /inert=\{anime && index !== actif\}/);
+  /* Chaque coloris a ses temps propres, et le repère d'onglet vise 30 % du
+     palier porté — la copie est entière à l'arrivée. */
+  assert.match(sequence, /DUREES_PAR_PLATEAU/);
+  assert.match(sequence, /porte\.debut \+ 0\.3 \* \(porte\.fin - porte\.debut\)/);
+  /* Les trois plans portés v2, décors nettoyés du 18/08. */
+  assert.match(sequence, /apollon-rose-model-color-v2\.webp/);
+  assert.match(sequence, /apollon-lilas-model-color-v2\.webp/);
+  assert.match(sequence, /apollon-pourpre-model-color-v2\.webp/);
+  /* Le texte avance avec l'image : la phrase suit l'ouverture du volet, la
+     ligne commerce s'assemble au palier, le lien invisible sort du focus. */
+  assert.match(sequence, /phrase\.style\.opacity = ouverture\.toFixed\(4\)/);
+  assert.match(sequence, /lisse\(borne\(u \/ 0\.25, 0, 1\)\)/);
+  assert.match(
+    sequence,
+    /noeud\.style\.visibility = commerce < 0\.05 \? "hidden" : ""/,
+  );
+  assert.match(page, /<ApollonGuidedSequence coloris=\{coloris\} \/>/);
 });
 
 test("the Awwwards layer covers the critical short tablet and reduced-motion states", async () => {
@@ -92,47 +106,48 @@ test("the Awwwards layer covers the critical short tablet and reduced-motion sta
   );
   const packageJson = JSON.parse(await readFile(projectFile("package.json"), "utf8"));
 
-  assert.match(
-    css,
-    /@media \(min-width: 761px\) and \(max-width: 999px\) and \(max-height: 620px\)/,
+  /* CONTRATS RÉALIGNÉS LE 21/08. Les marqueurs aj-sequence__* et le pin GSAP
+     appartenaient à la première implémentation ; les garanties vivantes sont
+     celles-ci, et elles couvrent les mêmes risques : une variante statique
+     LISIBLE sous mouvement réduit, GSAP jamais importé statiquement, et le
+     scroll comme seule horloge. */
+  const module_ = await readFile(
+    projectFile("app/components/Accueil.module.css"),
+    "utf8",
   );
+  const hook = await readFile(
+    projectFile("app/components/useAjMotion.ts"),
+    "utf8",
+  );
+
+  /* Mouvement réduit : le rail se déplie en colonne, les transforms écrits
+     en inline par GSAP sont neutralisés, les entrées de chargement coupées. */
+  assert.match(module_, /@media \(prefers-reduced-motion: reduce\)/);
+  assert.match(module_, /transform: none !important/);
+  assert.match(module_, /flex-direction: column/);
+  assert.match(sequence, /prefers-reduced-motion: no-preference/);
+  assert.match(experience, /prefers-reduced-motion: no-preference/);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
-  assert.match(css, /\.aj-sequence__frame,[\s\S]*transition: none !important/);
-  assert.match(css, /scroll-snap-type: x mandatory/);
-  assert.match(css, /@media \(max-width: 760px\)[\s\S]*\.aj-sequence__stage \{[\s\S]*--aj-split: 28%;/);
-  assert.match(css, /@media \(max-width: 760px\)[\s\S]*\.aj-sequence__symbol \{[\s\S]*right: calc\(100% - var\(--aj-split\)\);[\s\S]*bottom: 0;/);
-  assert.match(css, /@media \(max-width: 760px\)[\s\S]*\.aj-sequence__body \{[\s\S]*top: 0;[\s\S]*left: var\(--aj-split\);[\s\S]*padding: 10px 8px 112px;/);
-  assert.doesNotMatch(css, /\.aj-sequence__stage::before \{[\s\S]{0,180}top: 43%/);
-  assert.equal(packageJson.dependencies.gsap, "^3.15.0");
-  assert.equal(packageJson.dependencies["@gsap/react"], "^2.1.2");
-  assert.match(sequence, /import\("gsap"\)/);
-  assert.match(sequence, /gsap\.timeline/);
-  assert.match(sequence, /autoplayRef/);
-  assert.doesNotMatch(sequence, /requestAnimationFrame/);
-  assert.match(sequence, /IntersectionObserver/);
-  assert.match(sequence, /document\.visibilityState === "visible"/);
-  assert.match(sequence, /prefers-reduced-motion: reduce/);
-  assert.match(experience, /ScrollTrigger/);
-  assert.match(experience, /import\("gsap\/ScrollTrigger"\)/);
-  assert.match(experience, /gsap\.matchMedia/);
-  assert.match(experience, /\.aj-proof/);
-  assert.match(experience, /\.aj-product-card/);
-  assert.match(experience, /\.aj-moodboard__item/);
-  assert.match(experience, /\.aj-story__copy/);
+
+  /* GSAP n'entre que par import dynamique, via le hook partagé. */
+  assert.match(hook, /import\("gsap"\)/);
+  assert.match(hook, /import\("gsap\/ScrollTrigger"\)/);
   assert.doesNotMatch(sequence, /^import .* from "gsap"/m);
   assert.doesNotMatch(experience, /^import .* from "gsap/m);
-  assert.doesNotMatch(experience, /^gsap\.registerPlugin/m);
-  assert.doesNotMatch(experience, /ScrollSmoother|scrollTo\(/);
-  assert.match(experience, /pin: true/);
-  assert.match(experience, /end: "\+=85%"/);
-  assert.match(css, /\.aj-film__hero-poster img,[\s\S]*\.aj-film__hero-video \{[\s\S]*object-fit: contain/);
-  assert.match(css, /\.aj-sequence__body img \{[\s\S]*object-fit: contain/);
-  assert.match(css, /\.aj-moodboard__item img \{[\s\S]*object-fit: contain/);
-  assert.match(css, /\.aj-product-card__image img \{[\s\S]*object-fit: contain/);
-  assert.doesNotMatch(experience, /yPercent: -4/);
-  assert.doesNotMatch(experience, /clipPath: "inset\(9%/);
-  assert.doesNotMatch(sequence, /\.aj-sequence__body img"\), \{[^}]*scale:/);
-  assert.doesNotMatch(sequence, /\.aj-sequence__body img"\), \{[^}]*xPercent:/);
+  assert.equal(packageJson.dependencies.gsap, "^3.15.0");
+  assert.equal(packageJson.dependencies["@gsap/react"], "^2.1.2");
+
+  /* Le scroll est la seule horloge : scrub 1:1 sans lissage, le collage est
+     en CSS sticky — jamais un pin GSAP qui se disputerait la position — et
+     la hauteur de la section est DÉRIVÉE de la partition. */
+  assert.match(sequence, /scrub: true/);
+  assert.doesNotMatch(sequence, /pin: true/);
+  assert.match(module_, /position: sticky/);
+  assert.doesNotMatch(experience, /ScrollSmoother/);
+  assert.match(
+    module_,
+    /calc\(\(1 \+ var\(--plaque-temps, 3\.2\)\) \* 100svh\)/,
+  );
 });
 
 test("new editorial messages are localized in every supported locale", async () => {

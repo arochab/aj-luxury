@@ -601,9 +601,12 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
      overlay d'identite dans le HTML rendu. */
   assert.doesNotMatch(html, /hero-identity-overlay-/);
   assert.match(html, /aj-film__hero-reflection/);
+  /* 1 depuis le 20/08 : la grille des trois cartes et son second champ
+     metallique ont quitte l'accueil avec la reprise de la sequence ; seul le
+     reflet du hero reste, et il doit rester non monte au premier rendu. */
   assert.equal(
     (html.match(/data-metallic-mounted="false"/g) ?? []).length,
-    3,
+    1,
     "homepage metallic fields must remain unmounted during initial hero render",
   );
   assert.doesNotMatch(html, /class="metallic-field__canvas"/);
@@ -629,13 +632,18 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
   );
 });
 
+/* Tailles de galerie depuis la reprise des fiches du 19/08 (natures mortes) :
+   pourpre 5, rose 4, lilas 3. L'ancienne garde « >= 4 placeholders » était un
+   proxy calibré sur le catalogue d'avant ; l'invariant exact est plus fort —
+   chaque cadre porte son placeholder, la vue principale portant EN PLUS la
+   seule image pleine résolution : n placeholders, 1 full. */
 const productCases = [
-  ["/products/pourpre", "Pourpre Impérial"],
-  ["/products/rose-pale", "Rose Velours"],
-  ["/products/lilas-bleu-clair", "Lilas Céleste"],
+  ["/products/pourpre", "Pourpre Impérial", 5],
+  ["/products/rose-pale", "Rose Velours", 4],
+  ["/products/lilas-bleu-clair", "Lilas Céleste", 3],
 ];
 
-for (const [pathname, colorName] of productCases) {
+for (const [pathname, colorName, galerie] of productCases) {
   test(`server-renders ${pathname}`, async () => {
     const response = await render(pathname);
     assert.equal(response.status, 200);
@@ -660,8 +668,9 @@ for (const [pathname, colorName] of productCases) {
       1,
       "initial HTML keeps only the full-resolution lead gallery image",
     );
-    assert.ok(
-      (html.match(/data-gallery-media="placeholder"/g) ?? []).length >= 4,
+    assert.equal(
+      (html.match(/data-gallery-media="placeholder"/g) ?? []).length,
+      galerie,
       "every gallery frame keeps a lightweight visual placeholder",
     );
     assert.match(html, /Disponibilité simulée/);
@@ -699,7 +708,12 @@ test("server-renders the real boutique and its complete navigation", async () =>
   assert.equal(response.status, 200);
   const html = await response.text();
   assert.match(html, /<h1[^>]*>Apollon<\/h1>/);
-  assert.match(html, /3(?:<!-- -->)? coloris/);
+  /* Depuis la reprise du 19/08, la boutique NOMME les coloris au lieu de les
+     compter — « Coloris : Rose Velours · Lilas Céleste · Pourpre Impérial ». */
+  assert.match(
+    html,
+    /Coloris[\s\S]*Rose Velours[\s\S]*Lilas Céleste[\s\S]*Pourpre Impérial/,
+  );
   assert.match(html, /Pourpre Impérial/);
   assert.match(html, /Rose Velours/);
   assert.match(html, /Lilas Céleste/);
@@ -723,7 +737,14 @@ test("server-renders the real boutique and its complete navigation", async () =>
     /<h[1-6][^>]*>(?:Collection Apollon|Les trois coloris|3 produits)<\/h[1-6]>/,
   );
   assert.doesNotMatch(html, />\s*Best Seller\s*</i);
-  assert.doesNotMatch(html, /\d+[,.]\d{2}\s*(?:€|EUR)/i);
+  /* L'interdit « aucun prix en boutique » est tombé avec la reprise du 19/08 :
+     les trois coloris partagent UN prix et la boutique le dit une fois
+     (app/shop/page.tsx, LocalizedPrice). Le contrat devient : le prix unique,
+     jamais un prix par carte. */
+  assert.ok(
+    (html.match(/29,99(?:\s|&nbsp;|&#xA0;)*€/g) ?? []).length >= 1,
+    "the boutique states the single shared price",
+  );
 });
 
 test("server-renders the complete AJ Luxury story", async () => {
@@ -760,7 +781,10 @@ test("server-renders the complete AJ Luxury story", async () => {
     /href="\/notre-histoire"[^>]*aria-current="page"[^>]*>Notre histoire</,
   );
   assert.doesNotMatch(html, /Le premier chapitre/);
-  assert.doesNotMatch(html, /94\s*%\s*modal|6\s*%\s*élasthanne/);
+  /* L'interdit « pas de fiche technique dans le recit » est tombe avec la
+     section Le Laurier (reprise du recit, 19-20/08) : la matiere y est
+     presentee en composition — 94 MODAL · 6 ELASTHANNE — et cette section
+     fait partie du design courant, verifie par captures le 21/08. */
   assert.doesNotMatch(
     html,
     /intention d’image|casting|futurs? shootings?|compte officiel à confirmer/i,
@@ -825,7 +849,13 @@ test("privacy and cookies describe the actual preview storage and no fictitious 
   assert.match(privacyHtml, /Facturation et comptabilité/);
   assert.match(privacyHtml, /10 ans/);
   assert.match(privacyHtml, /CNIL/);
-  assert.match(privacyHtml, /ne conserve pas le cryptogramme/i);
+  /* Reformulé lors de la reprise des pages légales : même garantie, phrase
+     plus complète — ni réception ni conservation du numéro ou du
+     cryptogramme. */
+  assert.match(
+    privacyHtml,
+    /ne reçoit ni ne conserve le numéro complet de carte ou son\s+cryptogramme/i,
+  );
 
   const cookiesResponse = await render("/cookies");
   const cookiesHtml = await cookiesResponse.text();

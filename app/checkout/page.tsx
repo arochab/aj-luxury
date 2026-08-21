@@ -59,7 +59,9 @@ export default function CheckoutPage() {
     <main className={`${styles.shell} ${tunnel.sol}`}>
       <StoreHeader />
       <div className={tunnel.tunnel}>
-        <FilDEtapes etape={2} />
+        {/* Commerce fermé : aucun fil d'étapes — même règle que /cart, un
+            parcours ne se dessine que s'il existe. */}
+        {commerceOuvert && <FilDEtapes etape={2} />}
 
         {/*
           La barre de sortie. Deux informations et rien d'autre : par où l'on
