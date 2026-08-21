@@ -49,19 +49,30 @@
      tout le reste se cale dessus. */
   --aj-hero-figures-h: 92svh;
 
-  /* Distance entre le bas de la fenêtre et la ligne de base du mot. Réglée
-     pour que le mot croise les corps à hauteur de hanche. */
-  --aj-hero-mot-bas: 31svh;
+  /* De combien le logo est remonté par rapport au centre de la fenêtre, pour
+     dégager la copie posée en bas. */
+  --aj-hero-mot-bas: 14svh;
 }
 
-/* --- La caméra et la chambre ----------------------------------------------
-   DEUX NŒUDS, ET C'EST UN CORRECTIF, PAS UNE ÉLÉGANCE. La dérive au repos et
-   la poussée au défilement visaient au départ le même élément. GSAP n'écrase
-   pas par défaut : les deux tweens se disputaient `scale` et le dernier rendu
+/* --- Les plans et les chambres --------------------------------------------
+   DEUX NIVEAUX DE TRANSFORMATION, ET C'EST UN CORRECTIF. La dérive au repos et
+   la poussée au défilement visaient au départ le même élément : GSAP n'écrase
+   pas par défaut, les deux tweens se disputaient `scale` et le dernier rendu
    gagnait — mesuré, la scène affichait `transform: none` en plein défilement.
-   Séparés sur deux nœuds imbriqués, les deux gestes se composent par produit
-   de matrices au lieu de se disputer une propriété. */
-.camera,
+   `.plan` porte le défilement, `.scene` la dérive ; les deux se composent par
+   produit de matrices au lieu de se disputer une propriété.
+
+   DEUX PLANS FRÈRES, ET C'EST LA CONDITION DU VOL. Le mot-marque doit rester
+   ENTRE le métal et les corps — c'est tout son geste — mais il doit aussi
+   pouvoir quitter la scène pour aller se poser dans la barre. Or un ancêtre
+   transformé crée un contexte d'empilement : tant que le mot vivait DANS le
+   plan, il héritait de la caméra et son vol se composait avec elle.
+
+   Le métal et les corps sont donc deux plans SÉPARÉS, pilotés par le même
+   tween, et le mot est leur frère intercalé. L'ordre de peinture vient de
+   l'ordre du DOM : métal, mot, corps. Le mot est libre, et il est toujours
+   occulté par les corps. */
+.plan,
 .scene {
   position: absolute;
   inset: 0;
@@ -83,19 +94,30 @@
   position: absolute;
   inset: 0;
   pointer-events: none;
-  /* ── POURQUOI LE CHAMP EST RENDU À 42 % ────────────────────────────────
-     À pleine intensité, le champ occupe l'écran de grandes masses claires et
-     floues : à l'œil, au navigateur, ça ne lit pas « chrome poli », ça lit
-     « fumée ». Et il entrait en concurrence directe avec les deux seules
-     choses qui doivent gagner ce premier écran — les corps éclairés et le
-     mot-marque clair. Le contraste du mot variait d'ailleurs d'un bout à
-     l'autre du mot selon la masse claire qui passait dessous.
+  /* ── LE MÉTAL EST UNE CONTRAINTE CLIENT : IL DOIT ÊTRE PRÉSENT ─────────
+     Premier essai : champ rendu à 42 % pour qu'il cesse de disputer le premier
+     plan aux corps. Verdict d'Adam le 21/08 — trop discret, à renforcer.
 
-     Ramené sur le noir de marque, le métal redevient ce qu'il doit être :
-     une AMBIANCE profonde traversée de reflets, pas un décor. C'est aussi
-     l'ouverture sombre que la référence demande. On n'a rien retiré au
-     shader — c'est le même champ, mais à sa juste place dans la hiérarchie. */
-  opacity: 0.42;
+     Le baisser était le mauvais levier. Le défaut n'était pas l'intensité,
+     c'était le CONTRASTE : à plat, le champ n'est qu'un empilement de masses
+     claires et floues, et à l'œil ça lit « fumée », pas « chrome poli ».
+
+     SECONDE PASSE, MÊME JOUR : encore trop discret. Contraste porté de 2,6 à
+     3,4, opacité rendue à 1, et le champ passe en cadence normale au lieu de
+     « lente » — parce que « liquide » est autant une question de MOUVEMENT que
+     de matière. Un métal qui ne coule pas n'est pas liquide.
+
+     Le contraste creuse les noirs et durcit les hautes lumières :
+     les masses deviennent des reflets, avec des bords nets et des creux
+     profonds — la matière lit enfin comme du métal en fusion. La luminosité
+     rendue à 0,58 garde l'ouverture sombre que la référence demande et rend
+     au mot-marque un fond régulier.
+
+     Le filtre est STATIQUE sur un canvas animé : le compositeur l'applique,
+     rien n'est recalculé en mise en page. Coût mesuré au navigateur, avec et
+     sans, dans la même session. */
+  opacity: 1;
+  filter: contrast(3.4) brightness(0.52) saturate(0.85);
 }
 
 .metal > * {
@@ -106,42 +128,90 @@
 }
 
 /* --- Le mot-marque --------------------------------------------------------
-   POURQUOI UNE DIVISION ET PAS UN clamp()
-   La chaîne est fixe — « AJ LUXURY ». Son rapport largeur/corps est donc
-   constant : une taille exprimée en unité de fenêtre remplit toujours la même
-   fraction de largeur, sans point de rupture. 4,72 est la largeur MESURÉE de
-   la boîte du mot, en em, interlettrage et compensation de chasse compris.
+   C'EST LE LOGO LUI-MÊME, PAS UNE IMITATION. Le premier essai reconstruisait
+   le lettrage en Manrope à l'interlettrage relevé sur le fichier (0,63 em,
+   mesuré : hauteur de capitale 69 px, écart moyen 43 px). C'était fidèle à la
+   TYPOGRAPHIE mais ça restait un pastiche — le monogramme AJ n'est pas de la
+   type, c'est un dessin, et aucune fonte ne le rend.
 
-   Le mot est le h1 : il porte le nom de la maison, une seule fois, à sa place
-   logique dans la hiérarchie du document. */
+   Le premier écran affiche donc l'actif de marque, en grand. Bénéfice qui ne
+   se voyait pas d'avance : l'atterrissage dans la barre devient un vrai FLIP
+   — même image, même dessin, seule l'échelle change. Il n'y a plus de fondu
+   entre deux objets différents, il y a un objet qui rentre chez lui.
+
+   Le mot est le h1 : le texte alternatif de l'image porte le nom de la
+   maison, une seule fois, à sa place logique dans la hiérarchie. */
 .marque {
   position: absolute;
   inset: 0;
   margin: 0;
   display: flex;
   justify-content: center;
-  align-items: flex-end;
+  /* Centré, pas posé sur une ligne de base : le verrou du premier essai. Le
+     logo est un LOCKUP presque carré (720x520), là où le lettrage sur une
+     ligne était très large. Calé en bas et large de 46cqi, il tenait tout
+     entier derrière les deux corps — relevé à l'écran : on ne lisait plus que
+     des fragments du monogramme, et LUXURY était tranché par le modèle de
+     gauche. La marque devenait une forme accidentelle.
+
+     Centré et large, il déborde franchement les corps des deux côtés : le
+     monogramme respire au-dessus des torses et LUXURY court sous les hanches,
+     bien au-delà de leur silhouette. */
+  align-items: center;
+  /* Remonté du bas de la fenêtre pour laisser la copie respirer : à ce
+     réglage, le mot LUXURY du lockup cesse de passer sous « Apollon, premier
+     modèle » — relevé à l'écran, les deux se chevauchaient sur 50 px. */
   padding-bottom: var(--aj-hero-mot-bas);
   pointer-events: none;
 }
 
-.marqueMot {
+.marqueBoite {
+  position: relative;
   display: block;
-  font-family: var(--disp);
-  font-size: calc(100cqi / 4.77);
-  font-weight: var(--aj-w-fin);
-  letter-spacing: -0.045em;
-  /* L'interlettrage s'applique AUSSI après la dernière lettre : sans cette
-     compensation le mot est poussé de 13 px vers la gauche. */
-  margin-right: -0.045em;
-  line-height: 0.78;
-  white-space: nowrap;
-  text-transform: uppercase;
-  /* Le balayage du métal est deux fois plus large que le mot : la brillance
-     le traverse d'un bord à l'autre sans jamais laisser voir une extrémité
-     de dégradé. */
-  background-size: 220% 100%;
+  /* TROIS BORNES, ET CHACUNE RÉPOND À UN DÉFAUT CONSTATÉ.
+       71cqi   — le logo doit être NETTEMENT plus large que les deux corps,
+                 sinon il disparaît derrière eux : à 46cqi on n'en lisait plus
+                 que des fragments et LUXURY était tranché par le modèle de
+                 gauche ;
+       1400px  — la largeur du dérivé @2x (Lanczos, aucun pixel inventé), donc
+                 jamais d'agrandissement au-delà du natif ;
+       hauteur — le lockup fait 1,385:1, presque carré. Sur un écran large il
+                 devenait plus haut que la fenêtre. Les 210 px réservés sont
+                 la copie (64), son air (60), la marge haute (40) et le jeu.
+     La plus petite gagne. */
+  width: min(71cqi, 1400px, calc((100svh - 210px) * 1.385));
+}
+
+.marqueLogo {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* La brillance qui traverse le métal. Elle est MASQUÉE PAR LE LOGO lui-même :
+   la lumière ne court donc que sur le dessin, jamais sur le fond. `screen`
+   n'éclaircit que ce qui est déjà clair — les creux du chrome restent noirs,
+   ce qui est exactement le comportement d'un reflet sur du métal poli. */
+.marqueEclat {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  mix-blend-mode: screen;
+  background-image: linear-gradient(
+    104deg,
+    transparent 38%,
+    rgba(255, 255, 255, 0.9) 50%,
+    transparent 62%
+  );
+  background-size: 280% 100%;
   background-position: 0% 50%;
+  background-repeat: no-repeat;
+  -webkit-mask-image: url("/images/aj-luxury-logo.webp");
+  mask-image: url("/images/aj-luxury-logo.webp");
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
 }
 
 /* --- Les corps ------------------------------------------------------------
@@ -358,8 +428,17 @@
        La seconde borne reste la largeur : un corps ne se rogne jamais. La
        plus petite des deux gagne, donc le premier écran reste juste sur un
        téléphone étroit comme sur une tablette haute. */
+    /* Le logo commande, les corps prennent le reste. Le terme qui le
+       représentait était calibré sur un LETTRAGE (17,9cqi) ; le lockup, lui,
+       est presque carré et beaucoup plus haut. Relevé à l'écran avec l'ancien
+       terme : le logo mordait la copie de 72 px à 390 et de 255 px à 768.
+       Sa hauteur se déduit désormais de sa largeur réelle et du rapport du
+       fichier, 1,385:1. */
+    --aj-hero-marque-l: min(78cqi, 460px);
     --aj-hero-figures-h: min(
-      calc(100svh - var(--aj-tete-h) - 17.9cqi - 190px),
+      calc(
+        100svh - var(--aj-tete-h) - (var(--aj-hero-marque-l) / 1.385) - 190px
+      ),
       calc((100cqi - 2 * var(--gut)) / var(--aj-hero-figures-ratio))
     );
   }
@@ -369,9 +448,8 @@
     padding-bottom: calc(var(--aj-hero-figures-h) + 14px);
   }
 
-  .marqueMot {
-    font-size: calc(100cqi / 4.8);
-    line-height: 0.86;
+  .marqueBoite {
+    width: var(--aj-hero-marque-l);
   }
 
   .copie {
@@ -391,15 +469,33 @@
   }
 
   /* Le dégradé bas disparaît : la copie n'est plus en bas, et l'assombrir
-     ferait perdre les pieds et le socle. Seul le voile haut reste, pour la
-     barre. */
+     ferait perdre les pieds et le socle.
+
+     Le voile haut, lui, DESCEND BEAUCOUP PLUS BAS qu'en paysage, et c'est une
+     correction. Sur un écran vertical le champ de métal pose une grande masse
+     claire au milieu de l'écran — là où le bureau la cache derrière les corps.
+     Relevé à l'écran : la copie et le lockup argenté s'y délavaient, et le
+     premier écran perdait son ouverture sombre. Le voile couvre donc les deux
+     premiers tiers, exactement la bande où vivent la copie et le logo, et rend
+     le métal à pleine puissance là où il travaille : autour des corps. */
   .voile {
     background: linear-gradient(
       to bottom,
-      rgba(8, 8, 10, 0.82) 0%,
-      rgba(8, 8, 10, 0.34) 16%,
-      rgba(8, 8, 10, 0) 34%
+      rgba(8, 8, 10, 0.88) 0%,
+      rgba(8, 8, 10, 0.42) 20%,
+      rgba(8, 8, 10, 0.16) 44%,
+      rgba(8, 8, 10, 0) 68%
     );
+  }
+
+  /* SUR ÉCRAN VERTICAL, LE MÉTAL DESCEND D'UN CRAN. Le champ pose une grande
+     masse claire au milieu de la fenêtre, là où le bureau la cache derrière
+     les corps. La voiler la transformait en aplat gris : on perdait la matière
+     au lieu de la calmer. On baisse donc le NIVEAU sans toucher au contraste —
+     les creux restent noirs, les reflets restent nets, mais l'ensemble revient
+     dans l'ouverture sombre, et le lockup argenté retrouve son fond. */
+  .metal {
+    filter: contrast(3.4) brightness(0.34) saturate(0.85);
   }
 }
 
@@ -415,7 +511,7 @@
     display: none;
   }
 
-  .camera,
+  .plan,
   .scene {
     transform: scale(1);
   }

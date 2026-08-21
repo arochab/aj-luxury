@@ -151,6 +151,23 @@
   transition: filter var(--aj-d-court) var(--e1);
 }
 
+/* ── L'EFFACEMENT DU LOGO SUR L'ACCUEIL ────────────────────────────────────
+   Au tout premier ecran de l'accueil, la marque est deja ecrite en grand au
+   milieu de la scene : la repeter en petit dans la barre la dirait deux fois.
+   Le hero pilote donc cette variable au defilement — 0 en haut de page, 1
+   quand le grand mot est venu se poser ici.
+
+   La valeur par defaut est 1 : toutes les autres pages, et l'accueil sans
+   JavaScript, gardent leur logo. Et le focus clavier le rend TOUJOURS, sinon
+   le lien « retour a l'accueil » serait invisible pour qui navigue au clavier. */
+.brandImage {
+  opacity: var(--aj-marque-entete-opacite, 1);
+}
+
+.brand:focus-visible .brandImage {
+  opacity: 1;
+}
+
 /* DÉFILEMENT ENGAGÉ — MÊME LANGAGE QU'AU REPOS, PLUS DENSE — 21/08.
    L'état posé rendait à la barre son aplat plein : au retour vers le haut,
    57 px de noir opaque se posaient sur la scène colorée de la séquence —

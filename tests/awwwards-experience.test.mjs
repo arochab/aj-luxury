@@ -67,12 +67,47 @@ test("the private homepage preserves the approved film and the recovered Apollon
   assert.match(fabrique, /only_mask=True/);
   assert.match(hero, /HERO_FIGURES/);
   assert.doesNotMatch(hero, /role="plate"/);
+
+  /* LE VOL DU MOT-MARQUE, ET LE DEFAUT QU'IL A COUTE.
+     Un tween sans duree explicite prend 0,5 s ; dans une timeline pilotee au
+     scrub, il ne couvre donc que la MOITIE de la course. Releve image par
+     image le 21/08 : le logo atteignait sa taille finale des p=0,5 puis
+     glissait a vide sur tout le reste du defilement. Les tweens de course
+     portent desormais leur duree, et ce test la garde. */
+  assert.equal(
+    (hero.match(/duration: 1,/g) ?? []).length,
+    2,
+    "les deux tweens de course (camera et vol du logo) doivent porter leur duree",
+  );
+  /* La cible du vol est cherchee par attribut, jamais par classe de module :
+     celles-ci sont hachees a la compilation. */
+  assert.match(hero, /\[data-aj-marque="entete"\]/);
+  /* Le terme de defilement. Le mot vit dans le flux : sans lui rendre la
+     hauteur du hero, il sort par le haut au lieu d'atterrir. */
+  assert.match(hero, /noeud\.offsetHeight/);
+
+  /* La barre ne se derobe pas tant que le premier ecran est la. */
+  const barre = await readFile(
+    projectFile("app/components/StoreHeader.tsx"),
+    "utf8",
+  );
+  assert.match(barre, /data-aj-tete-seuil/);
+  assert.match(barre, /onRefresh: mesurerSeuil/);
   /* Trois mouvements, trois proprietaires. La derive et la poussee au
      defilement ont anime `scale` sur le meme noeud le 21/08 : elles se
      disputaient le rendu et l'image restait immobile au defilement. Elles
      vivent depuis sur deux noeuds imbriques. */
-  assert.match(hero, /const camera = q\(`\.\$\{styles\.camera\}`\)\[0\]/);
-  assert.match(hero, /const scene = q\(`\.\$\{styles\.scene\}`\)\[0\]/);
+  assert.match(hero, /const plans = q\(`\.\$\{styles\.plan\}`\)/);
+  assert.match(hero, /const scenes = q\(`\.\$\{styles\.scene\}`\)/);
+  /* Deux PLANS freres, et non un seul : le mot-marque doit rester entre le
+     metal et les corps tout en pouvant quitter la scene pour la barre. Un
+     ancetre transforme creerait un contexte d'empilement dont il ne sortirait
+     pas. Le composant en rend donc exactement deux. */
+  assert.equal(
+    (hero.match(/className=\{styles\.plan\}/g) ?? []).length,
+    2,
+    "le metal et les corps doivent etre deux plans freres",
+  );
   /* Chaque tween de defilement part d'une valeur ECRITE et ne se rend qu'au
      premier defilement : sans cela GSAP relevait sa valeur de depart en plein
      milieu de l'arrivee, et le retour en haut de page rendait le premier ecran

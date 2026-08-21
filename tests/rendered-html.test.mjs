@@ -619,11 +619,30 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
      a plus de calque de fond pour la porter a leur place. */
   assert.match(html, /hero-figures\.webp\?v=v8" alt="AJ Luxury —/);
 
-  /* Le mot-marque EST le h1 : le nom de la maison, une fois, a sa place. */
-  assert.match(
-    html,
-    /<h1 class="[^"]*" id="aj-hero-marque"><span class="aj-metal [^"]*">AJ Luxury<\/span><\/h1>/,
+  /* LE MOT-MARQUE EST LE LOGO LUI-MEME, ET IL EST LE h1.
+     Adam, 21/08 : « reprends exactement le logo, pas juste la typo ». Le
+     premier essai reconstruisait le lettrage en Manrope a l'interlettrage
+     releve sur le fichier ; c'etait fidele a la typographie et ca restait un
+     pastiche, puisque le monogramme AJ est un dessin et non de la type.
+     Le nom de la maison est porte une seule fois, par le texte alternatif. */
+  assert.match(html, /<h1 class="[^"]*" id="aj-hero-marque">/);
+  assert.match(html, /alt="AJ Luxury"/);
+  assert.doesNotMatch(html, /aj-metal[^"]*">AJ Luxury</);
+
+  /* C'EST LE MEME FICHIER QUE CELUI DE LA BARRE. C'est ce qui fait de
+     l'atterrissage un vrai changement d'echelle et non un fondu entre deux
+     objets differents. Si un jour les deux divergent, le vol devient un
+     remplacement visible : le test le dira. */
+  const logoBarre = html.indexOf('data-aj-marque="entete"');
+  assert.ok(logoBarre > -1, "le point d'accroche du logo de barre a disparu");
+  assert.ok(
+    (html.match(/aj-luxury-logo\.webp/g) ?? []).length >= 2,
+    "le hero et la barre doivent servir le MEME fichier de logo",
   );
+
+  /* La barre reste posee tant que le premier ecran est la : le grand logo ne
+     peut pas atterrir sur une barre qui vient de se derober. */
+  assert.match(html, /data-aj-tete-seuil/);
 
   /* Le rapport de la decoupe est pose en variable CSS : le navigateur reserve
      la place exacte des corps avant decodage, donc aucun saut de mise en page. */

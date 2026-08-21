@@ -149,9 +149,29 @@ export default function StoreHeader({
             reduit: boolean;
           };
 
-          // Sous ce seuil on ne se dérobe jamais : un micro-scroll en haut de
-          // page ne doit pas faire clignoter la barre.
-          const SEUIL = 140;
+          /* Sous ce seuil on ne se dérobe jamais : un micro-scroll en haut de
+             page ne doit pas faire clignoter la barre.
+
+             UNE PAGE PEUT ALLONGER CE SEUIL. Elle marque l'élément qui doit
+             garder la barre posée avec `data-aj-tete-seuil`, et la barre tient
+             jusqu'à ce que cet élément soit passé. L'accueil s'en sert pour son
+             premier écran : le grand logo y vient atterrir dans la barre au
+             défilement, et il ne peut pas se poser sur une barre qui vient de
+             partir. Se dérober au-dessus du premier écran n'apporte de toute
+             façon rien — il n'y a rien à découvrir au-dessus.
+
+             Mesuré au montage puis à chaque rafraîchissement, jamais dans
+             `onUpdate` : lire une hauteur à chaque cran de défilement forcerait
+             un calcul de mise en page par image. */
+          let seuil = 140;
+          const mesurerSeuil = () => {
+            const ancrage = document.querySelector("[data-aj-tete-seuil]");
+            seuil =
+              ancrage instanceof HTMLElement
+                ? Math.max(140, ancrage.offsetHeight)
+                : 140;
+          };
+          mesurerSeuil();
           let cachee = false;
 
           const montrer = () => {
@@ -183,11 +203,12 @@ export default function StoreHeader({
             start: 0,
             end: "max",
             invalidateOnRefresh: true,
+            onRefresh: mesurerSeuil,
             onUpdate: (self) => {
               const y = self.scroll();
               tete.classList.toggle(styles.headerPose, y > 8);
               if (!anime) return;
-              if (y <= SEUIL) {
+              if (y <= seuil) {
                 montrer();
                 return;
               }
@@ -232,6 +253,11 @@ export default function StoreHeader({
         aria-label={`AJ Luxury · ${t("nav.home")}`}
       >
         <img
+          /* Point d'accroche du vol du mot-marque : sur l'accueil, le grand
+             AJ LUXURY du premier ecran vient se poser ICI au defilement. Le
+             hero cherche cet attribut, jamais une classe de module CSS —
+             celles-ci sont hachees a la compilation. */
+          data-aj-marque="entete"
           className={styles.brandImage}
           src="/images/aj-luxury-logo.webp"
           alt=""

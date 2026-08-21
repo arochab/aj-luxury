@@ -67,3 +67,20 @@ export const HERO_FIGURES = {
 /** Rapport largeur/hauteur de la découpe. Le CSS s'en sert pour réserver la
  *  place exacte des figures avant leur décodage : aucun saut de mise en page. */
 export const HERO_FIGURES_RATIO = HERO_FIGURES.largeur / HERO_FIGURES.hauteur;
+
+/** Le logo de la maison, servi en grand au premier écran ET en petit dans la
+ *  barre. C'est le MÊME dessin : l'atterrissage du mot-marque est donc un vrai
+ *  changement d'échelle, pas un fondu entre deux objets.
+ *
+ *  Le dérivé @2x est un rééchantillonnage de Lanczos de l'actif natif — aucun
+ *  pixel inventé, aucun modèle génératif. Il n'existe que pour les rendus qui
+ *  dépassent 720 px de large. */
+export const HERO_LOGO = {
+  src: versioned("/media/images/aj-luxury-logo.webp"),
+  srcSet: `${versioned("/media/images/aj-luxury-logo.webp")} 720w, ${versioned(
+    "/media/images/aj-luxury-logo@2x.webp",
+  )} 1440w`,
+  sizes: "(max-aspect-ratio: 4 / 5) min(78vw, 620px), min(46vw, 980px)",
+  largeur: 720,
+  hauteur: 520,
+} as const;

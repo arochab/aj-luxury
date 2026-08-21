@@ -1,9 +1,13 @@
+/* eslint-disable @next/next/no-img-element -- actifs client deja optimises et
+   servis par le worker : aucun runtime d'image a charger. Meme regle que
+   app/page.tsx et StoreHeader.tsx. */
 "use client";
 
 import type { CSSProperties } from "react";
 import {
   HERO_FIGURES,
   HERO_FIGURES_RATIO,
+  HERO_LOGO,
   HERO_PORTRAIT_MEDIA,
   HERO_VERSION,
 } from "../../lib/hero";
@@ -71,11 +75,13 @@ function veillerSurAnimation(
 export default function Hero() {
   const racine = useAjMotion<HTMLElement>(({ gsap, mm, racine: noeud }) => {
     const q = gsap.utils.selector(noeud);
-    const camera = q(`.${styles.camera}`)[0];
-    const scene = q(`.${styles.scene}`)[0];
-    const mot = q(`.${styles.marqueMot}`)[0];
+    // Deux plans, deux chambres : un seul tween pilote les deux a l'identique.
+    const plans = q(`.${styles.plan}`);
+    const scenes = q(`.${styles.scene}`);
+    const mot = q(`.${styles.marqueBoite}`)[0];
+    const eclat = q(`.${styles.marqueEclat}`)[0];
     const figures = q(`.${styles.figures}`)[0];
-    if (!camera || !scene || !mot || !figures) return;
+    if (!plans.length || !scenes.length || !mot || !eclat || !figures) return;
 
     mm.add(
       {
@@ -98,7 +104,7 @@ export default function Hero() {
         arrivee
           // La caméra se détend d'un sur-cadrage serré vers le repos.
           .fromTo(
-            scene,
+            scenes,
             { scale: etroit ? 1.1 : 1.13 },
             { scale: 1, duration: 2.6, ease: "expo.out" },
             0,
@@ -138,7 +144,7 @@ export default function Hero() {
            tient l'essentiel du cycle à l'arrêt : le mot est un objet de métal
            sous une lumière qui tourne, pas une enseigne qui clignote. */
         const brillance = gsap.fromTo(
-          mot,
+          eclat,
           { backgroundPositionX: "0%" },
           {
             backgroundPositionX: "100%",
@@ -153,7 +159,7 @@ export default function Hero() {
            3 % sur 18 secondes, aller-retour. Sous le seuil de perception
            consciente : on ne voit pas l'image bouger, on sent que le plan
            respire. */
-        const derive = gsap.to(scene, {
+        const derive = gsap.to(scenes, {
           scale: 1.03,
           duration: 18,
           ease: "sine.inOut",
@@ -169,46 +175,37 @@ export default function Hero() {
         let arretDerive: (() => void) | undefined;
         arrivee.eventCallback("onComplete", () => {
           derive.play();
-          arretDerive = veillerSurAnimation(scene, derive);
+          arretDerive = veillerSurAnimation(scenes[0], derive);
         });
 
         /* ── LA CAMÉRA CONTINUE AU DÉFILEMENT ───────────────────────────
            Même appareil, même axe. Aucun pin : la page défile normalement,
            ce qui évite le piège de défilement sur téléphone et garde le
            retour arrière propre. */
-        gsap
-          .timeline({
-            scrollTrigger: {
-              trigger: noeud,
-              start: "top top",
-              end: "bottom top",
-              scrub: 0.6,
-              invalidateOnRefresh: true,
-            },
-          })
+        const defilement = gsap.timeline({
+          scrollTrigger: {
+            trigger: noeud,
+            start: "top top",
+            end: "bottom top",
+            scrub: 0.6,
+            invalidateOnRefresh: true,
+          },
+        });
+
+        defilement
           /* CHAQUE TWEEN PART D'UNE VALEUR ÉCRITE ET NE SE REND QU'AU PREMIER
              DÉFILEMENT. Sans cela, GSAP relève la valeur de départ à la
              CRÉATION du tween, c'est-à-dire en plein milieu de l'arrivée :
              mesuré, le retour en haut de page rendait la caméra à 1,13 et le
              mot à l'opacité 0 — le premier écran revenait VIDE. */
           .fromTo(
-            camera,
+            plans,
             { scale: 1, yPercent: 0 },
             {
               scale: etroit ? 1.12 : 1.16,
               yPercent: -6,
               ease: "none",
-              immediateRender: false,
-            },
-            0,
-          )
-          .fromTo(
-            mot,
-            { yPercent: 0, opacity: 1 },
-            {
-              yPercent: -46,
-              opacity: 0.12,
-              ease: "none",
+              duration: 1,
               immediateRender: false,
             },
             0,
@@ -221,17 +218,137 @@ export default function Hero() {
               opacity: 0,
               ease: "none",
               stagger: 0.04,
+              /* La copie sort sur le premier tiers : elle a dit ce qu'elle
+                 avait a dire, et l'ecran doit se vider par etages. */
+              duration: 0.34,
               immediateRender: false,
             },
             0,
           );
 
+        /* ── LE MOT RENTRE À LA MAISON ──────────────────────────────────
+           Demande d'Adam du 21/08 : en défilant, le mot-marque reprend sa
+           place en haut à gauche. Ce n'est pas une sortie, c'est un
+           ATTERRISSAGE — le grand nom du premier écran vient devenir le logo
+           de la barre, et la barre ne porte donc jamais deux fois la marque.
+
+           GÉOMÉTRIE, ET POURQUOI ELLE SE CALCULE SANS LIRE UNE SEULE MATRICE.
+           Mesurer le mot avec getBoundingClientRect() donnerait sa boîte
+           TRANSFORMÉE — or au moment du calcul il est en pleine arrivée. On
+           remonte donc la chaîne des offsetParent, que les transformations
+           n'affectent pas, pour obtenir sa position de mise en page ; `.hero`
+           n'est lui-même jamais transformé, donc sa boîte sert d'origine.
+
+           LE TERME DE DÉFILEMENT. Le mot vit dans le flux : pendant que la
+           course avance, la page l'emmène vers le haut d'exactement une
+           hauteur de hero. Pour qu'il ATTERRISSE sur le logo au lieu de le
+           dépasser, il faut lui rendre cette hauteur — d'où le `+ hauteur`
+           dans l'écart vertical. Sans ce terme, le mot sort par le haut.
+
+           Tout est en valeurs-fonctions et `invalidateOnRefresh` : un
+           redimensionnement, un changement de police ou une rotation
+           recalculent la cible au lieu de la figer au premier rendu. */
+        const logo = document.querySelector<HTMLElement>(
+          '[data-aj-marque="entete"]',
+        );
+
+        const positionDeMiseEnPage = (element: HTMLElement) => {
+          let x = 0;
+          let y = 0;
+          let noeudCourant: HTMLElement | null = element;
+          while (noeudCourant && noeudCourant !== noeud) {
+            x += noeudCourant.offsetLeft;
+            y += noeudCourant.offsetTop;
+            noeudCourant = noeudCourant.offsetParent as HTMLElement | null;
+          }
+          const cadre = noeud.getBoundingClientRect();
+          return { x: cadre.left + x, y: cadre.top + y };
+        };
+
+        if (logo) {
+          const motElement = mot as HTMLElement;
+          const echelle = () =>
+            logo.getBoundingClientRect().width / motElement.offsetWidth;
+          const ecartX = () => {
+            const depart = positionDeMiseEnPage(motElement);
+            const cible = logo.getBoundingClientRect();
+            return (
+              cible.left +
+              cible.width / 2 -
+              (depart.x + motElement.offsetWidth / 2)
+            );
+          };
+          const ecartY = () => {
+            const depart = positionDeMiseEnPage(motElement);
+            const cible = logo.getBoundingClientRect();
+            return (
+              cible.top +
+              cible.height / 2 -
+              (depart.y + motElement.offsetHeight / 2) +
+              noeud.offsetHeight
+            );
+          };
+
+          /* Le logo de la barre s'efface tant que le grand logo est a l'ecran :
+             la marque n'est jamais ecrite deux fois en meme temps.
+             Pose en DOM et non par gsap.set : GSAP n'ecrit une propriete
+             personnalisee qu'au premier rendu du tween qui la porte, et le
+             notre est en immediateRender: false — l'etat initial n'aurait donc
+             jamais ete applique. Mesure : la variable restait vide au repos et
+             la barre gardait son logo. */
+          document.documentElement.style.setProperty(
+            "--aj-marque-entete-opacite",
+            "0",
+          );
+
+          defilement
+            .fromTo(
+              mot,
+              { x: 0, y: 0, scale: 1 },
+              {
+                x: ecartX,
+                y: ecartY,
+                scale: echelle,
+                ease: "none",
+                /* DUREE EXPLICITE, ET C'EST UN CORRECTIF. Un tween sans duree
+                   prend 0,5 s par defaut ; dans une timeline de course pilotee
+                   au scrub, il ne couvrait donc que la MOITIE du defilement.
+                   Releve image par image : le logo atteignait sa taille finale
+                   des p=0,5 puis glissait a vide pendant tout le reste. Le vol
+                   doit tenir toute la course, d'ou duration: 1. */
+                duration: 1,
+                immediateRender: false,
+              },
+              0,
+            )
+            /* Le relais se joue avant la fin, quand les deux marques sont deja
+               superposees : on ne voit donc pas un fondu, on voit le logo
+               devenir celui de la barre. Il se termine a 0,88 et non a 1 pour
+               que la passation soit ACQUISE avant que la barre ne reprenne son
+               droit de se derober. */
+            .to(mot, { opacity: 0, ease: "none", duration: 0.22 }, 0.66)
+            .to(
+              document.documentElement,
+              {
+                "--aj-marque-entete-opacite": 1,
+                ease: "none",
+                duration: 0.22,
+              },
+              0.66,
+            );
+        }
+
         // Ni la dérive ni la brillance n'ont de raison de tourner hors champ :
         // le budget de composition revient aux écrans qui sont à l'image.
-        const arretBrillance = veillerSurAnimation(mot, brillance);
+        const arretBrillance = veillerSurAnimation(eclat, brillance);
         return () => {
           arretDerive?.();
           arretBrillance();
+          // Sans cela, quitter l'accueil en cours de vol laisserait la barre
+          // sans logo sur la page suivante.
+          document.documentElement.style.removeProperty(
+            "--aj-marque-entete-opacite",
+          );
         };
       },
     );
@@ -242,6 +359,10 @@ export default function Hero() {
       ref={racine}
       className={styles.hero}
       data-hero-version={HERO_VERSION}
+      /* Tant que ce premier écran est à l'image, la barre reste posée : le
+         grand logo vient s'y poser au défilement. Contrat lu par
+         StoreHeader.tsx. */
+      data-aj-tete-seuil=""
       aria-labelledby="aj-hero-marque"
       style={
         {
@@ -249,7 +370,12 @@ export default function Hero() {
         } as CSSProperties
       }
     >
-      <div className={styles.camera}>
+      {/* Le métal et les corps sont deux PLANS frères, pilotés par la même
+          caméra, et le mot-marque est intercalé entre eux. Il garde donc son
+          occultation par les corps tout en restant libre de quitter la scène
+          pour aller se poser dans la barre. Voir Hero.module.css, « DEUX PLANS
+          FRÈRES ». */}
+      <div className={styles.plan}>
         <div className={styles.scene}>
           {/* ── LE MÉTAL LIQUIDE ─────────────────────────────────────────
               Le monde, pas un décor. Plein cadre, calculé au navigateur,
@@ -260,13 +386,31 @@ export default function Hero() {
               plafond, repli en dégradé CSS sans WebGL, arrêt complet en
               mouvement réduit. */}
           <div className={styles.metal} aria-hidden="true">
-            <DeferredMetallicField variant="reference" motion="slow" />
+            <DeferredMetallicField variant="reference" motion="normal" />
           </div>
+        </div>
+      </div>
 
-          <h1 className={styles.marque} id="aj-hero-marque">
-            <span className={`aj-metal ${styles.marqueMot}`}>AJ Luxury</span>
-          </h1>
+      <h1 className={styles.marque} id="aj-hero-marque">
+        <span className={styles.marqueBoite}>
+          <img
+            className={styles.marqueLogo}
+            src={HERO_LOGO.src}
+            srcSet={HERO_LOGO.srcSet}
+            sizes={HERO_LOGO.sizes}
+            alt="AJ Luxury"
+            width={HERO_LOGO.largeur}
+            height={HERO_LOGO.hauteur}
+            decoding="sync"
+            loading="eager"
+            fetchPriority="high"
+          />
+          <span className={styles.marqueEclat} aria-hidden="true" />
+        </span>
+      </h1>
 
+      <div className={styles.plan}>
+        <div className={styles.scene}>
           {/* Les deux corps, socle noir compris. Un seul actif pour toutes
               les tailles d'écran : c'est un sujet, pas une scène — on ne le
               recadre pas, on le place. */}

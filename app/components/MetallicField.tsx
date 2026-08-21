@@ -295,8 +295,13 @@ function MetallicCanvas({
             0.0,
             1.0
           );
+          /* 13.2 et non 8.4 : la frequence des plis. A 8.4 la surface n'offre
+             que de grandes masses molles — a l'ecran ca lit « fumee », pas
+             « chrome ». Plus de plis par ecran, donc plus d'aretes, donc de la
+             MATIERE. Terme purement spatial : la periodicite de la boucle, qui
+             ne depend que de u_phase, n'est pas touchee. */
           float membrane = sin(
-            referenceSurface * 8.4 +
+            referenceSurface * 13.2 +
             referenceReflection.x * 2.6 +
             u_phase
           ) * 0.5 + 0.5;
@@ -312,11 +317,15 @@ function MetallicCanvas({
             vec3(0.04, 0.041, 0.047),
             membraneShadow * 0.42
           );
-          float liquidHighlight = smoothstep(0.74, 0.86, membrane);
+          /* La spéculaire se resserre et gagne en intensité. Sur 0.74-0.86
+             elle s'étalait en larges plages laiteuses ; sur 0.795-0.845 elle
+             devient une arête de lumière — c'est ce qui sépare un reflet de
+             métal poli d'un dégradé gris. */
+          float liquidHighlight = smoothstep(0.795, 0.845, membrane);
           referenceBase = mix(
             referenceBase,
             vec3(0.985, 0.987, 0.99),
-            liquidHighlight * 0.48
+            liquidHighlight * 0.66
           );
           referenceBase = mix(
             referenceBase,
