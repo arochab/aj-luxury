@@ -133,10 +133,24 @@ test("the private homepage preserves the approved film and the recovered Apollon
   assert.match(sequence, /apollon-rose-model-color-v2\.webp/);
   assert.match(sequence, /apollon-lilas-model-color-v2\.webp/);
   assert.match(sequence, /apollon-pourpre-model-color-v2\.webp/);
-  /* Le texte avance avec l'image : la phrase suit l'ouverture du volet, la
-     ligne commerce s'assemble au palier, le lien invisible sort du focus. */
+  /* Le texte avance avec l'image : la phrase suit l'ouverture du volet, le
+     lien invisible sort du focus. */
   assert.match(sequence, /phrase\.style\.opacity = ouverture\.toFixed\(4\)/);
-  assert.match(sequence, /lisse\(borne\(u \/ 0\.25, 0, 1\)\)/);
+
+  /* LE PALIER TIENT UN PANNEAU COMPLET. La ligne commerce s'assemblait sur le
+     premier quart du PALIER : mesure au navigateur, prix et lien restaient
+     visibility:hidden pendant 1 700 px de defilement, soit 67 % du panneau 01.
+     La phase la plus longue et la plus regardee tenait un panneau encore en
+     train de s'ecrire, alors que le brief exige que le visiteur comprenne
+     toujours le prix et le chemin d'achat. Le commerce monte donc pendant le
+     DEVOILEMENT, et vaut 1 sur tout le palier. */
+  assert.match(sequence, /mesure\.nom === "porte"\s*\?\s*1/);
+  assert.match(sequence, /lisse\(borne\(\(u - 0\.35\) \/ 0\.65, 0, 1\)\)/);
+  /* Le voile du telephone ne peint que la hauteur revelee : un aplat aux
+     dimensions de tout le contenu laissait 79 % de rectangle sombre sur du
+     vide pendant le plan scelle. 34 % est le plancher qui couvre le titre. */
+  assert.match(sequence, /--aj-copie-remplie/);
+  assert.match(sequence, /34 \+ 66 \* Math\.max\(ouverture, commerce\)/);
   assert.match(
     sequence,
     /noeud\.style\.visibility = commerce < 0\.05 \? "hidden" : ""/,
