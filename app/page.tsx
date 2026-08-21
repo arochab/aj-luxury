@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import type { CSSProperties } from "react";
-import HeroV7 from "./components/HeroV7";
+import Hero from "./components/Hero";
 import StoreFooter from "./components/StoreFooter";
 import StoreHeader from "./components/StoreHeader";
 import ClientCopyText from "./components/ClientCopyText";
@@ -75,13 +75,11 @@ export default function Home() {
         {/* ── 01 · Le film ─────────────────────────────────────────────── */}
         <span id="accueil" aria-hidden="true" />
         {/* ── 01 · Le premier écran ─────────────────────────────────────
-            La section `.aj-film` a été retirée avec le hero v6. Elle ne
-            portait plus que deux choses : le décalage qui remonte le film
-            sous la barre collante, et le voile de gradation. Les deux sont
-            passés dans HeroV7.module.css — un calque de moins, et la règle
-            de recouvrement de l'en-tête vit désormais à côté de l'écran
-            qu'elle concerne au lieu d'un fichier global de 6100 lignes. */}
-        <HeroV7 />
+            Plus de section `.aj-film` : son décalage de recouvrement de la
+            barre collante vit désormais dans Hero.module.css, à côté de
+            l'écran qu'il concerne, au lieu d'un fichier global de 6100
+            lignes. */}
+        <Hero />
 
         {/* ── LES COUTURES ────────────────────────────────────────────────
             La règle tient en une phrase : le blanc d'une couture est la
