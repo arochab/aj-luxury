@@ -415,7 +415,21 @@
 
 .panneauCopie {
   padding: clamp(18px, 1.8vw, 26px) clamp(20px, 2vw, 30px);
-  background: var(--voile);
+  /* Voile à hauteur variable : on ne peint que sous ce qui est révélé. Le
+     dégradé s'éteint sur ses 22 derniers pour cent, donc le bord qui descend
+     est un fondu et non un trait. `--aj-copie-remplie` est piloté image par
+     image par ApollonGuidedSequence ; à 100 % par défaut, la carte est pleine
+     même sans JavaScript. Au-dessus de 900 px cette règle est annulée
+     (`background: none`) : c'est `::before` qui porte le voile du bureau. */
+  background-color: transparent;
+  background-image: linear-gradient(
+    to bottom,
+    var(--voile) 0%,
+    var(--voile) 78%,
+    transparent 100%
+  );
+  background-repeat: no-repeat;
+  background-size: 100% var(--aj-copie-remplie, 100%);
 }
 
 /* Le nom du coloris. Encre pleine depuis le 20/08 : sous le dégradé

@@ -453,6 +453,9 @@ export default function ApollonGuidedSequence({ coloris }: Props) {
         const phrases = tous(styles.panneauTexte);
         const commerces = tous(styles.panneauPrix);
         const liens = tous(styles.panneauLien);
+        // La carte de copie du téléphone : son voile grandit avec ce qu'elle
+        // porte. Voir le réglage de `--aj-copie-remplie` plus bas.
+        const cartes = tous(styles.panneauCopie);
         // Les deux demi-boîtes de chaque panneau, dans l'ordre du DOM : elles
         // se déplacent ENSEMBLE, c'est la paire qu'on recentre.
         const paires = panneaux.map((panneau) =>
@@ -561,9 +564,19 @@ export default function ApollonGuidedSequence({ coloris }: Props) {
             //   • plan scellé — le nom seul ;
             //   • dévoilement — la phrase monte AVEC le volet : même valeur
             //     `ouverture`, même pilote, 1:1 avec le scroll ;
-            //   • palier porté — la ligne commerce et « Découvrir »
-            //     s'assemblent sur le premier quart du palier, quand le
-            //     diptyque est entier.
+            //   • dévoilement, seconde partie — la ligne commerce et
+            //     « Découvrir » s'assemblent, de sorte que le PALIER TIENNE
+            //     UN PANNEAU COMPLET.
+            //
+            // CE DERNIER POINT EST UN CORRECTIF DU 21/08. La ligne commerce
+            // s'assemblait auparavant sur le premier quart du PALIER, donc
+            // après le plan scellé ET tout le dévoilement : mesuré au
+            // navigateur, le prix et le lien restaient `visibility:hidden`
+            // pendant 1 700 px de défilement sur le panneau 01, soit 67 % de
+            // sa durée. Le brief d'Adam demande que le visiteur comprenne
+            // toujours le produit, le coloris, LE PRIX et le chemin d'achat.
+            // Le palier, phase la plus longue et la plus regardée, tenait un
+            // panneau encore en train de s'écrire.
             // Remonter la page déconstruit le bloc dans l'ordre inverse.
             // Opacité + translation seulement, et les nœuds restent dans le
             // DOM : rien ne change pour le lecteur d'écran, `inert` continue
@@ -574,13 +587,43 @@ export default function ApollonGuidedSequence({ coloris }: Props) {
                 : i > mesure.panneau
                   ? 0
                   : mesure.nom === "porte"
-                    ? lisse(borne(u / 0.25, 0, 1))
-                    : 0;
+                    ? 1
+                    : mesure.nom === "devoile"
+                      ? // Sur les 65 derniers % du dévoilement : le nom reste
+                        // seul pendant le plan scellé — c'est le rituel voulu —
+                        // puis le commerce monte derrière la phrase et le
+                        // panneau est ENTIER quand le palier commence.
+                        lisse(borne((u - 0.35) / 0.65, 0, 1))
+                      : 0;
             const phrase = phrases[i];
             if (phrase) {
               phrase.style.opacity = ouverture.toFixed(4);
               phrase.style.transform = `translate3d(0,${((1 - ouverture) * 16).toFixed(2)}px,0)`;
             }
+            /* ── LE VOILE GRANDIT AVEC LA COPIE — 21/08 ──────────────
+               Sur téléphone, la carte de copie est un aplat peint aux
+               dimensions de TOUT son contenu, révélé ou non. Mesuré au
+               navigateur pendant le plan scellé : 335x242 px de voile pour un
+               titre qui s'arrête à 51 px — 190 px de rectangle sombre peint
+               sur du vide, soit 79 % de la carte. Un cadre vide, pas une
+               composition.
+
+               Le voile est donc un dégradé dont on ne peint que la hauteur
+               utile. 34 % couvre le titre en entier — c'est le plancher de
+               contraste, il ne descend jamais en dessous — puis la surface
+               suit ce que la copie a effectivement révélé. `background-size`
+               ne touche pas la mise en page : c'est de la peinture, pas du
+               calcul de boîte. Sans effet au-dessus de 900 px, où la carte
+               n'a pas de fond et où c'est `::before` qui tient le voile. */
+            const carte = cartes[i];
+            if (carte) {
+              const remplie = 34 + 66 * Math.max(ouverture, commerce);
+              carte.style.setProperty(
+                "--aj-copie-remplie",
+                `${remplie.toFixed(2)}%`,
+              );
+            }
+
             for (const noeud of [commerces[i], liens[i]]) {
               if (!noeud) continue;
               noeud.style.opacity = commerce.toFixed(4);
