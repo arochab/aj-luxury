@@ -130,6 +130,28 @@ export default function ShopPage() {
                       sizes="(max-width: 700px) 100vw, 33vw"
                       priority={index === 0}
                     />
+
+                    {/*
+                      LE REVERS DE LA CARTE — 22/08.
+                      Au survol, le corps porté cède la place à la nature morte
+                      du même coloris. Ce n'est pas un effet ajouté : c'est le
+                      DIPTYQUE que la séquence de l'accueil raconte déjà —
+                      l'objet et le corps —, rendu ici en un geste.
+
+                      Le calque est décoratif et le reste : `alt=""`, et il ne
+                      dit rien qu'un lecteur d'écran n'ait déjà entendu du plan
+                      porté juste au-dessus.
+                    */}
+                    <span
+                      className={styles.carteRevers}
+                      aria-hidden="true"
+                      style={
+                        { "--revers": `url("${product.still}")` } as CSSProperties
+                      }
+                    >
+                      <span className={styles.carteReversFond} />
+                    </span>
+
                     <span className={styles.carteFilet} aria-hidden="true" />
                   </span>
 

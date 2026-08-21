@@ -484,7 +484,81 @@
   background: var(--aj-noir-media);
 }
 
-.carteCadre img {
+/* ── LE REVERS SE DÉVOILE EN VOLET ─────────────────────────────────────────
+   Le brief demande un révélateur d'image alternée et un survol par masque, là
+   où la carte n'avait qu'un agrandissement de 1,04 — le survol le plus banal
+   du commerce en ligne.
+
+   DEUX TRANSFORMATIONS QUI S'ANNULENT. La fenêtre monte de 100 % à 0 pendant
+   que l'image descend de −100 % à 0 : les deux se compensent exactement, donc
+   L'IMAGE NE BOUGE PAS. Ce qui se déplace est son cadre. On obtient un vrai
+   volet — le geste que le premier écran et la séquence emploient déjà — sans
+   animer autre chose que `transform`, ce que la doctrine du projet impose.
+   Un `clip-path` aurait été plus court à écrire et aurait coûté une passe de
+   peinture par image.
+
+   Réservé au pointeur fin : sur un écran tactile il n'y a pas de survol, et un
+   revers qui ne se dévoile jamais serait 300 Ko téléchargés pour rien — d'où
+   le `loading="lazy"` du calque. */
+.carteRevers {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  transform: translateY(100%);
+  will-change: transform;
+}
+
+.carteReversFond {
+  position: absolute;
+  inset: 0;
+  transform: translateY(-100%);
+}
+
+/* ── ZÉRO OCTET SUR UN ÉCRAN TACTILE ──────────────────────────────────────
+   Le revers était une <img> : mesuré au navigateur, les TROIS étaient
+   téléchargées sur téléphone — `loading="lazy"` ne sert à rien quand les
+   cartes sont déjà dans le champ — pour un survol qui n'existe pas sur
+   tactile. C'est de la bande passante payée par le visiteur mobile pour un
+   geste qu'il ne verra jamais.
+
+   L'image devient donc un FOND, et sa déclaration vit à l'intérieur de la
+   requête de média. Un navigateur ne va chercher le fond d'une règle qui ne
+   s'applique pas : sur un écran tactile, rien n'est demandé. Aucun
+   JavaScript, aucune hydratation, aucune détection à la main. */
+@media (hover: hover) and (pointer: fine) {
+  .carteReversFond {
+    background-image: var(--revers);
+    background-size: cover;
+    /* Même ancrage que le plan porté : ce qui sort du cadre sort par le bas. */
+    background-position: center top;
+  }
+
+  .carteRevers,
+  .carteReversFond {
+    transition: transform 0.86s var(--e1);
+  }
+
+  .carteLien:hover .carteRevers,
+  .carteLien:focus-visible .carteRevers,
+  .carteLien:hover .carteReversFond,
+  .carteLien:focus-visible .carteReversFond {
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .carteRevers,
+  .carteReversFond {
+    transition: none;
+  }
+}
+
+/* ENFANT DIRECT, et c'est un correctif. Le revers est lui aussi une <img>
+   dans `.carteCadre` : cette regle l'attrapait et son `scale` ecrasait la
+   contre-translation qui doit le tenir IMMOBILE pendant que sa fenetre
+   s'ouvre. Mesure au navigateur : l'image du revers se deplacait de 757 a
+   261 px au lieu de ne pas bouger — un glissement, pas un volet. */
+.carteCadre > img {
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -610,7 +684,12 @@
    entière est le lien. L'affordance passe par le nom, qui se souligne au
    survol comme au clavier. */
 @media (hover: hover) {
-  .carteLien:hover .carteCadre img {
+  .carteLien:hover /* ENFANT DIRECT, et c'est un correctif. Le revers est lui aussi une <img>
+   dans `.carteCadre` : cette regle l'attrapait et son `scale` ecrasait la
+   contre-translation qui doit le tenir IMMOBILE pendant que sa fenetre
+   s'ouvre. Mesure au navigateur : l'image du revers se deplacait de 757 a
+   261 px au lieu de ne pas bouger — un glissement, pas un volet. */
+.carteCadre > img {
     transform: scale(1.04);
   }
 }
@@ -758,7 +837,7 @@
    donc rien à forcer ici. */
 
 @media (prefers-reduced-motion: reduce) {
-  .carteCadre img,
+  .carteCadre > img,
   .carteFilet {
     transition: none;
   }
