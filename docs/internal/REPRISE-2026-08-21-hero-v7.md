@@ -8,129 +8,92 @@ cinq chantiers précédents. Il ne couvre que la passe de refonte en cours.
 
 ---
 
-# ⚠️ CHANGEMENT DE DIRECTION — À LIRE EN PREMIER
+# Le premier écran — direction v8, LIVRÉE
 
-**Décision d'Adam, 21/08, juste avant la pause. Elle prime sur tout ce qui
-suit dans ce fichier.**
+**Décision d'Adam du 21/08 : les masters ChatGPT sont refusés** — visages
+déformés, décor kitsch. Ne jamais les réutiliser ni en regénérer. La v8 est
+la réponse, et elle est appliquée.
 
-## Les images ChatGPT sont REFUSÉES
-
-Les deux masters `_design-reference/hero-v7-sources/hero-v7-source-{A,B}-*.png`
-et, avant eux, toute la direction « salle de chrome » de la v6 sont **invalides** :
-
-- **les visages sont déformés** — c'est le défaut rédhibitoire, une faute sur
-  la personne ;
-- **le fond est kitsch** — colonnes, statue, laurier, lyre, socle APOLLO.
-
-Ne pas les réutiliser, ne pas essayer de les rattraper, ne pas en regénérer.
-
-## Le seul master valide
+## Ce que le hero est maintenant
 
 ```
-public/images/client/campaign-duo-lilas-seated.webp
+    fond    = MÉTAL LIQUIDE, synthétique, calculé au navigateur
+    marque  = AJ LUXURY, entre les deux
+    figures = LES DEUX CORPS RÉELS, découpés
 ```
 
-1484x2229, ratio 0,666, portrait. C'est la **vraie photographie de studio**
-des deux modèles — celle que le handoff du 21/08 §3 avait identifiée comme
-`IMG_5466.JPG`, la prise dont les corps avaient servi au composite chrome.
-Fond de studio gris/mauve dégradé, aucun décor.
+Master unique : `public/images/client/campaign-duo-lilas-seated.webp`
+(1484x2229), la vraie prise de studio, déjà au dépôt et déjà validée client.
 
-Elle est déjà dans le dépôt et déjà utilisée par `lib/editorial-moodboard.ts`
-et `lib/products.ts` — donc déjà validée client.
+**La garantie sur les visages est structurelle, pas déclarative.** Un modèle
+GÉNÉRATIF redessine les pixels : c'est la cause des visages déformés, pas un
+problème de prompt. Un modèle de SEGMENTATION ne produit qu'un canal alpha —
+il choisit quels pixels garder, jamais à quoi ils ressemblent. Les corps
+servis sont donc, au sens strict, les pixels de la photographie.
 
-## Le concept qui en découle, et pourquoi il est meilleur
+Ce contrat est **verrouillé par un test** : `tests/awwwards-experience.test.mjs`
+exige que `scripts/build_hero_figures.py` lise le master approuvé et appelle
+`only_mask=True`.
 
-Adam avait donné la clé dans son message précédent : « on peut l'intégrer à
-une image des deux modèles préexistantes **en fond animé, en isolant
-parfaitement leurs silhouettes** ». Avec la vraie photo, ça devient l'évidence :
+## Trois gains
 
-```
-    fond           = MÉTAL LIQUIDE animé, plein cadre, synthétique
-    silhouettes    = les deux corps réels, détourés, posés par-dessus
-    AJ LUXURY      = entre les deux
-```
+1. **Le plafond de résolution a disparu.** Seuls les corps viennent d'un
+   fichier ; le fond est calculé, donc net à toute taille et à tout DPR. Le
+   compromis « 1,72x d'agrandissement » de la v7 n'existe plus.
+2. **Un seul actif pour toutes les tailles.** Les figures sont un SUJET, pas
+   une scène : on ne les recadre pas, on les place. Plus de masters portrait
+   et paysage à tenir synchronisés.
+3. **Le mot-marque a enfin un fond qui lui appartient.**
 
-Trois gains décisifs sur la direction précédente :
+## Décisions d'Adam appliquées
 
-1. **Aucun générateur ne touche les personnes.** La garantie d'architecture
-   déjà acquise sur la v7 est conservée telle quelle.
-2. **Le plafond de résolution disparaît.** Seuls les CORPS viennent de la
-   photo ; le fond est du WebGL, donc net à toute taille et à tout DPR. Le
-   compromis « 1672x941, 1,72x d'agrandissement » que nous venions d'assumer
-   n'a plus lieu d'être.
-3. **Le geste du mot-marque derrière les corps devient plus fort**, pas plus
-   faible : sur un champ de métal, les lettres ont enfin un fond qui leur
-   appartient au lieu d'une architecture chargée.
+- **Le socle noir est CONSERVÉ**, en socle mat sur le métal.
+- **La composition paysage est redessinée**, au même niveau que le portrait,
+  et non dérivée de lui.
 
-## L'obstacle réel, mesuré — NE PAS SOUS-ESTIMER
+## Ce qui a été trouvé à l'œil et corrigé
 
-Le détourage par simple séparation chromatique **ne suffit PAS sur cette
-photo**, contrairement au composite. Mesures du 21/08 :
+- Le champ de métal à pleine intensité lisait « fumée », pas « chrome », et
+  disputait le premier plan aux corps ; le contraste du mot variait d'un bout
+  à l'autre. Rendu à **42 %** sur le noir de marque : le métal redevient une
+  ambiance, l'ouverture redevient sombre.
+- L'origine de `transform` au centre poussait le bas de scène sous la
+  fenêtre : **pieds rognés de 10 px à 390x844**, interdit par AGENTS.md.
+  Origine passée en bas de cadre.
+- Sur écran étroit, le mot derrière les corps ne montrait plus que « A »,
+  « L » et « RY ». Il passe **au-dessus, en cartouche**, sur le métal sombre.
+  Ce n'est pas le bureau rétréci : le geste du bureau y serait illisible.
+- À **768x1024**, le plafond fixe de 62svh laissait exactement 135 px pour un
+  mot de 135 px. La hauteur des corps est devenue un **reste calculé**
+  (écran − barre − 17,9cqi − 190px), borné par la largeur.
 
-| Zone | Chroma moyen |
-|---|---|
-| Fond de studio, partie éclairée | 17,7 à 19,6 |
-| Fond de studio, partie sombre | 3,5 |
-| Peau modèle droit | 80,9 |
-| Peau modèle gauche | 55,4 |
-| Boxer lilas | 46,4 |
-| Tissu noir du siège | 29,1 |
+## Recette tenue sur cette passe
 
-Le fond éclairé monte à ~20, il faut donc seuiller haut ; et ce seuil **mange
-le modèle de gauche**, plus pâle. Essai fait, aperçu conservé dans
-`work/hero-v7/REEL-matte-preview.png` : **des trous dans les deux visages**
-(yeux, barbe, joues), cheveux partiellement perdus. Inutilisable en l'état.
+- **Neuf tailles d'AGENTS.md** : zéro débordement horizontal, zéro pied rogné,
+  zéro débordement des corps ou du mot, zéro collision.
+- **Mouvement réduit** vérifié sous émulation : volet supprimé, aucune
+  échelle, métal figé sans `requestAnimationFrame`, composition complète.
+- `lint` OK · `build` OK · `rendered-html` 36/37 · `awwwards` OK ·
+  `hero-video` + `motion-lifecycle` 24/24.
+- Seul rouge : `synthetic health ... four zones ready` (503 local), **connu et
+  préexistant**, périmètre backend.
 
-**Pistes pour la reprise, par ordre de préférence :**
+## Dette assumée, à traiter APRÈS validation d'Adam
 
-1. **Modélisation du fond puis soustraction.** Le fond est un dégradé lisse :
-   l'estimer (par ajustement polynomial depuis les bords, ou remplissage
-   depuis les quatre coins) et soustraire donne une séparation bien plus
-   franche qu'un seuil global. C'est la voie la plus propre et la plus
-   déterministe.
-2. **Un modèle de SEGMENTATION local** (type `rembg`/U²-Net). À noter, et
-   c'est ce qui le rend acceptable ici : un modèle de matting **ne redessine
-   aucun pixel**, il ne produit qu'un masque. Il ne viole donc pas la
-   contrainte d'Adam sur les visages. À vérifier avant install.
-3. Chroma + luminance combinés, avec affinage de bord — le repli.
+Les actifs v6 (4 MP4 + posters) et v7 (8 images) sont **encore dans
+`public/`** alors que plus rien ne les sert : ~3,3 Mo de poids mort dans le
+déploiement. Ils sont conservés volontairement comme chemin de retour arrière
+tant qu'Adam n'a pas validé la v8 à l'écran.
 
-Quelle que soit la voie : **contrôle à 100 % sur les deux visages, les
-cheveux, les mains et les ceintures avant de committer un matte.**
-
-## Questions ouvertes pour Adam
-
-1. **Le siège.** Le modèle de gauche est assis sur une caisse recouverte de
-   tissu noir. Le retirer le fait flotter. Le garder (socle noir mat sur métal
-   liquide, ce qui peut être très beau), le recadrer hors champ, ou le
-   remplacer ?
-2. **Le cadrage bureau.** Le master est PORTRAIT (0,666). Pour un premier
-   écran paysage, les corps seront posés dans un champ de métal plein cadre —
-   donc pas de recadrage destructeur, mais la composition bureau reste à
-   dessiner.
-
-## Ce qui reste valable de la v7 malgré le changement
-
-L'architecture est intacte et se réutilise telle quelle — seuls les ACTIFS
-changent :
-
-- `HeroV7.tsx` / `HeroV7.module.css` : les quatre calques, la caméra et la
-  dérive séparées, les trois `immediateRender: false`, le volet, le mouvement
-  réduit, les plafonds responsives ;
-- `scripts/build_hero_v7_assets.py` : le pipeline est le bon, seuls le master
-  d'entrée et la méthode de matte changent ;
-- `DeferredMetallicField` : passe simplement de « sol » à « fond plein cadre » ;
-- les contrats de test v7 : à réaligner sur les nouveaux noms d'actifs.
-
-**Ne pas supprimer** les actifs v6 ni les masters ChatGPT tant qu'Adam n'a pas
-vu la nouvelle version : ils restent le chemin de retour arrière.
-
----
+Leur suppression exigera aussi de réécrire `tests/hero-video.test.mjs`, qui
+vérifie encore leurs budgets d'octets — c'est pour cela que ce n'est pas fait
+dans la même passe.
 
 ## Où on en est, en une phrase
 
-**Le premier écran est refait, vérifié et livré.** Le reste de l'accueil est
-diagnostiqué mais pas encore repris. Tout est commité et poussé, zéro écart
-avec GitHub.
+**Le premier écran est refait sur la vraie photographie, vérifié et livré.**
+Le reste de l'accueil est diagnostiqué mais pas encore repris. Tout est
+commité et poussé, zéro écart avec GitHub.
 
 ## Ce qui est LIVRÉ et vérifié
 
