@@ -68,3 +68,6 @@ next-env.d.ts
 *.p12
 *.pfx
 *.zip
+
+# Python bytecode des scripts de compositing
+/scripts/__pycache__/
