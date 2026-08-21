@@ -81,6 +81,7 @@ export default function Hero() {
     const mot = q(`.${styles.marqueBoite}`)[0];
     const eclat = q(`.${styles.marqueEclat}`)[0];
     const figures = q(`.${styles.figures}`)[0];
+    const volet = q(`.${styles.volet}`)[0];
     if (!plans.length || !scenes.length || !mot || !eclat || !figures) return;
 
     mm.add(
@@ -99,7 +100,12 @@ export default function Hero() {
            Elle démarre pendant que le volet CSS finit de se lever : les deux
            gestes se recouvrent, l'écran n'a donc jamais l'air figé entre
            « couvert » et « animé ». */
-        const arrivee = gsap.timeline({ delay: 0.12 });
+        /* On coupe le filet CSS AVANT de creer la timeline : les valeurs de
+           depart des fromTo s'appliquent des la construction, et elles doivent
+           s'appliquer derriere un volet encore ferme. */
+        noeud.dataset.anime = "pret";
+
+        const arrivee = gsap.timeline();
 
         arrivee
           // La caméra se détend d'un sur-cadrage serré vers le repos.
@@ -138,6 +144,17 @@ export default function Hero() {
             { opacity: 1, y: 0, duration: 0.9, ease: "power2.out" },
             1.18,
           );
+
+        /* Le volet part une fraction apres le debut : les valeurs de depart
+           sont deja posees, l'a-coup de la prise en main est donc derriere
+           lui. Il decouvre ensuite une scene deja en mouvement. */
+        if (volet) {
+          arrivee.to(
+            volet,
+            { scaleY: 0, duration: 1.15, ease: "power4.inOut" },
+            0.06,
+          );
+        }
 
         /* ── LA BRILLANCE ───────────────────────────────────────────────
            Une lumière traverse le métal, lentement, en boucle. `repeatDelay`
@@ -344,6 +361,7 @@ export default function Hero() {
         return () => {
           arretDerive?.();
           arretBrillance();
+          delete noeud.dataset.anime;
           // Sans cela, quitter l'accueil en cours de vol laisserait la barre
           // sans logo sur la page suivante.
           document.documentElement.style.removeProperty(

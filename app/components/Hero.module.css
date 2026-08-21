@@ -365,14 +365,35 @@
    dynamique arrive toujours après, et l'écran serait déjà découvert quand le
    volet voudrait le couvrir. Sans JavaScript, la page est simplement déjà
    ouverte. */
+/* ── LE VOLET COUVRE LA PRISE EN MAIN, ET C'EST UN CORRECTIF ─────────────
+   Relevé image par image le 21/08. GSAP est chargé en import dynamique : il
+   n'arrive qu'aux alentours de 430 ms. Avant lui, le CSS a déjà peint la
+   composition FINALE. Quand le module arrive, il pose les valeurs de départ
+   de l'arrivée — et la scène SAUTE, en pleine vue, parce que le volet en
+   était déjà à 83 % de son ouverture. Mesuré : les corps passaient de y=72 à
+   y=3 puis revenaient. Un à-coup franc, sur le tout premier écran.
+
+   Le volet ne s'ouvre donc plus tout seul quand le JavaScript est là : il
+   attend que GSAP ait pris la main, pose ses valeurs de départ derrière lui,
+   puis s'ouvre DANS la même timeline que l'arrivée. Le saut existe toujours,
+   mais il se produit hors de vue.
+
+   L'animation CSS reste, en filet de sécurité, avec un délai : si le module
+   n'arrive jamais, le volet s'ouvre seul et la page reste juste. */
 .volet {
   position: absolute;
   inset: 0;
   z-index: 3;
   background: var(--aj-noir-abysse);
   transform-origin: 50% 100%;
-  animation: voletLeve var(--aj-d-long) var(--aj-e-volet) forwards;
+  animation: voletLeve var(--aj-d-long) var(--aj-e-volet) 1.7s forwards;
   pointer-events: none;
+}
+
+/* GSAP a pris la main : on coupe le filet, sinon les deux se disputeraient
+   le volet. */
+.hero[data-anime="pret"] .volet {
+  animation: none;
 }
 
 @keyframes voletLeve {
