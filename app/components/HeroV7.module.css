@@ -60,10 +60,23 @@
   --aj-hero-copie-bas: clamp(24px, 4.4svh, 54px);
 }
 
-/* --- La caméra ------------------------------------------------------------
-   Seul nœud transformé de la scène. Au repos elle est à l'échelle 1 : arrivée
-   et dérive ne font qu'AGRANDIR, aucune ne réduit, donc aucune marge de
-   sur-cadrage n'est nécessaire et le cadre reste entier. */
+/* --- La caméra et la chambre ----------------------------------------------
+   DEUX NŒUDS, ET C'EST UN CORRECTIF, PAS UNE ÉLÉGANCE. Les deux mouvements
+   d'échelle — la dérive au repos et la poussée au défilement — visaient au
+   départ le même élément. GSAP n'écrase pas par défaut : les deux tweens
+   tournaient donc en concurrence sur `scale`, et le dernier rendu gagnait.
+   Mesuré au navigateur : à 55 % du défilement la scène affichait
+   `transform: none` au lieu de son agrandissement, la dérive ayant repassé
+   par-dessus. Le mot partait, l'image restait immobile.
+
+   Séparés sur deux nœuds imbriqués, les deux gestes se composent par produit
+   de matrices au lieu de se disputer une propriété :
+     .camera — le défilement (scale + yPercent)
+     .scene  — la dérive au repos (scale)
+   Au repos les deux sont à l'échelle 1 : arrivée et dérive ne font
+   qu'AGRANDIR, donc aucune marge de sur-cadrage n'est nécessaire et le cadre
+   reste entier. */
+.camera,
 .scene {
   position: absolute;
   inset: 0;
@@ -310,18 +323,69 @@
    des têtes, dans le vide chromé de la voûte, où il a de la place.
    ========================================================================== */
 @media (max-aspect-ratio: 4 / 5) {
+  /* ── LA BANDE PHOTOGRAPHIQUE ──────────────────────────────────────────
+     LE PLEIN CADRE EST UN PIÈGE ICI, ET LA MESURE LE DIT. Le master portrait
+     est en 704x941, soit un rapport de 0,748 ; un téléphone en 390x844 est à
+     0,462. En `cover` plein cadre, le navigateur cale sur la hauteur et rogne
+     241 px de large — mesuré : les pieds sortaient du cadre et le flanc du
+     modèle de droite était tranché. Un master plus étroit n'y changerait
+     rien : à 941 px de haut, remplir 844 px de haut d'un écran DPR 3 demande
+     déjà 2,7x. Le plein cadre coûte donc les corps ET la définition.
+
+     La bande fait donc 72svh : à cette hauteur le rapport du conteneur (0,72)
+     rejoint celui du master (0,748), le rognage tombe à 32 px de chaque côté
+     et LES DEUX CORPS TIENNENT ENTIERS, pieds et ceintures compris. Le reste
+     de l'écran est le noir de marque, où la copie se lit sans voile.
+
+     Ce n'est pas le bureau rétréci : c'est l'autre moitié de la même idée. */
+  .plate,
+  .figures {
+    inset: 0 0 auto 0;
+    height: 72svh;
+    /* Le sol de chrome se dissout dans le noir au lieu de s'arrêter sur une
+       ligne droite. Le masque est porté par les deux calques et JAMAIS par
+       `.scene`, qui contient aussi le mot : le mot ne doit pas s'effacer. */
+    -webkit-mask-image: linear-gradient(
+      to bottom,
+      #000 0%,
+      #000 82%,
+      transparent 100%
+    );
+    mask-image: linear-gradient(to bottom, #000 0%, #000 82%, transparent 100%);
+  }
+
+  /* LE MOT NE PEUT PAS VIVRE DANS LA BANDE, ET C'EST UNE MESURE, PAS UN GOÛT.
+     Posé à 45svh il croisait les jambes — donc du métal clair sur un sol de
+     chrome clair : à l'écran on ne lisait plus que deux fragments, « U » et
+     « RY ». Le mot-marque devenait un artefact.
+
+     Il est donc calé À CHEVAL sur la dissolution : son sommet est encore
+     voilé par le sol qui s'efface, son pied est net sur le noir de marque.
+     La salle se dissout littéralement DANS le nom. Le rapport spatial avec
+     l'image est gardé, la lisibilité est rendue, et le téléphone reçoit son
+     propre geste au lieu d'une version rétrécie de celui du bureau. */
   .marque {
-    align-items: flex-start;
-    padding-top: calc(var(--aj-header-h) + 2.5svh);
-    padding-bottom: 0;
+    align-items: flex-end;
+    padding-top: 0;
+    padding-bottom: 24svh;
   }
 
   .marqueMot {
-    /* Deux fois plus gros par rapport à la fenêtre qu'en paysage : sur un
-       écran étroit c'est la seule façon de rester monumental. */
-    font-size: calc(100cqi / 4.2);
+    /* Même mesure qu'au bureau (4,72em), marge de 4 px de chaque côté. */
+    font-size: calc(100cqi / 4.8);
     line-height: 0.86;
     margin-right: -0.045em;
+  }
+
+  /* Plus de dégradé bas : la bande se dissout déjà dans le noir, et la copie
+     est posée sur ce noir. Seul le voile haut reste, pour la barre. */
+  .voile {
+    background: linear-gradient(
+      to bottom,
+      rgba(8, 8, 10, 0.8) 0%,
+      rgba(8, 8, 10, 0.3) 14%,
+      rgba(8, 8, 10, 0) 30%
+    );
   }
 
   .copie {
@@ -336,22 +400,6 @@
 
   .enonce {
     font-size: var(--t1);
-  }
-
-  .voile {
-    background:
-      linear-gradient(
-        to bottom,
-        rgba(8, 8, 10, 0.8) 0%,
-        rgba(8, 8, 10, 0.3) 20%,
-        rgba(8, 8, 10, 0) 42%
-      ),
-      linear-gradient(
-        to top,
-        rgba(8, 8, 10, 0.9) 0%,
-        rgba(8, 8, 10, 0.5) 18%,
-        rgba(8, 8, 10, 0) 46%
-      );
   }
 }
 

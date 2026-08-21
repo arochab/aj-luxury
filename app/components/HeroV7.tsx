@@ -143,9 +143,10 @@ export default function HeroV7() {
 
   const racine = useAjMotion<HTMLElement>(({ gsap, mm, racine: noeud }) => {
     const q = gsap.utils.selector(noeud);
+    const camera = q(`.${styles.camera}`)[0];
     const scene = q(`.${styles.scene}`)[0];
     const mot = q(`.${styles.marqueMot}`)[0];
-    if (!scene || !mot) return;
+    if (!camera || !scene || !mot) return;
 
     mm.add(
       {
@@ -223,7 +224,17 @@ export default function HeroV7() {
           yoyo: true,
           paused: true,
         });
-        arrivee.eventCallback("onComplete", () => derive.play());
+
+        /* La dérive partage `scene` avec l'arrivée. Deux tweens GSAP sur la
+           même propriété du même nœud ne s'écrasent pas par défaut : ils se
+           disputent le rendu. Elles ne doivent donc jamais se recouvrir — la
+           dérive n'existe qu'une fois l'arrivée terminée, et c'est aussi à ce
+           moment-là qu'elle lit sa valeur de départ, l'échelle 1. */
+        let arretDerive: (() => void) | undefined;
+        arrivee.eventCallback("onComplete", () => {
+          derive.play();
+          arretDerive = veillerSurAnimation(scene, derive);
+        });
 
         /* ── LA CAMÉRA CONTINUE AU DÉFILEMENT ───────────────────────────
            Même appareil, même axe : la scène poursuit sa poussée et s'élève
@@ -240,25 +251,57 @@ export default function HeroV7() {
               invalidateOnRefresh: true,
             },
           })
-          .to(
-            scene,
-            { scale: etroit ? 1.12 : 1.16, yPercent: -6, ease: "none" },
+          /* CHAQUE TWEEN DE DÉFILEMENT PART D'UNE VALEUR ÉCRITE, ET NE SE
+             REND QU'AU PREMIER DÉFILEMENT. Sans `fromTo` explicite, GSAP
+             relève la valeur de départ au moment où il rend le tween pour la
+             première fois — c'est-à-dire à la CRÉATION, en plein milieu de
+             l'arrivée. Mesuré au navigateur : le retour en haut de page
+             rendait la caméra à 1,13 au lieu de 1, et le mot-marque à
+             l'opacité 0, la valeur qu'il avait quand le tween est né. Le
+             premier écran revenait vide.
+             `immediateRender: false` empêche en plus ces valeurs de départ
+             d'écraser l'arrivée au tout premier rendu. */
+          .fromTo(
+            camera,
+            { scale: 1, yPercent: 0 },
+            {
+              scale: etroit ? 1.12 : 1.16,
+              yPercent: -6,
+              ease: "none",
+              immediateRender: false,
+            },
             0,
           )
-          .to(mot, { yPercent: -46, opacity: 0.12, ease: "none" }, 0)
-          .to(
+          .fromTo(
+            mot,
+            { yPercent: 0, opacity: 1 },
+            {
+              yPercent: -46,
+              opacity: 0.12,
+              ease: "none",
+              immediateRender: false,
+            },
+            0,
+          )
+          .fromTo(
             q(`.${styles.copieBloc}, .${styles.lien}`),
-            { yPercent: -60, opacity: 0, ease: "none", stagger: 0.04 },
+            { yPercent: 0, opacity: 1 },
+            {
+              yPercent: -60,
+              opacity: 0,
+              ease: "none",
+              stagger: 0.04,
+              immediateRender: false,
+            },
             0,
           );
 
         // Ni la dérive ni la brillance n'ont de raison de tourner quand la
         // scène est sortie du champ : le budget de composition revient aux
         // écrans qui sont, eux, à l'image.
-        const arretDerive = veillerSurAnimation(scene, derive);
         const arretBrillance = veillerSurAnimation(mot, brillance);
         return () => {
-          arretDerive();
+          arretDerive?.();
           arretBrillance();
         };
       },
@@ -273,24 +316,26 @@ export default function HeroV7() {
       aria-labelledby="aj-hero-marque"
       style={{ "--aj-hero-lqip": `url("${paysage.lqip}")` } as CSSProperties}
     >
-      <div className={styles.scene}>
-        <Calque
-          role="plate"
-          alt="AJ Luxury — Jérémy et Alex portent le boxer Apollon Lilas Céleste dans une salle de chrome à colonnes."
-          priorite
-        />
+      <div className={styles.camera}>
+        <div className={styles.scene}>
+          <Calque
+            role="plate"
+            alt="AJ Luxury — Jérémy et Alex portent le boxer Apollon Lilas Céleste dans une salle de chrome à colonnes."
+            priorite
+          />
 
         {/* Le mot-marque est le h1 : il porte le nom de la maison, une seule
             fois, à sa place logique dans la hiérarchie du document. */}
-        <h1 className={styles.marque} id="aj-hero-marque">
-          <span className={`aj-metal ${styles.marqueMot}`}>AJ Luxury</span>
-        </h1>
+          <h1 className={styles.marque} id="aj-hero-marque">
+            <span className={`aj-metal ${styles.marqueMot}`}>AJ Luxury</span>
+          </h1>
 
         {/* Les corps, redécoupés du MÊME fichier. Leur seule fonction est
             d'occulter le mot : le texte alternatif appartient au calque du
             dessous, qui décrit déjà la scène entière — le répéter ici
             créerait une seconde description de la même photographie. */}
-        <Calque role="figures" alt="" priorite={false} />
+          <Calque role="figures" alt="" priorite={false} />
+        </div>
       </div>
 
       <div className={styles.voile} aria-hidden="true" />
