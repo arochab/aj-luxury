@@ -1157,10 +1157,23 @@
 .colorisPied {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  /* Ligne de base commune : les trois groupes sont du TEXTE, ils s'alignent
+     sur leur ligne d'ecriture et non sur le centre de boites invisibles. */
+  align-items: baseline;
   justify-content: space-between;
   gap: clamp(20px, 3vw, 48px);
   padding: clamp(28px, 4vh, 44px) var(--gut) clamp(56px, 8vh, 96px);
+}
+
+/* Sous 720 px, `space-between` ecartait les groupes sur deux axes : le prix a
+   gauche, le lien plaque contre le bord droit, sans gouttiere commune. Empiles
+   et alignes a gauche, ils retrouvent la marge du reste de la page. */
+@media (max-width: 719px) {
+  .colorisPied {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: clamp(18px, 4vh, 30px);
+  }
 }
 
 /* Ligne de spécification. Rien ici n'est cliquable, donc rien ici ne porte le
@@ -1186,22 +1199,48 @@
   letter-spacing: 0.16em;
 }
 
+/* L'aplat blanc est parti. Il etait le seul de la page, et un bouton plein de
+   gabarit est exactement ce que la direction artistique interdit. Le lien
+   reprend la grammaire de filet du premier ecran : un trait plein au repos,
+   qui se retracte vers son bord d'attaque au survol. */
 .colorisAction {
   display: inline-flex;
   align-items: center;
-  min-height: 56px;
-  padding: 0 34px;
-  background: var(--aj-encre);
-  color: var(--aj-noir);
-  font-size: var(--t1);
-  font-weight: var(--aj-w-lourd);
+  gap: 0.9em;
+  min-height: 44px;
+  color: var(--aj-encre);
+  font-size: var(--t0);
+  font-weight: var(--aj-w-gras);
+  letter-spacing: var(--aj-ls-action);
+  text-transform: uppercase;
 }
 
-.colorisNote {
-  flex-basis: 100%;
-  margin: 0;
-  color: var(--aj-encre-72);
-  font-size: var(--t0);
+.colorisActionMot {
+  position: relative;
+}
+
+.colorisActionMot::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -0.35em;
+  height: 1px;
+  background: currentColor;
+  transform: scaleX(1);
+  transform-origin: left center;
+  transition: transform var(--aj-d-court) var(--aj-e-nav);
+}
+
+.colorisAction:hover .colorisActionMot::after,
+.colorisAction:focus-visible .colorisActionMot::after {
+  transform: scaleX(0.35);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .colorisActionMot::after {
+    transition: none;
+  }
 }
 
 /* ==========================================================================

@@ -645,13 +645,23 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
      aucune requete, aucun decalage de mise en page. */
   assert.match(html, /--aj-hero-lqip:url\(&quot;data:image\/webp;base64,/);
 
-  /* Plus une seule video sur l'accueil, donc plus de bouton pour la figer,
-     et plus aucun champ metallique a monter. */
+  /* Plus une seule video sur l'accueil, donc plus de bouton pour la figer. */
   assert.doesNotMatch(html, /<video/);
   assert.doesNotMatch(html, /Figer le métal/);
   assert.doesNotMatch(html, /aj-film__hero-|aj-film__living-duo|aj-film__liquid-overlay/);
-  assert.equal((html.match(/data-metallic-mounted="false"/g) ?? []).length, 0);
+
+  /* LE METAL LIQUIDE. Un champ, et un seul : le sol du hero. Il doit arriver
+     NON MONTE dans le HTML serveur — le WebGL ne se cree qu'a l'intersection,
+     donc il ne peut pas peser sur le premier rendu ni sur le LCP. */
+  assert.equal((html.match(/data-metallic-mounted="false"/g) ?? []).length, 1);
   assert.doesNotMatch(html, /class="metallic-field__canvas"/);
+  /* Il est decoratif et vit ENTRE le fond et les corps : jamais au-dessus des
+     modeles, jamais annonce a un lecteur d'ecran. */
+  const metal = html.indexOf('data-metallic-mounted="false"');
+  assert.ok(
+    metal > plate && metal < figures,
+    "le champ metallique doit rester entre le fond et les corps decoupes",
+  );
   assert.doesNotMatch(html, /hero-identity-overlay-/);
   assert.doesNotMatch(html, /images\/client\/hero-duo-(?:static|cutout)/);
 

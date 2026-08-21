@@ -144,25 +144,25 @@ export default function Home() {
             <T id="home.apollonEyebrow" />
           </h2>
 
+          {/* ── LE COLOPHON ────────────────────────────────────────────
+              CE BLOC ETAIT UN TABLEAU DE BORD. Trois statistiques sans rapport
+              sur une rangee, et le SEUL aplat opaque de la page : un bouton
+              blanc de 56 px de haut, de gabarit, qui n'existait nulle part
+              ailleurs dans le site.
+
+              Il disait aussi trois fois la meme chose en 900 px de haut :
+              « TAILLES S · M · L · XL », puis « 94 % Modal · 03 Coloris ·
+              S—XL Tailles », puis l'ecran matiere juste dessous qui pose
+              94 et 6 en chiffres de 70 px. La note recapitulative part donc
+              entierement : la composition appartient a l'ecran matiere, les
+              trois coloris viennent d'etre montres sur neuf ecrans, et la
+              plage de tailles se dit une fois, ici.
+
+              Restent trois faits, chacun dit une seule fois : ce que c'est et
+              combien, dans quelles tailles, et par ou entrer. Aucun cadre,
+              aucun aplat — le lien reprend la grammaire de filet du premier
+              ecran, qui est celle de tout le site. */}
           <div className={styles.colorisPied}>
-            {/* Ligne de spécification, PAS un sélecteur. Le choix de taille
-                appartient à la fiche produit, seul écran qui connaît le stock
-                par taille (ProductPurchase.tsx:38, availability résolue serveur
-                dans products/[slug]/page.tsx:57). Dessiner ici quatre boutons
-                inertes promettait une action qui n'existait pas : on retire le
-                cadre et le gabarit 58x48, et on nomme la plage à voix haute au
-                lieu de la cacher dans un aria-label. */}
-            <p className={styles.tailles}>
-              <span className={styles.taillesIntitule}>
-                <T id="home.sizes" />
-              </span>
-              <span className={styles.taillesPlage}>S · M · L · XL</span>
-            </p>
-            {/* Le prix, traité comme un chiffre d'affichage et non comme une
-                mention — même traitement que Boutique.module.css:105, --t4 et
-                graisse fine. L'accueil est l'écran dont la mission est de faire
-                choisir : il ne peut pas être le seul à ne jamais dire combien.
-                Les trois coloris partagent le même prix, un chiffre suffit. */}
             <p className="aj-home__prix">
               <span className="aj-home__prix-mention">
                 <T id="nav.apollon" />
@@ -171,13 +171,25 @@ export default function Home() {
                 <LocalizedPrice amountCents={prixCents} />
               </span>
             </p>
-            <Link className={styles.colorisAction} href="/shop">
-              <T id="home.viewBoutique" />
-            </Link>
-            <p className={styles.colorisNote}>
-              94 % <T id="home.materialModal" /> · 03 <T id="home.colors" /> ·
-              S—XL <T id="home.sizes" />
+
+            {/* Ligne de specification, PAS un selecteur. Le choix de taille
+                appartient a la fiche produit, seul ecran qui connait le stock
+                par taille (ProductPurchase.tsx:38, availability resolue
+                serveur dans products/[slug]/page.tsx:57). Dessiner ici quatre
+                boutons inertes promettait une action qui n'existait pas. */}
+            <p className={styles.tailles}>
+              <span className={styles.taillesIntitule}>
+                <T id="home.sizes" />
+              </span>
+              <span className={styles.taillesPlage}>S · M · L · XL</span>
             </p>
+
+            <Link className={styles.colorisAction} href="/shop">
+              <span className={styles.colorisActionMot}>
+                <T id="home.viewBoutique" />
+              </span>
+              <span aria-hidden="true">↗</span>
+            </Link>
           </div>
         </section>
 

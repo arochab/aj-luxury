@@ -8,6 +8,7 @@ import {
   type HeroCalque,
   type HeroMaster,
 } from "../../lib/hero-v7";
+import DeferredMetallicField from "./DeferredMetallicField";
 import { T } from "../../lib/i18n/TranslatedText";
 import { useAjMotion } from "./useAjMotion";
 import styles from "./HeroV7.module.css";
@@ -326,6 +327,32 @@ export default function HeroV7() {
 
         {/* Le mot-marque est le h1 : il porte le nom de la maison, une seule
             fois, à sa place logique dans la hiérarchie du document. */}
+          {/* ── LE METAL LIQUIDE ─────────────────────────────────────────
+              LA SEULE CHOSE QUI BOUGE EST DERRIERE LES CORPS, ET C'EST VOULU.
+              Regenerer la scene avec un modele generatif change les visages a
+              chaque passe : c'est structurel, pas un probleme de prompt. Ici
+              aucun generateur n'intervient — les corps sont les pixels
+              approuves, decoupes du fichier d'origine, et ils sont poses
+              PAR-DESSUS. Leur visage ne peut donc pas deriver : rien ne les
+              redessine.
+
+              Le champ ne couvre que le sol. L'horizon mur/sol du master est
+              mesure a 68,5 % de la hauteur d'image (profil de luminance des
+              colonnes de bord, modeles exclus) ; le masque le fait naitre a
+              64 % et l'installe a 76 %, donc la jonction n'est jamais une
+              ligne. Sur tout ecran paysage `cover` cale sur la HAUTEUR — le
+              rapport du master, 1,777, est superieur a celui des fenetres
+              usuelles — donc aucun rognage vertical et cet horizon tombe
+              toujours au meme endroit. Sur ecran vertical le calque reprend
+              la geometrie exacte de la bande photographique.
+
+              Le champ est le composant deja ecrit pour ce role : montage
+              differe a l'intersection, 30 i/s au plafond, repli en degrade
+              CSS sans WebGL, et arret complet en mouvement reduit. */}
+          <div className={styles.metal} aria-hidden="true">
+            <DeferredMetallicField variant="reference" motion="slow" />
+          </div>
+
           <h1 className={styles.marque} id="aj-hero-marque">
             <span className={`aj-metal ${styles.marqueMot}`}>AJ Luxury</span>
           </h1>

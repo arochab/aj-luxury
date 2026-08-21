@@ -94,11 +94,60 @@
 }
 
 .plate,
-.figures {
+.figures,
+.metal {
   position: absolute;
   inset: 0;
   display: block;
   pointer-events: none;
+}
+
+/* --- Le metal liquide -----------------------------------------------------
+   Il MODULE le sol, il ne le remplace pas.
+
+   POURQUOI `screen` ET UN FILTRE DE CONTRASTE. En `screen`, le noir n'a aucun
+   effet et seules les hautes lumieres s'ajoutent. Le champ brut est un degrade
+   pleine plage : ses gris moyens posaient un VOILE sur tout le sol — un halo,
+   pas un reflet. Le filtre ecrase les moyens vers le noir et ne garde que les
+   cretes : ce qui passe est une lumiere, pas une brume.
+
+   POURQUOI IL EST ECRASE VERTICALEMENT. Un reflet sur un sol miroir est
+   toujours etire dans la profondeur : ses accidents sont des TRAINEES
+   horizontales, jamais des taches rondes. Le champ est donc rendu sur 260 %
+   de hauteur puis comprime a 0,385 : ses motifs s'allongent d'autant, et la
+   lumiere se met a filer le long du marbre au lieu de flotter dessus.
+
+   Le masque nait a 64 % et s'installe a 76 %, de part et d'autre de l'horizon
+   mesure a 68,5 % : la jonction est une zone, jamais une ligne.
+   `isolation: isolate` sur .hero borne le melange a l'ecran d'accueil. */
+.metal {
+  z-index: 0;
+  overflow: hidden;
+  opacity: 0.62;
+  mix-blend-mode: screen;
+  filter: contrast(1.8) brightness(0.7);
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    transparent 64%,
+    #000 76%,
+    #000 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    transparent 64%,
+    #000 76%,
+    #000 100%
+  );
+}
+
+/* Le champ est rendu haut puis comprime : le facteur est le meme des deux
+   cotes, donc la bande couvre exactement sa boite. */
+.metal > * {
+  height: 260%;
+  transform: scaleY(0.385);
+  transform-origin: 50% 0;
 }
 
 .plate img,
@@ -343,7 +392,8 @@
 
      Ce n'est pas le bureau rétréci : c'est l'autre moitié de la même idée. */
   .plate,
-  .figures {
+  .figures,
+  .metal {
     inset: 0 0 auto 0;
     height: var(--aj-hero-bande);
     /* ── POURQUOI LA BANDE EST PARFOIS PLUS ETROITE QUE L'ECRAN ──────────
@@ -401,6 +451,12 @@
     padding-bottom: max(24svh, 210px);
   }
 
+  /* La bande est plus courte, donc le champ couvre une part plus grande du
+     sol visible : a 0,62 il commencait a laver le marbre. */
+  .metal {
+    opacity: 0.44;
+  }
+
   .marqueMot {
     /* Même mesure qu'au bureau (4,72em), marge de 4 px de chaque côté. */
     font-size: calc(100cqi / 4.8);
@@ -443,6 +499,14 @@
    ========================================================================== */
 @media (prefers-reduced-motion: reduce) {
   .volet {
+    display: none;
+  }
+
+  /* Le champ metallique s'arrete de lui-meme (lib/motion-policy.ts), mais son
+     repli reste un degrade fixe : pose en `screen` sur le sol il ajouterait un
+     voile clair qui n'existe pas dans la photographie approuvee. On le retire
+     entierement — la salle rendue est alors exactement le fichier valide. */
+  .metal {
     display: none;
   }
 
