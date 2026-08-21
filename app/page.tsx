@@ -11,6 +11,7 @@ import ApollonGuidedSequence from "./components/ApollonGuidedSequence";
 import HomeGsapExperience from "./components/HomeGsapExperience";
 import { T } from "../lib/i18n/TranslatedText";
 import { formatPrice, getProducts } from "../lib/products";
+import { getServerCommerceRuntimeMode } from "../lib/commerce/commerce-runtime.server";
 import { editorialMoodboardImages } from "../lib/editorial-moodboard";
 import styles from "./components/Accueil.module.css";
 
@@ -53,6 +54,9 @@ const SIGNATURES: Record<string, string> = {
 
 export default function Home() {
   const produits = getProducts();
+  /* Lu ici pour la meme raison que sur la fiche : tant que la vente n'est pas
+     ouverte, aucun chiffre ne s'affiche sans sa qualification. */
+  const modeCommerce = getServerCommerceRuntimeMode();
   /* Un seul prix pour les trois coloris — même lecture que app/shop/page.tsx:31. */
   const prixCents = produits[0]?.priceCents ?? null;
   /* Ce que la séquence guidée consomme, et rien de plus. `image`, `nom` et
@@ -161,6 +165,12 @@ export default function Home() {
               aucun aplat — le lien reprend la grammaire de filet du premier
               ecran, qui est celle de tout le site. */}
           <div className={styles.colorisPied}>
+            {/* LE SEUL CHIFFRE DE L'ACCUEIL NE PEUT PAS ETRE NU. Releve au
+                navigateur : la page affichait « APOLLON 29,99 € » sans qu'une
+                seule ligne, nulle part sur l'accueil, ne dise que la vente
+                n'est pas ouverte — alors que la boutique et la fiche le
+                disent toutes deux. Un chiffre isole se lit comme un prix de
+                vente. La cle existe deja dans les cinq langues. */}
             <p className="aj-home__prix">
               <span className="aj-home__prix-mention">
                 <T id="nav.apollon" />
@@ -168,6 +178,11 @@ export default function Home() {
               <span className="aj-home__prix-chiffre">
                 <LocalizedPrice amountCents={prixCents} />
               </span>
+              {modeCommerce !== "production" && (
+                <span className="aj-home__prix-etat">
+                  <T id="product.priceLabel" />
+                </span>
+              )}
             </p>
 
             {/* Ligne de specification, PAS un selecteur. Le choix de taille

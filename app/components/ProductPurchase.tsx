@@ -311,9 +311,26 @@ export default function ProductPurchase({
         <p className={styles.tone}>{localizedProduct.tone}</p>
       </div>
 
+      {/* ── LE PRIX NE S'AFFICHE JAMAIS NU TANT QUE LA VENTE EST FERMEE ──
+          La qualification n'etait rendue qu'en `preproduction`. Or l'etat
+          `closed` — celui d'un environnement sans APP_ENV, donc l'etat par
+          defaut — montrait « 29,99 € » SEUL, sans rien qui dise que la vente
+          n'est pas ouverte et que ce montant n'est pas encore commercial.
+          Un chiffre nu sur une fiche produit se lit comme un prix de vente :
+          c'est la lecture qu'un client en fait, et elle serait fausse.
+
+          CE QUI N'EST PAS ECRIT ICI, ET POURQUOI. Aucune mention « TTC ».
+          Le depot ne permet pas de l'affirmer : `lib/legal.ts` porte un numero
+          de TVA « A completer », et le dictionnaire dit lui-meme que « les
+          taxes et droits restent a confirmer avant l'ouverture des ventes ».
+          Ecrire TTC serait inventer un fait fiscal. La mention viendra quand
+          le regime sera arrete — pas avant.
+
+          `product.priceLabel` existe deja dans les cinq langues : rien n'est
+          traduit ici, seule sa condition d'affichage change. */}
       <div className={styles.price} data-aj-reveal>
         <strong>{formatPrice(product.priceCents, locale)}</strong>
-        {runtimeMode === "preproduction" && (
+        {runtimeMode !== "production" && (
           <span>{t("product.priceLabel")}</span>
         )}
       </div>

@@ -3163,6 +3163,19 @@ footer:not([class]) > p {
   line-height: 1;
 }
 
+/* L'etat de vente, sous le chiffre. Meme rang typographique que la mention du
+   dessus — c'est une precision, pas un avertissement : elle informe sans
+   crier, et elle ne peut pas etre lue comme une promotion. */
+.aj-home__prix-etat {
+  display: block;
+  margin-top: 0.5em;
+  font-size: var(--t0);
+  font-weight: var(--aj-w-moyen);
+  letter-spacing: var(--aj-ls-label);
+  text-transform: uppercase;
+  color: var(--aj-encre-72);
+}
+
 .aj-section-break {
   height: 28px;
   border-top: 1px solid rgba(17, 17, 18, 0.1);
