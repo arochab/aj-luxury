@@ -21,22 +21,57 @@
 
 .hero {
   position: relative;
+  /* ── LE RECOUVREMENT DE L'EN-TÊTE ────────────────────────────────────
+     Repris tel quel de l'ancienne `.aj-film`, avec son raisonnement, parce
+     qu'il a été payé cher : la barre est un frère AVANT le hero dans le flux
+     et occupe --aj-tete-h. Rogner le hero d'autant (100svh - --aj-tete-h) a
+     été refusé par le client — on voyait le fond de scène sous la barre et le
+     premier écran ne remplissait plus la fenêtre. On remonte donc le hero de
+     la hauteur exacte de la barre : il repart du TOUT premier pixel et garde
+     une hauteur d'écran pleine, la barre restant collante donc vivante,
+     par-dessus l'image.
+
+     Les 2 px de rab : --aj-tete-h est un jeton, la barre est du CONTENU, sa
+     hauteur réelle dérive (mesuré 110,8 px pour un jeton à 6,9rem = 110,4).
+     Sans cette marge, ce delta laissait une ligne de fond de page crème au
+     tout premier pixel. On mord 2 px de plus — ils passent derrière la barre,
+     jamais à l'écran — et on les rend à la hauteur. */
+  margin-top: calc(-1 * var(--aj-tete-h) - 2px);
   /* svh, pas vh : sur iOS la barre d'URL rétractile change vh en cours de
      défilement et ferait respirer tout le premier écran. */
-  height: 100svh;
+  height: calc(100svh + 2px);
   min-height: 560px;
+  /* clip et non hidden : `overflow: hidden` sur un ancêtre annule le
+     `position: sticky` de la barre (StoreChrome.module.css). `clip` coupe
+     sans créer de conteneur de défilement, donc sans casser la barre. */
   overflow: clip;
   background: var(--aj-noir-abysse);
   isolation: isolate;
+
+  /* Le mot-marque se dimensionne sur cqi et non sur vw : `100vw` INCLUT la
+     barre de defilement, donc le mot debordait de 11 px a droite et de 4 a
+     gauche — un decentrage visible sur un signe de 288 px. `cqi` mesure la
+     boite reelle du hero, barre deduite. */
+  container-type: inline-size;
+
+  /* Le bas de la copie, cite deux fois : par la copie elle-meme et par le
+     calage du mot juste au-dessus. Un seul chiffre, donc un seul endroit ou
+     l'ecart entre les deux se decide. */
+  --aj-hero-copie-bas: clamp(24px, 4.4svh, 54px);
 }
 
 /* --- La caméra ------------------------------------------------------------
-   Seul nœud transformé de la scène. Le sur-cadrage au repos (1.04) est la
-   marge dans laquelle la caméra dérive sans jamais découvrir un bord. */
+   Seul nœud transformé de la scène. Au repos elle est à l'échelle 1 : arrivée
+   et dérive ne font qu'AGRANDIR, aucune ne réduit, donc aucune marge de
+   sur-cadrage n'est nécessaire et le cadre reste entier. */
 .scene {
   position: absolute;
   inset: 0;
-  transform: scale(1.04);
+  /* Repos a l'echelle 1 : le sur-cadrage ne sert QU'a l'arrivee et a la
+     derive, qui ne font qu'agrandir. Le garder a 1.04 au repos coutait 4 % du
+     cadre en permanence — mesure au navigateur : la statue de gauche etait
+     rognee alors qu'elle tient la symetrie de la salle. */
+  transform: scale(1);
   transform-origin: 50% 46%;
   will-change: transform;
 }
@@ -83,20 +118,32 @@
   margin: 0;
   display: flex;
   justify-content: center;
-  /* Le mot croise les corps à hauteur de hanche et mord le bas du cadre : la
-     ligne de base tombe SOUS la fenêtre. C'est le geste — une enseigne
-     monumentale dans la salle, pas un titre posé sur une image. */
+  /* Le mot croise les corps à hauteur de cuisse et court d'un bord à l'autre :
+     c'est le geste — une enseigne monumentale dans la salle, pas un titre posé
+     sur une image. */
   align-items: flex-end;
-  padding-bottom: 6svh;
+  /* Le mot est cale SUR la copie, pas sur la fenetre : bas de copie + hauteur
+     de la copie (64 px au bureau) + 40 px d'air. Ecrit ainsi, l'ecart reste
+     constant a toute hauteur d'ecran — mesure 38 px a 900 px comme a 1080. Un
+     reglage en svh donnait 7 px d'ecart a 900 et 100 px a 1080. */
+  padding-bottom: calc(var(--aj-hero-copie-bas) + 64px + 64px);
   pointer-events: none;
 }
 
 .marqueMot {
   display: block;
   font-family: var(--disp);
-  font-size: calc(100vw / 5.05);
+  /* 4,72 est la largeur MESUREE de la boite du mot, en em, interlettrage et
+     compensation de chasse compris. Diviser la largeur du hero par 4,77 fait
+     donc tenir « AJ Luxury » d'un bord a l'autre en gardant 8 px de marge de
+     chaque cote, a toute largeur et sans point de rupture. */
+  font-size: calc(100cqi / 4.77);
   font-weight: var(--aj-w-fin);
   letter-spacing: -0.045em;
+  /* L'interlettrage s'applique AUSSI apres la derniere lettre : sans cette
+     compensation le mot est pousse de 13 px vers la gauche (mesure : 2 px a
+     gauche contre 17 a droite). */
+  margin-right: -0.045em;
   line-height: 0.78;
   white-space: nowrap;
   text-transform: uppercase;
@@ -136,7 +183,7 @@
   position: absolute;
   left: var(--gut);
   right: var(--gut);
-  bottom: clamp(24px, 4.4svh, 54px);
+  bottom: var(--aj-hero-copie-bas);
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
@@ -169,10 +216,18 @@
 }
 
 /* Chaque ligne du texte monte derrière son propre masque. Le masque est le
-   <span> parent, en overflow hidden ; la ligne est l'enfant translaté. */
+   <span> parent, en overflow hidden ; la ligne est l'enfant translaté.
+   Le masque déborde d'un demi-cadratin en bas : sans cette marge, les
+   jambages de « p » et « q » se font raser par l'overflow au repos. */
 .ligneMasque {
   display: block;
   overflow: hidden;
+  padding-bottom: 0.12em;
+  margin-bottom: -0.12em;
+}
+
+.ligne {
+  display: block;
 }
 
 .lien {
@@ -264,8 +319,9 @@
   .marqueMot {
     /* Deux fois plus gros par rapport à la fenêtre qu'en paysage : sur un
        écran étroit c'est la seule façon de rester monumental. */
-    font-size: calc(100vw / 4.2);
+    font-size: calc(100cqi / 4.2);
     line-height: 0.86;
+    margin-right: -0.045em;
   }
 
   .copie {

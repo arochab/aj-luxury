@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import type { CSSProperties } from "react";
-import HeroComposition from "./components/HeroComposition";
+import HeroV7 from "./components/HeroV7";
 import StoreFooter from "./components/StoreFooter";
 import StoreHeader from "./components/StoreHeader";
 import ClientCopyText from "./components/ClientCopyText";
@@ -74,59 +74,14 @@ export default function Home() {
       <HomeGsapExperience>
         {/* ── 01 · Le film ─────────────────────────────────────────────── */}
         <span id="accueil" aria-hidden="true" />
-        <section className="aj-film" id="haut" aria-labelledby="aj-signature">
-          <HeroComposition />
-          <div className="aj-film__grade" aria-hidden="true" />
-
-          {/* LE MUR ÉTIRÉ A ÉTÉ RETIRÉ LE 21/08 avec la grille téléphone :
-              le master v6 vertical remplit l'écran entier, silhouettes
-              entières — plus rien à combler au-dessus des têtes. Voir
-              globals.css, « LE PREMIER ÉCRAN EST L'IMAGE VERTICALE ». */}
-
-          {/* Le premier écran parlait à 15px, en anglais, dans un coin : le seul
-              h1 du site était « AJ Luxury — Reveal Your Inner Beauty », une ligne
-              que n'importe quelle marque de lingerie pourrait reprendre telle
-              quelle. Pendant ce temps la seule phrase qui n'appartient qu'à cette
-              maison — story.quote — fermait la page, dix écrans plus bas.
-
-              La hiérarchie est remise à l'endroit : la phrase devient le h1 et
-              le plus grand signe du site (98px à 1920 contre 86px pour l'ancien
-              titre de clôture) ; la signature de marque reste, en surtitre, à sa
-              typographie d'avant (--t0, capitales, --aj-ls-signature) — elle perd
-              son rang, pas sa place. Aucune clé nouvelle : story.quote existe
-              déjà dans les cinq dictionnaires, donc rien à traduire. */}
-          <div className={styles.signature}>
-            <p className={styles.surtitre}>
-              <span className="aj-sr-only">AJ Luxury — </span>
-              <span lang="en">Reveal Your Inner Beauty</span>
-            </p>
-
-            {/* Le mot-signe et le filet, pièces de l'ancienne grille
-                téléphone, ont été retirés le 21/08 : le premier écran parle
-                la même langue à toutes les tailles — le film plein cadre et
-                la phrase de la maison. Aucune copie n'a été modifiée. */}
-            <h1
-              className={`aj-display ${styles.signatureTitre}`}
-              id="aj-signature"
-            >
-              <span className={styles.signatureLigne}>
-                <span className={styles.signatureTexte}>
-                  <T id="story.quote" />
-                </span>
-                <span className={styles.signatureEclat} aria-hidden="true" />
-              </span>
-            </h1>
-
-            <a className={styles.decouvrir} href="#plaque">
-              <span className={styles.decouvrirMot}>
-                <T id="hero.discover" />
-              </span>
-              <span className={styles.decouvrirFleche} aria-hidden="true">
-                ↓
-              </span>
-            </a>
-          </div>
-        </section>
+        {/* ── 01 · Le premier écran ─────────────────────────────────────
+            La section `.aj-film` a été retirée avec le hero v6. Elle ne
+            portait plus que deux choses : le décalage qui remonte le film
+            sous la barre collante, et le voile de gradation. Les deux sont
+            passés dans HeroV7.module.css — un calque de moins, et la règle
+            de recouvrement de l'en-tête vit désormais à côté de l'écran
+            qu'elle concerne au lieu d'un fichier global de 6100 lignes. */}
+        <HeroV7 />
 
         {/* ── LES COUTURES ────────────────────────────────────────────────
             La règle tient en une phrase : le blanc d'une couture est la
