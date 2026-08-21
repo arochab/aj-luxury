@@ -1,3 +1,5 @@
+/* eslint-disable @next/next/no-img-element -- actifs client deja optimises et servis
+   par le worker : aucun runtime d'image a charger. Meme regle que app/page.tsx. */
 "use client";
 
 import Image from "next/image";

@@ -19,16 +19,50 @@ export const LEGAL_CONTACT = {
   phone: "À compléter avant l’ouverture des ventes",
 } as const;
 
+/* ==========================================================================
+   IDENTITÉ DU VENDEUR — renseignée le 22/08/2026
+   --------------------------------------------------------------------------
+   SOURCE : Annuaire des Entreprises (INSEE, DGFiP, Douanes, INPI), fiche
+   SIREN 944 996 487, relevée le 22/08/2026, données mises à jour au
+   21/08/2026. Recoupée avec l'adresse d'expéditeur du compte Sendcloud
+   « Scheppler Jeremy », qui porte la même adresse.
+
+   « AJ Luxury » est le nom commercial. Le vendeur, au sens juridique, est
+   l'entreprise individuelle Jeremy SCHEPPLER : les mentions légales doivent
+   donc porter les deux.
+
+   DEUX POINTS DE VIGILANCE, VÉRIFIÉS ET NON INVENTÉS :
+
+   1. LE SIRET. L'entreprise compte trois établissements et UN SEUL est en
+      activité : 944 996 487 00038, siège social depuis le 28/07/2026. Les
+      deux autres sont fermés — 00012 à Strasbourg (fermé le 25/09/2025) et
+      00020 à Belmont (fermé le 28/07/2026). Ne jamais publier le 00020, qui
+      circule encore dans des annuaires tiers.
+
+   2. LA TVA. Le registre officiel indique « Pas de n° TVA valide ». Le numéro
+      FR58944996487 a beau être arithmétiquement cohérent — la clé 58 est bien
+      celle que donne (12 + 3 × (SIREN mod 97)) mod 97 —, l'administration ne
+      le reconnaît pas comme valide à ce jour. Publier un numéro de TVA
+      inexistant serait une mention légale fausse. Le champ reste donc en
+      attente, et le prix ne peut pas s'afficher « TTC » tant que le régime
+      n'est pas tranché : si l'entreprise relève de la franchise en base, la
+      mention obligatoire est « TVA non applicable, article 293 B du CGI ».
+   ========================================================================== */
 export const SELLER_IDENTITY = {
-  legalName: "À compléter — dénomination sociale ou nom de l’entrepreneur",
-  legalForm: "À compléter — forme juridique et capital social, le cas échéant",
-  registeredOffice: "À compléter — adresse du siège ou de domiciliation",
+  legalName: "Jérémy Scheppler, entrepreneur individuel",
+  legalForm: "Entreprise individuelle — nom commercial AJ Luxury",
+  registeredOffice: "3 A rue Principale, 67130 Belmont, France",
   registration:
-    "À compléter — SIREN, SIRET et mention RCS/RNE avec la ville d’immatriculation",
-  vatNumber: "À compléter — numéro de TVA intracommunautaire, si applicable",
-  publicationDirector:
-    "À compléter — nom du représentant légal ou du directeur de la publication",
+    "SIREN 944 996 487 — SIRET du siège 944 996 487 00038 — immatriculée au Registre national des entreprises (RNE) le 28 mai 2025",
+  vatNumber:
+    "À confirmer — le registre officiel indique « pas de n° TVA valide » au 21/08/2026 ; régime de TVA à trancher avant l’ouverture des ventes",
+  publicationDirector: "Jérémy Scheppler",
 } as const;
+
+/** Numéro EORI, relevé sur la fiche officielle le 22/08/2026. Le handoff du
+ *  17/08 le donnait « en attente » : il existe. Il reste à vérifier qu'il est
+ *  activé auprès de la douane pour l'export hors Union européenne. */
+export const EORI_NUMBER = "FR944996487" as const;
 
 export const HOSTING_PROVIDER = {
   name: "Cloudflare, Inc.",
@@ -45,7 +79,7 @@ export const MEDIATOR = {
 } as const;
 
 export const PRELAUNCH_BLOCKERS = [
-  "identité juridique complète du vendeur",
+  "régime de TVA du vendeur et mention associée sur les prix",
   "adresse de retour et numéro de téléphone",
   "médiateur de la consommation conventionné",
   "zones, transporteurs, tarifs et délais de livraison",

@@ -875,19 +875,41 @@ for (const [pathname, marker] of informationCases) {
   });
 }
 
-test("legal notice exposes the required pre-launch checklist without invented company data", async () => {
+test("legal notice publishes the sourced seller identity and never the closed establishment", async () => {
   const response = await render("/legal-notice");
   assert.equal(response.status, 200);
   const html = await response.text();
   assert.match(html, /Éditeur du site/);
-  assert.match(html, /adresse du siège ou de domiciliation/);
-  assert.match(html, /SIREN, SIRET et mention RCS\/RNE/);
   assert.match(html, /Direction de la publication/);
   assert.match(html, /Cloudflare, Inc\./);
   assert.match(html, /\+33 1 73 01 52 44/);
   assert.match(html, /contact@ajluxurystore\.com/);
+
+  /* L'IDENTITE EST DESORMAIS RENSEIGNEE, ET ELLE EST SOURCEE. Relevee le
+     22/08 sur l'Annuaire des Entreprises (INSEE, DGFiP, Douanes, INPI) et
+     recoupee avec l'adresse d'expediteur du compte Sendcloud. Le test ne
+     verifie plus l'absence de donnees, il verifie qu'elles sont LES BONNES. */
+  assert.match(html, /Jérémy Scheppler/);
+  assert.match(html, /944 996 487/);
+  assert.match(html, /944 996 487 00038/);
+  assert.match(html, /Belmont/);
+  assert.match(html, /Registre national des entreprises/);
+
+  /* LE SIRET FERME NE DOIT JAMAIS PARAITRE. L'entreprise compte trois
+     etablissements et un seul est en activite ; le 00020 de Belmont est ferme
+     depuis le 28/07/2026 et circule pourtant encore dans des annuaires
+     tiers. Le publier serait une mention legale fausse. */
+  assert.doesNotMatch(html, /944 996 487 00020|94499648700020/);
+  assert.doesNotMatch(html, /944 996 487 00012|94499648700012/);
+
+  /* AUCUN NUMERO DE TVA N'EST AFFIRME. Le registre officiel indique « pas de
+     n° TVA valide » au 21/08/2026 : publier un numero serait faux, et le prix
+     ne peut pas s'afficher TTC tant que le regime n'est pas tranche. */
+  assert.doesNotMatch(html, /FR\s?58\s?944\s?996\s?487/);
+  assert.match(html, /pas de n° TVA valide/i);
+
+  /* Ce qui reste inconnu continue de se dire. */
   assert.match(html, /À compléter avant l’ouverture des ventes/);
-  assert.match(html, /à compléter/i);
 });
 
 test("terms cover the 2026 consumer baseline without a blanket underwear exclusion", async () => {
