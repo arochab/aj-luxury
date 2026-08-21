@@ -102,10 +102,16 @@
      PANIER (14,29:1) tombent sur une zone sombre et n'étaient pas concernés.
      0.62 au départ et le second arrêt repoussé à 85 % maintiennent le voile
      sous toute la hauteur du lettrage sans poser d'aplat sur le marbre. */
+  /* Le voile LOCAL derriere les liens reglait le contraste et posait une
+     plaque grise flottante au milieu de la barre. Adam l'a refusee a vue, et
+     il a raison : une mesure au vert ne vaut rien si le dessin est laid.
+     Degrade pleine largeur, assombri, qui MEURT avant le bas de la barre — il
+     se lit comme un vignettage de l'image, jamais comme un aplat rapporte. */
   background-image: linear-gradient(
     180deg,
-    rgba(6, 6, 8, 0.62),
-    rgba(6, 6, 8, 0.34) 85%,
+    rgba(6, 6, 8, 0.86),
+    rgba(6, 6, 8, 0.52) 62%,
+    rgba(6, 6, 8, 0.18) 88%,
     transparent
   );
   border-bottom-color: transparent;
@@ -137,32 +143,6 @@
     background-color var(--aj-d-court) var(--e1),
     border-bottom-color var(--aj-d-court) var(--e1),
     text-shadow var(--aj-d-court) var(--e1);
-}
-
-/* Voile local sous la navigation, au repos, sur l'accueil uniquement.
-
-   Le jury du 20/08 a mesure, a 1920x1080 et au premier ecran : ACCUEIL 2,13:1,
-   NOTRE HISTOIRE 2,18:1, BOUTIQUE 2,21:1, PANIER 3,68:1. Le plancher du projet
-   est 5,0:1 : trois libelles etaient sous la moitie. A 1440 le probleme
-   n'existe pas — c'est le cadrage `cover` qui, en 16/9 large, amene le mur de
-   metal brosse CLAIR sous la barre.
-
-   Pourquoi pas un degrade plus sombre : il faudrait porter l'opacite composite
-   a environ 0,80 a hauteur des glyphes pour passer de 2,13 a 5,0. A ce niveau
-   ce n'est plus un voile, c'est l'aplat que le retour client du 18/08 a
-   explicitement rejete — la « bande grise ».
-
-   Un voile LOCAL, lui, rend le rapport independant de l'image : il ne depend
-   plus de ce que le cadrage amene sous la barre. Le procede est deja valide
-   ailleurs sur ce site, sur l'etiquette « Figer le metal » et sur le titre
-   d'ouverture de /notre-histoire, ou le jury a constate qu'il fonctionne.
-   Le marbre reste visible partout ailleurs sur la barre. */
-:global(.aj-home) > .header:not(.headerPose) .desktopNav {
-  padding: 6px 18px;
-  border-radius: 2px;
-  background: rgba(6, 6, 8, 0.55);
-  backdrop-filter: blur(8px) saturate(108%);
-  -webkit-backdrop-filter: blur(8px) saturate(108%);
 }
 
 /* Le logo est un .webp : le text-shadow ne l'atteint pas. */
