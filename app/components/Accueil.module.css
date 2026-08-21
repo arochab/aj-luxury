@@ -1126,15 +1126,32 @@
     margin-inline: var(--gut);
   }
 
-  /* Ici la contrainte s'inverse : la colonne est étroite et la ligne est
-     haute, donc c'est la LARGEUR qui décide. On dimensionne sur elle et on
-     laisse le rapport dériver la hauteur — sinon les deux boîtes seraient
-     bien plus hautes que les images qu'elles portent, et le volet balaierait
-     du mur nu avant d'atteindre la prise. La gouttière est retranchée des
-     deux moitiés, sinon la paire déborderait de sa colonne. */
+  /* ── LA HAUTEUR DÉCIDE, ET C'EST UN CORRECTIF DU 21/08 ────────────────
+     Le réglage précédent dimensionnait chaque prise sur la LARGEUR, à la
+     moitié de la colonne. Conséquence mesurée à 390x844 : une photographie de
+     183x275 px, soit 33 % de la hauteur d'écran, quand la rangée lui en
+     offrait 398 — et quand la même prise occupe 93 % de l'écran à 1440. La
+     séquence n'était pas composée pour le téléphone, elle y était rétrécie.
+     C'est exactement ce que le brief interdit.
+
+     La prise se dimensionne donc sur la HAUTEUR disponible et laisse le
+     rapport 1731/2600 dériver sa largeur. La paire devient alors plus large
+     que la colonne — c'est voulu et sans conséquence : au repos une seule
+     prise est centrée, `.duo` rogne le reste, et le volet balaie de la
+     photographie et non du mur nu puisque la boîte porte le rapport de
+     l'image. Le débordement horizontal du DOCUMENT est vérifié à chaque
+     taille de la matrice. */
   .demi {
-    width: calc(50% - var(--duo-gouttiere) / 2);
-    height: auto;
+    /* `flex: 0 0 auto` est indispensable ici. Avec la base `0 1 auto`, la
+       paire — plus large que la colonne par construction — était RÉTRÉCIE par
+       le flex : mesuré 183x399, soit un rapport de 0,46 quand l'image en
+       porte 0,666. La boîte cessait d'avoir le rapport de sa photographie et
+       `object-fit: cover` rognait le produit sur les côtés. On interdit donc
+       le rétrécissement : la boîte garde le rapport de l'image, `.duo` rogne
+       ce qui dépasse, et la prise centrée est entière. */
+    flex: 0 0 auto;
+    width: auto;
+    height: 100%;
     max-height: 100%;
   }
 }
