@@ -3,7 +3,7 @@
 /* eslint-disable @next/next/no-img-element -- the fixed local logo needs no image-loader runtime */
 
 import Link from "next/link";
-import { useCallback, useEffect, useId, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import type { TranslationKey } from "@/lib/i18n/dictionaries";
@@ -97,6 +97,11 @@ export default function StoreHeader({
      deux clés déjà présentes dans les cinq dictionnaires et leurs jumeaux
      public/i18n. */
   const [menuOuvert, setMenuOuvert] = useState(false);
+  /* La timeline du menu, construite une fois GSAP chargé. Elle vit dans un ref
+     et non dans l'état : la rejouer ne doit rien re-rendre. */
+  const ouvertureMenu = useRef<{ play: () => void; reverse: () => void } | null>(
+    null,
+  );
   const menuId = useId();
 
   const basculerMenu = useCallback(() => {
@@ -122,6 +127,15 @@ export default function StoreHeader({
   /* Échap referme, comme partout ailleurs sur le site (AGENTS.md, « Responsive
      et interactions »). Écouté sur le document : la touche doit répondre même
      si le focus est reparti dans la page. */
+  /* Le menu joue sa partition à l'endroit, la rembobine à l'envers. Aucun
+     re-rendu : on pilote une timeline déjà construite. */
+  useEffect(() => {
+    const partition = ouvertureMenu.current;
+    if (!partition) return;
+    if (menuOuvert) partition.play();
+    else partition.reverse();
+  }, [menuOuvert]);
+
   useEffect(() => {
     if (!menuOuvert) return;
     const surTouche = (evenement: KeyboardEvent) => {
@@ -142,11 +156,15 @@ export default function StoreHeader({
         {
           anime: "(prefers-reduced-motion: no-preference)",
           reduit: "(prefers-reduced-motion: reduce)",
+          // Le menu n'existe qu'ici : c'est la seule taille où le panneau est
+          // un panneau et non six cibles alignées dans la barre.
+          etroit: "(max-width: 560px)",
         },
         (contexte) => {
-          const { anime } = contexte.conditions as {
+          const { anime, etroit } = contexte.conditions as {
             anime: boolean;
             reduit: boolean;
+            etroit: boolean;
           };
 
           /* Sous ce seuil on ne se dérobe jamais : un micro-scroll en haut de
@@ -216,6 +234,62 @@ export default function StoreHeader({
               else montrer();
             },
           });
+
+          /* ── LE MENU S'OUVRE, IL N'APPARAÎT PLUS ────────────────────
+             Le panneau passait de `display: none` à `display: block` : zéro
+             image de transition sur le seul geste de navigation du téléphone.
+
+             La partition, dans l'ordre où l'œil la lit :
+               • le panneau descend de 14 px et se révèle — c'est la surface
+                 qui arrive, pas les liens ;
+               • chaque cible monte derrière son propre masque, décalée de
+                 45 ms : la liste s'écrit de haut en bas, elle ne s'allume pas
+                 d'un bloc ;
+               • le filet du panneau se déploie depuis le bord d'attaque.
+             `expo.out` partout : sortie longue, arrivée sans rebond, la même
+             courbe que le premier écran.
+
+             `autoAlpha` et non `opacity` : GSAP y ajoute `visibility`, donc un
+             lien fermé n'est jamais focalisable au clavier. C'est ce qui
+             autorise à retirer le `display: none` sans ouvrir un piège de
+             tabulation.
+
+             La timeline est construite en PAUSE et pilotée par un effet : la
+             rejouer à l'endroit ou à l'envers suffit, et le retour arrière est
+             exactement le trajet aller inversé. */
+          if (etroit) {
+            const panneau = tete.querySelector<HTMLElement>(
+              `.${styles.menuPanneau}`,
+            );
+            if (panneau && anime) {
+              const cibles = panneau.querySelectorAll<HTMLElement>(
+                "a, select, label",
+              );
+              const partition = gsap
+                .timeline({ paused: true })
+                .fromTo(
+                  panneau,
+                  { autoAlpha: 0, y: -14 },
+                  { autoAlpha: 1, y: 0, duration: 0.44, ease: "expo.out" },
+                  0,
+                )
+                .fromTo(
+                  cibles,
+                  { autoAlpha: 0, y: 18 },
+                  {
+                    autoAlpha: 1,
+                    y: 0,
+                    duration: 0.52,
+                    ease: "expo.out",
+                    stagger: 0.045,
+                  },
+                  0.08,
+                );
+              ouvertureMenu.current = partition;
+              // La visibilité appartient désormais à GSAP, pas au CSS.
+              tete.dataset.menuAnime = "oui";
+            }
+          }
 
           // Une barre dérobée qui reçoit le focus au clavier doit revenir :
           // sans ça, la tabulation part sur une cible invisible.

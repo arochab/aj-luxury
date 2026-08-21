@@ -704,6 +704,7 @@
     position: absolute;
     top: 8px;
     right: 0;
+    transform-origin: center;
     /* Le second filet est plus court : le bouton a un fer à droite, comme le
        surtitre du film. Fermé il se lit comme deux lignes décalées ; ouvert,
        les deux se rejoignent. */
@@ -711,28 +712,70 @@
     height: 1px;
     background: currentColor;
     box-shadow: inherit;
-    transition: width var(--aj-d-court) var(--e1);
+    transition:
+      width var(--aj-d-court) var(--e1),
+      transform var(--aj-d-court) var(--e1);
+  }
+
+  /* ── LE SIGNE DEVIENT UNE CROIX ────────────────────────────────────
+     Le repos garde son fer à droite : deux filets décalés, 26 et 16 px. À
+     l'ouverture le court rejoint le long — c'était déjà l'intention — puis
+     les deux basculent en croix. Le geste est le même que celui du panneau :
+     ce qui était décalé se referme. */
+  .header[data-menu="ouvert"] .menuSigne {
+    transform: translateY(4.5px) rotate(45deg);
   }
 
   .header[data-menu="ouvert"] .menuSigne::after {
     width: 26px;
+    transform: translateY(-9px) rotate(-90deg);
   }
 
   /* LE PANNEAU. Il ne s'ouvre qu'ici, et il porte son propre aplat : sur
      l'accueil la barre est transparente au repos, donc les six liens seraient
      posés sur la photo sans lui. */
+  /* ── LE PANNEAU DEVIENT UN CALQUE ──────────────────────────────────
+     Il occupait une seconde rangée de la grille : l'ouvrir POUSSAIT la barre
+     et tout ce qui la suit. Rien d'animable là-dedans — le menu basculait de
+     `display: none` à `display: block`, sans une seule image de transition.
+
+     Il passe donc en calque posé sous la barre. Plus aucun reflux, donc le
+     mouvement peut n'être que transform et opacity, comme le reste du site.
+
+     LE REPLI SANS JAVASCRIPT EST CONSERVÉ. Tant que le moteur d'animation
+     n'a pas pris la main, ce sont ces règles qui ouvrent et ferment le
+     panneau — le menu marche donc avant l'hydratation, et marcherait même si
+     le bundle n'arrivait jamais. Dès que GSAP est prêt, l'en-tête porte
+     `data-menu-anime` et la visibilité lui appartient : sans ce relais, le
+     `visibility: hidden` du repos couperait net l'animation de fermeture. */
   .menuPanneau {
-    display: none;
-    grid-column: 1 / -1;
-    grid-row: 2;
-    margin-inline: calc(-1 * var(--chrome-pad));
-    padding: 6px var(--chrome-pad) 14px;
+    /* `display: block` est OBLIGATOIRE ici : la règle de base met le panneau
+       en `display: contents` pour que ses six cibles s'alignent dans la barre
+       au format large. Une boîte en `contents` n'existe pas, donc
+       `position: absolute` y est sans effet — mesuré au navigateur, les
+       actions se reposaient dans la grille de la barre et recouvraient le
+       bouton, qui devenait inatteignable une fois le menu ouvert. */
+    display: block;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    z-index: 2;
+    padding: 10px var(--chrome-pad) 18px;
     border-top: 1px solid var(--chrome-filet);
     background: var(--aj-noir-abysse);
+    visibility: hidden;
+    opacity: 0;
+  }
+
+  .header[data-menu-anime] .menuPanneau {
+    visibility: visible;
+    opacity: 1;
   }
 
   .header[data-menu="ouvert"] .menuPanneau {
-    display: block;
+    visibility: visible;
+    opacity: 1;
   }
 
   /* Dans le panneau, les six cibles sont empilées et ferrées à gauche : une
