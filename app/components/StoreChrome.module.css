@@ -152,20 +152,19 @@
 }
 
 /* ── L'EFFACEMENT DU LOGO SUR L'ACCUEIL ────────────────────────────────────
-   Au tout premier ecran de l'accueil, la marque est deja ecrite en grand au
-   milieu de la scene : la repeter en petit dans la barre la dirait deux fois.
-   Le hero pilote donc cette variable au defilement — 0 en haut de page, 1
-   quand le grand mot est venu se poser ici.
+   Au premier ecran de l'accueil, la marque est deja ecrite en grand au milieu
+   de la scene : la repeter en petit dans la barre la dirait deux fois. Le hero
+   efface donc ce logo et le rend a la fin du vol, en animant directement son
+   opacite (Hero.tsx). Aucune regle ici : sans JavaScript, sur toutes les
+   autres pages et en mouvement reduit, le logo est simplement la.
 
-   La valeur par defaut est 1 : toutes les autres pages, et l'accueil sans
-   JavaScript, gardent leur logo. Et le focus clavier le rend TOUJOURS, sinon
-   le lien « retour a l'accueil » serait invisible pour qui navigue au clavier. */
-.brandImage {
-  opacity: var(--aj-marque-entete-opacite, 1);
-}
-
+   `!important` EST LE BON OUTIL ICI, et le seul. Le focus clavier doit rendre
+   le logo QUOI QU'IL ARRIVE : le lien « retour a l'accueil » ne peut pas etre
+   invisible pour qui navigue au clavier. Or le hero ecrit une opacite EN
+   LIGNE, qu'une regle ordinaire ne peut pas battre. C'est une garantie
+   d'accessibilite qui doit primer sur une animation. */
 .brand:focus-visible .brandImage {
-  opacity: 1;
+  opacity: 1 !important;
 }
 
 /* DÉFILEMENT ENGAGÉ — MÊME LANGAGE QU'AU REPOS, PLUS DENSE — 21/08.

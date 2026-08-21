@@ -308,15 +308,17 @@ export default function Hero() {
 
           /* Le logo de la barre s'efface tant que le grand logo est a l'ecran :
              la marque n'est jamais ecrite deux fois en meme temps.
-             Pose en DOM et non par gsap.set : GSAP n'ecrit une propriete
-             personnalisee qu'au premier rendu du tween qui la porte, et le
-             notre est en immediateRender: false — l'etat initial n'aurait donc
-             jamais ete applique. Mesure : la variable restait vide au repos et
-             la barre gardait son logo. */
-          document.documentElement.style.setProperty(
-            "--aj-marque-entete-opacite",
-            "0",
-          );
+
+             UN SEUL MECANISME, ET C'EST UN CORRECTIF. La premiere version
+             passait par une propriete personnalisee sur :root, lue par une
+             regle CSS de la barre. Deux proprietaires pour une meme valeur :
+             GSAP l'animait ET l'invalidait a chaque rafraichissement de
+             ScrollTrigger. Mesure au navigateur : le style en ligne restait
+             VIDE au repos, la barre gardait son logo, et la marque etait donc
+             ecrite deux fois sur le premier ecran. On anime desormais
+             l'opacite du logo lui-meme — une propriete ordinaire, un seul
+             proprietaire. */
+          gsap.set(logo, { opacity: 0 });
 
           defilement
             .fromTo(
@@ -344,15 +346,7 @@ export default function Hero() {
                que la passation soit ACQUISE avant que la barre ne reprenne son
                droit de se derober. */
             .to(mot, { opacity: 0, ease: "none", duration: 0.22 }, 0.66)
-            .to(
-              document.documentElement,
-              {
-                "--aj-marque-entete-opacite": 1,
-                ease: "none",
-                duration: 0.22,
-              },
-              0.66,
-            );
+            .to(logo, { opacity: 1, ease: "none", duration: 0.22 }, 0.66);
         }
 
         // Ni la dérive ni la brillance n'ont de raison de tourner hors champ :
@@ -364,9 +358,7 @@ export default function Hero() {
           delete noeud.dataset.anime;
           // Sans cela, quitter l'accueil en cours de vol laisserait la barre
           // sans logo sur la page suivante.
-          document.documentElement.style.removeProperty(
-            "--aj-marque-entete-opacite",
-          );
+          if (logo) gsap.set(logo, { clearProps: "opacity" });
         };
       },
     );
