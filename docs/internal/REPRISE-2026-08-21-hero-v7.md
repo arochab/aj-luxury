@@ -117,35 +117,70 @@ réécrire `tests/hero-video.test.mjs`, qui vérifie encore leurs budgets d'octe
   Le LCP de cet écran, ce sont les CORPS. Avertissement console éliminé.
 - `lint` OK · `build` OK · **60/61** tests front.
 
-## Ce qui reste ouvert — l'accueil, écrans 2 à 6
+## L'accueil, écrans 2 à 6 — état au 21/08 au soir
 
-Un jury hostile a inspecté les 27 captures de l'accueil (14 en 1440, 13 en
-390). Défauts retenus après vérification :
+### Corrigé et vérifié
 
-| Zone | Défaut | Gravité |
-|---|---|---|
-| Séquence Apollon | panneau de copie sur un voile aux bords flous | majeur |
-| Séquence Apollon | colonne de gauche vide au-dessus du bloc de texte | majeur |
-| Clôture | retrait à x=163 quand tout le site part à x=57 ; 220 px de noir vide sous les liens | majeur |
-| Éditorial | légendes « Jérémy / Alex » dans le style des libellés de navigation | mineur |
-| Toute la page | huit appels à l'action, dont « Découvrir » quatre fois | mineur |
-| Pied de page | « Reveal Your Inner Beauty » répété depuis le hero | mineur |
-| Téléphone | séquence Apollon = version rétrécie du bureau, photo à 275 px | majeur |
+1. **Prix et « Découvrir » absents sur 67 % de chaque panneau.** Ils ne
+   s'assemblaient qu'au dernier quart du PALIER : mesuré, `visibility:hidden`
+   pendant 1 700 px de défilement sur le panneau 01. La phase la plus longue
+   tenait un panneau en train de s'écrire, quand le brief exige que le
+   visiteur comprenne toujours le prix et le chemin d'achat. Le commerce monte
+   désormais pendant le dévoilement ; le palier commence sur un panneau
+   entier. Vérifié sur les trois panneaux.
+2. **Cadre vide sur téléphone.** La carte de copie était peinte aux dimensions
+   de tout son contenu, révélé ou non : 190 px de rectangle sombre sur du
+   vide, 79 % de la carte. Le voile ne peint plus que la hauteur révélée,
+   plancher de 34 % qui couvre le titre.
+3. **La photographie du téléphone était une miniature.** 183x275 px sur un
+   écran de 844, soit 33 % de la hauteur, contre 93 % à 1440. Elle fait
+   maintenant 266x399 — **+111 % de surface**. Piège rencontré : en
+   dimensionnant par la hauteur, le flex écrasait le rapport à 0,46 au lieu de
+   0,666 et `object-fit: cover` rognait le produit. D'où `flex: 0 0 auto`.
+4. **La clôture était centrée** (x=162) quand toute la page part de la
+   gouttière (58). Elle s'aligne. Et ses deux actions avaient le même poids au
+   pixel : la boutique prend le rang principal, le récit reste en lien de
+   texte.
+5. **Deux libellés pour `/shop`** sur le même écran. Un seul désormais.
 
-**Deux faux positifs écartés après vérification, ne pas les rouvrir :**
+### Écarté après vérification — NE PAS ROUVRIR
 
-- « portrait sans visage » sur l'écran matière : c'est un **détail produit
-  volontaire** (ceinture, plaque logo), photographie client approuvée ;
-- « neuf écrans quasi identiques » dans la séquence : la durée est **mesurée
-  contre le site étalon** et documentée dans `ApollonGuidedSequence.tsx`
-  (sections d'observation d'objet de 4 à 13,25 écrans). Raccourcir
-  recréerait le défaut corrigé le 21/08, où le lecteur traversait la
-  révélation sans jamais s'y arrêter.
+- **Légendes de l'éditorial « désalignées » à 22 px.** Elles sont ancrées à
+  LEUR PROPRE image dans un triptyque pleine largeur. Les caler sur la
+  gouttière n'alignerait que la première. Faux positif.
+- **« Deux marges droites concurrentes » dans la séquence.** Le diptyque
+  remplit exactement de la colonne de copie au bord de l'écran : c'est un
+  plein-bord assumé, comme le triptyque éditorial. La barre d'onglets, elle,
+  est de l'interface et garde la gouttière. Faux positif.
+- **Bande vide entre le titre et la photo sur téléphone.** C'est la zone de
+  copie réservée et non peinte — donc le correctif 2 qui fonctionne.
+- **Couture absente entre clôture et pied de page.** Exception documentée par
+  la règle elle-même : aucune image ne borde cette jonction.
 
-Le voile de la copie de séquence est lui aussi **déjà argumenté et mesuré**
-(contraste plancher 7,78:1, fondu sur deux axes pour ne pas redevenir un
-rectangle). Ne pas le refaire sans arbitrage d'Adam : c'est un désaccord de
-goût contre une décision documentée.
+### Signalé, NON corrigé — décision à prendre par Adam
+
+**La colonne de copie de la séquence fait 216 px à 1440, soit 21 signes par
+ligne sur 4 lignes.** C'est très serré typographiquement (le confort commence
+vers 45). Mais cette largeur est le produit d'une décision mesurée : la copie
+ne peut pas se poser sur la nature morte — la luminance maximale sous le bloc
+vaut 0,949, il faudrait un voile noir à 85 % pour tenir 5:1, c'est-à-dire
+exactement la plaque opaque que la composition refuse. La colonne est donc
+retranchée de la largeur avant que la hauteur du diptyque n'en soit déduite.
+L'élargir coûte de la photographie. **Je n'ai pas renversé cette décision sur
+un argument typographique seul.**
+
+### Recette d'ensemble après tous ces changements
+
+- **72 contrôles** (9 tailles x 8 positions de défilement) : zéro débordement
+  horizontal.
+- Descente et remontée complètes de la page : **zéro erreur console**, et le
+  retour en haut restitue l'état exact (logo hero 954 px, opacité 1, logo de
+  barre à 0).
+- `lint` OK · `build` OK.
+- Deux rouges, tous deux **préexistants et vérifiés comme tels** :
+  `synthetic health` (503 local, périmètre backend) et
+  `homepage product portraits`, qui porte sur `.aj-product-card__image`, une
+  classe retirée par une session antérieure.
 
 ## La reprise, dans l'ordre
 
