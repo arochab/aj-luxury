@@ -102,74 +102,20 @@ alors que plus rien ne les sert : ~3,3 Mo de poids mort. Conservés comme retour
 arrière tant qu'Adam n'a pas validé à l'écran. Leur suppression exigera de
 réécrire `tests/hero-video.test.mjs`, qui vérifie encore leurs budgets d'octets.
 
-## Où on en est, en une phrase
+## Vérifié APRÈS le correctif du volet (reprise du 21/08 au soir)
 
-**Le premier écran est refait sur la vraie photographie, vérifié et livré.**
-Le reste de l'accueil est diagnostiqué mais pas encore repris. Tout est
-commité et poussé, zéro écart avec GitHub.
-
-## Ce qui est LIVRÉ et vérifié
-
-### Le hero v7 — la photographie vivante
-
-La vidéo v6 est remplacée par une photographie en calques, animée en
-DOM/CSS/GSAP. Le geste central : **le mot AJ LUXURY passe derrière les corps**,
-parce que le fond et les corps sont deux calques distincts.
-
-- 173 Ko pour le premier écran de bureau contre 742 Ko pour le seul MP4 v6.
-- Ordre des calques : `plate` → `metal` → `marque` → `figures`.
-- Réglages relevés au navigateur, jamais estimés : largeur de boîte du mot
-  mesurée à 4,72 em d'où `100cqi / 4.77` ; `cqi` et non `vw`, car `100vw`
-  inclut la barre de défilement et décentrait le mot de 11 px ; le mot est
-  calé SUR la copie et non sur la fenêtre, l'écart mesuré restant constant
-  de 900 à 1080 px de haut.
-
-### Le métal liquide — la réponse au problème des visages
-
-Fait validé avec Adam : **un modèle génératif redessine ce qu'on lui donne**,
-donc les visages dérivent à chaque passe. Ce n'est pas un problème de prompt.
-La solution retenue est de RETIRER LE GÉNÉRATEUR DU CHEMIN.
-
-Les corps sont les pixels approuvés, découpés par séparation chromatique et
-reposés par-dessus. Rien ne les redessine. Ce qui bouge est derrière eux : le
-sol, là où le métal liquide est physiquement chez lui.
-
-Mesuré au navigateur, 4 s d'écart : sol 62,4 % de pixels animés (écart moyen
-9,17 niveaux), torses 8,3 % (0,85), visages 1,5 à 1,8 — ce résidu est la
-respiration de la caméra sur tout le plan. Coût nul : médiane 6,1 ms avec le
-champ contre 6,1 ms sans, zéro image perdue.
-
-Le champ réutilise `DeferredMetallicField`, déjà écrit pour ce rôle et
-inutilisé : montage différé à l'intersection donc hors chemin du LCP, 30 i/s
-au plafond, repli CSS sans WebGL, retiré entièrement en mouvement réduit.
-
-### Le colophon de l'accueil
-
-Le bloc de spécifications portait le seul aplat blanc de la page et disait
-tailles et composition une troisième fois en 900 px. Refait : 303 → 185 px,
-trois faits dits une seule fois, aucun cadre.
-
-### Recette tenue
-
-- Neuf tailles d'AGENTS.md balayées : zéro débordement horizontal partout.
-- **Deux fautes trouvées et corrigées** : têtes coupées à 768x1024 (`cover`
-  basculait en rognage vertical de 289 px) ; collision mot/copie à 320 px.
-- **Trois bugs de mouvement corrigés** : dérive et défilement se disputaient
-  `scale` ; les tweens de scroll relevaient leur valeur de départ en pleine
-  arrivée, donc le retour en haut de page rendait le premier écran VIDE.
-- Mouvement réduit vérifié sous émulation.
-- `lint` OK, `build` OK, contrats de test réécrits sur la v7 et renforcés.
-
-## Décisions d'Adam prises pendant la session
-
-1. **Priorité : finir l'accueil** avant la boutique et les fiches produit.
-2. **Résolution : on reste en 1672x941.** Le plafond est assumé et documenté,
-   aucun upscale génératif sur de vrais visages. Un vrai palier supposerait de
-   regénérer les masters en 4K.
-3. **Écart signalé, toujours non tranché** : les deux images jointes par Adam
-   sont toutes deux en PAYSAGE 1672x941, pas une paire paysage/portrait.
-   Hypothèse en vigueur : A pour le bureau, B recadrée en 704x941 pour le
-   téléphone. À confirmer.
+- **Mouvement réduit** : volet jamais posé, aucune échelle, composition
+  complète, et la barre garde son logo puisque le vol ne joue pas.
+- **Neuf tailles** : zéro débordement, zéro pied rogné, zéro débordement du
+  logo ou des corps, tous les écarts positifs, `anime=pret` partout.
+- **Un défaut trouvé au passage et corrigé** : le hero servait
+  `/media/images/aj-luxury-logo.webp?v=v8` quand la barre sert
+  `/images/aj-luxury-logo.webp` — deux entrées de cache pour un seul fichier,
+  donc deux téléchargements du même dessin. Et le `fetchPriority="high"` du
+  logo faisait émettre par React un préchargement de l'actif 720 px que le
+  navigateur n'utilisait jamais, puisque le srcSet lui fait choisir le @2x.
+  Le LCP de cet écran, ce sont les CORPS. Avertissement console éliminé.
+- `lint` OK · `build` OK · **60/61** tests front.
 
 ## Ce qui reste ouvert — l'accueil, écrans 2 à 6
 

@@ -419,9 +419,15 @@ export default function Hero() {
             alt="AJ Luxury"
             width={HERO_LOGO.largeur}
             height={HERO_LOGO.hauteur}
-            decoding="sync"
+            /* PAS de fetchPriority high ici : le LCP de cet écran, ce sont les
+               CORPS. Marquer le logo prioritaire faisait émettre par React un
+               préchargement de l'actif 720 px, que le navigateur n'utilisait
+               pas ensuite puisque le srcSet lui fait choisir le @2x — un
+               avertissement de ressource préchargée et jamais servie, relevé
+               au navigateur. Le logo reste par ailleurs derrière le volet
+               pendant 1,2 s : il n'a aucune raison de disputer la priorité. */
+            decoding="async"
             loading="eager"
-            fetchPriority="high"
           />
           <span className={styles.marqueEclat} aria-hidden="true" />
         </span>

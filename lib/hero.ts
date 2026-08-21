@@ -76,11 +76,18 @@ export const HERO_FIGURES_RATIO = HERO_FIGURES.largeur / HERO_FIGURES.hauteur;
  *  pixel inventé, aucun modèle génératif. Il n'existe que pour les rendus qui
  *  dépassent 720 px de large. */
 export const HERO_LOGO = {
-  src: versioned("/media/images/aj-luxury-logo.webp"),
-  srcSet: `${versioned("/media/images/aj-luxury-logo.webp")} 720w, ${versioned(
-    "/media/images/aj-luxury-logo@2x.webp",
-  )} 1440w`,
-  sizes: "(max-aspect-ratio: 4 / 5) min(78vw, 620px), min(46vw, 980px)",
+  /* MÊME URL QUE LA BARRE, AU CARACTÈRE PRÈS, ET C'EST UN CORRECTIF.
+     Le hero servait `/media/images/aj-luxury-logo.webp?v=v8` quand la barre
+     sert `/images/aj-luxury-logo.webp` : deux entrées de cache pour un seul
+     fichier, donc deux téléchargements du même dessin sur le premier écran.
+     Les deux chemins passent par le même worker ; seule leur écriture
+     différait. */
+  src: "/images/aj-luxury-logo.webp",
+  /* Le rendu du hero dépasse 720 px sur grand écran. Le dérivé @2x est un
+     rééchantillonnage de Lanczos de l'actif natif — aucun pixel inventé. */
+  srcSet:
+    "/images/aj-luxury-logo.webp 720w, /images/aj-luxury-logo@2x.webp 1440w",
+  sizes: "(max-aspect-ratio: 4 / 5) min(78vw, 460px), min(71vw, 1400px)",
   largeur: 720,
   hauteur: 520,
 } as const;
