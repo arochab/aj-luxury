@@ -299,12 +299,19 @@ export default function Home() {
             <p className={`aj-reveal ${styles.clotureTexte}`}>
               <ClientCopyText copyKey="brandStory" />
             </p>
+            {/* La boutique passe EN PREMIER et prend le rang principal : c'est
+                la seule action commerciale de la fin de page. Elle reprend le
+                libellé de `#coloris` — `/shop` était appelée « Voir toute la
+                boutique » là-haut et « Découvrir la collection » ici, deux
+                noms pour une même destination sur une même page. Un seul
+                libellé, donc une seule idée. Le récit reste accessible, en
+                second rang. */}
             <div className={`aj-reveal ${styles.clotureActions}`}>
+              <Link href="/shop">
+                <T id="home.viewBoutique" />
+              </Link>
               <Link href="/notre-histoire">
                 <T id="home.discoverStory" />
-              </Link>
-              <Link href="/shop">
-                <T id="story.discoverCollection" />
               </Link>
             </div>
           </div>

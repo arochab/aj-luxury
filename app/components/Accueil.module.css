@@ -1493,7 +1493,17 @@
 .cloture {
   display: grid;
   min-height: 88svh;
-  place-items: center;
+  /* ── LA CLÔTURE REJOINT LA GRILLE DU SITE — 21/08 ──────────────────
+     Elle était centrée quand tout le reste de la page part de la gouttière :
+     relevé au navigateur, son bloc commençait à x=162 quand le pied de page,
+     la boutique et la barre d'onglets partent tous de 58. Une section centrée
+     au milieu d'une page alignée à gauche ne lit pas comme une variation,
+     elle lit comme un autre gabarit — et AGENTS.md le dit : « centré » veut
+     dire composition équilibrée, pas centrage systématique de chaque bloc.
+     Le bloc s'aligne donc, et reste centré VERTICALEMENT. */
+  align-items: center;
+  justify-items: start;
+  padding-inline: var(--gut);
   /* Cette section porte le titre en métal. L'arrêt sombre du dégradé (#6d737b)
      ne tient que 4,18:1 sur le noir de marque et perd 0,35 point par tranche
      de 4 L* rendue au fond : la clôture reste donc sur --aj-noir-abysse, le
@@ -1537,21 +1547,46 @@
   gap: clamp(18px, 3vw, 40px);
 }
 
+/* ── DEUX ACTIONS, DEUX RANGS ──────────────────────────────────────────
+   Les deux liens avaient le même poids au pixel près — 278x48 et 269x48,
+   même graisse, même filet. Deux propositions égales à la fin d'une page
+   marchande, c'est aucune proposition : le lecteur doit choisir alors que la
+   page vient de lui raconter un produit. Le premier lien mène à la boutique
+   et prend le rang principal ; le second, vers le récit, reste un lien de
+   texte. Aucun bouton pilule : le rang se dit par le remplissage et le poids,
+   pas par un gabarit rapporté. */
 .clotureActions a {
   display: inline-flex;
   align-items: center;
   min-height: 48px;
-  padding-bottom: 5px;
-  border-bottom: 1px solid var(--aj-filet-fort);
   font-size: var(--t0);
   font-weight: var(--aj-w-gras);
   letter-spacing: var(--aj-ls-action);
   text-transform: uppercase;
-  transition: border-color var(--aj-d-court) var(--e1);
+  transition:
+    background-color var(--aj-d-court) var(--e1),
+    border-color var(--aj-d-court) var(--e1),
+    color var(--aj-d-court) var(--e1);
 }
 
-.clotureActions a:hover,
-.clotureActions a:focus-visible {
+.clotureActions a:first-child {
+  padding: 0 clamp(22px, 2.2vw, 34px);
+  background: var(--aj-encre);
+  color: var(--aj-noir-abysse);
+}
+
+.clotureActions a:first-child:hover,
+.clotureActions a:first-child:focus-visible {
+  background: var(--aj-accent-lilas);
+}
+
+.clotureActions a:last-child {
+  padding-bottom: 5px;
+  border-bottom: 1px solid var(--aj-filet-fort);
+}
+
+.clotureActions a:last-child:hover,
+.clotureActions a:last-child:focus-visible {
   border-color: var(--aj-encre);
 }
 
