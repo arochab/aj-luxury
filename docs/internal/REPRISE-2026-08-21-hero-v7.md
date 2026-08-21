@@ -6,6 +6,126 @@ Dernière mise à jour : deuxième pause, à la demande d'Adam.
 Ce fichier ne remplace pas `HANDOFF-2026-08-21.md`, qui reste le récit des
 cinq chantiers précédents. Il ne couvre que la passe de refonte en cours.
 
+---
+
+# ⚠️ CHANGEMENT DE DIRECTION — À LIRE EN PREMIER
+
+**Décision d'Adam, 21/08, juste avant la pause. Elle prime sur tout ce qui
+suit dans ce fichier.**
+
+## Les images ChatGPT sont REFUSÉES
+
+Les deux masters `_design-reference/hero-v7-sources/hero-v7-source-{A,B}-*.png`
+et, avant eux, toute la direction « salle de chrome » de la v6 sont **invalides** :
+
+- **les visages sont déformés** — c'est le défaut rédhibitoire, une faute sur
+  la personne ;
+- **le fond est kitsch** — colonnes, statue, laurier, lyre, socle APOLLO.
+
+Ne pas les réutiliser, ne pas essayer de les rattraper, ne pas en regénérer.
+
+## Le seul master valide
+
+```
+public/images/client/campaign-duo-lilas-seated.webp
+```
+
+1484x2229, ratio 0,666, portrait. C'est la **vraie photographie de studio**
+des deux modèles — celle que le handoff du 21/08 §3 avait identifiée comme
+`IMG_5466.JPG`, la prise dont les corps avaient servi au composite chrome.
+Fond de studio gris/mauve dégradé, aucun décor.
+
+Elle est déjà dans le dépôt et déjà utilisée par `lib/editorial-moodboard.ts`
+et `lib/products.ts` — donc déjà validée client.
+
+## Le concept qui en découle, et pourquoi il est meilleur
+
+Adam avait donné la clé dans son message précédent : « on peut l'intégrer à
+une image des deux modèles préexistantes **en fond animé, en isolant
+parfaitement leurs silhouettes** ». Avec la vraie photo, ça devient l'évidence :
+
+```
+    fond           = MÉTAL LIQUIDE animé, plein cadre, synthétique
+    silhouettes    = les deux corps réels, détourés, posés par-dessus
+    AJ LUXURY      = entre les deux
+```
+
+Trois gains décisifs sur la direction précédente :
+
+1. **Aucun générateur ne touche les personnes.** La garantie d'architecture
+   déjà acquise sur la v7 est conservée telle quelle.
+2. **Le plafond de résolution disparaît.** Seuls les CORPS viennent de la
+   photo ; le fond est du WebGL, donc net à toute taille et à tout DPR. Le
+   compromis « 1672x941, 1,72x d'agrandissement » que nous venions d'assumer
+   n'a plus lieu d'être.
+3. **Le geste du mot-marque derrière les corps devient plus fort**, pas plus
+   faible : sur un champ de métal, les lettres ont enfin un fond qui leur
+   appartient au lieu d'une architecture chargée.
+
+## L'obstacle réel, mesuré — NE PAS SOUS-ESTIMER
+
+Le détourage par simple séparation chromatique **ne suffit PAS sur cette
+photo**, contrairement au composite. Mesures du 21/08 :
+
+| Zone | Chroma moyen |
+|---|---|
+| Fond de studio, partie éclairée | 17,7 à 19,6 |
+| Fond de studio, partie sombre | 3,5 |
+| Peau modèle droit | 80,9 |
+| Peau modèle gauche | 55,4 |
+| Boxer lilas | 46,4 |
+| Tissu noir du siège | 29,1 |
+
+Le fond éclairé monte à ~20, il faut donc seuiller haut ; et ce seuil **mange
+le modèle de gauche**, plus pâle. Essai fait, aperçu conservé dans
+`work/hero-v7/REEL-matte-preview.png` : **des trous dans les deux visages**
+(yeux, barbe, joues), cheveux partiellement perdus. Inutilisable en l'état.
+
+**Pistes pour la reprise, par ordre de préférence :**
+
+1. **Modélisation du fond puis soustraction.** Le fond est un dégradé lisse :
+   l'estimer (par ajustement polynomial depuis les bords, ou remplissage
+   depuis les quatre coins) et soustraire donne une séparation bien plus
+   franche qu'un seuil global. C'est la voie la plus propre et la plus
+   déterministe.
+2. **Un modèle de SEGMENTATION local** (type `rembg`/U²-Net). À noter, et
+   c'est ce qui le rend acceptable ici : un modèle de matting **ne redessine
+   aucun pixel**, il ne produit qu'un masque. Il ne viole donc pas la
+   contrainte d'Adam sur les visages. À vérifier avant install.
+3. Chroma + luminance combinés, avec affinage de bord — le repli.
+
+Quelle que soit la voie : **contrôle à 100 % sur les deux visages, les
+cheveux, les mains et les ceintures avant de committer un matte.**
+
+## Questions ouvertes pour Adam
+
+1. **Le siège.** Le modèle de gauche est assis sur une caisse recouverte de
+   tissu noir. Le retirer le fait flotter. Le garder (socle noir mat sur métal
+   liquide, ce qui peut être très beau), le recadrer hors champ, ou le
+   remplacer ?
+2. **Le cadrage bureau.** Le master est PORTRAIT (0,666). Pour un premier
+   écran paysage, les corps seront posés dans un champ de métal plein cadre —
+   donc pas de recadrage destructeur, mais la composition bureau reste à
+   dessiner.
+
+## Ce qui reste valable de la v7 malgré le changement
+
+L'architecture est intacte et se réutilise telle quelle — seuls les ACTIFS
+changent :
+
+- `HeroV7.tsx` / `HeroV7.module.css` : les quatre calques, la caméra et la
+  dérive séparées, les trois `immediateRender: false`, le volet, le mouvement
+  réduit, les plafonds responsives ;
+- `scripts/build_hero_v7_assets.py` : le pipeline est le bon, seuls le master
+  d'entrée et la méthode de matte changent ;
+- `DeferredMetallicField` : passe simplement de « sol » à « fond plein cadre » ;
+- les contrats de test v7 : à réaligner sur les nouveaux noms d'actifs.
+
+**Ne pas supprimer** les actifs v6 ni les masters ChatGPT tant qu'Adam n'a pas
+vu la nouvelle version : ils restent le chemin de retour arrière.
+
+---
+
 ## Où on en est, en une phrase
 
 **Le premier écran est refait, vérifié et livré.** Le reste de l'accueil est
