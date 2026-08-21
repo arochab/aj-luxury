@@ -571,46 +571,90 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
   assert.match(html, /Pourpre Impérial/);
   assert.match(html, /Rose Velours/);
   assert.match(html, /Lilas Céleste/);
-  assert.match(html, /data-hero-version="video-v6"/);
-  assert.match(html, /\/media\/images\/client\/hero-v6-/);
-  assert.match(html, /class="aj-film__hero-video"/);
-  assert.match(html, /class="aj-film__hero-backdrop"/);
-  assert.match(html, /class="aj-film__hero-stage"/);
-  assert.match(html, /class="aj-film__hero-poster"/);
-  assert.match(html, /hero-v6-portrait-720x934-poster\.webp\?v=v6/);
-  assert.match(html, /hero-v6-portrait-480x623-poster\.webp\?v=v6/);
-  assert.doesNotMatch(html, /hero-v6-portrait-720x934-poster\.avif\?v=v6/);
-  assert.match(html, /type="image\/avif"/);
-  assert.match(html, /hero-v6-tablet-1440x810-poster\.webp\?v=v6/);
-  assert.match(html, /hero-v6-tablet-1440x810-poster\.avif\?v=v6/);
-  assert.match(html, /hero-v6-desktop-1920x1080-poster\.webp\?v=v6/);
-  assert.match(html, /hero-v6-desktop-1920x1080-poster\.avif\?v=v6/);
-  assert.match(html, /hero-v6-xl-native-1920x1080-poster\.webp\?v=v6/);
-  assert.match(html, /hero-v6-xl-native-1920x1080-poster\.avif\?v=v6/);
+  /* ── LE CONTRAT DU HERO v7 ────────────────────────────────────────────
+     Le premier ecran n'est plus une video mais une photographie vivante en
+     deux calques. Le contrat v6 verrouillait la mecanique de la video —
+     autoPlay, loop, poster, backdrop, stage, reflet metallique — et decrivait
+     donc un produit qui n'existe plus. Il est REECRIT sur ce que la v7 promet,
+     et ce qu'elle promet est plus fort : le geste de la maison est verifiable
+     dans le HTML rendu, pas seulement a l'oeil. */
+  assert.match(html, /data-hero-version="v7"/);
+  assert.doesNotMatch(html, /hero-v6-|data-hero-version="video-v6"/);
+
+  /* LES DEUX CALQUES. C'est l'invariant central : sans le calque `figures`,
+     le mot-marque cesse de passer DERRIERE les corps et le hero perd sa seule
+     idee. Les deux <picture> doivent etre presents, et le mot entre les deux
+     dans l'ordre du document. */
+  const plate = html.indexOf("hero-v7-paysage-plate");
+  const marque = html.indexOf('id="aj-hero-marque"');
+  const figures = html.indexOf("hero-v7-paysage-figures");
+  assert.ok(
+    plate > -1 && marque > plate && figures > marque,
+    "l'ordre du hero doit rester fond -> mot-marque -> corps decoupes",
+  );
+
+  /* Les quatre actifs, chacun dans les deux formats, et le master portrait
+     derriere sa requete media — un telephone ne doit jamais telecharger le
+     master paysage. */
+  for (const actif of [
+    "hero-v7-paysage-plate",
+    "hero-v7-paysage-figures",
+    "hero-v7-portrait-plate",
+    "hero-v7-portrait-figures",
+  ]) {
+    assert.ok(html.includes(`${actif}.avif?v=v7`), `${actif}.avif manquant`);
+    assert.ok(html.includes(`${actif}.webp?v=v7`), `${actif}.webp manquant`);
+  }
   assert.match(
     html,
-    /<video[^>]*autoPlay=""[^>]*muted=""[^>]*playsInline=""[^>]*preload="none"/,
+    /media="\(max-aspect-ratio: 4 \/ 5\)"[^>]*srcSet="[^"]*hero-v7-portrait-plate\.avif/,
   );
-  /* Contrat inverse depuis le 20/08 : la boucle est obligatoire (master v6
-     periodique par construction, voir tests/hero-video.test.mjs). */
-  assert.match(html, /<video[^>]*\sloop=""/);
-  assert.doesNotMatch(html, /<video[^>]*\ssrc=/);
-  assert.doesNotMatch(html, /<video[^>]*\sposter=/);
-  assert.doesNotMatch(html, /images\/client\/hero-duo-(?:static|cutout)/);
-  /* Calque d'identite v4 retire avec le master v6 du 21/08 : plus aucun
-     overlay d'identite dans le HTML rendu. */
-  assert.doesNotMatch(html, /hero-identity-overlay-/);
-  assert.match(html, /aj-film__hero-reflection/);
-  /* 1 depuis le 20/08 : la grille des trois cartes et son second champ
-     metallique ont quitte l'accueil avec la reprise de la sequence ; seul le
-     reflet du hero reste, et il doit rester non monte au premier rendu. */
-  assert.equal(
-    (html.match(/data-metallic-mounted="false"/g) ?? []).length,
-    1,
-    "homepage metallic fields must remain unmounted during initial hero render",
+
+  /* L'ordre des <source> suit le poids MESURE et non le format : sur la
+     decoupe paysage, WebP bat AVIF (79 Ko contre 120). Se tromper d'ordre
+     coute le surpoids a chaque visite, silencieusement. */
+  const figuresPaysage = html.slice(figures - 400, figures + 400);
+  assert.ok(
+    figuresPaysage.indexOf("hero-v7-paysage-figures.webp") <
+      figuresPaysage.indexOf("hero-v7-paysage-figures.avif"),
+    "la decoupe paysage doit proposer WebP avant AVIF : il est plus leger",
   );
+
+  /* Le fond est le LCP et se declare comme tel ; la decoupe ne doit PAS
+     concourir avec lui. */
+  assert.match(
+    html,
+    /hero-v7-paysage-plate\.webp\?v=v7"[^>]*decoding="sync"[^>]*fetchPriority="high"/,
+  );
+
+  /* La decoupe est strictement decorative : elle redecoupe les memes pixels
+     que le fond, qui porte deja la description de la scene. Un second texte
+     alternatif creerait une deuxieme description de la meme photographie. */
+  assert.match(
+    html,
+    /hero-v7-paysage-figures\.webp\?v=v7" alt=""/,
+  );
+
+  /* Le mot-marque EST le h1 : le nom de la maison, une fois, a sa place. */
+  assert.match(
+    html,
+    /<h1 class="[^"]*" id="aj-hero-marque"><span class="aj-metal [^"]*">AJ Luxury<\/span><\/h1>/,
+  );
+
+  /* La couleur est posee au premier paint par une vignette en data URI :
+     aucune requete, aucun decalage de mise en page. */
+  assert.match(html, /--aj-hero-lqip:url\(&quot;data:image\/webp;base64,/);
+
+  /* Plus une seule video sur l'accueil, donc plus de bouton pour la figer,
+     et plus aucun champ metallique a monter. */
+  assert.doesNotMatch(html, /<video/);
+  assert.doesNotMatch(html, /Figer le métal/);
+  assert.doesNotMatch(html, /aj-film__hero-|aj-film__living-duo|aj-film__liquid-overlay/);
+  assert.equal((html.match(/data-metallic-mounted="false"/g) ?? []).length, 0);
   assert.doesNotMatch(html, /class="metallic-field__canvas"/);
-  assert.match(html, /Figer le métal/);
+  assert.doesNotMatch(html, /hero-identity-overlay-/);
+  assert.doesNotMatch(html, /images\/client\/hero-duo-(?:static|cutout)/);
+
   assert.match(html, /href="\/"[^>]*aria-current="page"[^>]*>Accueil</);
   assert.match(html, />Notre histoire</);
   assert.match(html, /href="\/shop"[^>]*>Découvrir la collection</);

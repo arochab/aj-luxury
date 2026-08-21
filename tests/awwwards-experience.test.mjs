@@ -45,25 +45,31 @@ test("the private homepage preserves the approved film and the recovered Apollon
     projectFile("app/components/ApollonGuidedSequence.tsx"),
     "utf8",
   );
-  const heroComposition = await readFile(
-    projectFile("app/components/HeroComposition.tsx"),
-    "utf8",
-  );
-  const heroBackgroundVideo = await readFile(
-    projectFile("app/components/HeroBackgroundVideo.tsx"),
-    "utf8",
-  );
+  const hero = await readFile(projectFile("app/components/HeroV7.tsx"), "utf8");
   const rose = sequence.indexOf("apollon-rose-lyre-v1.webp");
   const lilas = sequence.indexOf("apollon-lilas-lyre-v1.webp");
   const pourpre = sequence.indexOf("apollon-pourpre-lyre-v1.webp");
 
   assert.ok(rose > -1 && lilas > rose && pourpre > lilas);
-  assert.match(page, /<HeroComposition\s*\/>/);
+  assert.match(page, /<HeroV7\s*\/>/);
   assert.doesNotMatch(page, /className="aj-film__message"/);
-  assert.match(heroComposition, /<HeroBackgroundVideo/);
-  /* Calque d'identite v4 retire avec le master v6 du 21/08 — voir
-     tests/hero-video.test.mjs, contrat « subject-safe ». */
-  assert.doesNotMatch(heroBackgroundVideo, /<HeroIdentityOverlay/);
+  /* Le hero v7 tient sur deux calques superposes. Le calque `figures` est la
+     SEULE raison pour laquelle le mot-marque passe derriere les corps : sans
+     lui le premier ecran redevient un titre pose sur une image. */
+  assert.match(hero, /role="plate"/);
+  assert.match(hero, /role="figures"/);
+  /* Trois mouvements, trois proprietaires. La derive et la poussee au
+     defilement ont anime `scale` sur le meme noeud le 21/08 : elles se
+     disputaient le rendu et l'image restait immobile au defilement. Elles
+     vivent depuis sur deux noeuds imbriques. */
+  assert.match(hero, /const camera = q\(`\.\$\{styles\.camera\}`\)\[0\]/);
+  assert.match(hero, /const scene = q\(`\.\$\{styles\.scene\}`\)\[0\]/);
+  /* Chaque tween de defilement part d'une valeur ECRITE et ne se rend qu'au
+     premier defilement : sans cela GSAP relevait sa valeur de depart en plein
+     milieu de l'arrivee, et le retour en haut de page rendait le premier ecran
+     vide. Trois tweens de defilement, trois immediateRender: false. */
+  assert.equal((hero.match(/immediateRender: false,/g) ?? []).length, 3);
+  assert.doesNotMatch(hero, /<HeroIdentityOverlay/);
   /* CONTRATS RÉALIGNÉS LE 21/08 sur l'implémentation vivante — partition
      nommée + copie progressive. Les marqueurs aj-sequence__*, selectFrame et
      le mode world/color appartenaient à la première implémentation, disparue
