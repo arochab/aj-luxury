@@ -45,19 +45,28 @@ test("the private homepage preserves the approved film and the recovered Apollon
     projectFile("app/components/ApollonGuidedSequence.tsx"),
     "utf8",
   );
-  const hero = await readFile(projectFile("app/components/HeroV7.tsx"), "utf8");
+  const hero = await readFile(projectFile("app/components/Hero.tsx"), "utf8");
   const rose = sequence.indexOf("apollon-rose-lyre-v1.webp");
   const lilas = sequence.indexOf("apollon-lilas-lyre-v1.webp");
   const pourpre = sequence.indexOf("apollon-pourpre-lyre-v1.webp");
 
   assert.ok(rose > -1 && lilas > rose && pourpre > lilas);
-  assert.match(page, /<HeroV7\s*\/>/);
+  assert.match(page, /<Hero\s*\/>/);
   assert.doesNotMatch(page, /className="aj-film__message"/);
-  /* Le hero v7 tient sur deux calques superposes. Le calque `figures` est la
-     SEULE raison pour laquelle le mot-marque passe derriere les corps : sans
-     lui le premier ecran redevient un titre pose sur une image. */
-  assert.match(hero, /role="plate"/);
-  assert.match(hero, /role="figures"/);
+  /* LA PROVENANCE DES VISAGES EST UN CONTRAT, PAS UNE INTENTION. Adam a
+     refuse le 21/08 les masters issus d'un modele generatif : les visages y
+     etaient deformes. La decoupe servie au premier ecran doit donc etre
+     fabriquee a partir de la photographie de studio validee, et par un modele
+     de SEGMENTATION — qui ne produit qu'un canal alpha et ne peut pas
+     redessiner un visage. Ce test verrouille les deux. */
+  const fabrique = await readFile(
+    projectFile("scripts/build_hero_figures.py"),
+    "utf8",
+  );
+  assert.match(fabrique, /campaign-duo-lilas-seated\.webp/);
+  assert.match(fabrique, /only_mask=True/);
+  assert.match(hero, /HERO_FIGURES/);
+  assert.doesNotMatch(hero, /role="plate"/);
   /* Trois mouvements, trois proprietaires. La derive et la poussee au
      defilement ont anime `scale` sur le meme noeud le 21/08 : elles se
      disputaient le rendu et l'image restait immobile au defilement. Elles

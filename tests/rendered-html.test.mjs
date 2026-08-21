@@ -578,62 +578,46 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
      donc un produit qui n'existe plus. Il est REECRIT sur ce que la v7 promet,
      et ce qu'elle promet est plus fort : le geste de la maison est verifiable
      dans le HTML rendu, pas seulement a l'oeil. */
-  assert.match(html, /data-hero-version="v7"/);
-  assert.doesNotMatch(html, /hero-v6-|data-hero-version="video-v6"/);
+  assert.match(html, /data-hero-version="v8"/);
+  assert.doesNotMatch(html, /hero-v6-|hero-v7-|data-hero-version="video-v[67]"/);
 
-  /* LES DEUX CALQUES. C'est l'invariant central : sans le calque `figures`,
-     le mot-marque cesse de passer DERRIERE les corps et le hero perd sa seule
-     idee. Les deux <picture> doivent etre presents, et le mot entre les deux
-     dans l'ordre du document. */
-  const plate = html.indexOf("hero-v7-paysage-plate");
+  /* LA PROVENANCE DES VISAGES, VERIFIEE DANS LE HTML RENDU. Adam a refuse le
+     21/08 les masters issus d'un modele generatif : les visages y etaient
+     deformes. Le premier ecran ne doit donc servir QUE la decoupe faite a
+     partir de la photographie de studio validee. */
+  assert.ok(html.includes("hero-figures.avif?v=v8"), "hero-figures.avif manquant");
+  assert.ok(html.includes("hero-figures.webp?v=v8"), "hero-figures.webp manquant");
+
+  /* L'ORDRE DES CALQUES. C'est l'invariant central du bureau : le metal est
+     le monde, le mot passe ENTRE, les corps se posent par-dessus. Inverser
+     metal et corps mettrait le champ anime DEVANT les modeles ; passer le mot
+     apres les corps lui ferait perdre sa seule idee. */
   const marque = html.indexOf('id="aj-hero-marque"');
-  const figures = html.indexOf("hero-v7-paysage-figures");
+  const figures = html.indexOf("hero-figures.avif");
   assert.ok(
-    plate > -1 && marque > plate && figures > marque,
-    "l'ordre du hero doit rester fond -> mot-marque -> corps decoupes",
+    marque > -1 && figures > marque,
+    "l'ordre du hero doit rester metal -> mot-marque -> corps decoupes",
   );
 
-  /* Les quatre actifs, chacun dans les deux formats, et le master portrait
-     derriere sa requete media — un telephone ne doit jamais telecharger le
-     master paysage. */
-  for (const actif of [
-    "hero-v7-paysage-plate",
-    "hero-v7-paysage-figures",
-    "hero-v7-portrait-plate",
-    "hero-v7-portrait-figures",
-  ]) {
-    assert.ok(html.includes(`${actif}.avif?v=v7`), `${actif}.avif manquant`);
-    assert.ok(html.includes(`${actif}.webp?v=v7`), `${actif}.webp manquant`);
-  }
-  assert.match(
-    html,
-    /media="\(max-aspect-ratio: 4 \/ 5\)"[^>]*srcSet="[^"]*hero-v7-portrait-plate\.avif/,
-  );
-
-  /* L'ordre des <source> suit le poids MESURE et non le format : sur la
-     decoupe paysage, WebP bat AVIF (79 Ko contre 120). Se tromper d'ordre
-     coute le surpoids a chaque visite, silencieusement. */
-  const figuresPaysage = html.slice(figures - 400, figures + 400);
+  /* L'ordre des <source> suit le poids MESURE : sur cette decoupe AVIF bat
+     WebP (195 Ko contre 289). Se tromper d'ordre coute le surpoids a chaque
+     visite, silencieusement. */
+  const bloc = html.slice(figures - 200, figures + 600);
   assert.ok(
-    figuresPaysage.indexOf("hero-v7-paysage-figures.webp") <
-      figuresPaysage.indexOf("hero-v7-paysage-figures.avif"),
-    "la decoupe paysage doit proposer WebP avant AVIF : il est plus leger",
+    bloc.indexOf("hero-figures.avif") < bloc.indexOf("hero-figures.webp"),
+    "la decoupe doit proposer AVIF avant WebP : il est plus leger",
   );
 
-  /* Le fond est le LCP et se declare comme tel ; la decoupe ne doit PAS
-     concourir avec lui. */
+  /* Les corps SONT le LCP : plus de photographie de fond, donc plus rien
+     d'autre a prioriser. */
   assert.match(
     html,
-    /hero-v7-paysage-plate\.webp\?v=v7"[^>]*decoding="sync"[^>]*fetchPriority="high"/,
+    /hero-figures\.webp\?v=v8"[^>]*decoding="sync"[^>]*fetchPriority="high"/,
   );
 
-  /* La decoupe est strictement decorative : elle redecoupe les memes pixels
-     que le fond, qui porte deja la description de la scene. Un second texte
-     alternatif creerait une deuxieme description de la meme photographie. */
-  assert.match(
-    html,
-    /hero-v7-paysage-figures\.webp\?v=v7" alt=""/,
-  );
+  /* Et ils portent la description de la photographie, une seule fois : il n'y
+     a plus de calque de fond pour la porter a leur place. */
+  assert.match(html, /hero-figures\.webp\?v=v8" alt="AJ Luxury —/);
 
   /* Le mot-marque EST le h1 : le nom de la maison, une fois, a sa place. */
   assert.match(
@@ -641,26 +625,27 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
     /<h1 class="[^"]*" id="aj-hero-marque"><span class="aj-metal [^"]*">AJ Luxury<\/span><\/h1>/,
   );
 
-  /* La couleur est posee au premier paint par une vignette en data URI :
-     aucune requete, aucun decalage de mise en page. */
-  assert.match(html, /--aj-hero-lqip:url\(&quot;data:image\/webp;base64,/);
+  /* Le rapport de la decoupe est pose en variable CSS : le navigateur reserve
+     la place exacte des corps avant decodage, donc aucun saut de mise en page. */
+  assert.match(html, /--aj-hero-figures-ratio:0\.6/);
 
   /* Plus une seule video sur l'accueil, donc plus de bouton pour la figer. */
   assert.doesNotMatch(html, /<video/);
   assert.doesNotMatch(html, /Figer le métal/);
   assert.doesNotMatch(html, /aj-film__hero-|aj-film__living-duo|aj-film__liquid-overlay/);
 
-  /* LE METAL LIQUIDE. Un champ, et un seul : le sol du hero. Il doit arriver
-     NON MONTE dans le HTML serveur — le WebGL ne se cree qu'a l'intersection,
-     donc il ne peut pas peser sur le premier rendu ni sur le LCP. */
+  /* LE METAL LIQUIDE. Un champ, et un seul : le MONDE du hero, plein cadre.
+     Il doit arriver NON MONTE dans le HTML serveur — le WebGL ne se cree qu'a
+     l'intersection, donc il ne peut peser ni sur le premier rendu ni sur le
+     LCP. */
   assert.equal((html.match(/data-metallic-mounted="false"/g) ?? []).length, 1);
   assert.doesNotMatch(html, /class="metallic-field__canvas"/);
   /* Il est decoratif et vit ENTRE le fond et les corps : jamais au-dessus des
      modeles, jamais annonce a un lecteur d'ecran. */
   const metal = html.indexOf('data-metallic-mounted="false"');
   assert.ok(
-    metal > plate && metal < figures,
-    "le champ metallique doit rester entre le fond et les corps decoupes",
+    metal > -1 && metal < marque && marque < figures,
+    "le champ metallique doit rester DERRIERE le mot-marque et les corps",
   );
   assert.doesNotMatch(html, /hero-identity-overlay-/);
   assert.doesNotMatch(html, /images\/client\/hero-duo-(?:static|cutout)/);

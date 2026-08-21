@@ -344,8 +344,22 @@
      523, et deux respirations de ~25. Les corps sont calés à 62svh, valeur
      sous la limite de largeur (390 / 0,671 = 581 px) : rien n'est rogné. */
   .hero {
+    /* ── LA HAUTEUR DES CORPS EST UN RESTE, PAS UN SOUHAIT ──────────────
+       Un plafond fixe en svh ne tient pas sur un écran vertical : à
+       768x1024 il donnait 635 px de corps et laissait EXACTEMENT 135 px
+       au-dessus pour un mot qui en fait 135 — la copie et le mot se
+       touchaient. Le budget vertical se calcule donc au lieu d'être deviné :
+
+         hauteur d'écran
+         − la barre                     var(--aj-tete-h)
+         − le mot, qui suit la largeur  17,9cqi  (corps/4,8 × interligne 0,86)
+         − la copie et ses respirations 190px    (121 mesurés + 69 d'air)
+
+       La seconde borne reste la largeur : un corps ne se rogne jamais. La
+       plus petite des deux gagne, donc le premier écran reste juste sur un
+       téléphone étroit comme sur une tablette haute. */
     --aj-hero-figures-h: min(
-      62svh,
+      calc(100svh - var(--aj-tete-h) - 17.9cqi - 190px),
       calc((100cqi - 2 * var(--gut)) / var(--aj-hero-figures-ratio))
     );
   }
