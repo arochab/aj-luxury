@@ -1707,6 +1707,35 @@
 }
 
 /* ==========================================================================
+   Les coutures — 21/08
+   --------------------------------------------------------------------------
+   LA RÈGLE, EN UNE PHRASE : le blanc d'une couture est la teinte des hautes
+   lumières de l'image qu'elle borde — moyenne RGB des pixels au 95e
+   percentile de luminance, relevée au navigateur sur 400 px côté image, typo
+   exclue — portée à la clarté L* = 93 avec une chromie plafonnée à 6, sur
+   une bande pleine largeur de hauteur constante.
+
+   Ce N'EST PAS la « bande grise » refusée le 18/08 : celle-là était un
+   interstice accidentel de quelques pixels sous la barre. Ici la hauteur est
+   ASSUMÉE et constante — clamp(72px, 10svh, 108px), le même rapport à
+   l'écran sur toutes les jonctions — et chaque blanc est MESURÉ, jamais
+   choisi : chrome froid après le film (237,234,235), bordeaux chaud après la
+   plaque (243,233,229), peau après la matière (246,231,231)... Les valeurs
+   par jonction vivent dans app/page.tsx, les preuves du relevé dans
+   .playwright-mcp/chantier4-coutures-20260821/.
+
+   Deux exceptions, par la règle elle-même : l'intérieur de la séquence
+   épinglée (un effet de scroll n'est pas une jonction) et
+   clôture -> pied de page (aucune image ne borde la jonction). */
+
+.couture {
+  display: block;
+  width: 100%;
+  height: clamp(72px, 10svh, 108px);
+  background: var(--couture-blanc, #f2eeec);
+}
+
+/* ==========================================================================
    05 · Éditorial
    ========================================================================== */
 
@@ -1724,12 +1753,23 @@
 .editorialGrille {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 2px;
+  /* ÉCRAN VERTICAL : les figures s'empilent, et chaque interstice devient
+     une couture d'images — même blanc que la couture matière -> éditorial
+     (245,232,229, relevé le 21/08), hauteur constante plus courte que les
+     coutures de sections : c'est une respiration entre images, pas entre
+     écrans. Le fond de la grille ne se voit QUE dans les interstices. */
+  gap: clamp(18px, 2.6svh, 28px);
+  background: rgb(245, 232, 229);
 }
 
 @media (min-width: 700px) {
   .editorialGrille {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+    /* Trois colonnes côte à côte : le rythme redevient horizontal et la
+       gouttière retourne au filet sombre d'origine. La consigne des bandes
+       blanches entre images vaut pour les écrans verticaux. */
+    gap: 2px;
+    background: var(--aj-noir);
   }
 }
 

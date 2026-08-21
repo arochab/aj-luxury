@@ -1,6 +1,7 @@
 /* eslint-disable @next/next/no-img-element -- médias client déjà optimisés : aucun runtime d'image à charger */
 
 import Link from "next/link";
+import type { CSSProperties } from "react";
 import HeroComposition from "./components/HeroComposition";
 import StoreFooter from "./components/StoreFooter";
 import StoreHeader from "./components/StoreHeader";
@@ -149,11 +150,35 @@ export default function Home() {
           </div>
         </section>
 
+        {/* ── LES COUTURES ────────────────────────────────────────────────
+            La règle tient en une phrase : le blanc d'une couture est la
+            teinte des hautes lumières de l'image qu'elle borde — moyenne RGB
+            des pixels au 95e percentile de luminance, relevée au navigateur
+            sur 400 px côté image, typo exclue — portée à la clarté L* = 93
+            avec une chromie plafonnée à 6, sur une bande pleine largeur de
+            hauteur constante `--couture-h`. Valeurs relevées le 21/08 à
+            1920x1080 (chaque jonction dans son état réel d'arrivée, mur
+            pourpre compris) : preuves et calcul dans
+            .playwright-mcp/chantier4-coutures-20260821/.
+            Deux exceptions, par la règle elle-même : l'intérieur de la
+            séquence épinglée (un effet de scroll n'est pas une jonction) et
+            clôture -> pied de page (aucune image ne borde la jonction). */}
+
         {/* ── 02 · La plaque ───────────────────────────────────────────── */}
+        <span
+          aria-hidden="true"
+          className={styles.couture}
+          style={{ "--couture-blanc": "rgb(237, 234, 235)" } as CSSProperties}
+        />
         <span id="apollon" aria-hidden="true" />
         <ApollonGuidedSequence coloris={coloris} />
 
         {/* ── 03 · Les coloris ─────────────────────────────────────────── */}
+        <span
+          aria-hidden="true"
+          className={styles.couture}
+          style={{ "--couture-blanc": "rgb(243, 233, 229)" } as CSSProperties}
+        />
         <span id="collection" aria-hidden="true" />
         <section
           className={styles.coloris}
@@ -224,6 +249,11 @@ export default function Home() {
         </section>
 
         {/* ── 04 · La matière ──────────────────────────────────────────── */}
+        <span
+          aria-hidden="true"
+          className={styles.couture}
+          style={{ "--couture-blanc": "rgb(246, 231, 231)" } as CSSProperties}
+        />
         <section
           className={styles.matiere}
           id="matiere"
@@ -266,6 +296,11 @@ export default function Home() {
         </section>
 
         {/* ── 05 · Éditorial ───────────────────────────────────────────── */}
+        <span
+          aria-hidden="true"
+          className={styles.couture}
+          style={{ "--couture-blanc": "rgb(245, 232, 229)" } as CSSProperties}
+        />
         <section className={styles.editorial} aria-labelledby="aj-editorial-titre">
           <h2 className="aj-sr-only" id="aj-editorial-titre">
             <T id="home.incarnationEyebrow" />
@@ -290,6 +325,11 @@ export default function Home() {
         </section>
 
         {/* ── 06 · Clôture ─────────────────────────────────────────────── */}
+        <span
+          aria-hidden="true"
+          className={styles.couture}
+          style={{ "--couture-blanc": "rgb(246, 231, 233)" } as CSSProperties}
+        />
         <span id="histoire" aria-hidden="true" />
         <section className={styles.cloture} aria-labelledby="aj-cloture-titre">
           <div className={styles.clotureBloc}>

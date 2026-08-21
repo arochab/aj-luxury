@@ -698,10 +698,15 @@
    identifiable mais le logo de ceinture ne faisait plus que 11 px et devenait
    illisible, au seul endroit du site où les deux fondateurs sont présentés
    ensemble. La règle d'appariement reste tenue : deux cellules successives,
-   même cadre, même hauteur — elles sont simplement empilées. */
+   même cadre, même hauteur — elles sont simplement empilées.
+   L'interstice devient une couture d'images (règle des coutures du 21/08,
+   Accueil.module.css) : blanc dérivé des hautes lumières des deux portraits,
+   relevé au navigateur — rgb(246,231,231). */
 @media (max-width: 419px) {
   .duoGrille {
     grid-template-columns: 1fr;
+    gap: clamp(18px, 2.6svh, 28px);
+    background: rgb(246, 231, 231);
   }
 }
 
