@@ -332,29 +332,29 @@ export default function NotreHistoirePage() {
         <section className={styles.ouverture} aria-labelledby="recit-titre">
           <div className={styles.ouvertureMedia}>
             <div className={styles.plan}>
-              {/* Art direction, pas simple redimensionnement : sous 780 px le
-                  cadre est portrait (720/934 en CSS) et la source 16/9 du
-                  bureau y perdait 28,4 % de sa largeur. Le poster portrait de
-                  l'échelle hero v6 existe déjà (lib/hero-video.ts l'utilise
-                  pour la vidéo d'accueil) ; on le sert ici pour l'image. Le
-                  portrait v6 n'est plus un recadrage du paysage : c'est la
-                  composition verticale validée par Adam le 21/08. */}
-              <picture>
-                <source
-                  media="(max-width: 780px)"
-                  srcSet="/images/client/hero-v6-portrait-480x623-poster.webp 480w, /images/client/hero-v6-portrait-720x934-poster.webp 720w"
-                  sizes="100vw"
-                />
-                <img
-                  alt="AJ Luxury — Jérémy et Alex dans l’univers Apollon : marbre, métal liquide, lyre, arc et laurier"
-                  className={styles.planMedia}
-                  src="/images/client/hero-v6-desktop-1920x1080-poster.webp"
-                  width={1920}
-                  height={1080}
-                  fetchPriority="high"
-                  decoding="async"
-                />
-              </picture>
+              {/* ── L'OUVERTURE REPART DE LA VRAIE PHOTOGRAPHIE — 22/08 ──
+                  Cet écran servait encore les posters du hero v6, c'est-à-dire
+                  les images composites qu'Adam a REFUSÉES le 21/08 : visages
+                  déformés, décor kitsch. Elles avaient disparu de l'accueil
+                  mais survivaient ici, sur la page qui présente les deux
+                  fondateurs — l'endroit du site où un visage déformé est le
+                  plus grave.
+
+                  La source est la prise de studio validée, la même que celle
+                  dont le premier écran découpe les corps. Le cadre reste
+                  paysage au bureau et portrait sous 780 px, et l'ancrage HAUT
+                  garantit les visages entiers dans les deux cas : ce qui sort
+                  du cadre sort toujours par le bas. */}
+              <img
+                alt="AJ Luxury — Jérémy et Alex, prise de studio de la collection Apollon"
+                className={styles.planMedia}
+                src="/images/client/campaign-duo-lilas-seated.webp"
+                width={1484}
+                height={2229}
+                style={{ objectPosition: "center top" }}
+                fetchPriority="high"
+                decoding="async"
+              />
             </div>
             <span aria-hidden="true" className={styles.grade} />
           </div>
