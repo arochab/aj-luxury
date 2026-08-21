@@ -268,21 +268,40 @@ const ETATS = ["Seul", "Se dévoile", "Porté"] as const;
 
    Les durées ci-dessous sont donc lues EN ÉCRANS, et la hauteur de la section
    en découle : `.plaque` vaut `(1 + somme) × 100svh`, l'écran collant plus la
-   course. Une unité = un écran plein. Somme = 3 × (0,5 + 1 + 1) + 2 × 0,5 =
-   8,5, donc 950svh au lieu de 420svh, et par coloris : un demi-écran de plan
-   scellé, un écran de dévoilement, UN ÉCRAN PLEIN de diptyque immobile, un
-   demi-écran de transit. Le palier porté passe de 17svh à 100svh, ×5,9.
+   course. Une unité = un écran plein. Depuis le 21/08 les durées sont PAR
+   COLORIS (voir DUREES_PAR_PLATEAU) : somme 8,3 écrans, donc 930svh, et
+   aucun palier porté sous 0,85 écran — la leçon de l'étalon est conservée,
+   les strophes ne sont plus identiques.
    ========================================================================== */
 
 type NomTemps = "transit" | "seul" | "devoile" | "porte";
 
-/** En ÉCRANS. La somme pilote la hauteur de la section, cf. SOMME_TEMPS. */
-const DUREES: Record<NomTemps, number> = {
-  transit: 0.5,
-  seul: 0.5,
-  devoile: 1,
-  porte: 1,
-};
+/* ── CHAQUE COLORIS A SES TEMPS PROPRES — 21/08 ────────────────────
+   Le jeu précédent donnait 0,5 / 1 / 1 aux trois coloris : trois strophes
+   identiques, relevées par le handoff comme un défaut majeur (« 9 écrans sur
+   14, même bloc au pixel près »). La partition devient musicale :
+     • rose, 01 — l'OUVERTURE. Le rituel est nouveau : le plan scellé tient
+       0,75 écran, le dévoilement prend son temps (1,05), le palier 0,9 ;
+     • lilas, 02 — la REPRISE. Le lecteur connaît le rituel : entrée brève
+       (0,45), dévoilement plus allant (0,75), palier 0,85 ;
+     • pourpre, 03 — la CADENCE FINALE. Entrée moyenne (0,5), dévoilement
+       soutenu (0,9), et le palier le plus long de la série (1,15) : la
+       séquence se referme sur son plan le plus tenu, pas sur un écho.
+   Les transits restent égaux : la vitesse du rail est la physique de la
+   pièce, pas un trait de caractère des coloris. Somme 8,3 écrans (‑0,2). */
+const DUREES_PAR_PLATEAU: readonly Record<
+  Exclude<NomTemps, "transit">,
+  number
+>[] = [
+  { seul: 0.75, devoile: 1.05, porte: 0.9 },
+  { seul: 0.45, devoile: 0.75, porte: 0.85 },
+  { seul: 0.5, devoile: 0.9, porte: 1.15 },
+];
+
+const DUREE_TRANSIT = 0.5;
+
+const dureeDe = (panneau: number, nom: NomTemps): number =>
+  nom === "transit" ? DUREE_TRANSIT : DUREES_PAR_PLATEAU[panneau][nom];
 
 type Mesure = {
   readonly panneau: number;
@@ -301,11 +320,11 @@ function partition(n: number): readonly Mesure[] {
     brut.push({ panneau: i, nom: "devoile" });
     brut.push({ panneau: i, nom: "porte" });
   }
-  const total = brut.reduce((somme, m) => somme + DUREES[m.nom], 0);
+  const total = brut.reduce((somme, m) => somme + dureeDe(m.panneau, m.nom), 0);
   let curseur = 0;
   return brut.map(({ panneau, nom }) => {
     const debut = curseur / total;
-    curseur += DUREES[nom];
+    curseur += dureeDe(panneau, nom);
     return { panneau, nom, debut, fin: curseur / total };
   });
 }
@@ -317,9 +336,10 @@ const MESURES = partition(PLATEAUX.length);
    Elle est DÉRIVÉE du même tableau que la partition : une durée modifiée
    déplace la hauteur de la section du même geste, et le palier ne peut pas
    se retrouver plus court que ce que la partition annonce. */
-const SOMME_TEMPS =
-  PLATEAUX.length * (DUREES.seul + DUREES.devoile + DUREES.porte) +
-  (PLATEAUX.length - 1) * DUREES.transit;
+const SOMME_TEMPS = MESURES.reduce(
+  (somme, m) => somme + dureeDe(m.panneau, m.nom),
+  0,
+);
 
 /** Trouve la mesure en cours. Onze entrées : un balayage suffit, et il évite
     de garder un index en cache que le scroll inversé rendrait faux. */
@@ -342,14 +362,21 @@ function mesureA(q: number): Mesure {
  *  translateX(-568,03 px) — complètement fermé. Il fallait deviner qu'il
  *  fallait continuer à faire défiler pour compléter la composition.
  *
- *  On vise donc le premier temps où le volet est ouvert et le vêtement porté
+ *  On vise donc le temps où le volet est ouvert et le vêtement porté
  *  visible : la composition est entière à l'arrivée, et la révélation reste
  *  disponible en remontant. Le repère continue de sortir de la partition, donc
- *  la barre et le récit ne peuvent toujours pas diverger. */
-const REPERES: readonly number[] = PLATEAUX.map(
-  (_, i) =>
-    MESURES.find((m) => m.panneau === i && m.nom === "porte")?.debut ?? 0,
-);
+ *  la barre et le récit ne peuvent toujours pas diverger.
+ *
+ *  À 30 % DU PALIER, pas à son seuil — 21/08. Depuis que le texte avance avec
+ *  l'image, la ligne commerce et « Découvrir » s'assemblent sur le premier
+ *  quart du palier porté. Un saut d'onglet posé à u = 0 arrivait donc sur une
+ *  copie amputée de son lien, sans un pixel de scroll pour la compléter. À
+ *  30 %, la copie est entière à l'arrivée et 70 % du palier reste à lire. */
+const REPERES: readonly number[] = PLATEAUX.map((_, i) => {
+  const porte = MESURES.find((m) => m.panneau === i && m.nom === "porte");
+  if (!porte) return 0;
+  return porte.debut + 0.3 * (porte.fin - porte.debut);
+});
 
 export type ColorisPlaque = {
   slug: string;
@@ -420,6 +447,12 @@ export default function ApollonGuidedSequence({ coloris }: Props) {
         const panneaux = tous(styles.panneau);
         const fenetres = tous(styles.fenetre);
         const contenus = tous(styles.fenetreContenu);
+        // La copie progressive : la phrase suit le volet, la ligne commerce
+        // et le lien n'arrivent qu'au diptyque complet. Interrogés une fois,
+        // pilotés par frame comme le reste.
+        const phrases = tous(styles.panneauTexte);
+        const commerces = tous(styles.panneauPrix);
+        const liens = tous(styles.panneauLien);
         // Les deux demi-boîtes de chaque panneau, dans l'ordre du DOM : elles
         // se déplacent ENSEMBLE, c'est la paire qu'on recentre.
         const paires = panneaux.map((panneau) =>
@@ -520,6 +553,43 @@ export default function ApollonGuidedSequence({ coloris }: Props) {
             ).toFixed(4)}),0,0)`;
             const paire = paires[i];
             if (paire) for (const boite of paire) boite.style.transform = recentrage;
+
+            // ── LE TEXTE AVANCE AVEC L'IMAGE — 21/08 ─────────────────
+            // Le bloc de copie était monté entier dès le plan scellé : le
+            // même texte au pixel près tenait trois écrans consécutifs. Il
+            // se CONSTRUIT désormais au rythme de la partition :
+            //   • plan scellé — le nom seul ;
+            //   • dévoilement — la phrase monte AVEC le volet : même valeur
+            //     `ouverture`, même pilote, 1:1 avec le scroll ;
+            //   • palier porté — la ligne commerce et « Découvrir »
+            //     s'assemblent sur le premier quart du palier, quand le
+            //     diptyque est entier.
+            // Remonter la page déconstruit le bloc dans l'ordre inverse.
+            // Opacité + translation seulement, et les nœuds restent dans le
+            // DOM : rien ne change pour le lecteur d'écran, `inert` continue
+            // de gouverner les panneaux hors cadre.
+            const commerce =
+              i < mesure.panneau
+                ? 1
+                : i > mesure.panneau
+                  ? 0
+                  : mesure.nom === "porte"
+                    ? lisse(borne(u / 0.25, 0, 1))
+                    : 0;
+            const phrase = phrases[i];
+            if (phrase) {
+              phrase.style.opacity = ouverture.toFixed(4);
+              phrase.style.transform = `translate3d(0,${((1 - ouverture) * 16).toFixed(2)}px,0)`;
+            }
+            for (const noeud of [commerces[i], liens[i]]) {
+              if (!noeud) continue;
+              noeud.style.opacity = commerce.toFixed(4);
+              noeud.style.transform = `translate3d(0,${((1 - commerce) * 12).toFixed(2)}px,0)`;
+              // Un lien à opacité nulle resterait focusable et cliquable :
+              // `visibility` le retire du focus et du pointeur tant qu'il
+              // n'est pas arrivé. WCAG 2.4.7 sur le panneau actif.
+              noeud.style.visibility = commerce < 0.05 ? "hidden" : "";
+            }
           }
 
           if (remplie) {
@@ -589,6 +659,13 @@ export default function ApollonGuidedSequence({ coloris }: Props) {
           });
           contenus.forEach((noeud) => {
             noeud.style.transform = "";
+          });
+          // La copie progressive redevient entière : le régime « mouvement
+          // réduit » et le repli sans JS montrent le bloc complet.
+          [...phrases, ...commerces, ...liens].forEach((noeud) => {
+            noeud.style.opacity = "";
+            noeud.style.transform = "";
+            noeud.style.visibility = "";
           });
           paires.forEach((paire) => {
             paire.forEach((boite) => {
