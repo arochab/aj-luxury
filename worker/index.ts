@@ -132,7 +132,7 @@ const CACHEABLE_HTML_ROUTES = new Set([
 ]);
 // Bump this namespace whenever cacheable server-rendered content changes so a
 // deployment never inherits HTML written by an older Worker version.
-const HTML_CACHE_VERSION = "2026-08-20-hero-v5";
+const HTML_CACHE_VERSION = "2026-08-21-hero-v6";
 const PREPROD_API_PREFIX = "/api/preprod/";
 const PREPROD_CART_PATH = `${PREPROD_API_PREFIX}cart`;
 const PREPROD_CART_LINE_PATTERN = /^\/api\/preprod\/cart\/lines\/([^/]+)$/;

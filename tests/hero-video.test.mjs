@@ -58,7 +58,7 @@ async function listFiles(directory) {
 }
 
 test("hero video asset selection is deterministic at every breakpoint", () => {
-  assert.equal(HERO_VIDEO_VERSION, "v5");
+  assert.equal(HERO_VIDEO_VERSION, "v6");
   assert.equal(selectHeroVideoAsset(390, 844), HERO_VIDEO_ASSETS.portrait);
   assert.equal(selectHeroVideoAsset(768, 1024), HERO_VIDEO_ASSETS.portrait);
   assert.equal(selectHeroVideoAsset(800, 1000), HERO_VIDEO_ASSETS.portrait);
@@ -100,7 +100,7 @@ test("the responsive HD MP4 set stays bounded and starts progressively", async (
     assert.ok(ftyp >= 0 && ftyp < 32, `${name} has no valid MP4 header`);
     assert.ok(moov > ftyp, `${name} has no moov atom`);
     assert.ok(mdat > moov, `${name} is not optimized for progressive start`);
-    assert.match(asset.src, /aj-luxury-hero-v5-[\w-]+\.mp4\?v=v5$/);
+    assert.match(asset.src, /aj-luxury-hero-v6-[\w-]+\.mp4\?v=v6$/);
   }
 });
 
@@ -117,7 +117,7 @@ test("responsive first-frame posters stay within explicit byte budgets", async (
       info.size <= V3_POSTER_BYTE_CEILINGS[role],
       `${role} poster exceeds its exact V3 byte ceiling`,
     );
-    assert.match(asset.poster, /hero-v5-[\w-]+-poster\.webp\?v=v5$/);
+    assert.match(asset.poster, /hero-v6-[\w-]+-poster\.webp\?v=v6$/);
   }
 
   for (const [role, asset] of Object.entries(HERO_VIDEO_ASSETS).filter(
@@ -136,7 +136,7 @@ test("responsive first-frame posters stay within explicit byte budgets", async (
       avifInfo.size <= webpInfo.size * 0.65,
       `${role} AVIF exceeds its WebP-relative byte budget`,
     );
-    assert.match(asset.posterAvif, /hero-v5-[\w-]+-poster\.avif\?v=v5$/);
+    assert.match(asset.posterAvif, /hero-v6-[\w-]+-poster\.avif\?v=v6$/);
   }
 
   const compactPortrait = HERO_VIDEO_ASSETS.portrait.posterCompact;
@@ -146,7 +146,7 @@ test("responsive first-frame posters stay within explicit byte budgets", async (
     compactInfo.size <= V3_COMPACT_PORTRAIT_POSTER_BYTE_CEILING,
     "compact portrait poster exceeds its exact V3 byte ceiling",
   );
-  assert.match(compactPortrait, /hero-v5-portrait-480x623-poster\.webp\?v=v5$/);
+  assert.match(compactPortrait, /hero-v6-portrait-480x623-poster\.webp\?v=v6$/);
 });
 
 test("public assets never contain temporary .tmp files", async () => {
@@ -206,22 +206,20 @@ test("hero identity overlays are frozen derivatives of the approved client photo
 });
 
 test("hero playback is accessible, resource-aware and subject-safe", async () => {
-  const [videoComponent, heroComponent, identityComponent, stylesheet] = await Promise.all([
+  const [videoComponent, heroComponent, stylesheet] = await Promise.all([
     readFile(projectFile("app/components/HeroBackgroundVideo.tsx"), "utf8"),
     readFile(projectFile("app/components/HeroComposition.tsx"), "utf8"),
-    readFile(projectFile("app/components/HeroIdentityOverlay.tsx"), "utf8"),
     readFile(projectFile("app/globals.css"), "utf8"),
   ]);
 
   assert.match(videoComponent, /muted/);
-  /* CONTRAT INVERSE LE 2026-08-20. La v4 gelait definitivement sur sa
-     derniere image : `loop` etait interdit parce que son raccord fin -> debut
-     valait 3,83 niveaux de gris de difference STRUCTURELLE, soit 29,5 fois le
-     mouvement adjacent moyen, avec 231 niveaux au pire pixel. Le master v5 est
-     un aller-retour : images 0..84 puis 83..1, 168 images a 24 i/s. Sa
-     derniere image et sa premiere sont deux images CONSECUTIVES du master, donc
-     le raccord vaut 0,50 en moyenne et 5,5 au pire pixel. La boucle est
-     desormais OBLIGATOIRE ; c'est le gel qui est le defaut. */
+  /* CONTRAT INVERSE LE 2026-08-20, TENU PAR LA v6. La v4 gelait sur sa
+     derniere image : son raccord fin -> debut valait 3,83 niveaux de gris de
+     difference structurelle. Le master v6 est un compositing periodique
+     (scripts/build_hero_v6_motion.py) : toutes les phases temporelles sont
+     des multiples entiers de 2*pi/168, donc l'image 168 EST l'image 0. Le
+     raccord mesure vaut 0,037 niveau de gris, exactement le pas adjacent
+     0 -> 1. La boucle est OBLIGATOIRE ; c'est le gel qui est le defaut. */
   assert.match(videoComponent, /\n\s+loop\n/);
   assert.match(videoComponent, /playsInline/);
   assert.match(videoComponent, /saveData/);
@@ -265,7 +263,11 @@ test("hero playback is accessible, resource-aware and subject-safe", async () =>
   assert.match(heroComponent, /backgroundVideoRef\.current\?\.requestPlayback\(\)/);
   assert.doesNotMatch(heroComponent, /hero-duo-(?:static|cutout)/);
   assert.match(heroComponent, /<figcaption>/);
-  assert.match(videoComponent, /<HeroIdentityOverlay \/>/);
+  /* Le calque d'identite v4 est retire avec la v6 : ses visages a l'ancienne
+     geometrie dessinaient deux tetes fantomes sur le master valide par Adam
+     le 21/08 (constate au navigateur a 390x844). Le remonter sans nouvelle
+     decision est desormais une regression. */
+  assert.doesNotMatch(videoComponent, /<HeroIdentityOverlay/);
   assert.match(stylesheet, /\.aj-film__hero-video[\s\S]*object-fit: contain/);
   assert.match(
     stylesheet,
@@ -289,22 +291,16 @@ test("hero playback is accessible, resource-aware and subject-safe", async () =>
     stylesheet,
     /@media \(min-aspect-ratio: 801 \/ 1000\)[\s\S]*object-fit: cover/,
   );
-  /* PORTRAIT — meme contrat que le paysage, applique le 20/08.
-     Ce test epinglait l'inverse : un cadre de 70svh au ratio 720/934, centre,
-     et le reste de l'ecran rempli par le meme visuel floute. Mesure a ce
-     moment-la : la boite rendue du media couvrait 50,4 % de l'aire du premier
-     ecran a 768x1024 et 57,7 % a 390x844, et la couture entre la photo nette
-     et le remplissage flou traversait le h1. Le premier ecran n'etait pas une
-     image, il en CONTENAIT une.
-     Le contrat epingle est desormais : la scene remplit la boite (aucune regle
-     `.aj-film__hero-stage` dans la branche portrait, donc `inset: 0` de base),
-     le media est en `cover`, et son `object-position` horizontal est CALCULE —
-     57 %, la valeur qui garde les deux visages et les deux boxers dans la
-     fenetre a 768, 430, 390, 360 et jusqu'a 320 de large. Voir le commentaire
-     de globals.css pour la mesure de la boite de surete dans l'espace source.
-     Les trois marqueurs de l'ancien cadre sont donc interdits DANS cette
-     branche ; `blur(18px)` reste legitime en paysage, ou la scene et le media
-     n'ont pas le meme ratio. */
+  /* PORTRAIT — meme contrat que le paysage : la scene remplit la boite
+     (aucune regle `.aj-film__hero-stage` dans la branche portrait, donc
+     `inset: 0` de base) et le media est en `cover`. Depuis la v6 (21/08), le
+     master portrait est la composition verticale validee par Adam, hommes
+     centres et silhouettes entieres : le decalage calcule a 57 % qui
+     rachetait l'ancien recadrage du paysage est caduc, `object-position`
+     revient a 50 % (voir le commentaire de globals.css). Les trois marqueurs
+     de l'ancien cadre restent interdits DANS cette branche ; `blur(18px)`
+     reste legitime en paysage, ou la scene et le media n'ont pas le meme
+     ratio. */
   assert.match(stylesheet, /@media \(max-aspect-ratio: 4 \/ 5\)/);
   const depuisPortrait = stylesheet.slice(
     stylesheet.indexOf("@media (max-aspect-ratio: 4 / 5)"),
@@ -315,7 +311,8 @@ test("hero playback is accessible, resource-aware and subject-safe", async () =>
     depuisPortrait.indexOf("\n}\n"),
   );
   assert.match(portrait, /object-fit: cover/);
-  assert.match(portrait, /object-position: 57% 0%/);
+  assert.match(portrait, /object-position: 50% 0%/);
+  assert.doesNotMatch(portrait, /object-position: 57%/);
   assert.doesNotMatch(portrait, /top: calc\(50% \+ 34px\)/);
   assert.doesNotMatch(portrait, /aspect-ratio: 720 \/ 934/);
   assert.doesNotMatch(portrait, /70svh/);
@@ -325,8 +322,6 @@ test("hero playback is accessible, resource-aware and subject-safe", async () =>
   assert.doesNotMatch(portrait, /filter: blur/);
   assert.match(stylesheet, /filter: blur\(18px\) brightness\(0\.44\)/);
   assert.match(stylesheet, /object-position: center top/);
-  assert.match(identityComponent, /hero-identity-overlay-landscape-v1\.png/);
-  assert.match(identityComponent, /hero-identity-overlay-portrait-v1\.png/);
   assert.match(stylesheet, /\.aj-film__hero-reflection[\s\S]*mix-blend-mode: soft-light/);
 });
 

@@ -21,7 +21,6 @@ import {
   shouldAttachHeroVideoSource,
   shouldPlayHeroVideo,
 } from "../../lib/motion-policy";
-import HeroIdentityOverlay from "./HeroIdentityOverlay";
 import DeferredMetallicField from "./DeferredMetallicField";
 
 type HeroBackgroundVideoProps = {
@@ -401,7 +400,10 @@ const HeroBackgroundVideo = forwardRef<
           motion={playing ? "slow" : "still"}
           variant="reference"
         />
-        <HeroIdentityOverlay />
+        {/* Le calque HeroIdentityOverlay est retiré avec la v6 : ses visages
+            découpés à la géométrie v4 dessinaient deux têtes fantômes sur le
+            master v6 validé par Adam, constaté au navigateur à 390x844 le
+            21/08. Voir le commentaire de globals.css, section identité. */}
       </div>
     </div>
   );

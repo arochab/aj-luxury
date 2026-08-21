@@ -61,7 +61,9 @@ test("the private homepage preserves the approved film and the recovered Apollon
   assert.match(page, /<HeroComposition\s*\/>/);
   assert.doesNotMatch(page, /className="aj-film__message"/);
   assert.match(heroComposition, /<HeroBackgroundVideo/);
-  assert.match(heroBackgroundVideo, /<HeroIdentityOverlay\s*\/>/);
+  /* Calque d'identite v4 retire avec le master v6 du 21/08 — voir
+     tests/hero-video.test.mjs, contrat « subject-safe ». */
+  assert.doesNotMatch(heroBackgroundVideo, /<HeroIdentityOverlay/);
   assert.match(sequence, /<T id="home\.incarnationTitle"\s*\/>/);
   assert.match(sequence, /role="tablist"/);
   assert.match(sequence, /tabIndex=\{index === active \? 0 : -1\}/);

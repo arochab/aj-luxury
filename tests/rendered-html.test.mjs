@@ -392,7 +392,7 @@ test("public HTML advertises shared caching without using the forbidden Cache AP
     );
     assert.match(
       publicResponse.headers.get("cache-tag") ?? "",
-      /aj-luxury-html-2026-08-20-hero-v5/,
+      /aj-luxury-html-2026-08-21-hero-v6/,
     );
     await publicResponse.text();
 
@@ -571,33 +571,35 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
   assert.match(html, /Pourpre Impérial/);
   assert.match(html, /Rose Velours/);
   assert.match(html, /Lilas Céleste/);
-  assert.match(html, /data-hero-version="video-v5"/);
-  assert.match(html, /\/media\/images\/client\/hero-v5-/);
+  assert.match(html, /data-hero-version="video-v6"/);
+  assert.match(html, /\/media\/images\/client\/hero-v6-/);
   assert.match(html, /class="aj-film__hero-video"/);
   assert.match(html, /class="aj-film__hero-backdrop"/);
   assert.match(html, /class="aj-film__hero-stage"/);
   assert.match(html, /class="aj-film__hero-poster"/);
-  assert.match(html, /hero-v5-portrait-720x934-poster\.webp\?v=v5/);
-  assert.match(html, /hero-v5-portrait-480x623-poster\.webp\?v=v5/);
-  assert.doesNotMatch(html, /hero-v5-portrait-720x934-poster\.avif\?v=v5/);
+  assert.match(html, /hero-v6-portrait-720x934-poster\.webp\?v=v6/);
+  assert.match(html, /hero-v6-portrait-480x623-poster\.webp\?v=v6/);
+  assert.doesNotMatch(html, /hero-v6-portrait-720x934-poster\.avif\?v=v6/);
   assert.match(html, /type="image\/avif"/);
-  assert.match(html, /hero-v5-tablet-1440x810-poster\.webp\?v=v5/);
-  assert.match(html, /hero-v5-tablet-1440x810-poster\.avif\?v=v5/);
-  assert.match(html, /hero-v5-desktop-1920x1080-poster\.webp\?v=v5/);
-  assert.match(html, /hero-v5-desktop-1920x1080-poster\.avif\?v=v5/);
-  assert.match(html, /hero-v5-xl-native-1920x1080-poster\.webp\?v=v5/);
-  assert.match(html, /hero-v5-xl-native-1920x1080-poster\.avif\?v=v5/);
+  assert.match(html, /hero-v6-tablet-1440x810-poster\.webp\?v=v6/);
+  assert.match(html, /hero-v6-tablet-1440x810-poster\.avif\?v=v6/);
+  assert.match(html, /hero-v6-desktop-1920x1080-poster\.webp\?v=v6/);
+  assert.match(html, /hero-v6-desktop-1920x1080-poster\.avif\?v=v6/);
+  assert.match(html, /hero-v6-xl-native-1920x1080-poster\.webp\?v=v6/);
+  assert.match(html, /hero-v6-xl-native-1920x1080-poster\.avif\?v=v6/);
   assert.match(
     html,
     /<video[^>]*autoPlay=""[^>]*muted=""[^>]*playsInline=""[^>]*preload="none"/,
   );
-  assert.doesNotMatch(html, /<video[^>]*\sloop=""/);
+  /* Contrat inverse depuis le 20/08 : la boucle est obligatoire (master v6
+     periodique par construction, voir tests/hero-video.test.mjs). */
+  assert.match(html, /<video[^>]*\sloop=""/);
   assert.doesNotMatch(html, /<video[^>]*\ssrc=/);
   assert.doesNotMatch(html, /<video[^>]*\sposter=/);
   assert.doesNotMatch(html, /images\/client\/hero-duo-(?:static|cutout)/);
-  assert.match(html, /data-identity-source="client-approved-campaign-photo"/);
-  assert.match(html, /hero-identity-overlay-landscape-v1\.png/);
-  assert.match(html, /hero-identity-overlay-portrait-v1\.png/);
+  /* Calque d'identite v4 retire avec le master v6 du 21/08 : plus aucun
+     overlay d'identite dans le HTML rendu. */
+  assert.doesNotMatch(html, /hero-identity-overlay-/);
   assert.match(html, /aj-film__hero-reflection/);
   assert.equal(
     (html.match(/data-metallic-mounted="false"/g) ?? []).length,

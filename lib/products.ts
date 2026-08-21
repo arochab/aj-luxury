@@ -65,10 +65,11 @@ export const wearerByAsset: Readonly<Record<string, Wearer | "duo">> =
     "apollon-world/apollon-rose-model-color-v2.webp": "alex",
     "apollon-world/apollon-lilas-model-color-v2.webp": "jeremy",
     "apollon-world/apollon-pourpre-model-color-v2.webp": "alex",
-    // Le film d'ouverture : les deux dans le même plan.
-    "hero-v4-desktop-1920x1080-poster.webp": "duo",
-    "hero-v4-portrait-720x934-poster.webp": "duo",
-    "hero-v4-portrait-480x623-poster.webp": "duo",
+    // Le film d'ouverture : les deux dans le même plan. Les posters v6 sont
+    // tirés des deux images validées par Adam le 21/08 — même duo.
+    "hero-v6-desktop-1920x1080-poster.webp": "duo",
+    "hero-v6-portrait-720x934-poster.webp": "duo",
+    "hero-v6-portrait-480x623-poster.webp": "duo",
     // Rose Velours
     "raw/product-card-rose.webp": "alex",
     "editorial-rose-profile.webp": "alex",

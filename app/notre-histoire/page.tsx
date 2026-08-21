@@ -335,18 +335,20 @@ export default function NotreHistoirePage() {
               {/* Art direction, pas simple redimensionnement : sous 780 px le
                   cadre est portrait (720/934 en CSS) et la source 16/9 du
                   bureau y perdait 28,4 % de sa largeur. Le poster portrait de
-                  l'échelle hero v4 existe déjà (lib/hero-video.ts l'utilise
-                  pour la vidéo d'accueil) ; on le sert ici pour l'image. */}
+                  l'échelle hero v6 existe déjà (lib/hero-video.ts l'utilise
+                  pour la vidéo d'accueil) ; on le sert ici pour l'image. Le
+                  portrait v6 n'est plus un recadrage du paysage : c'est la
+                  composition verticale validée par Adam le 21/08. */}
               <picture>
                 <source
                   media="(max-width: 780px)"
-                  srcSet="/images/client/hero-v4-portrait-480x623-poster.webp 480w, /images/client/hero-v4-portrait-720x934-poster.webp 720w"
+                  srcSet="/images/client/hero-v6-portrait-480x623-poster.webp 480w, /images/client/hero-v6-portrait-720x934-poster.webp 720w"
                   sizes="100vw"
                 />
                 <img
                   alt="AJ Luxury — Jérémy et Alex dans l’univers Apollon : marbre, métal liquide, lyre, arc et laurier"
                   className={styles.planMedia}
-                  src="/images/client/hero-v4-desktop-1920x1080-poster.webp"
+                  src="/images/client/hero-v6-desktop-1920x1080-poster.webp"
                   width={1920}
                   height={1080}
                   fetchPriority="high"

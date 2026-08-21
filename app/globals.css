@@ -3234,9 +3234,7 @@ footer:not([class]) > p {
 .aj-film__hero-stage,
 .aj-film__hero-poster,
 .aj-film__hero-poster img,
-.aj-film__hero-video,
-.aj-film__identity,
-.aj-film__identity img {
+.aj-film__hero-video {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -3314,15 +3312,13 @@ footer:not([class]) > p {
   );
 }
 
-.aj-film__identity {
-  z-index: 3;
-  pointer-events: none;
-}
-
-.aj-film__identity img {
-  object-fit: cover;
-  object-position: center top;
-}
+/* LE CALQUE D'IDENTITÉ EST RETIRÉ AVEC LA v6, PAS MASQUÉ. Il plaquait les
+   visages découpés de la campagne (géométrie v4) par-dessus le film. Sur le
+   master v6 — les deux images validées par Adam le 21/08, composées
+   différemment — ce calque dessinait deux têtes fantômes à côté des vraies,
+   constaté au navigateur à 390x844. Les PNG dérivés de la photo approuvée
+   restent dans le dépôt comme référence d'identité, mais plus rien ne les
+   monte. */
 
 @media (min-aspect-ratio: 801 / 1000) {
   .aj-film__hero-backdrop {
@@ -3374,40 +3370,18 @@ footer:not([class]) > p {
    donc le recul se joue sur la fenetre de recadrage — d'ou un `object-position`
    CALCULE, et non centre par defaut.
 
-   MESURE DE LA BOÎTE DE SÛRETÉ, dans l'espace source 720x934, par masque
-   colorimétrique (peau : r-g>=22 et r>b+18 ; lilas du boxer : b-g>=32 et
-   b-r>=24), union de 12 images de la vidéo portrait plus l'affiche :
+   DEPUIS LA v6 (21/08), LE MASTER PORTRAIT N'EST PLUS UN RECADRAGE DU
+   PAYSAGE : c'est la composition verticale validée par Adam (941x1672,
+   fenêtre 941x1221 -> 720x934 dans scripts/build_hero_v6_motion.py). Les
+   deux hommes y sont CENTRÉS, silhouettes entières, têtes à ~11 % du haut
+   et reflets en pied de cadre. Toute la mesure v4 de « boîte de sûreté »
+   (silhouette 71,66 % de large, coude d'Alex à 82,22 %, décalage à 57 %)
+   est donc caduque : le 57 % rachetait un cadrage large dans une fenêtre
+   étroite qui n'existe plus. `object-position` revient à 50 %.
 
-     silhouette pleine   x 10,56 % -> 82,22 %   y 7,71 % -> 100,00 %
-     visages + boxers    x 30,56 % -> 76,81 %   y 7,71 % ->  66,81 %
-
-   Deux faits en sortent :
-     • la source elle-même coupe déjà le tibia de Jérémy au bord bas (y1 =
-       100,00 %). Aucune valeur de `object-position` ne peut rendre un pied qui
-       n'a jamais été photographié : la marge basse est nulle par construction
-       de l'actif, pas par cadrage CSS ;
-     • la silhouette pleine mesure 71,66 % de large. À 390x844 le rapport de la
-       fenêtre (0,4621) contre celui de la source (0,7709) ne laisse voir que
-       59,94 % de la largeur. 71,66 > 59,94 : garder les deux bras entiers est
-       arithmétiquement impossible. Le rapport minimal qui le permettrait, avec
-       3 % de marge de chaque côté, est 0,609. Voir le rapport de boucle.
-
-   CE QUI EST DONC PROTÉGÉ : la boîte visages + boxers, 46,25 % de large. Elle
-   tient dans les 59,94 % disponibles avec de la marge. Ce qui est sacrifié à
-   390 est l'avant-bras gauche tendu de Jérémy — un membre, jamais un visage,
-   jamais un boxer.
-
-   POURQUOI 57 %. `object-position: X%` épingle le point X % de la SOURCE sur
-   le point X % de la BOÎTE : le repère tient donc à tous les rapports, alors
-   qu'une marge en pixels dérive. Le centre de la boîte critique est à 53,7 %.
-   On la décale à 57 % pour racheter le coude d'Alex (82,22 %) qui, centré,
-   sortait du cadre à 390. Marges obtenues sur les visages et les boxers :
-   7,7 / 6,0 à 390x844 ; 6,8 / 5,3 à 360x800 ; 3,1 / 2,5 à 320x800 (le pire
-   cas praticable) ; 9,0 / 22,0 à 768x1024.
-
-   Le 0 % vertical ancre le sommet du crâne : entre 0,771 et 0,800 de rapport,
-   `cover` rogne jusqu'à 3,6 % en hauteur, et ces 3,6 % doivent être pris en
-   bas, sur la jambe déjà coupée par l'actif, jamais en haut sur les têtes. */
+   Le 0 % vertical reste : entre 0,771 et 0,800 de rapport de fenêtre,
+   `cover` rogne en hauteur, et ce rognage doit se payer en bas — sur le
+   reflet, qui s'éteint dans le marbre — jamais en haut sur les têtes. */
 @media (max-aspect-ratio: 4 / 5) {
   .aj-film__hero-media {
     background: #09090b;
@@ -3426,10 +3400,9 @@ footer:not([class]) > p {
      garantit qu'aucune arête ne subsiste. */
 
   .aj-film__hero-poster img,
-  .aj-film__hero-video,
-  .aj-film__identity img {
+  .aj-film__hero-video {
     object-fit: cover;
-    object-position: 57% 0%;
+    object-position: 50% 0%;
   }
 }
 
@@ -3521,8 +3494,7 @@ footer:not([class]) > p {
      `animation: none` posé ici perdrait au départage par l'ordre. */
 
   .aj-film__hero-poster img,
-  .aj-film__hero-video,
-  .aj-film__identity img {
+  .aj-film__hero-video {
     object-fit: cover;
     object-position: 50% 0%;
   }

@@ -477,7 +477,7 @@
     /* Le poster compact, celui que HeroBackgroundVideo précharge déjà en
        `fetchPriority: high` pour le portrait. Même URL, même entrée de cache :
        cette continuation ne coûte pas une requête de plus. */
-    background-image: url("/media/images/client/hero-v5-portrait-480x623-poster.webp?v=v5");
+    background-image: url("/media/images/client/hero-v6-portrait-480x623-poster.webp?v=v6");
     background-repeat: no-repeat;
     background-position: 50% 0;
     background-size: 100% 2000%;
