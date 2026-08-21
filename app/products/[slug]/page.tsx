@@ -22,7 +22,12 @@ type ProductPageProps = {
   params: Promise<{ slug: string }>;
 };
 
-export const dynamicParams = false;
+/* `dynamicParams = false` court-circuitait le rendu AVANT la page : vinext
+   renvoyait alors 9 octets de « Not Found », sans barre, sans pied et sans
+   sortie. En laissant la page s'exécuter, son `notFound()` rend le
+   `not-found.tsx` voisin, donc la vraie page introuvable. Le statut reste 404
+   et `generateStaticParams` continue de pré-rendre les trois coloris. */
+export const dynamicParams = true;
 
 export function generateStaticParams() {
   return getProducts().map((product) => ({ slug: product.slug }));

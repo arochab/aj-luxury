@@ -330,5 +330,8 @@
   "account.preparationLabelClosed": "Créer le bordereau uniquement quand le compte transporteur et le service réel seront activés.",
   "account.preparationDropoff": "Déposer le colis au lieu correspondant au choix du client.",
   "account.preparationTracking": "Contrôler que le suivi réel remonte avant de classer la commande.",
-  "account.printPreparation": "Imprimer la fiche de préparation"
+  "account.printPreparation": "Imprimer la fiche de préparation",
+  "error.notFoundEyebrow": "Page introuvable",
+  "error.notFoundTitle": "Cette adresse ne mène nulle part.",
+  "error.notFoundBody": "Elle a peut-être changé, ou n’a jamais existé. La collection, elle, est toujours là."
 }

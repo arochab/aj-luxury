@@ -330,5 +330,8 @@
   "account.preparationLabelClosed": "Creare l’etichetta solo dopo l’attivazione dell’account e del servizio reale del corriere.",
   "account.preparationDropoff": "Consegnare il pacco nel luogo corrispondente alla scelta del cliente.",
   "account.preparationTracking": "Verificare il tracking reale prima di archiviare l’ordine.",
-  "account.printPreparation": "Stampa scheda di preparazione"
+  "account.printPreparation": "Stampa scheda di preparazione",
+  "error.notFoundEyebrow": "Pagina non trovata",
+  "error.notFoundTitle": "Questo indirizzo non porta da nessuna parte.",
+  "error.notFoundBody": "Forse è cambiato, o non è mai esistito. La collezione è sempre qui."
 }

@@ -330,5 +330,8 @@
   "account.preparationLabelClosed": "Crear la etiqueta solo cuando la cuenta y el servicio real del transportista estén activos.",
   "account.preparationDropoff": "Depositar el paquete en el lugar correspondiente a la elección del cliente.",
   "account.preparationTracking": "Confirmar el seguimiento real antes de archivar el pedido.",
-  "account.printPreparation": "Imprimir ficha de preparación"
+  "account.printPreparation": "Imprimir ficha de preparación",
+  "error.notFoundEyebrow": "Página no encontrada",
+  "error.notFoundTitle": "Esta dirección no lleva a ninguna parte.",
+  "error.notFoundBody": "Puede que haya cambiado, o que nunca haya existido. La colección sigue aquí."
 }

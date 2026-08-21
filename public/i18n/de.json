@@ -330,5 +330,8 @@
   "account.preparationLabelClosed": "Label erst erstellen, wenn Transportkonto und echter Service aktiviert sind.",
   "account.preparationDropoff": "Paket an der zum Kundenwunsch passenden Stelle abgeben.",
   "account.preparationTracking": "Echtes Tracking prüfen, bevor die Bestellung abgelegt wird.",
-  "account.printPreparation": "Packliste drucken"
+  "account.printPreparation": "Packliste drucken",
+  "error.notFoundEyebrow": "Seite nicht gefunden",
+  "error.notFoundTitle": "Diese Adresse führt ins Leere.",
+  "error.notFoundBody": "Vielleicht hat sie sich geändert, vielleicht gab es sie nie. Die Kollektion ist weiterhin da."
 }

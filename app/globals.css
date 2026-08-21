@@ -6122,3 +6122,102 @@ footer:not([class]) > p {
   }
 }
 
+
+/* ==========================================================================
+   404
+   --------------------------------------------------------------------------
+   La page d'erreur emprunte la grammaire de la clôture de l'accueil : fond de
+   marque, énoncé en grand, deux actions de rang inégal. Elle n'a ni champ
+   métallique ni animation — une page d'erreur doit ARRIVER, pas se jouer, et
+   elle ne doit surtout pas charger un contexte WebGL pour dire qu'une adresse
+   n'existe pas.
+   ========================================================================== */
+.aj-erreur {
+  display: flex;
+  flex-direction: column;
+  min-height: 100svh;
+  background: var(--aj-noir-abysse);
+  color: var(--aj-encre);
+  overflow-x: clip;
+}
+
+.aj-erreur__bloc {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: clamp(18px, 2.6vh, 30px);
+  padding: clamp(64px, 12vh, 140px) var(--gut);
+}
+
+.aj-erreur__surtitre {
+  margin: 0;
+  font-size: var(--t0);
+  font-weight: var(--aj-w-gras);
+  letter-spacing: var(--aj-ls-signature);
+  text-transform: uppercase;
+  color: var(--aj-encre-72);
+}
+
+.aj-erreur__titre {
+  --aj-display-w: var(--aj-w-normal);
+  --aj-display-ls: -0.028em;
+  --aj-display-lh: 0.96;
+  max-width: 18ch;
+  margin: 0;
+  font-size: var(--t6);
+}
+
+.aj-erreur__texte {
+  max-width: 46ch;
+  margin: 0;
+  font-size: var(--t2);
+  font-weight: var(--aj-w-livre);
+  line-height: 1.45;
+  color: var(--aj-encre-90);
+}
+
+.aj-erreur__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: clamp(18px, 3vw, 40px);
+  margin-top: clamp(8px, 1.6vh, 20px);
+}
+
+.aj-erreur__actions a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 48px;
+  font-size: var(--t0);
+  font-weight: var(--aj-w-gras);
+  letter-spacing: var(--aj-ls-action);
+  text-transform: uppercase;
+  text-decoration: none;
+  transition:
+    background-color var(--aj-d-court) var(--e1),
+    border-color var(--aj-d-court) var(--e1);
+}
+
+/* Un rang plein, un rang en lien de texte — la règle posée en clôture. */
+.aj-erreur__actions a:first-child {
+  padding: 0 clamp(22px, 2.2vw, 34px);
+  background: var(--aj-encre);
+  color: var(--aj-noir-abysse);
+}
+
+.aj-erreur__actions a:first-child:hover,
+.aj-erreur__actions a:first-child:focus-visible {
+  background: var(--aj-accent-lilas);
+}
+
+.aj-erreur__actions a:last-child {
+  padding-bottom: 5px;
+  border-bottom: 1px solid var(--aj-filet-fort);
+  color: var(--aj-encre);
+}
+
+.aj-erreur__actions a:last-child:hover,
+.aj-erreur__actions a:last-child:focus-visible {
+  border-color: var(--aj-encre);
+}

@@ -330,5 +330,8 @@
   "account.preparationLabelClosed": "Create a label only after the carrier account and real service are enabled.",
   "account.preparationDropoff": "Drop off the parcel at the location matching the customer's choice.",
   "account.preparationTracking": "Confirm real tracking is active before filing the order.",
-  "account.printPreparation": "Print packing sheet"
+  "account.printPreparation": "Print packing sheet",
+  "error.notFoundEyebrow": "Page not found",
+  "error.notFoundTitle": "This address leads nowhere.",
+  "error.notFoundBody": "It may have changed, or never existed. The collection is still here."
 }
