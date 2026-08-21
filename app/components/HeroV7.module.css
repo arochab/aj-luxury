@@ -1,0 +1,321 @@
+/* ==========================================================================
+   Hero v7 — la photographie vivante
+   --------------------------------------------------------------------------
+   Trois calques, un seul cadre, aucune surprise de recalage :
+
+       .scene            porteur unique de la caméra (transform)
+         └ .plate        la photographie entière
+         └ .marque       AJ LUXURY, en métal, ENTRE les deux
+         └ .figures      les deux corps détourés, fond transparent
+
+   `.plate img` et `.figures img` partagent la MÊME règle de cadrage. C'est la
+   condition du geste : dès qu'elles divergent d'un pixel, la découpe se
+   décolle de son fond et l'illusion tombe. Elles sont donc écrites une fois,
+   pour les deux, et jamais surchargées séparément.
+
+   Ce que le CSS livre SANS JavaScript : la composition finale, complète et
+   lisible — image posée, mot-marque en place, copie visible. GSAP n'ajoute
+   qu'une arrivée et une caméra. Si le bundle d'animation n'arrive jamais, le
+   premier écran reste juste. C'est la même doctrine que le volet v6.
+   ========================================================================== */
+
+.hero {
+  position: relative;
+  /* svh, pas vh : sur iOS la barre d'URL rétractile change vh en cours de
+     défilement et ferait respirer tout le premier écran. */
+  height: 100svh;
+  min-height: 560px;
+  overflow: clip;
+  background: var(--aj-noir-abysse);
+  isolation: isolate;
+}
+
+/* --- La caméra ------------------------------------------------------------
+   Seul nœud transformé de la scène. Le sur-cadrage au repos (1.04) est la
+   marge dans laquelle la caméra dérive sans jamais découvrir un bord. */
+.scene {
+  position: absolute;
+  inset: 0;
+  transform: scale(1.04);
+  transform-origin: 50% 46%;
+  will-change: transform;
+}
+
+.plate,
+.figures {
+  position: absolute;
+  inset: 0;
+  display: block;
+  pointer-events: none;
+}
+
+.plate img,
+.figures img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  /* 46 % : le cadrage remonte le point d'intérêt sur les torses et les
+     visages. À 50 % le bas de cadre gagnait du sol chromé et les têtes
+     frôlaient la barre de navigation. */
+  object-fit: cover;
+  object-position: 50% 46%;
+}
+
+.plate {
+  background-image: var(--aj-hero-lqip);
+  background-size: cover;
+  background-position: 50% 46%;
+}
+
+/* --- Le mot-marque --------------------------------------------------------
+   POURQUOI UNE DIVISION DE vw ET PAS UN clamp()
+   La chaîne est fixe — « AJ LUXURY », neuf signes. Son rapport largeur/corps
+   est donc constant : une taille exprimée en vw remplit toujours la même
+   fraction de fenêtre, à toute largeur, sans point de rupture. Un clamp()
+   aurait figé le corps aux extrémités et décollé le mot des bords. Le
+   diviseur est relevé au navigateur, pas estimé.
+
+   Le mot est le h1 de la page. Il n'est pas décoratif : il porte le nom de la
+   maison, à sa place logique, et le lecteur d'écran l'annonce une fois. */
+.marque {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  display: flex;
+  justify-content: center;
+  /* Le mot croise les corps à hauteur de hanche et mord le bas du cadre : la
+     ligne de base tombe SOUS la fenêtre. C'est le geste — une enseigne
+     monumentale dans la salle, pas un titre posé sur une image. */
+  align-items: flex-end;
+  padding-bottom: 6svh;
+  pointer-events: none;
+}
+
+.marqueMot {
+  display: block;
+  font-family: var(--disp);
+  font-size: calc(100vw / 5.05);
+  font-weight: var(--aj-w-fin);
+  letter-spacing: -0.045em;
+  line-height: 0.78;
+  white-space: nowrap;
+  text-transform: uppercase;
+  /* Le balayage du métal est deux fois plus large que le mot : la brillance
+     peut donc le traverser d'un bord à l'autre en glissant le fond, sans
+     jamais laisser apparaître une extrémité de dégradé. */
+  background-size: 220% 100%;
+  background-position: 0% 50%;
+}
+
+/* --- Le voile -------------------------------------------------------------
+   Assombrit le haut et le bas pour tenir la barre de navigation et la copie,
+   sans toucher au centre où vivent les corps. Deux dégradés, aucun aplat. */
+.voile {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(
+      to bottom,
+      rgba(8, 8, 10, 0.72) 0%,
+      rgba(8, 8, 10, 0.28) 14%,
+      rgba(8, 8, 10, 0) 30%
+    ),
+    linear-gradient(
+      to top,
+      rgba(8, 8, 10, 0.86) 0%,
+      rgba(8, 8, 10, 0.42) 16%,
+      rgba(8, 8, 10, 0) 40%
+    );
+}
+
+/* --- La copie -------------------------------------------------------------
+   Trois signes, pas un de plus : la signature de maison, une ligne, un lien.
+   Tout le reste du discours appartient aux écrans suivants. */
+.copie {
+  position: absolute;
+  left: var(--gut);
+  right: var(--gut);
+  bottom: clamp(24px, 4.4svh, 54px);
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--gut);
+  pointer-events: none;
+}
+
+.copieBloc {
+  max-width: 34ch;
+  pointer-events: auto;
+}
+
+.surtitre {
+  margin: 0 0 0.9em;
+  font-size: var(--t0);
+  font-weight: var(--aj-w-gras);
+  letter-spacing: var(--aj-ls-signature);
+  text-transform: uppercase;
+  color: var(--aj-encre-84);
+}
+
+.enonce {
+  margin: 0;
+  font-size: var(--t2);
+  font-weight: var(--aj-w-livre);
+  letter-spacing: var(--aj-ls-sous);
+  line-height: 1.3;
+  color: var(--aj-encre-94);
+  text-wrap: balance;
+}
+
+/* Chaque ligne du texte monte derrière son propre masque. Le masque est le
+   <span> parent, en overflow hidden ; la ligne est l'enfant translaté. */
+.ligneMasque {
+  display: block;
+  overflow: hidden;
+}
+
+.lien {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.9em;
+  /* 44 px de haut minimum, exigence AGENTS.md sur les cibles principales. */
+  min-height: 44px;
+  padding: 0.4em 0;
+  pointer-events: auto;
+  font-size: var(--t0);
+  font-weight: var(--aj-w-gras);
+  letter-spacing: var(--aj-ls-action);
+  text-transform: uppercase;
+  color: var(--aj-encre);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.lienMot {
+  position: relative;
+}
+
+/* Le filet se dessine du bord d'attaque, pas du centre : le geste a un sens
+   de lecture. */
+.lienMot::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -0.35em;
+  height: 1px;
+  background: currentColor;
+  transform: scaleX(1);
+  transform-origin: left center;
+  transition: transform var(--aj-d-court) var(--aj-e-nav);
+}
+
+.lien:hover .lienMot::after,
+.lien:focus-visible .lienMot::after {
+  transform: scaleX(0.35);
+}
+
+.lienFleche {
+  display: block;
+  font-size: 1.15em;
+  line-height: 1;
+}
+
+/* --- Le volet d'ouverture -------------------------------------------------
+   En @keyframes et non en GSAP : il doit exister au PREMIER paint. Un import
+   dynamique arrive toujours après, et l'écran serait déjà découvert quand le
+   volet voudrait le couvrir. Il se retire tout seul et ne laisse rien
+   derrière lui — sans JavaScript, la page est simplement déjà ouverte. */
+.volet {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  background: var(--aj-noir-abysse);
+  transform-origin: 50% 100%;
+  animation: voletLeve var(--aj-d-long) var(--aj-e-volet) forwards;
+  pointer-events: none;
+}
+
+@keyframes voletLeve {
+  from {
+    transform: scaleY(1);
+  }
+  to {
+    transform: scaleY(0);
+  }
+}
+
+/* ==========================================================================
+   Téléphone — une chorégraphie propre, pas une réduction du bureau
+   --------------------------------------------------------------------------
+   Le master portrait est déjà cadré sur les deux corps. Ce qui change ici
+   n'est donc pas l'image mais la place du mot : sur un écran étroit, un
+   mot-marque à hauteur de hanche écraserait les corps. Il remonte au-dessus
+   des têtes, dans le vide chromé de la voûte, où il a de la place.
+   ========================================================================== */
+@media (max-aspect-ratio: 4 / 5) {
+  .marque {
+    align-items: flex-start;
+    padding-top: calc(var(--aj-header-h) + 2.5svh);
+    padding-bottom: 0;
+  }
+
+  .marqueMot {
+    /* Deux fois plus gros par rapport à la fenêtre qu'en paysage : sur un
+       écran étroit c'est la seule façon de rester monumental. */
+    font-size: calc(100vw / 4.2);
+    line-height: 0.86;
+  }
+
+  .copie {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: clamp(18px, 3svh, 30px);
+  }
+
+  .copieBloc {
+    max-width: none;
+  }
+
+  .enonce {
+    font-size: var(--t1);
+  }
+
+  .voile {
+    background:
+      linear-gradient(
+        to bottom,
+        rgba(8, 8, 10, 0.8) 0%,
+        rgba(8, 8, 10, 0.3) 20%,
+        rgba(8, 8, 10, 0) 42%
+      ),
+      linear-gradient(
+        to top,
+        rgba(8, 8, 10, 0.9) 0%,
+        rgba(8, 8, 10, 0.5) 18%,
+        rgba(8, 8, 10, 0) 46%
+      );
+  }
+}
+
+/* ==========================================================================
+   Mouvement réduit
+   --------------------------------------------------------------------------
+   Aucune information ne manque : le volet ne descend jamais, la caméra ne
+   dérive pas, la brillance ne circule pas. La composition est là, entière,
+   dès le premier paint. C'est une variante, pas une page appauvrie.
+   ========================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  .volet {
+    display: none;
+  }
+
+  .scene {
+    transform: scale(1);
+  }
+
+  .lienMot::after {
+    transition: none;
+  }
+}
