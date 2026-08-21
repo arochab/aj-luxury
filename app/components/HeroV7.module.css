@@ -58,6 +58,10 @@
      calage du mot juste au-dessus. Un seul chiffre, donc un seul endroit ou
      l'ecart entre les deux se decide. */
   --aj-hero-copie-bas: clamp(24px, 4.4svh, 54px);
+
+  /* Hauteur de la bande photographique sur ecran vertical. Citee par les deux
+     calques et par leur plafond de largeur : un seul chiffre. */
+  --aj-hero-bande: 72svh;
 }
 
 /* --- La caméra et la chambre ----------------------------------------------
@@ -341,7 +345,27 @@
   .plate,
   .figures {
     inset: 0 0 auto 0;
-    height: 72svh;
+    height: var(--aj-hero-bande);
+    /* ── POURQUOI LA BANDE EST PARFOIS PLUS ETROITE QUE L'ECRAN ──────────
+       `cover` ne rogne verticalement QUE si le conteneur est plus large, en
+       rapport, que l'image. Le master est a 0,748 : tant que la bande reste
+       plus etroite que 0,748 x sa hauteur, elle montre TOUTE la hauteur de
+       l'image et ne mord que les cotes — ce que l'on veut.
+
+       Sur telephone c'est toujours vrai : a 390x844 la bande fait 390x608,
+       soit 0,641. Sur TABLETTE PORTRAIT ce n'est plus vrai : a 768x1024 la
+       bande ferait 768x737, soit 1,042 — et `cover` bascule sur un rognage
+       VERTICAL de 289 px. Mesure au navigateur : LES DEUX TETES ETAIENT
+       COUPEES, ce qu'AGENTS.md compte comme une faute sur la personne.
+
+       La largeur est donc plafonnee a 0,748 x la hauteur de bande. Sur
+       telephone le plafond depasse la largeur d'ecran et ne change rien ; sur
+       tablette il ramene la bande a 551 px centres, et la photographie
+       devient une plaque verticale posee dans le noir. Les visages sont
+       saufs, et la tablette recoit une composition qui lui appartient. */
+    right: 0;
+    margin-inline: auto;
+    width: min(100%, calc(var(--aj-hero-bande) * 0.748));
     /* Le sol de chrome se dissout dans le noir au lieu de s'arrêter sur une
        ligne droite. Le masque est porté par les deux calques et JAMAIS par
        `.scene`, qui contient aussi le mot : le mot ne doit pas s'effacer. */
@@ -367,7 +391,14 @@
   .marque {
     align-items: flex-end;
     padding-top: 0;
-    padding-bottom: 24svh;
+    /* Le plancher de 210 px n'est pas decoratif : en svh seul, l'ecart entre
+       le mot et la copie fond avec la hauteur d'ecran. Mesure sur les huit
+       tailles d'AGENTS.md : 54 px a 430x932, 40 a 390x844, 32 a 360x800 et
+       -4 A 320x720 — soit une COLLISION a la largeur que le projet s'impose
+       de tenir. La copie, elle, ne retrecit pas : elle passe a trois lignes.
+       Le plancher rend l'ecart a 32 px minimum partout, sans rien changer
+       au-dessus de 875 px de haut. */
+    padding-bottom: max(24svh, 210px);
   }
 
   .marqueMot {
