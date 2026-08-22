@@ -76,8 +76,36 @@ test("the private homepage preserves the approved film and the recovered Apollon
      portent desormais leur duree, et ce test la garde. */
   assert.equal(
     (hero.match(/duration: 1,/g) ?? []).length,
+    1,
+    "le tween de camera doit porter sa duree",
+  );
+
+  /* LE VOL NE VA PLUS JUSQU'AU BOUT DE LA COURSE, ET C'EST UN CORRECTIF.
+
+     Releve au navigateur le 22/08, scrub laisse se poser 1,5 s par palier :
+
+       p=0,67 -> mot 372 px, logo 82 px, rapport 4,5, opacites 0,96 / 0,04
+       p=0,75 -> mot 298 px, rapport 3,6, opacites 0,58 / 0,42
+       p=0,92 -> mot 153 px, rapport 1,9, opacite du mot DEJA NULLE
+       p=1,00 -> mot 82 px, rapport 1,0, mais invisible depuis longtemps
+
+     L'atterrissage etait donc geometriquement juste et PERSONNE NE LE VOYAIT :
+     le mot s'evaporait encore deux fois trop gros pendant que la barre
+     rallumait le sien derriere, d'ou le dedoublement fantome signale par Adam.
+
+     Trois choses doivent rester vraies ensemble, et aucune ne suffit seule.
+     Le vol s'acheve avant la fin de la course. La passation demarre a cet
+     instant precis, quand les deux marques occupent la meme boite. Et la
+     compensation verticale suit le vol, sans quoi le mot atterrit 198 px trop
+     haut — c'est le piege de ce correctif, la geometrie et le tempo sont
+     lies. */
+  assert.match(hero, /const FIN_DU_VOL = 0\.78;/);
+  assert.match(hero, /duration: FIN_DU_VOL,/);
+  assert.match(hero, /FIN_DU_VOL \* noeud\.offsetHeight/);
+  assert.equal(
+    (hero.match(/\}, FIN_DU_VOL\)/g) ?? []).length,
     2,
-    "les deux tweens de course (camera et vol du logo) doivent porter leur duree",
+    "la passation des deux marques doit demarrer au poser, pas avant",
   );
   /* La cible du vol est cherchee par attribut, jamais par classe de module :
      celles-ci sont hachees a la compilation. */

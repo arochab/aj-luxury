@@ -284,6 +284,27 @@ export default function Hero() {
 
         if (logo) {
           const motElement = mot as HTMLElement;
+
+          /* ── OÙ LE VOL SE TERMINE, ET POURQUOI PAS À LA FIN ─────────────
+             Le vol s'achevait à p=1, c'est-à-dire au pixel exact où la barre
+             commence à se dérober. Relevé au navigateur, scrub laissé se
+             poser 1,5 s à chaque palier :
+
+               p=0,67 → mot 372 px, logo 82 px, rapport 4,5, opacités 0,96/0,04
+               p=0,75 → mot 298 px, rapport 3,6, opacités 0,58/0,42
+               p=0,92 → mot 153 px, rapport 1,9, opacité du mot DÉJÀ NULLE
+               p=1,00 → mot 82 px, rapport 1,0, mais invisible depuis longtemps
+
+             Autrement dit l'atterrissage était géométriquement juste et
+             PERSONNE NE LE VOYAIT : le mot s'évaporait encore deux fois trop
+             gros pendant que la barre rallumait le sien derrière. D'où le
+             dédoublement fantôme signalé par Adam le 22/08.
+
+             Le vol se termine donc à 78 % de la course. À ce moment le mot est
+             exactement à la taille et à la place du logo, et la barre tient
+             encore : la passation a lieu sur deux marques réellement
+             superposées, ce que le commentaire précédent affirmait à tort. */
+          const FIN_DU_VOL = 0.78;
           const echelle = () =>
             logo.getBoundingClientRect().width / motElement.offsetWidth;
           const ecartX = () => {
@@ -302,7 +323,12 @@ export default function Hero() {
               cible.top +
               cible.height / 2 -
               (depart.y + motElement.offsetHeight / 2) +
-              noeud.offsetHeight
+              /* Le terme de défilement suit le vol, il ne suit plus la course.
+                 La page emmène le mot vers le haut proportionnellement au
+                 défilement parcouru ; si le vol s'arrête à 78 %, elle ne l'a
+                 emmené que de 78 % d'une hauteur de hero. Rendre la hauteur
+                 ENTIÈRE ferait atterrir le mot 198 px trop haut. */
+              FIN_DU_VOL * noeud.offsetHeight
             );
           };
 
@@ -334,19 +360,33 @@ export default function Hero() {
                    au scrub, il ne couvrait donc que la MOITIE du defilement.
                    Releve image par image : le logo atteignait sa taille finale
                    des p=0,5 puis glissait a vide pendant tout le reste. Le vol
-                   doit tenir toute la course, d'ou duration: 1. */
-                duration: 1,
+                   doit tenir la course jusqu'a son terme, voir FIN_DU_VOL. */
+                duration: FIN_DU_VOL,
                 immediateRender: false,
               },
               0,
             )
-            /* Le relais se joue avant la fin, quand les deux marques sont deja
-               superposees : on ne voit donc pas un fondu, on voit le logo
-               devenir celui de la barre. Il se termine a 0,88 et non a 1 pour
-               que la passation soit ACQUISE avant que la barre ne reprenne son
-               droit de se derober. */
-            .to(mot, { opacity: 0, ease: "none", duration: 0.22 }, 0.66)
-            .to(logo, { opacity: 1, ease: "none", duration: 0.22 }, 0.66);
+            /* LA PASSATION SE JOUE AU POSER, PAS AVANT. Elle demarre a
+               FIN_DU_VOL, l'instant ou le mot occupe exactement la boite du
+               logo : meme largeur, meme centre. Deux marques superposees au
+               pixel, donc aucun fondu perceptible — on voit le grand nom
+               DEVENIR le logo de la barre.
+
+               LA DUREE EST COURTE, ET C'EST MESURE. Le vol termine, le mot
+               reste dans le flux : la page continue de l'emporter vers le
+               haut, d'un pixel par pixel defile. Toute duree de passation se
+               paie donc en DERIVE.
+
+               A 0,05 de course, relevé au navigateur : a mi-fondu le mot
+               flottait 19 px au-dessus du logo, et finissait 45 px plus haut.
+               Un fantome qui monte en s'effacant, c'est-a-dire une version
+               attenuee du defaut que ce correctif supprime.
+
+               A 0,02, soit environ 18 px, la derive a mi-fondu tombe sous
+               10 px. Plus court encore, un ecran a faible frequence pourrait
+               sauter la transition et faire clignoter la marque. */
+            .to(mot, { opacity: 0, ease: "none", duration: 0.02 }, FIN_DU_VOL)
+            .to(logo, { opacity: 1, ease: "none", duration: 0.02 }, FIN_DU_VOL);
         }
 
         // Ni la dérive ni la brillance n'ont de raison de tourner hors champ :

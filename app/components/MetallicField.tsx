@@ -106,6 +106,49 @@ function MetallicCanvas({
         return value;
       }
 
+      /* ── LE STUDIO QUE LE MÉTAL RÉFLÉCHIT ───────────────────────────────
+         Adam, 22/08 : « il faut absolument du liquide métallique ». Regardé
+         au navigateur : la surface précédente était OMBRÉE, pas
+         RÉFLÉCHISSANTE. C'est la différence entre du marbre et du chrome, et
+         aucun réglage de contraste ne la franchit.
+
+         Un métal poli ne possède presque pas de couleur propre : ce qu'on
+         voit sur lui est l'image du lieu où il se trouve. Tant qu'il n'y a
+         rien à réfléchir, il ne peut pas ressembler à du métal.
+
+         Cette fonction est donc le décor. Un studio noir, un plafond clair,
+         deux rampes de lampes, et surtout UNE LIGNE D'HORIZON DURE — c'est
+         elle qui trace sur chaque pli la coupure nette clair/sombre par
+         laquelle l'œil reconnaît une surface miroir.
+
+         Elle ne dépend que de la direction du reflet. Aucun terme temporel,
+         donc la périodicité de la boucle reste intacte. */
+      float studio(vec3 direction) {
+        float y = direction.y;
+        float x = direction.x;
+
+        // L'horizon. Volontairement etroit : une transition douce donnerait
+        // un degrade, et un degrade ne se lit jamais comme un reflet.
+        float ciel = smoothstep(-0.035, 0.055, y);
+        float valeur = mix(0.022, 0.60, ciel);
+
+        // Le sol absorbe : sous l'horizon, le metal doit plonger vers le noir.
+        valeur = mix(valeur, 0.012, (1.0 - smoothstep(-0.62, -0.14, y)) * 0.85);
+
+        // Deux rampes de lampes. Ce sont elles qui deviennent les coulees
+        // blanches qui glissent sur les plis quand la surface ondule.
+        float rampeHaute =
+          smoothstep(0.30, 0.355, y) * (1.0 - smoothstep(0.50, 0.565, y));
+        float rampeBasse =
+          smoothstep(-0.40, -0.355, y) * (1.0 - smoothstep(-0.235, -0.185, y));
+        valeur += rampeHaute * 0.95 + rampeBasse * 0.42;
+
+        // Une lueur laterale, pour que les plis de profil ne soient pas morts.
+        valeur += smoothstep(0.55, 0.98, abs(x)) * 0.16;
+
+        return clamp(valeur, 0.0, 1.5);
+      }
+
       vec2 chromeOrb(vec2 p, vec2 center, float radius, float offset) {
         vec2 local = (p - center) / radius;
         float radiusSquared = dot(local, local);
@@ -307,25 +350,126 @@ function MetallicCanvas({
           ) * 0.5 + 0.5;
           float membraneLight = smoothstep(0.48, 0.78, membrane);
           float membraneShadow = 1.0 - smoothstep(0.20, 0.48, membrane);
-          vec3 referenceBase = mix(
-            vec3(0.02, 0.021, 0.025),
-            vec3(0.82, 0.825, 0.84),
-            referenceEnvironment * 0.62 + membraneLight * 0.32
+          /* LE MÉTAL EST CE QU'IL RÉFLÉCHIT. On échantillonne le studio dans
+             la direction du reflet, et cette valeur EST la matière — elle
+             n'est plus une teinte qu'on éclaire. Trois échantillons décalés
+             sur la normale donnent une très légère dispersion colorée, celle
+             qu'un chrome réel montre sur ses arêtes.
+
+             Le facteur 1.9 sur la normale creuse les plis : plus la surface
+             s'incline, plus le reflet balaie vite le décor, et plus la ligne
+             d'horizon vient trancher le pli. C'est là que naît l'impression
+             de liquide. */
+          /* ── LE MICRO-RELIEF, ET POURQUOI IL FAIT LE « LIQUIDE » ────────
+             Regardé au navigateur après la première passe : avec le seul
+             studio réfléchi, chaque masse revenait presque UNIE. Le résultat
+             lisait « chrome découpé », graphique, pas coulant.
+
+             Ce qui manquait n'est pas du contraste, c'est du RELIEF FIN. Sur
+             du mercure, l'œil suit des ondes serrées qui glissent à
+             l'intérieur de chaque masse ; ce sont elles qui disent que la
+             matière coule au lieu d'être une découpe.
+
+             Les ondes se posent donc sur la normale, pas sur la couleur : le
+             reflet balaie le studio plus vite, et les bandes du décor
+             s'enroulent dans le pli. Leur amplitude suit la pente, pour que
+             les zones plates restent des miroirs calmes et que seules les
+             courbures s'animent. Termes purement spatiaux. */
+          float pente = clamp(length(referenceGradient) * 0.42, 0.0, 1.0);
+          vec2 ondes = vec2(
+            sin(p.x * 21.0 + referenceSurface * 8.6) +
+              0.6 * sin(p.y * 33.0 - referenceSurface * 5.4),
+            cos(p.y * 19.0 - referenceSurface * 7.8) +
+              0.6 * cos(p.x * 29.0 + referenceSurface * 6.2)
+          ) * (0.055 + pente * 0.085);
+
+          vec3 normalePlus = normalize(
+            referenceNormal + vec3(-referenceGradient * 1.12 + ondes, 0.0)
           );
+          vec3 refletCreuse = reflect(-viewDirection, normalePlus);
+          float refletR = studio(refletCreuse + vec3(0.014, 0.010, 0.0));
+          float refletV = studio(refletCreuse);
+          float refletB = studio(refletCreuse - vec3(0.012, 0.009, 0.0));
+          vec3 referenceBase = vec3(refletR, refletV, refletB);
+
+          /* La membrane ne colore plus la surface, elle la DÉFORME : elle
+             ajoute et retire du reflet selon le pli, au lieu de peindre du
+             gris par-dessus. Un métal ne se teinte pas, il se courbe. */
+          referenceBase *= 0.74 + membraneLight * 0.52;
+          /* 0.72 et non 0.42 : le creux redevient PRESQUE NOIR. Un métal se
+             reconnaît d'abord à son écart dynamique — il est quasi noir à
+             l'ombre et quasi blanc au reflet. À 0.42 les creux restaient gris
+             moyen, et un gris moyen partout, c'est de la fumée. */
           referenceBase = mix(
             referenceBase,
-            vec3(0.04, 0.041, 0.047),
-            membraneShadow * 0.42
+            vec3(0.012, 0.013, 0.017),
+            membraneShadow * 0.72
           );
           /* La spéculaire se resserre et gagne en intensité. Sur 0.74-0.86
              elle s'étalait en larges plages laiteuses ; sur 0.795-0.845 elle
              devient une arête de lumière — c'est ce qui sépare un reflet de
              métal poli d'un dégradé gris. */
-          float liquidHighlight = smoothstep(0.795, 0.845, membrane);
+          float liquidHighlight = smoothstep(0.815, 0.842, membrane);
           referenceBase = mix(
             referenceBase,
             vec3(0.985, 0.987, 0.99),
-            liquidHighlight * 0.66
+            liquidHighlight * 0.88
+          );
+
+          /* ── CE QUI MANQUAIT POUR QUE ÇA SE MATÉRIALISE ─────────────────
+             Adam, 22/08 : « trop abstrait, ça doit se matérialiser beaucoup
+             plus directement ». Une spéculaire seule ne suffit pas : elle
+             donne des taches claires, pas une SURFACE. Trois signaux sont
+             ajoutés ici, et ce sont ceux par lesquels l'œil reconnaît du
+             métal poli plutôt qu'un dégradé.
+
+             1. LES BANDES DE REFLET. Un chrome réfléchit un environnement
+                structuré, donc il porte des bandes claires et sombres serrées
+                qui suivent la courbure. Sans elles, aucune surface ne lit
+                comme réfléchissante. Le terme est purement spatial : il ne
+                dépend que de la normale, jamais de u_phase, donc la
+                périodicité de la boucle reste intacte.
+
+             2. LE LISERÉ. Chaque bande porte une arête très fine et très
+                claire. C'est le détail qui donne l'impression de dureté,
+                celui qui sépare le métal liquide de la peinture argentée.
+
+             3. LE FRESNEL. Là où la surface s'incline face au regard, un
+                métal s'éclaircit franchement. Ça dessine le VOLUME des plis
+                au lieu de les laisser plats. */
+          float bandes = sin(
+            referenceReflection.y * 9.4 +
+            referenceReflection.x * 4.1 +
+            referenceSurface * 3.2
+          ) * 0.5 + 0.5;
+          float bandeClaire = smoothstep(0.42, 0.62, bandes);
+          float bandeSombre = 1.0 - smoothstep(0.30, 0.50, bandes);
+          referenceBase = mix(
+            referenceBase,
+            vec3(0.90, 0.905, 0.925),
+            bandeClaire * 0.30
+          );
+          referenceBase = mix(
+            referenceBase,
+            vec3(0.028, 0.029, 0.036),
+            bandeSombre * 0.34
+          );
+
+          float lisere = smoothstep(0.955, 0.995, bandes);
+          referenceBase = mix(
+            referenceBase,
+            vec3(1.0, 1.0, 1.0),
+            lisere * 0.72
+          );
+
+          float fresnel = pow(
+            1.0 - clamp(referenceNormal.z, 0.0, 1.0),
+            1.7
+          );
+          referenceBase = mix(
+            referenceBase,
+            vec3(0.93, 0.935, 0.955),
+            fresnel * 0.42
           );
           referenceBase = mix(
             referenceBase,
@@ -344,9 +488,14 @@ function MetallicCanvas({
           float referenceDepth = smoothstep(0.08, 0.88, referenceSurface);
           finalDepth = referenceDepth;
           referenceBase *= 0.68 + referenceDepth * 0.40;
+          /* La plage se resserre : 0.075-0.83 au lieu de 0.045-0.91. Tout ce
+             qui est sombre plonge vers le noir, tout ce qui est clair monte
+             vers le blanc, et la zone grise du milieu — celle qui donnait
+             l'impression de brume — se réduit. C'est le même geste qu'un
+             contraste en post-production, appliqué ici à la source. */
           referenceBase = smoothstep(
-            vec3(0.045),
-            vec3(0.91),
+            vec3(0.075),
+            vec3(0.83),
             referenceBase
           );
 
