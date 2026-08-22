@@ -117,7 +117,11 @@
      rien n'est recalculé en mise en page. Coût mesuré au navigateur, avec et
      sans, dans la même session. */
   opacity: 1;
-  filter: contrast(3.4) brightness(0.52) saturate(0.85);
+  /* LE FILTRE NE NOIRCIT PLUS. Il divisait la luminosite par deux, ce qui
+     rendait tout cyclorama clair en gris moyen : la reference du 22/08, une
+     eclaboussure de chrome sur BLANC, etait donc impossible a atteindre tant
+     qu'il etait la. Il ne reste qu'un leger appui de contraste. */
+  filter: contrast(1.12) saturate(0.92);
 }
 
 .metal > * {
@@ -516,7 +520,7 @@
      les creux restent noirs, les reflets restent nets, mais l'ensemble revient
      dans l'ouverture sombre, et le lockup argenté retrouve son fond. */
   .metal {
-    filter: contrast(3.4) brightness(0.34) saturate(0.85);
+    filter: contrast(1.12) brightness(0.92) saturate(0.92);
   }
 }
 

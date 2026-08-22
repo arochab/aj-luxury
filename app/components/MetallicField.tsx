@@ -123,42 +123,38 @@ function MetallicCanvas({
 
          Elle ne dépend que de la direction du reflet. Aucun terme temporel,
          donc la périodicité de la boucle reste intacte. */
+      /* ── LE CYCLORAMA BLANC ─────────────────────────────────────────────
+         La reference du 22/08 est une eclaboussure de chrome sur FOND BLANC.
+         Ce n'est pas un detail de gout : un chrome ne montre que ce qu'il
+         reflete, donc changer le decor change entierement la matiere. Sur
+         fond noir il etait sombre avec des aretes claires ; sur cyclorama
+         blanc il devient clair avec des CREUX sombres, ce qui est exactement
+         la lecture de la reference.
+
+         Aucun terme temporel : la periodicite de la boucle reste intacte. */
       float studio(vec3 direction) {
         float hauteur = direction.y;
         float azimut = atan(direction.z, direction.x);
 
-        /* L'HORIZON, coupure franche. Une transition douce donnerait un
-           degrade, et un degrade ne se lit jamais comme un reflet. */
-        float ciel = smoothstep(-0.055, 0.05, hauteur);
-        float valeur = mix(0.014, 0.93, ciel);
+        // Le fond est lumineux partout, un peu plus dense vers le bas.
+        float valeur = mix(0.78, 1.34, smoothstep(-0.55, 0.55, hauteur));
+        valeur = mix(valeur, 0.30, (1.0 - smoothstep(-0.80, -0.22, hauteur)) * 0.78);
 
-        // Le sol absorbe : sous l'horizon le metal plonge vers le noir.
-        valeur = mix(valeur, 0.045, (1.0 - smoothstep(-0.66, -0.12, hauteur)) * 0.55);
+        /* Quelques sources franches reparties en azimut. Elles ne servent
+           plus a eclairer — le decor est deja clair — mais a poser des
+           ECLATS, ces points presque purs qui disent que la surface est
+           polie et non peinte. */
+        float sources = sin(azimut * 3.0) * 0.5 + 0.5;
+        valeur += smoothstep(0.88, 0.985, sources) * 0.62;
 
-        /* LES RAMPES VERTICALES, ET C'EST LA CORRECTION DECISIVE.
-           Premiere version : le decor ne variait qu'en HAUTEUR. Sur des
-           masses rondes vues de face, les normales pointent vers la camera et
-           tous les reflets allaient donc chercher a peu pres la meme valeur —
-           d'ou des boules grises et mates, constate a l'ecran.
+        /* Et deux barres sombres. Contre-intuitif mais indispensable : sur
+           fond blanc, ce sont les REFLETS SOMBRES qui dessinent la forme.
+           Sans eux la matiere se confond avec le fond et disparait. */
+        float barres = sin(azimut * 2.0 + hauteur * 3.0) * 0.5 + 0.5;
+        valeur -= smoothstep(0.72, 0.94, barres) * 0.74;
+        valeur -= smoothstep(0.20, -0.30, hauteur) * 0.30;
 
-           Un studio reel porte des sources REPARTIES AUTOUR du sujet. En
-           faisant varier le decor selon l'azimut, la moindre courbure balaie
-           plusieurs sources, et c'est ce balayage qui fait le chrome. */
-        float rampes = sin(azimut * 3.0) * 0.5 + 0.5;
-        valeur += smoothstep(0.62, 0.86, rampes) * (0.30 + ciel * 0.85);
-
-        float rampesFines = sin(azimut * 7.0 + hauteur * 4.0) * 0.5 + 0.5;
-        valeur += smoothstep(0.80, 0.97, rampesFines) * 0.45;
-
-        // Deux bandeaux horizontaux : les coulees blanches qui glissent.
-        valeur +=
-          smoothstep(0.28, 0.335, hauteur) *
-          (1.0 - smoothstep(0.50, 0.57, hauteur)) * 1.05;
-        valeur +=
-          smoothstep(-0.40, -0.35, hauteur) *
-          (1.0 - smoothstep(-0.20, -0.155, hauteur)) * 0.50;
-
-        return clamp(valeur, 0.0, 1.7);
+        return clamp(valeur, 0.0, 1.8);
       }
 
       vec2 chromeOrb(vec2 p, vec2 center, float radius, float offset) {
@@ -268,30 +264,54 @@ function MetallicCanvas({
         return mix(b, a, h) - k * h * (1.0 - h);
       }
 
-      /* La masse principale. Six spheres reunies par une union DOUCE : c'est
-         elle qui fabrique les cols en sablier entre deux renflements, la
-         signature du metal en fusion. Une union ordinaire donnerait deux
-         boules qui s'interpenetrent, ce qui ne ressemble a rien. */
-      float carteFluide(vec3 pos) {
+      /* La deformation. Des ondes croisees a plusieurs echelles : les
+         grandes creusent les nappes, les fines plissent leurs bords. */
+      float deformation(vec3 pos) {
         float t = u_phase;
-        float d = length(pos - vec3(-1.18 + cos(t) * 0.20, sin(t) * 0.30 + 0.18, 0.0)) - 0.62;
-        d = unionDouce(d, length(pos - vec3(-0.44 + sin(t + 1.2) * 0.17, cos(t) * 0.32 - 0.22, 0.05)) - 0.56, 0.36);
-        d = unionDouce(d, length(pos - vec3(0.32 + cos(t * 2.0) * 0.15, sin(t + 2.4) * 0.34 + 0.14, -0.05)) - 0.60, 0.36);
-        d = unionDouce(d, length(pos - vec3(1.04 + sin(t * 2.0 + 0.8) * 0.16, cos(t + 1.7) * 0.30 - 0.20, 0.04)) - 0.52, 0.34);
-        d = unionDouce(d, length(pos - vec3(1.66 + cos(t + 3.1) * 0.13, sin(t * 2.0) * 0.28 + 0.10, 0.0)) - 0.44, 0.30);
-        d = unionDouce(d, length(pos - vec3(-1.74 + sin(t + 4.4) * 0.12, cos(t * 2.0 + 1.0) * 0.26 - 0.12, 0.02)) - 0.42, 0.28);
-        return d;
+        return
+          sin(pos.x * 2.9 + t) * 0.115 +
+          sin(pos.y * 3.5 - t) * 0.100 +
+          sin(pos.z * 3.1 + t * 2.0) * 0.085 +
+          sin(pos.x * 5.2 + pos.y * 4.3 + t * 2.0) * 0.040 +
+          sin(pos.y * 6.1 - pos.z * 5.3 - t) * 0.026 +
+          sin(pos.x * 8.2 - pos.z * 7.1 + t * 3.0) * 0.010;
       }
 
-      /* Les gouttes. Union FRANCHE, volontairement : une goutte qui fusionne
-         avec la masse cesse d'etre une goutte. */
+      /* ── LA COQUE, ET C'EST LA CLE DE CETTE REFERENCE ────────────────────
+         Une eclaboussure n'est pas faite de boules : elle est faite de
+         NAPPES MINCES qui s'enroulent, se percent et retombent en couronne.
+         Aucune somme de spheres ne produit ca.
+
+         Le geste qui le produit tient en une ligne : abs(d) - epaisseur.
+         Prendre la valeur absolue d'une distance signee transforme le
+         CONTOUR d'un volume en une paroi de part et d'autre de lui-meme. Le
+         volume devient une peau. Deformee, cette peau donne exactement les
+         voiles et les cols de la reference.
+
+         Prix a payer, et il est reel : une distance ainsi transformee n'est
+         plus une borne sure de la distance vraie. La marche doit donc avancer
+         plus prudemment — d'ou le facteur 0,55 et non 0,92, et davantage de
+         pas. C'est le cout de cette forme, pas une precaution superflue. */
+      float carteFluide(vec3 pos) {
+        float noyau = length(pos * vec3(0.66, 1.15, 1.02)) - 0.74;
+        noyau += deformation(pos);
+        /* 0,058 et non 0,030. Une coque plus mince que l'amplitude de sa
+           propre deformation devient chaotique a l'echelle du pixel : la
+           marche la traverse une fois sur deux et le rendu part en flou,
+           constate a l'ecran le 22/08. L'epaisseur doit rester grande devant
+           le relief le plus fin. */
+        return abs(noyau) - 0.058;
+      }
+
+      /* Les gouttes projetees. Franches, jamais fusionnees. */
       float carteGouttes(vec3 pos) {
         float t = u_phase;
-        float d = length(pos - vec3(0.62 + cos(t * 3.0) * 0.10, 0.52 + sin(t * 2.0 + 1.0) * 0.08, 0.10)) - 0.058;
-        d = min(d, length(pos - vec3(-0.72 + sin(t * 3.0 + 2.0) * 0.09, 0.46 + cos(t * 2.0) * 0.07, -0.08)) - 0.045);
-        d = min(d, length(pos - vec3(1.32 + cos(t * 2.0 + 4.0) * 0.08, -0.46 + sin(t * 3.0) * 0.06, 0.06)) - 0.036);
-        d = min(d, length(pos - vec3(-1.42 + sin(t * 2.0 + 5.2) * 0.07, 0.58 + cos(t * 3.0 + 0.5) * 0.05, 0.0)) - 0.030);
-        d = min(d, length(pos - vec3(0.06 + cos(t * 3.0 + 3.3) * 0.06, -0.56 + sin(t * 2.0 + 2.0) * 0.05, -0.04)) - 0.026);
+        float d = length(pos - vec3(1.44 + cos(t) * 0.10, 0.72 + sin(t * 2.0) * 0.09, 0.10)) - 0.052;
+        d = min(d, length(pos - vec3(-1.52 + sin(t * 2.0 + 2.0) * 0.09, 0.58 + cos(t) * 0.08, -0.08)) - 0.040);
+        d = min(d, length(pos - vec3(1.18 + cos(t * 2.0 + 4.0) * 0.08, -0.86 + sin(t * 3.0) * 0.07, 0.06)) - 0.034);
+        d = min(d, length(pos - vec3(-1.06 + sin(t * 3.0 + 5.2) * 0.07, 0.94 + cos(t * 2.0 + 0.5) * 0.06, 0.0)) - 0.028);
+        d = min(d, length(pos - vec3(0.24 + cos(t * 3.0 + 3.3) * 0.06, 1.06 + sin(t * 2.0) * 0.05, -0.04)) - 0.022);
+        d = min(d, length(pos - vec3(-0.34 + sin(t * 2.0 + 1.1) * 0.05, -1.02 + cos(t * 3.0) * 0.05, 0.03)) - 0.019);
         return d;
       }
 
@@ -312,11 +332,11 @@ function MetallicCanvas({
       vec2 marcher(vec3 origine, vec3 direction) {
         float distance = 0.0;
         float touche = 0.0;
-        for (int i = 0; i < 48; i++) {
+        for (int i = 0; i < 78; i++) {
           float pas = carteScene(origine + direction * distance);
-          if (pas < 0.0020) { touche = 1.0; break; }
-          if (distance > 7.0) break;
-          distance += pas * 0.92;
+          if (pas < 0.0016) { touche = 1.0; break; }
+          if (distance > 6.4) break;
+          distance += pas * 0.55;
         }
         return vec2(distance, touche);
       }
@@ -325,11 +345,11 @@ function MetallicCanvas({
       vec2 marcherRebond(vec3 origine, vec3 direction) {
         float distance = 0.03;
         float touche = 0.0;
-        for (int i = 0; i < 18; i++) {
+        for (int i = 0; i < 26; i++) {
           float pas = carteScene(origine + direction * distance);
           if (pas < 0.0045) { touche = 1.0; break; }
           if (distance > 4.5) break;
-          distance += pas * 0.94;
+          distance += pas * 0.58;
         }
         return vec2(distance, touche);
       }
@@ -431,8 +451,8 @@ function MetallicCanvas({
              Un rayon par pixel. La camera est en retrait sur l'axe Z et
              regarde la nappe de fluide ; l'ouverture est large pour que les
              masses des bords entrent dans le champ. */
-          vec3 origineRayon = vec3(0.0, 0.0, 2.30);
-          vec3 directionRayon = normalize(vec3(scene * 2.55, -1.28));
+          vec3 origineRayon = vec3(0.0, 0.0, 3.10);
+          vec3 directionRayon = normalize(vec3(scene * 2.30, -1.62));
 
           vec2 contact = marcher(origineRayon, directionRayon);
           vec3 pointContact = origineRayon + directionRayon * contact.x;
@@ -477,7 +497,7 @@ function MetallicCanvas({
           couleurMatiere += fresnel * 0.62;
 
           // Hors matiere : le studio vu directement, assombri, qui sert de fond.
-          float fond = studio(directionRayon) * 0.34;
+          float fond = studio(directionRayon);
 
           vec3 referenceBase = mix(vec3(fond), couleurMatiere, contact.y);
 
@@ -491,8 +511,8 @@ function MetallicCanvas({
           /* Le contraste final. La reference oppose du blanc franc a du noir
              franc, sans plage grise intermediaire : la plage est donc etroite. */
           referenceBase = smoothstep(
-            vec3(0.035),
-            vec3(0.60),
+            vec3(0.03),
+            vec3(1.24),
             referenceBase
           );
 
