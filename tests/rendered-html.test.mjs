@@ -902,14 +902,38 @@ test("legal notice publishes the sourced seller identity and never the closed es
   assert.doesNotMatch(html, /944 996 487 00020|94499648700020/);
   assert.doesNotMatch(html, /944 996 487 00012|94499648700012/);
 
-  /* AUCUN NUMERO DE TVA N'EST AFFIRME. Le registre officiel indique « pas de
-     n° TVA valide » au 21/08/2026 : publier un numero serait faux, et le prix
-     ne peut pas s'afficher TTC tant que le regime n'est pas tranche. */
-  assert.doesNotMatch(html, /FR\s?58\s?944\s?996\s?487/);
-  assert.match(html, /pas de n° TVA valide/i);
+  /* LE NUMERO DE TVA EST PUBLIE, sur instruction explicite d'Adam du
+     22/08/2026. La cle de controle le confirme : (12 + 3 x (944996487 mod 97))
+     mod 97 = 58, donc FR58944996487 est bien LE numero de ce SIREN. */
+  assert.match(html, /FR\s?58\s?944\s?996\s?487/);
 
-  /* Ce qui reste inconnu continue de se dire. */
-  assert.match(html, /À compléter avant l’ouverture des ventes/);
+  /* MAIS L'ETIQUETTE DU PRIX NE SUIT PAS. Publier le numero ne tranche pas le
+     regime : l'API officielle renvoie encore « tva: null », ce qui est le
+     comportement d'une franchise en base. Le montant affiche est le meme sous
+     les deux regimes, seule sa mention change. Tant que Jeremy n'a pas
+     repondu, aucune des deux n'est affirmee — c'est la seule position vraie
+     dans les deux cas, et ce test empeche de la trancher par inadvertance. */
+  assert.doesNotMatch(html, /\bTTC\b/);
+  assert.doesNotMatch(html, /293\s?B/);
+
+  /* AUCUN TEXTE D'ATTENTE NE RESTE VISIBLE. Adam confirme le 22/08 qu'aucune
+     ligne telephonique n'est ouverte. La ligne « Telephone » est donc omise
+     plutot que remplie d'un « a completer » : le placeholder ne satisfaisait
+     pas la LCEN et signalait en plus une marque non prete. Le manque est
+     porte par PRELAUNCH_BLOCKERS, pas par la page publique. */
+  assert.doesNotMatch(html, /À compléter/);
+
+  /* Attention au faux positif : l'hebergeur AFFICHE un telephone, celui de
+     Cloudflare France. Interdire la chaine « Telephone » ferait echouer le
+     test pour la mauvaise raison. Ce qui doit etre vrai, c'est qu'il n'en
+     reste QU'UN sur la page, et que c'est celui de l'hebergeur. */
+  const lignesTelephone = html.match(/<dt[^>]*>Téléphone<\/dt>/g) ?? [];
+  assert.equal(
+    lignesTelephone.length,
+    1,
+    "seul l’hébergeur doit porter un téléphone tant que l’éditeur n’en a pas",
+  );
+  assert.match(html, /\+33 1 73 01 52 44/);
 });
 
 test("terms cover the 2026 consumer baseline without a blanket underwear exclusion", async () => {

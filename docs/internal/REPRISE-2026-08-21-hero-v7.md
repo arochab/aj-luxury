@@ -271,3 +271,84 @@ corrigée.
   `HeroBackgroundVideo`, les quatre MP4) sont **conservés volontairement** :
   ils sont le chemin de retour arrière tant qu'Adam n'a pas validé la v7. Ne
   pas les supprimer avant cette validation.
+
+---
+
+# Identité légale et corrections — 22/08/2026
+
+## TVA : le numéro est publié
+
+Adam a redonné le numéro le 22/08 après que j'ai refusé de le publier la
+veille. C'est sa décision, elle est appliquée.
+
+Ce qui est **vérifié** : la clé de contrôle. `(12 + 3 × (944996487 mod 97)) mod
+97 = 58`. `FR58944996487` est donc bien le numéro intracommunautaire que la
+règle française attache à ce SIREN — pas un numéro plausible, *le* numéro de
+cette entreprise.
+
+Ce qui **ne l'est pas** : son activation. L'API officielle
+`recherche-entreprises.api.gouv.fr` renvoie encore `tva: null` au 22/08. VIES
+n'a pas répondu — erreur de service `MS_MAX_CONCURRENT_REQ`, qui n'est **pas**
+un verdict d'invalidité, et qu'il ne faut pas lire comme tel. C'est le
+comportement attendu d'une entreprise en franchise en base : le numéro existe,
+il n'est pas activé pour les échanges intracommunautaires.
+
+**L'étiquette du prix reste donc en suspens, et c'est une question distincte.**
+Le montant affiché est le même sous les deux régimes ; seule sa mention change
+— « TTC » si assujetti, « TVA non applicable, article 293 B du CGI » si
+franchise en base. Deux `assert.doesNotMatch` empêchent désormais de trancher
+par inadvertance.
+
+## Téléphone : aucun, et la ligne est omise
+
+Adam confirme le 22/08 qu'aucune ligne n'est ouverte. L'article 6 III 1 a) de
+la LCEN en demande un pour un éditeur personne physique. **Il manque donc une
+mention légale, et aucun code ne peut la fabriquer.**
+
+Le choix retenu : `LEGAL_CONTACT.phone = null`, et la ligne « Téléphone » de
+l'éditeur n'est pas rendue. Un « à compléter avant l'ouverture des ventes »
+visible sur des mentions légales en ligne ne satisfait pas davantage la loi et
+signale en plus une marque qui n'est pas prête. Le manque est porté par
+`PRELAUNCH_BLOCKERS`, là où il peut être traité.
+
+Piège vérifié au test : l'hébergeur, lui, **affiche** un téléphone, celui de
+Cloudflare France. Interdire la chaîne « Téléphone » ferait échouer le test
+pour la mauvaise raison. L'assertion compte les lignes et exige qu'il n'en
+reste qu'une.
+
+## Activité déclarée
+
+`activite_principale: "59.11B"` — production de films. Confirmé par l'API
+officielle le 22/08. La vente de vêtements n'est pas l'activité enregistrée.
+Ce n'est pas un défaut du site et rien n'est à corriger dans le code ; c'est un
+point à traiter au guichet unique INPI avant l'ouverture des ventes. Ajouté aux
+bloqueurs.
+
+## DEUX CORRECTIONS DE MES PROPRES COMPTES RENDUS
+
+Je les écris ici parce qu'elles ont été communiquées à Adam sous une forme
+fausse, et qu'un chiffre faux dans un rapport vaut moins que pas de rapport.
+
+**1. « Six lots front verts » était inexact.** Le test
+`homepage product portraits preserve the full head area` était **rouge depuis
+le commit `81bb776` du 16/08**, donc avant même cette session. Il exigeait
+`object-position: center top` sur `.aj-product-card__image img` ; ce commit
+avait fait passer la règle en `object-fit: contain` et remis l'ancrage à
+`center`. Pire : `.aj-product-card` n'est plus rendue par **aucun** markup
+depuis la refonte — le test gardait du CSS mort.
+
+Il est reporté sur le contrat vivant, `.prise` et `.priseVoisine` dans
+`Accueil.module.css`, et renforcé : `contain` n'est pas un ancrage plus fin,
+c'est une garantie d'une autre nature, l'image entière entre dans le cadre donc
+aucun recadrage n'est possible. `cover` est interdit sur ces éléments.
+
+**2. Ma raison pour les 6 rouges backend était fausse.** J'avais écrit que cinq
+d'entre eux « exigent les quatre zones provisionnées ». C'est faux pour au
+moins `synthetic health exposes simulations…` : ce test **simule intégralement
+la base**, zones comprises. Il échoue parce que le worker répond **503 au lieu
+de 200** sur `/api/preprod/health`. La cause est donc *dans le worker*, pas
+dans l'environnement.
+
+Vérifié rigoureusement : rouge au `HEAD` `efebf4b`, sur arbre propre, avec un
+build neuf. **Préexistant, donc — mais pas pour la raison que j'avais donnée.**
+Le prochain qui prendra ce sujet doit partir du 503, pas des zones.

@@ -30,6 +30,10 @@ const storyStyles = await readFile(
   new URL("../app/notre-histoire/Story.module.css", import.meta.url),
   "utf8",
 );
+const accueilStyles = await readFile(
+  new URL("../app/components/Accueil.module.css", import.meta.url),
+  "utf8",
+);
 
 test("paired portrait media share one 2:3 frame", () => {
   assert.match(css, /\.galleryPortrait\s*\{[^}]*aspect-ratio:\s*2\s*\/\s*3/s);
@@ -83,14 +87,39 @@ test("recommendations exclude the product currently viewed", () => {
   );
 });
 
+/* CE TEST VISAIT UNE CLASSE MORTE, ET IL ETAIT ROUGE DEPUIS LE 16/08.
+
+   Intention d'origine, qui reste juste : un portrait produit sur l'accueil ne
+   doit jamais couper la tete du mannequin. Elle etait verifiee sur
+   `.aj-product-card__image img` dans globals.css, avec un ancrage haut
+   (`object-position: center top`) et l'interdiction du cadrage a 28 %.
+
+   Deux choses ont change depuis, et aucune n'a ete repercutee ici.
+
+   1. Le commit 81bb776 du 16/08 a fait passer cette regle en
+      `object-fit: contain`, rendant `object-position: center top` inutile — il
+      l'a donc remis a `center`. La regex exigeait toujours `center top` : le
+      test est rouge depuis, sans rapport avec ce qu'il pretend proteger.
+
+   2. La refonte de l'accueil a remplace `.aj-product-card`. Cette classe
+      n'est plus rendue par AUCUN markup : elle ne survit que dans globals.css
+      et dans ce test. Le test gardait donc du CSS mort.
+
+   Il est reporte sur le contrat vivant, et RENFORCE au passage. `contain`
+   n'est pas un ancrage plus fin, c'est une garantie d'une autre nature :
+   l'image entiere entre dans le cadre, donc aucun recadrage n'est possible,
+   quelle que soit la boite. Interdire `cover` sur ces memes elements ferme la
+   seule porte par laquelle une tete pourrait etre coupee.
+
+   Le CSS mort `.aj-product-card*` est laisse au chantier de nettoyage, qui a
+   son propre manifeste. */
 test("homepage product portraits preserve the full head area", () => {
-  assert.match(
-    globalStyles,
-    /\.aj-product-card__image img\s*\{[^}]*object-position:\s*center top;[^}]*transform-origin:\s*50% 0%;/s,
-  );
+  assert.match(accueilStyles, /\.prise\s*\{[^}]*object-fit:\s*contain;/s);
+  assert.match(accueilStyles, /\.priseVoisine\s*\{[^}]*object-fit:\s*contain;/s);
+  assert.doesNotMatch(accueilStyles, /\.prise\s*\{[^}]*object-fit:\s*cover;/s);
   assert.doesNotMatch(
-    globalStyles,
-    /\.aj-product-card__image img\s*\{[^}]*object-position:\s*center 28%;/s,
+    accueilStyles,
+    /\.priseVoisine\s*\{[^}]*object-fit:\s*cover;/s,
   );
 });
 

@@ -13,10 +13,28 @@ export const LEGAL_VERSION = "2026-07-30";
 export const LEGAL_VERSION_DISPLAY = LEGAL_VERSION.replace(/-/g, "‑");
 
 
+/*
+  LE TÉLÉPHONE EST `null`, ET C'EST UN CHOIX ASSUMÉ, PAS UN OUBLI.
+
+  Adam confirme le 22/08/2026 qu'aucune ligne n'est ouverte à ce jour.
+
+  L'article 6 III 1 a) de la LCEN demande, pour un éditeur personne physique,
+  « nom, prénoms, domicile et numéro de téléphone ». Il manque donc une mention
+  légale, et aucun code ne peut la fabriquer : inventer un numéro serait une
+  faute bien plus grave que l'absence.
+
+  Restait à choisir entre afficher un texte d'attente et ne rien afficher.
+  Un « à compléter avant l'ouverture des ventes » sur des mentions légales en
+  ligne ne satisfait pas davantage la loi ET signale au visiteur que la marque
+  n'est pas prête. La ligne est donc omise tant que la valeur est `null`, et le
+  manque est porté là où il peut être traité : PRELAUNCH_BLOCKERS ci-dessous.
+
+  Dès qu'un numéro existe, il suffit de le poser ici : la ligne réapparaît.
+*/
 export const LEGAL_CONTACT = {
   brand: "AJ Luxury",
   email: "contact@ajluxurystore.com",
-  phone: "À compléter avant l’ouverture des ventes",
+  phone: null as string | null,
 } as const;
 
 /* ==========================================================================
@@ -39,14 +57,27 @@ export const LEGAL_CONTACT = {
       00020 à Belmont (fermé le 28/07/2026). Ne jamais publier le 00020, qui
       circule encore dans des annuaires tiers.
 
-   2. LA TVA. Le registre officiel indique « Pas de n° TVA valide ». Le numéro
-      FR58944996487 a beau être arithmétiquement cohérent — la clé 58 est bien
-      celle que donne (12 + 3 × (SIREN mod 97)) mod 97 —, l'administration ne
-      le reconnaît pas comme valide à ce jour. Publier un numéro de TVA
-      inexistant serait une mention légale fausse. Le champ reste donc en
-      attente, et le prix ne peut pas s'afficher « TTC » tant que le régime
-      n'est pas tranché : si l'entreprise relève de la franchise en base, la
-      mention obligatoire est « TVA non applicable, article 293 B du CGI ».
+   2. LA TVA. Le numéro est publié sur instruction explicite d'Adam, répétée
+      le 22/08/2026. Ce qui est vérifié et ce qui ne l'est pas, sans mélange :
+
+      VÉRIFIÉ — la clé de contrôle. (12 + 3 × (944996487 mod 97)) mod 97 = 58.
+      FR58944996487 est donc bien le numéro intracommunautaire que la règle
+      française associe à ce SIREN. Ce n'est pas un numéro plausible, c'est LE
+      numéro de cette entreprise.
+
+      NON VÉRIFIÉ — son activation. L'API officielle
+      recherche-entreprises.api.gouv.fr renvoie encore « tva: null » au
+      22/08/2026, et VIES n'a pas répondu (erreur de service
+      MS_MAX_CONCURRENT_REQ, qui n'est pas un verdict d'invalidité). C'est le
+      comportement attendu d'une entreprise en franchise en base : le numéro
+      existe, mais n'est pas activé pour les échanges intracommunautaires.
+
+      CONSÉQUENCE SUR LES PRIX, et elle est indépendante de ce champ. Le
+      montant affiché est celui que le client paie sous les deux régimes ; seul
+      son ÉTIQUETTE dépend de la réponse de Jérémy. Assujetti : « TTC ».
+      Franchise en base : « TVA non applicable, article 293 B du CGI ». Tant
+      que la question n'est pas tranchée, aucune des deux mentions n'est
+      affirmée — c'est la seule position vraie dans les deux cas.
    ========================================================================== */
 export const SELLER_IDENTITY = {
   legalName: "Jérémy Scheppler, entrepreneur individuel",
@@ -54,8 +85,7 @@ export const SELLER_IDENTITY = {
   registeredOffice: "3 A rue Principale, 67130 Belmont, France",
   registration:
     "SIREN 944 996 487 — SIRET du siège 944 996 487 00038 — immatriculée au Registre national des entreprises (RNE) le 28 mai 2025",
-  vatNumber:
-    "À confirmer — le registre officiel indique « pas de n° TVA valide » au 21/08/2026 ; régime de TVA à trancher avant l’ouverture des ventes",
+  vatNumber: "FR 58 944 996 487",
   publicationDirector: "Jérémy Scheppler",
 } as const;
 
@@ -80,7 +110,9 @@ export const MEDIATOR = {
 
 export const PRELAUNCH_BLOCKERS = [
   "régime de TVA du vendeur et mention associée sur les prix",
-  "adresse de retour et numéro de téléphone",
+  "numéro de téléphone de l’éditeur, exigé par l’article 6 III de la LCEN",
+  "activité de vente au détail à déclarer : l’activité enregistrée est la production de films (59.11B)",
+  "adresse de retour",
   "médiateur de la consommation conventionné",
   "zones, transporteurs, tarifs et délais de livraison",
   "prestataire de paiement et moyens de paiement",
