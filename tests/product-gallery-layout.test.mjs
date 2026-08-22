@@ -18,10 +18,9 @@ const productPage = await readFile(
   new URL("../app/products/[slug]/page.tsx", import.meta.url),
   "utf8",
 );
-const globalStyles = await readFile(
-  new URL("../app/globals.css", import.meta.url),
-  "utf8",
-);
+/* globals.css n'est plus lu ici : le seul test qui s'en servait visait
+   .aj-product-card, une classe que plus aucun markup ne rend. Il est reporté
+   sur Accueil.module.css. */
 const purchase = await readFile(
   new URL("../app/components/ProductPurchase.tsx", import.meta.url),
   "utf8",
