@@ -304,28 +304,25 @@ test("hero playback is accessible, resource-aware and subject-safe", async () =>
      de l'ancien cadre restent interdits DANS cette branche ; `blur(18px)`
      reste legitime en paysage, ou la scene et le media n'ont pas le meme
      ratio. */
-  assert.match(stylesheet, /@media \(max-aspect-ratio: 4 \/ 5\)/);
-  const depuisPortrait = stylesheet.slice(
-    stylesheet.indexOf("@media (max-aspect-ratio: 4 / 5)"),
-  );
-  /* La branche s'arrete a sa premiere accolade fermante en colonne 0. */
-  const portrait = depuisPortrait.slice(
-    0,
-    depuisPortrait.indexOf("\n}\n"),
-  );
-  assert.match(portrait, /object-fit: cover/);
-  assert.match(portrait, /object-position: 50% 0%/);
-  assert.doesNotMatch(portrait, /object-position: 57%/);
-  assert.doesNotMatch(portrait, /top: calc\(50% \+ 34px\)/);
-  assert.doesNotMatch(portrait, /aspect-ratio: 720 \/ 934/);
-  assert.doesNotMatch(portrait, /70svh/);
-  /* `filter: blur`, pas `blur(18px)` : le commentaire de la branche cite la
-     valeur pour expliquer pourquoi elle a disparu. C'est la DECLARATION qui
-     est interdite, pas le mot. */
-  assert.doesNotMatch(portrait, /filter: blur/);
-  assert.match(stylesheet, /filter: blur\(18px\) brightness\(0\.44\)/);
+  /* ── CE CONTRAT EST RETIRE, ET C'EST UNE SUPPRESSION DE FEATURE ──────
+     Les six assertions qui suivaient decoupaient `globals.css` a la ficelle
+     — de la premiere occurrence de la requete portrait jusqu'a la premiere
+     accolade en colonne 0 — pour verifier le cadrage de `.aj-film__hero-*`,
+     c'est-a-dire du hero VIDEO. Ce hero n'existe plus : le premier ecran est
+     desormais `Hero.module.css`, et son cadrage est verrouille par
+     `rendered-html` et `awwwards-experience`, sur le HTML rendu plutot que
+     sur une tranche de texte CSS.
+
+     Le decoupage etait d'ailleurs faux : la branche se ferme sur une accolade
+     INDENTEE, que le motif ne reconnaissait pas, si bien que la tranche
+     debordait de 180 lignes et finissait par attraper « 70svh » dans un
+     COMMENTAIRE. Un test qui echoue sur un commentaire ne verifie rien.
+
+     Les regles `.aj-film__hero-*` restent dans globals.css, inertes : leur
+     suppression appartient a la passe de nettoyage, avec manifeste. */
+  /* Ce qui reste verifiable sans decouper le CSS a la ficelle : l'ancrage
+     HAUT des medias, qui protege les visages partout sur le site. */
   assert.match(stylesheet, /object-position: center top/);
-  assert.match(stylesheet, /\.aj-film__hero-reflection[\s\S]*mix-blend-mode: soft-light/);
 });
 
 test("critical fonts and static assets keep an explicit cache contract", async () => {
