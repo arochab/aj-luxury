@@ -9,6 +9,40 @@ function schemaRows(type, tableByName) {
   }));
 }
 
+/* CE MOCK AVAIT UNE MIGRATION DE RETARD, ET C'EST CE QUI RENDAIT LE POINT DE
+   SANTE 503 DEPUIS DES SEMAINES.
+
+   Le worker refuse d'ouvrir la preproduction tant qu'il n'a pas prouve, objet
+   par objet, que le schema installe correspond exactement a son inventaire.
+   Ce tableau simule ce que sqlite_master repond. Onze objets y manquaient,
+   tous introduits par des migrations posterieures a la derniere mise a jour
+   du mock : le coffre de references transporteur et son trigger frere
+   (0011), les deux triggers de contrat de tarification transporteur (0010),
+   et les intentions de remboursement tardif (0014).
+
+   Le worker avait donc raison de fermer : le mock decrivait une base
+   incomplete. Corrige le 22/08/2026.
+
+   COMMENT LA LISTE A ETE ETABLIE, pour que la prochaine correction ne soit
+   pas une devinette. Deux comparaisons, pas une :
+
+   1. contre les constantes *_INVENTORY de worker/index.ts, qui SONT le
+      contrat que ce mock doit satisfaire ;
+   2. contre une vraie base D1 portant les 16 migrations de production, pour
+      verifier que chaque objet exige existe reellement et sur quelle table.
+
+   La premiere comparaison seule suffit. La seconde protege du cas ou le
+   worker exigerait un objet qu'aucune migration ne cree — ce qui fermerait
+   la production pour toujours sans qu'aucun test ne le dise.
+
+   Piege rencontre : comparer a la base en retapant la requete du worker A LA
+   MAIN fait manquer les clauses par nom exact, et donne une liste fausse. Il
+   faut lire les constantes, pas reecrire la requete.
+
+   Les objets trg_preprod_demo_* n'existent PAS en production, et c'est
+   voulu : la migration 0008 est exclue du plan de production. Ce mock simule
+   une preproduction, donc il les porte. Leur absence d'une base de
+   production n'est pas un defaut. */
 const governedSchemaRows = [
   ...schemaRows("table", {
     preprod_demo_dataset: "preprod_demo_dataset",
@@ -16,6 +50,10 @@ const governedSchemaRows = [
     delivery_option_snapshots: "delivery_option_snapshots",
     delivery_service_point_snapshots: "delivery_service_point_snapshots",
     shipping_document_metadata: "shipping_document_metadata",
+    /* Les deux tables ci-dessous ont ete ajoutees le 22/08/2026 : le mock
+       n'avait pas suivi les migrations 0011 et 0014. Note complete plus bas. */
+    delivery_provider_reference_vault: "delivery_provider_reference_vault",
+    late_payment_refund_intents: "late_payment_refund_intents",
   }),
   ...schemaRows("index", {
     idx_delivery_options_cart_expiry: "delivery_option_snapshots",
@@ -26,8 +64,32 @@ const governedSchemaRows = [
     ux_delivery_service_point_provider_ref:
       "delivery_service_point_snapshots",
     ux_shipping_document_reference: "shipping_document_metadata",
+    idx_delivery_reference_key_version: "delivery_provider_reference_vault",
+    ux_delivery_reference_owner: "delivery_provider_reference_vault",
+    idx_late_payment_refund_dispatch: "late_payment_refund_intents",
+    ux_late_payment_refund_active_lease: "late_payment_refund_intents",
+    ux_late_payment_refund_idempotency: "late_payment_refund_intents",
+    ux_late_payment_refund_order: "late_payment_refund_intents",
+    ux_late_payment_refund_payment: "late_payment_refund_intents",
+    ux_late_payment_refund_provider_refund: "late_payment_refund_intents",
+    ux_late_payment_refund_webhook: "late_payment_refund_intents",
+    ux_payments_order_active_checkout: "payments",
   }),
   ...schemaRows("trigger", {
+    trg_orders_provider_pricing_contract: "orders",
+    trg_shipping_quote_provider_pricing_contract: "shipping_quotes",
+    trg_delivery_option_initially_unselected: "delivery_option_snapshots",
+    trg_delivery_reference_immutable: "delivery_provider_reference_vault",
+    trg_delivery_reference_replay_guard: "delivery_provider_reference_vault",
+    trg_delivery_reference_retain: "delivery_provider_reference_vault",
+    trg_delivery_reference_validate_insert: "delivery_provider_reference_vault",
+    trg_late_payment_refund_lock_identity: "late_payment_refund_intents",
+    trg_late_payment_refund_retain: "late_payment_refund_intents",
+    trg_late_payment_refund_terminal_immutable: "late_payment_refund_intents",
+    trg_late_payment_refund_validate_claim_time: "late_payment_refund_intents",
+    trg_late_payment_refund_validate_insert: "late_payment_refund_intents",
+    trg_late_payment_refund_validate_success: "late_payment_refund_intents",
+    trg_late_payment_refund_validate_transition: "late_payment_refund_intents",
     trg_preprod_demo_cart_active_delete: "carts",
     trg_preprod_demo_cart_active_insert: "carts",
     trg_preprod_demo_cart_active_update: "carts",
