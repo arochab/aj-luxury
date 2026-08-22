@@ -264,54 +264,90 @@ function MetallicCanvas({
         return mix(b, a, h) - k * h * (1.0 - h);
       }
 
-      /* La deformation. Des ondes croisees a plusieurs echelles : les
-         grandes creusent les nappes, les fines plissent leurs bords. */
-      float deformation(vec3 pos) {
+      /* ══ L'ECLABOUSSURE ═════════════════════════════════════════════════
+         Troisieme construction, et la premiere qui vise la BONNE topologie.
+
+         Ce que les deux precedentes rataient. Des spheres reunies donnent des
+         renflements ; une ellipsoide coquee donne une bulle froissee. Or une
+         eclaboussure n'est ni l'un ni l'autre : c'est une nappe qui part d'un
+         point d'impact, se creuse en cuvette, se releve en COURONNE, et dont
+         le bord se dechire en dents d'ou partent les gouttes. Sa geometrie est
+         RADIALE et se decrit en coordonnees polaires, pas en sommes de
+         volumes. C'est pour cela qu'aucun reglage des versions precedentes ne
+         pouvait y mener.
+
+         La nappe est donc definie par son PROFIL, une altitude en fonction du
+         rayon et de l'azimut, puis transformee en peau d'epaisseur finie.
+
+         Bouclage : uniquement des multiples entiers de u_phase. */
+      float profilNappe(vec2 sol) {
         float t = u_phase;
-        return
-          sin(pos.x * 2.9 + t) * 0.115 +
-          sin(pos.y * 3.5 - t) * 0.100 +
-          sin(pos.z * 3.1 + t * 2.0) * 0.085 +
-          sin(pos.x * 5.2 + pos.y * 4.3 + t * 2.0) * 0.040 +
-          sin(pos.y * 6.1 - pos.z * 5.3 - t) * 0.026 +
-          sin(pos.x * 8.2 - pos.z * 7.1 + t * 3.0) * 0.010;
+        float rayon = length(sol);
+        float azimut = atan(sol.y, sol.x);
+
+        // LA CUVETTE. Au point d'impact la matiere s'enfonce.
+        float cuvette = -0.86 * exp(-rayon * rayon * 1.55);
+
+        /* LA COURONNE. Un bourrelet circulaire qui se releve a distance fixe
+           de l'impact. Son rayon respire avec la phase : l'onde s'ecarte. */
+        float rayonCouronne = 0.94 + sin(t) * 0.10;
+        float bourrelet = exp(-(rayon - rayonCouronne) * (rayon - rayonCouronne) * 5.6);
+
+        /* LES DENTS. Le bord d'une couronne ne monte pas d'un bloc : il se
+           divise en lames inegales, et c'est de leur pointe que partent les
+           gouttes. Deux harmoniques desynchronisees suffisent a rompre toute
+           regularite mecanique. */
+        float dents =
+          (sin(azimut * 7.0 + t) * 0.5 + 0.5) * 0.86 +
+          (sin(azimut * 13.0 - t) * 0.5 + 0.5) * 0.44 +
+          (sin(azimut * 3.0 + t * 2.0) * 0.5 + 0.5) * 0.22;
+        /* 2,35 et non 0,95. A la distance de camera retenue, une couronne
+           d'un demi rayon de haut ne se lit plus : sa silhouette se confond
+           avec la nappe et l'ensemble revient a une dune lisse, constate a
+           l'ecran. C'est la SILHOUETTE qui porte cette image, donc elle doit
+           depasser franchement. */
+        float couronne = bourrelet * (0.30 + dents) * 2.35;
+
+        /* LES ONDES. La nappe garde la memoire de l'impact : des rides
+           concentriques qui s'amortissent en s'eloignant. */
+        float ondes = sin(rayon * 6.4 - t * 2.0) * 0.075 * exp(-rayon * 0.85);
+
+        // Un voile exterieur qui retombe, pour que la nappe ne s'arrete pas net.
+        float voile = -0.20 * smoothstep(1.05, 1.70, rayon);
+
+        return cuvette + couronne + ondes + voile;
       }
 
-      /* ── LA COQUE, ET C'EST LA CLE DE CETTE REFERENCE ────────────────────
-         Une eclaboussure n'est pas faite de boules : elle est faite de
-         NAPPES MINCES qui s'enroulent, se percent et retombent en couronne.
-         Aucune somme de spheres ne produit ca.
-
-         Le geste qui le produit tient en une ligne : abs(d) - epaisseur.
-         Prendre la valeur absolue d'une distance signee transforme le
-         CONTOUR d'un volume en une paroi de part et d'autre de lui-meme. Le
-         volume devient une peau. Deformee, cette peau donne exactement les
-         voiles et les cols de la reference.
-
-         Prix a payer, et il est reel : une distance ainsi transformee n'est
-         plus une borne sure de la distance vraie. La marche doit donc avancer
-         plus prudemment — d'ou le facteur 0,55 et non 0,92, et davantage de
-         pas. C'est le cout de cette forme, pas une precaution superflue. */
+      /* La peau. La valeur absolue transforme le contour de la nappe en paroi de part et
+         d'autre d'elle-meme ; le facteur 0,62 corrige le fait qu'une altitude
+         n'est pas une distance, sans quoi la marche depasse la surface. */
       float carteFluide(vec3 pos) {
-        float noyau = length(pos * vec3(0.66, 1.15, 1.02)) - 0.74;
-        noyau += deformation(pos);
-        /* 0,058 et non 0,030. Une coque plus mince que l'amplitude de sa
-           propre deformation devient chaotique a l'echelle du pixel : la
-           marche la traverse une fois sur deux et le rendu part en flou,
-           constate a l'ecran le 22/08. L'epaisseur doit rester grande devant
-           le relief le plus fin. */
-        return abs(noyau) - 0.058;
+        float ecart = pos.y - profilNappe(pos.xz);
+        float peau = abs(ecart) * 0.62 - 0.052;
+
+        /* LA NAPPE EST BORNEE, ET C'EST INDISPENSABLE. Un profil defini pour
+           tout le plan produit une nappe INFINIE : elle remplit le cadre, on
+           ne voit jamais une sculpture posee dans du vide, et la reference
+           devient inatteignable — constate a l'ecran le 22/08.
+
+           L'intersection avec une sphere donne a l'eclaboussure un bord franc
+           et du blanc autour. Elle divise aussi le cout par un facteur net :
+           les rayons qui passent a cote sortent des les premiers pas au lieu
+           de longer une nappe sans fin. */
+        float borne = length(pos * vec3(0.80, 0.72, 0.80)) - 1.66;
+        return max(peau, borne);
       }
 
-      /* Les gouttes projetees. Franches, jamais fusionnees. */
+      /* Les gouttes projetees, au-dessus des dents. Union franche : une goutte
+         qui fusionne cesse d'etre une goutte. */
       float carteGouttes(vec3 pos) {
         float t = u_phase;
-        float d = length(pos - vec3(1.44 + cos(t) * 0.10, 0.72 + sin(t * 2.0) * 0.09, 0.10)) - 0.052;
-        d = min(d, length(pos - vec3(-1.52 + sin(t * 2.0 + 2.0) * 0.09, 0.58 + cos(t) * 0.08, -0.08)) - 0.040);
-        d = min(d, length(pos - vec3(1.18 + cos(t * 2.0 + 4.0) * 0.08, -0.86 + sin(t * 3.0) * 0.07, 0.06)) - 0.034);
-        d = min(d, length(pos - vec3(-1.06 + sin(t * 3.0 + 5.2) * 0.07, 0.94 + cos(t * 2.0 + 0.5) * 0.06, 0.0)) - 0.028);
-        d = min(d, length(pos - vec3(0.24 + cos(t * 3.0 + 3.3) * 0.06, 1.06 + sin(t * 2.0) * 0.05, -0.04)) - 0.022);
-        d = min(d, length(pos - vec3(-0.34 + sin(t * 2.0 + 1.1) * 0.05, -1.02 + cos(t * 3.0) * 0.05, 0.03)) - 0.019);
+        float d = length(pos - vec3(0.92 + cos(t) * 0.08, 0.86 + sin(t * 2.0) * 0.14, 0.30)) - 0.048;
+        d = min(d, length(pos - vec3(-0.78 + sin(t * 2.0) * 0.07, 1.02 + cos(t) * 0.16, -0.42)) - 0.038);
+        d = min(d, length(pos - vec3(0.32 + cos(t * 2.0 + 2.0) * 0.06, 1.24 + sin(t) * 0.12, 0.62)) - 0.030);
+        d = min(d, length(pos - vec3(-1.14 + sin(t * 3.0) * 0.06, 0.74 + cos(t * 2.0) * 0.13, 0.18)) - 0.026);
+        d = min(d, length(pos - vec3(1.28 + cos(t * 3.0 + 1.0) * 0.05, 0.62 + sin(t * 2.0 + 1.0) * 0.11, -0.54)) - 0.022);
+        d = min(d, length(pos - vec3(-0.24 + sin(t * 2.0 + 4.0) * 0.05, 1.42 + cos(t * 3.0) * 0.10, -0.16)) - 0.018);
         return d;
       }
 
@@ -332,7 +368,7 @@ function MetallicCanvas({
       vec2 marcher(vec3 origine, vec3 direction) {
         float distance = 0.0;
         float touche = 0.0;
-        for (int i = 0; i < 78; i++) {
+        for (int i = 0; i < 56; i++) {
           float pas = carteScene(origine + direction * distance);
           if (pas < 0.0016) { touche = 1.0; break; }
           if (distance > 6.4) break;
@@ -345,7 +381,7 @@ function MetallicCanvas({
       vec2 marcherRebond(vec3 origine, vec3 direction) {
         float distance = 0.03;
         float touche = 0.0;
-        for (int i = 0; i < 26; i++) {
+        for (int i = 0; i < 14; i++) {
           float pas = carteScene(origine + direction * distance);
           if (pas < 0.0045) { touche = 1.0; break; }
           if (distance > 4.5) break;
@@ -451,8 +487,19 @@ function MetallicCanvas({
              Un rayon par pixel. La camera est en retrait sur l'axe Z et
              regarde la nappe de fluide ; l'ouverture est large pour que les
              masses des bords entrent dans le champ. */
-          vec3 origineRayon = vec3(0.0, 0.0, 3.10);
-          vec3 directionRayon = normalize(vec3(scene * 2.30, -1.62));
+          /* La camera se place LEGEREMENT AU-DESSUS du plan d'impact et vise
+             la cuvette : vue strictement de face, une couronne se lit comme un
+             anneau plat et l'eclaboussure disparait. */
+          vec3 origineRayon = vec3(0.0, 0.72, 4.35);
+          vec3 vise = vec3(0.0, 0.18, 0.0);
+          vec3 axeAvant = normalize(vise - origineRayon);
+          vec3 axeDroite = normalize(cross(vec3(0.0, 1.0, 0.0), axeAvant));
+          vec3 axeHaut = cross(axeAvant, axeDroite);
+          vec3 directionRayon = normalize(
+            axeAvant * 2.05 +
+            axeDroite * scene.x * 2.32 +
+            axeHaut * scene.y * 2.32
+          );
 
           vec2 contact = marcher(origineRayon, directionRayon);
           vec3 pointContact = origineRayon + directionRayon * contact.x;
