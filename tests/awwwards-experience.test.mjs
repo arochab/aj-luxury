@@ -65,7 +65,15 @@ test("the private homepage preserves the approved film and the recovered Apollon
   );
   assert.match(fabrique, /campaign-duo-lilas-seated\.webp/);
   assert.match(fabrique, /only_mask=True/);
-  assert.match(hero, /HERO_FIGURES/);
+  /* LA SCENE EST LA PHOTOGRAPHIE ENTIERE. Adam a rejete le 22/08/2026 la
+     composition precedente — deux corps DECOUPES sur un champ de metal
+     calcule. Le remplacement est litteral, pas une reinterpretation : le
+     composant sert la prise de vue de studio telle quelle, fond compris, et
+     ne connait plus ni decoupe ni canevas. */
+  assert.match(hero, /HERO_PHOTO/);
+  assert.doesNotMatch(hero, /HERO_FIGURES/);
+  assert.doesNotMatch(hero, /MetallicField/);
+  assert.doesNotMatch(hero, /styles\.metal/);
   assert.doesNotMatch(hero, /role="plate"/);
 
   /* LE VOL DU MOT-MARQUE, ET LE DEFAUT QU'IL A COUTE.
@@ -127,15 +135,20 @@ test("the private homepage preserves the approved film and the recovered Apollon
      vivent depuis sur deux noeuds imbriques. */
   assert.match(hero, /const plans = q\(`\.\$\{styles\.plan\}`\)/);
   assert.match(hero, /const scenes = q\(`\.\$\{styles\.scene\}`\)/);
-  /* Deux PLANS freres, et non un seul : le mot-marque doit rester entre le
-     metal et les corps tout en pouvant quitter la scene pour la barre. Un
-     ancetre transforme creerait un contexte d'empilement dont il ne sortirait
-     pas. Le composant en rend donc exactement deux. */
+  /* UN SEUL PLAN, et c'est la consequence directe du remplacement. La
+     structure a deux plans freres existait pour intercaler le mot-marque
+     ENTRE le metal et les corps decoupes, de sorte qu'il soit occulte par les
+     corps tout en pouvant quitter la scene. Sans decoupe, il n'y a plus rien
+     entre quoi s'intercaler : le mot se pose par-dessus la photographie.
+
+     Ce test empeche la resurgence de l'ancienne architecture, qui ramenerait
+     mecaniquement un second calque de fond. */
   assert.equal(
     (hero.match(/className=\{styles\.plan\}/g) ?? []).length,
-    2,
-    "le metal et les corps doivent etre deux plans freres",
+    1,
+    "la photographie occupe un plan unique",
   );
+
   /* Chaque tween de defilement part d'une valeur ECRITE et ne se rend qu'au
      premier defilement : sans cela GSAP relevait sa valeur de depart en plein
      milieu de l'arrivee, et le retour en haut de page rendait le premier ecran

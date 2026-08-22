@@ -6,12 +6,11 @@
 
        .camera             le défilement (scale + yPercent)
          .scene            la dérive au repos (scale)
-           .metal          le métal liquide, plein cadre, calculé
-           .marque         AJ LUXURY
-           .figures        les deux corps découpés
+           .photo          la photographie de campagne, entière
+           .marque         AJ LUXURY, posé par-dessus
 
    Ce que le CSS livre SANS JavaScript : la composition finale, complète et
-   lisible — métal en dégradé de repli, corps posés, mot en place, copie
+   lisible — photographie cadrée, mot en place, copie
    visible. GSAP n'ajoute qu'une arrivée et une caméra. Si le bundle
    d'animation n'arrive jamais, le premier écran reste juste.
    ========================================================================== */
@@ -45,9 +44,11 @@
      chiffre, donc un seul endroit où l'écart entre les deux se décide. */
   --aj-hero-copie-bas: clamp(24px, 4.4svh, 54px);
 
-  /* Hauteur des corps. C'est LE réglage de composition du premier écran :
-     tout le reste se cale dessus. */
-  --aj-hero-figures-h: 92svh;
+  /* Teintes du fond de studio, relevées sur les bords du master le
+     22/08/2026. Elles prolongent la photographie quand le cadre est plus
+     large qu'elle. */
+  --aj-hero-fond-haut: #2b2839;
+  --aj-hero-fond-bas: #282126;
 
   /* De combien le logo est remonté par rapport au centre de la fenêtre, pour
      dégager la copie posée en bas. */
@@ -90,46 +91,13 @@
    Plein cadre : c'est le monde, pas un décor posé derrière. Il n'y a plus de
    photographie de fond, donc plus d'horizon à respecter ni de jonction à
    masquer — le champ occupe tout, et les corps se tiennent dedans. */
-.metal {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  /* ── LE MÉTAL EST UNE CONTRAINTE CLIENT : IL DOIT ÊTRE PRÉSENT ─────────
-     Premier essai : champ rendu à 42 % pour qu'il cesse de disputer le premier
-     plan aux corps. Verdict d'Adam le 21/08 — trop discret, à renforcer.
-
-     Le baisser était le mauvais levier. Le défaut n'était pas l'intensité,
-     c'était le CONTRASTE : à plat, le champ n'est qu'un empilement de masses
-     claires et floues, et à l'œil ça lit « fumée », pas « chrome poli ».
-
-     SECONDE PASSE, MÊME JOUR : encore trop discret. Contraste porté de 2,6 à
-     3,4, opacité rendue à 1, et le champ passe en cadence normale au lieu de
-     « lente » — parce que « liquide » est autant une question de MOUVEMENT que
-     de matière. Un métal qui ne coule pas n'est pas liquide.
-
-     Le contraste creuse les noirs et durcit les hautes lumières :
-     les masses deviennent des reflets, avec des bords nets et des creux
-     profonds — la matière lit enfin comme du métal en fusion. La luminosité
-     rendue à 0,58 garde l'ouverture sombre que la référence demande et rend
-     au mot-marque un fond régulier.
-
-     Le filtre est STATIQUE sur un canvas animé : le compositeur l'applique,
-     rien n'est recalculé en mise en page. Coût mesuré au navigateur, avec et
-     sans, dans la même session. */
-  opacity: 1;
-  /* LE FILTRE NE NOIRCIT PLUS. Il divisait la luminosite par deux, ce qui
-     rendait tout cyclorama clair en gris moyen : la reference du 22/08, une
-     eclaboussure de chrome sur BLANC, etait donc impossible a atteindre tant
-     qu'il etait la. Il ne reste qu'un leger appui de contraste. */
-  filter: contrast(1.12) saturate(0.92);
-}
-
-.metal > * {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-}
+/* CES REGLES ONT ETE PERDUES PUIS RESTAUREES LE 22/08/2026. En supprimant le
+   bloc du champ metallique j'ai tranche du debut de `.metal` jusqu'a
+   `.figures`, ce qui a emporte au passage toutes les regles du mot-marque.
+   Consequence constatee au navigateur : `.marque` retombait en `position:
+   static`, donc le plan absolu de la photographie peignait PAR-DESSUS et le
+   nom de la maison avait disparu de l'ecran. Un element statique ne peut
+   jamais peindre au-dessus d'un frere positionne. */
 
 /* --- Le mot-marque --------------------------------------------------------
    C'EST LE LOGO LUI-MÊME, PAS UNE IMITATION. Le premier essai reconstruisait
@@ -218,28 +186,59 @@
   mask-repeat: no-repeat;
 }
 
-/* --- Les corps ------------------------------------------------------------
-   Un SUJET, pas une scène : on ne les recadre jamais, on les place. Le même
-   actif sert toutes les tailles d'écran — seule sa hauteur change. */
-.figures {
+/* --- LA PHOTOGRAPHIE ------------------------------------------------------
+   DIRECTION ARTISTIQUE, PAS UN `cover` PAR DEFAUT.
+
+   La prise de vue est en portrait, rapport 0,666, et les sujets occupent de
+   14 % a 100 % de sa hauteur. Un `background-size: cover` sur un premier ecran
+   en 1440x900 n'en montrerait que 42 % de la hauteur : impossible d'y garder
+   a la fois les visages et le produit. Le recadrage automatique est donc
+   ecarte, et le cadrage change de nature selon la forme de l'ecran.
+
+   ECRAN PLUS HAUT QUE LARGE — telephone, tablette en portrait. La forme du
+   cadre est proche de celle de la photographie : elle occupe tout, en `cover`,
+   ancree sur le haut des corps.
+
+   ECRAN PLUS LARGE QUE HAUT — ordinateur. La photographie garde sa hauteur
+   entiere et n'est PAS rognee ; le cadre restant est rempli par la teinte du
+   fond de studio, relevee sur les bords du master. Ce n'est pas un decor
+   ajoute : c'est le prolongement de son propre fond, donc la couture ne se
+   voit pas. Les sujets restent entiers, ce qui est la regle. */
+.photo {
   position: absolute;
-  bottom: 0;
-  left: 50%;
-  height: var(--aj-hero-figures-h);
-  /* Le rapport réserve la place exacte avant décodage : aucun saut. */
-  aspect-ratio: var(--aj-hero-figures-ratio);
-  transform: translateX(-50%);
+  inset: 0;
+  display: block;
   pointer-events: none;
+  /* Le prolongement du fond de studio. Les deux teintes viennent des bords
+     haut et bas du master, mesurees le 22/08. */
+  background: linear-gradient(
+    180deg,
+    var(--aj-hero-fond-haut, #2b2839) 0%,
+    var(--aj-hero-fond-bas, #282126) 100%
+  );
 }
 
-.figures img {
+.photo img {
   display: block;
   width: 100%;
   height: 100%;
-  /* contain et non cover : un corps ne se rogne pas. Le rapport du conteneur
-     est déjà celui de l'actif, donc `contain` ne produit aucune bande. */
+  /* Par defaut, ecran plutot large : la photographie tient en hauteur et se
+     centre. Aucun sujet n'est coupe. */
   object-fit: contain;
   object-position: 50% 100%;
+  /* Le rapport reserve la place exacte avant decodage : aucun saut. */
+  aspect-ratio: var(--aj-hero-photo-ratio);
+}
+
+/* Ecran plus haut que large : la photographie prend tout le cadre. Le
+   recadrage est ancre a 28 % de sa hauteur, valeur choisie pour garder les
+   deux visages en haut et la ceinture du produit dans le tiers median. */
+@media (max-aspect-ratio: 1 / 1) {
+  .photo img {
+    object-fit: cover;
+    object-position: 50% 28%;
+    aspect-ratio: auto;
+  }
 }
 
 /* --- Le voile -------------------------------------------------------------
@@ -412,12 +411,11 @@
 /* ==========================================================================
    Écran vertical — une chorégraphie propre, pas une réduction du bureau
    --------------------------------------------------------------------------
-   Sur un écran étroit, la hauteur des corps n'est plus décidée par la hauteur
-   de la fenêtre mais par sa LARGEUR : au-delà d'une certaine taille ils
-   déborderaient et un corps ne se rogne pas. `--aj-hero-figures-h` passe donc
-   d'une mesure en svh à une mesure dérivée de la largeur.
+   Sur un écran étroit, la photographie prend tout le cadre en `cover` : sa
+   forme et celle de l'écran sont alors proches, donc le recadrage ne coûte
+   presque rien et aucun sujet n'est perdu.
 
-   Conséquence de composition : les corps occupent tout le bas de l'écran, la
+   Conséquence de composition : l'image occupe tout le bas de l'écran, la
    copie ne peut plus s'y poser. Elle monte donc sous la barre, et l'écran se
    lit de haut en bas — la phrase, le nom, les corps. C'est l'ordre d'un
    éditorial de mode, pas un pis-aller.
@@ -460,17 +458,14 @@
        Sa hauteur se déduit désormais de sa largeur réelle et du rapport du
        fichier, 1,385:1. */
     --aj-hero-marque-l: min(78cqi, 460px);
-    --aj-hero-figures-h: min(
-      calc(
-        100svh - var(--aj-tete-h) - (var(--aj-hero-marque-l) / 1.385) - 190px
-      ),
-      calc((100cqi - 2 * var(--gut)) / var(--aj-hero-figures-ratio))
-    );
   }
 
   .marque {
     align-items: flex-end;
-    padding-bottom: calc(var(--aj-hero-figures-h) + 14px);
+    /* La photographie occupe desormais tout le cadre sur ecran vertical :
+       la copie se cale sur une fraction de la fenetre, plus sur la hauteur
+       d'un sujet decoupe qui n'existe plus. */
+    padding-bottom: calc(58svh + 14px);
   }
 
   .marqueBoite {
@@ -519,9 +514,6 @@
      au lieu de la calmer. On baisse donc le NIVEAU sans toucher au contraste —
      les creux restent noirs, les reflets restent nets, mais l'ensemble revient
      dans l'ouverture sombre, et le lockup argenté retrouve son fond. */
-  .metal {
-    filter: contrast(1.12) brightness(0.92) saturate(0.92);
-  }
 }
 
 /* ==========================================================================
