@@ -627,3 +627,64 @@ griser une taille réellement en stock.
 
 Corrigé en `0d0dd91`. En production, le libellé revient à « vérifié à l'ajout »,
 en **première branche** pour qu'aucune réécriture future ne le contourne.
+
+---
+
+# Détourage des cheveux — trois tentatives, aucune retenue (22/08/2026)
+
+Adam signale un liseré coloré dans les cheveux, visible depuis que le métal
+s'est éclairci. Trois corrections tentées, **toutes mesurées, aucune gardée**.
+
+## 1. Érosion avec adoucissement — ÉCHEC
+
+Éroder l'alpha d'un pixel puis adoucir à la gaussienne. Résultat : les pixels
+de bord ont **augmenté de 9 %** (48 389 → 52 841), parce que le flou crée des
+pixels partiellement transparents là où il n'y en avait pas. Saturation du
+liseré à peine descendue, 0,584 → 0,540.
+
+## 2. Érosion seule — ÉCHEC
+
+Sans adoucissement : 0,584 → 0,542 à 3 px, 0,527 à 5 px, pour un nombre de
+pixels de bord inchangé. À 5 px l'érosion mange visiblement les mèches. Le gain
+est invisible à l'œil pour un coût réel sur la matière.
+
+**Ce que ces deux échecs prouvent** : ce ne sont pas des pixels de CONTOUR. Une
+érosion enlève un anneau de bord ; ici elle ne change presque rien. Les points
+colorés sont donc des **mèches semi-transparentes à l'intérieur de la masse
+capillaire**, qui ont gardé la couleur du fond de studio. Aucun
+post-traitement du découpage ne les atteint.
+
+## 3. Modèle de segmentation portrait — ÉCHEC, pour une raison matérielle
+
+`birefnet-portrait` (928 Mo) est en cache et spécialisé sur les cheveux. À la
+résolution du master il **sature la mémoire** : allocation de 822 Mo refusée
+par onnxruntime.
+
+Contourné en segmentant à 1024 px puis en remontant le masque. Il tourne, mais
+il est MOINS BON :
+
+| | Général (servi) | Portrait 1024 remonté |
+|---|---|---|
+| Saturation du liseré | 0,5838 | 0,5607 |
+| **Pixels violets** | **1 729** | **2 010** |
+| Pixels de bord | 48 389 | 56 287 |
+
+Les pixels violets — ceux qui portent réellement la teinte du fond — sont
+**plus nombreux**. La remontée du masque depuis 1024 px ramollit le bord et
+annule le bénéfice du modèle.
+
+Vérifié aussi à l'œil, planche à fond clair et zoom ×2 :
+`.playwright-mcp/remplacement-2026-08-22/cheveux-general-vs-portrait.png`. Les
+deux découpages sont propres et quasi identiques ; le portrait est légèrement
+plus mou. La mesure et l'œil concordent.
+
+## Ce qu'il faudrait vraiment
+
+Faire tourner le modèle portrait **à pleine résolution**, ce qui demande plus
+de mémoire que cette machine n'en accorde à onnxruntime. Piste non testée :
+découper le master en bandes avec recouvrement, segmenter chaque bande, puis
+recoudre les masques. Le recouvrement doit être généreux, sinon la couture
+laisse une ligne franche en travers d'une chevelure.
+
+**Rien n'a été modifié.** `MODELE` est resté `birefnet-general-lite` et le
+découpage servi est celui d'origine, restauré et vérifié intact.
