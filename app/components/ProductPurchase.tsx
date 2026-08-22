@@ -68,8 +68,17 @@ export default function ProductPurchase({
     return availability?.[size] ?? null;
   }
 
+  /* `availability` vient de lib/commerce/internal-stock.ts, dont la note dit
+     ce qu'il est : un registre INTERNE DE MAQUETTE, codé en dur. Il ne lit pas
+     D1. En préproduction c'est exactement ce qu'on veut, la démonstration doit
+     montrer des états de stock. En production il n'a aucune autorité, et le
+     laisser griser une taille reviendrait à refuser la vente d'un article
+     réellement en stock, sur la foi d'un chiffre inventé. */
   function isSoldOut(size: ProductSize) {
-    return stockOf(size)?.state === "sold-out";
+    if (!availability) return false;
+    const soldOut = runtimeMode === "preproduction" &&
+      availability[size].state === "sold-out";
+    return soldOut;
   }
 
   function selectSize(size: ProductSize) {
@@ -81,6 +90,26 @@ export default function ProductPurchase({
   }
 
   function stockLabel(size: ProductSize) {
+    /* EN PRODUCTION, LE REGISTRE DE MAQUETTE NE PARLE PAS. Il est codé en dur
+       et ne lit pas D1 : afficher « Disponible » ou « Plus que 3 » à partir de
+       lui serait annoncer à un client un chiffre inventé. On dit donc ce qui
+       est vrai — le stock est vérifié au moment de l'ajout au panier, contre
+       la vraie base.
+
+       Ce garde-fou est antérieur à la refonte du front ; je l'avais supprimé
+       en réécrivant cette fonction, et c'est le test
+       « mock product availability has no authority over production sizes »
+       qui l'a rattrapé. Il retourne ici en premier, avant toute autre
+       branche, pour qu'aucune reformulation ultérieure ne puisse le
+       contourner par accident.
+
+       Conséquence assumée : les libellés « Live » restent inutilisés tant que
+       le stock réel n'est pas branché sur cette page. Les supprimer serait
+       perdre le vocabulaire du jour où il le sera. */
+    if (runtimeMode === "production") {
+      return t("product.stockCheckedAtAdd");
+    }
+
     const stock = stockOf(size);
 
     // Repli, et uniquement repli : la disponibilité n'a pas pu être résolue.
