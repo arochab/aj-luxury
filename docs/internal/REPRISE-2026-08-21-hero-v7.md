@@ -352,3 +352,124 @@ dans l'environnement.
 Vérifié rigoureusement : rouge au `HEAD` `efebf4b`, sur arbre propre, avec un
 build neuf. **Préexistant, donc — mais pas pour la raison que j'avais donnée.**
 Le prochain qui prendra ce sujet doit partir du 503, pas des zones.
+
+---
+
+# PAUSE — 22/08/2026, reprise sur GO d'Adam
+
+Branche `claude/front-awwwards-20260817`, HEAD `66e956f`, arbre propre, zéro
+divergence avec `origin`. Rien en cours d'écriture, rien à récupérer.
+
+## Ce qui bloque, et sur qui
+
+### 1. LE STOCK — bloquant, et il n'appartient qu'à Adam
+
+Adam a dit « 730 pièces, iso en nombre par taille ». **Le dépôt en déclare 756**,
+avec une courbe transmise par le client :
+
+| Coloris | S | M | L | XL | Total |
+|---|---|---|---|---|---|
+| Pourpre Impérial | 26 | 103 | 87 | 36 | 252 |
+| Rose Velours | 26 | 103 | 87 | 36 | 252 |
+| Lilas Céleste | 26 | 102 | 88 | 36 | 252 |
+
+`docs/BACKEND-LOT-2-ACTION-PLAN.md:48` dit « le stock physique **transmis** ».
+C'est une donnée client, pas une hypothèse. Elle est verrouillée par des
+assertions dans quatre fichiers de tests (`backend-core`, `last-mile-ops`,
+`production-commerce-api`) et par `db/seed.ts`.
+
+**Hypothèse la plus probable, à confirmer** : « iso par taille » signifie *iso
+entre les trois coloris*, ce que le dépôt fait déjà — Pourpre et Rose sont
+identiques, Lilas ne déplace qu'une unité de M vers L. Et 730 serait un
+souvenir approximatif de 756.
+
+**Ne pas écraser 756 par 60/60/60/60.** Les conséquences sont asymétriques :
+porter S de 26 à 60 vendrait 34 pièces inexistantes par coloris ; ramener M de
+103 à 60 refuserait des ventes sur la taille la plus demandée. Si Jérémy a
+recompté, il faut **le détail par taille**, pas le total.
+
+Tant que ce point n'est pas tranché, le manifeste de stock ne peut pas être
+écrit, et trois verrous de la porte de production restent fermés.
+
+### 2. LES SECRETS — Adam seul, et jamais par le chat
+
+Les comptes Stripe, Sendcloud et Resend sont ouverts (Adam, 22/08). Les clés
+ne doivent transiter ni par le chat, ni par un fichier. Elles s'installent
+directement depuis son terminal :
+
+```
+npx wrangler secret put STRIPE_SECRET_KEY --config cloudflare.production.jsonc
+npx wrangler secret put STRIPE_WEBHOOK_SECRET --config cloudflare.production.jsonc
+npx wrangler secret put SENDCLOUD_PUBLIC_KEY --config cloudflare.production.jsonc
+npx wrangler secret put SENDCLOUD_SECRET_KEY --config cloudflare.production.jsonc
+npx wrangler secret put RESEND_API_KEY --config cloudflare.production.jsonc
+npx wrangler secret put RESEND_WEBHOOK_SECRET --config cloudflare.production.jsonc
+```
+
+**En mode `sandbox`, la clé Stripe doit commencer par `sk_test_`.** La porte
+refuse une clé `sk_live_` à ce stade, et c'est voulu : aucun argent réel ne
+peut circuler avant l'étape suivante.
+
+⚠️ **Ces commandes exigent que le worker existe déjà sur le compte.** Il
+n'existe pas : je ne l'ai pas déployé, faute de l'accord de Jérémy. Provisionner
+un worker **sans route ni domaine** ne l'expose à personne et débloquerait
+l'installation des secrets. C'est une décision d'Adam, elle n'a pas été prise.
+
+### 3. L'ACCORD DE JÉRÉMY — manquant
+
+`AGENTS.md` : la version candidate se valide par Adam d'abord, par Jérémy
+ensuite. **Adam a donné la sienne le 22/08. Celle de Jérémy manque.** Sans
+elle, aucun déploiement de production, même fermé.
+
+## Ce qui a été fait pendant cette séance
+
+- **Base de production créée** : `aj-luxury-production`, région WEUR, id
+  `b02e8fc8-7309-43f7-a596-78fa51dc110d`. Le compte n'en portait aucune pour
+  AJ Luxury. 16 migrations appliquées en distant, **45 tables vérifiées par
+  requête**, migration préprod 0008 correctement exclue.
+- **`cloudflare.production.jsonc` écrit, PAS déployé.** Aucune route, aucun
+  domaine : brancher `ajluxurystore.com` est l'acte d'ouverture, il se décide.
+  `COMMERCE_MODE` démarre à `sandbox`.
+- **Bug Windows corrigé** : `spawnSync npx.cmd` échouait en EINVAL depuis le
+  correctif de la CVE-2024-27980. Le chemin de migration de production était
+  purement inutilisable sur la machine d'Adam. Résolu sans `shell: true`, qui
+  aurait rouvert ce que la CVE ferme.
+- **Le 503 du point de santé est résolu.** Ce n'était ni l'environnement ni
+  des zones non provisionnées — c'était le mock de schéma qui avait onze
+  objets de retard sur les migrations 0010, 0011 et 0014. Le worker avait
+  raison de fermer.
+- **TVA publiée**, téléphone retiré des mentions légales, activité 59.11B
+  ajoutée aux bloqueurs. Déployé et vérifié en ligne, version `803b1c8a`.
+
+## État des tests
+
+Lot front rendu : **58 sur 58**, vert pour la première fois.
+Lot backend et préproduction : **81 sur 82**.
+
+Le seul rouge restant échoue **par construction** sur une branche Claude : la
+liste `allowed_source_branches` de `.openai/preprod-demo-only.json` ne contient
+que cinq branches `codex/*`. Ce n'est pas un défaut, et il ne faut pas le
+« réparer » en modifiant cette liste.
+
+Une exécution de `npm test` complète tournait en arrière-plan au moment de la
+pause. Elle n'a pas été lue. **La relancer à la reprise** plutôt que se fier à
+ce qui précède, qui vient d'exécutions par lots.
+
+## À faire à la reprise, dans cet ordre
+
+1. Relancer `npm test` et confirmer les chiffres ci-dessus.
+2. Obtenir d'Adam la décision sur le stock — 756 avec la courbe transmise, ou
+   un recomptage détaillé par taille.
+3. Écrire le manifeste de stock une fois le chiffre tranché, puis le faire
+   approuver par Jérémy (`STOCK_MANIFEST_APPROVED_BY` doit valoir `jeremy`).
+4. Décider avec Adam s'il provisionne le worker sans route pour installer les
+   secrets.
+5. Reste à ma charge et non commencé : les alertes de supervision et
+   l'exercice de restauration de sauvegarde, deux verrous de la porte.
+
+## Ce qu'il ne faut pas faire
+
+- Ne pas déployer `cloudflare.production.jsonc` sans l'accord de Jérémy.
+- Ne pas écrire de secret dans un fichier, y compris un `.env` local.
+- Ne pas toucher à `.openai/preprod-demo-only.json` pour faire passer le test.
+- Ne pas modifier `db/seed.ts` avant la décision d'Adam sur le stock.
