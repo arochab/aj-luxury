@@ -553,3 +553,77 @@ Cela ajoute une tâche, à ma charge : obtenir une exécution complète de
 `npm test`, et savoir si ce gel préexiste. Tant qu'elle n'existe pas, **aucune
 affirmation globale sur l'état des tests ne doit être faite**, ni par moi ni
 dans un document remis à Jérémy.
+
+---
+
+# État réel des tests — 22/08/2026, après reprise
+
+## Ce que `npm test` cache
+
+C'est une chaîne `&&`. Elle s'arrête à `tests/d1-migrations.test.mjs` et **rien
+après ne tourne**. J'ai donc lancé les lots un par un.
+
+| Lot | Résultat |
+|---|---|
+| front rendu (i18n, model, gallery, rendered-html) | **58 / 58** |
+| `test:email-data-d1` | vert |
+| `test:fulfillment` | vert |
+| `test:preprod-demo` | vert |
+| `test:gate-c` | **6 rouges** |
+| `test:last-mile` | **1 rouge** |
+| `test:lot2-policies` | **1 rouge** |
+| `tests/d1-migrations.test.mjs` | **1 rouge**, par expiration |
+
+## Le gel de d1-migrations : mécanisme établi
+
+`ETIMEDOUT`, plafond de 60 s par appel dans `runWrangler`, 4 h 09 au total.
+
+Mesuré : un `wrangler d1 execute --local` trivial coûte **4,0 à 6,4 s** ici,
+avec un pic relevé à 18 s. Le test lance **un processus wrangler par
+instruction SQL**. Le total s'explique entièrement, et sous charge un appel
+finit par franchir les 60 s.
+
+Ce n'est **pas** le disque : mesuré sur C: interne et D: externe, écart nul.
+Ce n'est **pas** le bug Windows corrigé ce matin : ce test utilise déjà
+`spawnSync(process.execPath, [wranglerCliPath, ...])`.
+
+Cause racine du coût par appel : non établie. Piste non vérifiée, un antivirus
+analysant le runtime `workerd` à chaque lancement.
+
+## Antériorité des 8 rouges backend : ÉTABLIE
+
+Contrôle fait depuis `a900f25`, dernier commit d'avant cette session :
+
+- `git diff --name-only` sur `lib/commerce/`, `db/`, `drizzle/` : **vide**.
+- `worker/index.ts` : **une seule ligne**, la chaîne `HTML_CACHE_VERSION`.
+- Les quatre fichiers de tests en échec : **aucun modifié**.
+
+Aucune logique backend n'a changé de toute la session. Ces échecs sont donc
+antérieurs au 21/08. Ce n'est pas une supposition, c'est un diff.
+
+## Les 8 rouges, nommés
+
+`preprod-owner-account-tracking-api.test.mjs` — **5 tests**, tous en 503 là où
+201 ou 200 est attendu. Ce fichier construit une vraie base SQLite depuis les
+fichiers de migration ; ce n'est donc pas un mock périmé comme celui corrigé ce
+matin. Cause non établie.
+
+`preprod-demo-boundary.test.mjs:54` — gouvernance de branche.
+`production-operations-api.test.mjs:534` — expiration de réservation planifiée.
+
+`lot2-policies.test.mjs:84` — **ce n'est pas un défaut de contenu**. Les douze
+références sont identiques ; seul l'ordre diffère. `lib/products.ts` classe
+Rose, Lilas, Pourpre. `db/seed.ts` classe Pourpre, Rose, Lilas. Deux sources de
+vérité se contredisent sur l'ordre du catalogue. À trancher avant d'écrire le
+manifeste de stock, qui parcourt les variantes.
+
+## Un défaut de MOI, corrigé — le plus grave de la journée
+
+Ma réécriture de `stockLabel` avait supprimé un garde-fou : en production, la
+fiche produit affichait la disponibilité issue de `internal-stock.ts`, un
+**registre codé en dur** qui ne lit pas D1. Le site aurait annoncé « Disponible »
+et « Plus que 3 » à partir de chiffres inventés, et `isSoldOut` aurait pu
+griser une taille réellement en stock.
+
+Corrigé en `0d0dd91`. En production, le libellé revient à « vérifié à l'ajout »,
+en **première branche** pour qu'aucune réécriture future ne le contourne.
