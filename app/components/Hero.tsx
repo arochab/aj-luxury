@@ -217,7 +217,7 @@ export default function Hero() {
 
                0,25 garde de quoi absorber la molette crantée sans que le mot
                cesse de suivre la main. */
-            scrub: 0.25,
+            scrub: 0.4,
             invalidateOnRefresh: true,
           },
         });
@@ -317,7 +317,7 @@ export default function Hero() {
              exactement à la taille et à la place du logo, et la barre tient
              encore : la passation a lieu sur deux marques réellement
              superposées, ce que le commentaire précédent affirmait à tort. */
-          const FIN_DU_VOL = 0.78;
+          const FIN_DU_VOL = 0.88;
           const echelle = () =>
             logo.getBoundingClientRect().width / motElement.offsetWidth;
           const ecartX = () => {

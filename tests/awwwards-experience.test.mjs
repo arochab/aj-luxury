@@ -99,7 +99,7 @@ test("the private homepage preserves the approved film and the recovered Apollon
      compensation verticale suit le vol, sans quoi le mot atterrit 198 px trop
      haut — c'est le piege de ce correctif, la geometrie et le tempo sont
      lies. */
-  assert.match(hero, /const FIN_DU_VOL = 0\.78;/);
+  assert.match(hero, /const FIN_DU_VOL = 0\.88;/);
   assert.match(hero, /duration: FIN_DU_VOL,/);
   assert.match(hero, /FIN_DU_VOL \* noeud\.offsetHeight/);
   assert.equal(
