@@ -768,10 +768,27 @@
     opacity: 0;
   }
 
-  .header[data-menu-anime] .menuPanneau {
-    visibility: visible;
-    opacity: 1;
-  }
+  /* CETTE REGLE FORCAIT LE MENU OUVERT, ET C'EST CORRIGE LE 22/08/2026.
+
+     Elle disait : des que GSAP est pret, le panneau devient visible. Son
+     intention etait juste — empecher le `visibility: hidden` du repos de
+     couper net l'animation de FERMETURE — mais son expression ne l'etait pas.
+
+     Constate au navigateur en 390 px : `data-menu="ferme"`, style en ligne
+     VIDE, et pourtant panneau visible sur 231 px de haut. Le menu s'affichait
+     donc deploye au chargement, sur toute page, sans que personne l'ait
+     ouvert, et repoussait le premier ecran d'autant.
+
+     Pourquoi le style en ligne etait vide : `data-menu-anime` survit a une
+     reinitialisation du contexte GSAP, pas les styles qu'il avait poses. Il
+     restait donc un attribut qui forcait la visibilite, sans plus rien pour
+     le contredire.
+
+     La regle est supprimee, et rien ne la remplace : `autoAlpha` pose
+     `visibility` EN LIGNE dans les deux sens, a l'ouverture comme a la
+     fermeture, et un style en ligne l'emporte sur toute regle. Le repos CSS
+     `visibility: hidden` ne peut donc jamais couper une animation en cours.
+     Le repli sans JavaScript reste assure par `[data-menu="ouvert"]`. */
 
   .header[data-menu="ouvert"] .menuPanneau {
     visibility: visible;

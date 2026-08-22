@@ -643,53 +643,43 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
   assert.match(html, /data-hero-version="v8"/);
   assert.doesNotMatch(html, /hero-v6-|hero-v7-|data-hero-version="video-v[67]"/);
 
-  /* LA SCENE EST LA PHOTOGRAPHIE ENTIERE, ET PLUS UNE COMPOSITION.
+  /* LA PROVENANCE DES VISAGES, VERIFIEE DANS LE HTML RENDU. Adam a refuse le
+     21/08 les masters issus d'un modele generatif : les visages y etaient
+     deformes. Le premier ecran ne doit donc servir QUE la decoupe faite a
+     partir de la photographie de studio validee. */
+  assert.ok(html.includes("hero-figures.avif?v=v8"), "hero-figures.avif manquant");
+  assert.ok(html.includes("hero-figures.webp?v=v8"), "hero-figures.webp manquant");
 
-     Adam a rejete le 22/08/2026 le premier ecran precedent, qui superposait
-     deux corps DECOUPES sur un champ de metal calcule en WebGL. Le
-     remplacement est litteral : la prise de vue de studio est servie telle
-     quelle, fond compris.
-
-     Ce test verrouille les deux moities de cette exigence. La nouvelle
-     photographie est servie, ET aucune trace de la scene rejetee ne subsiste
-     — ni la decoupe, ni le canevas, ni le calque de metal. Un remplacement
-     partiel, qui laisserait l'ancien visible a une taille d'ecran ou dans un
-     etat de chargement, serait un echec silencieux. */
-  assert.ok(
-    html.includes("campagne-duo-1484.webp?v=v8"),
-    "la photographie de campagne doit etre servie",
-  );
-  assert.ok(
-    html.includes("campagne-duo-1100.webp?v=v8") &&
-      html.includes("campagne-duo-760.webp?v=v8"),
-    "les trois largeurs responsives doivent etre proposees",
-  );
-
-  /* AUCUN RESTE DE LA SCENE REJETEE. */
-  assert.doesNotMatch(html, /hero-figures/);
-  assert.doesNotMatch(html, /<canvas/);
-
-  /* AVIF N'EST PAS PROPOSE, ET C'EST MESURE. Sur cette photographie il pese
-     PLUS lourd que le WebP a qualite comparable : 240 Ko contre 188 en pleine
-     largeur. Le proposer couterait des octets sans rien apporter. */
-  assert.doesNotMatch(html, /campagne-duo-\d+\.avif/);
-
-  /* L'ORDRE DES CALQUES. La photographie d'abord, le mot-marque PAR-DESSUS.
-     La structure a deux plans freres n'a plus d'objet : elle existait pour
-     intercaler le mot entre le metal et les corps decoupes. */
+  /* L'ORDRE DES CALQUES. C'est l'invariant central du bureau : le metal est
+     le monde, le mot passe ENTRE, les corps se posent par-dessus. Inverser
+     metal et corps mettrait le champ anime DEVANT les modeles ; passer le mot
+     apres les corps lui ferait perdre sa seule idee. */
   const marque = html.indexOf('id="aj-hero-marque"');
-  const photo = html.indexOf("campagne-duo-1484.webp");
+  const figures = html.indexOf("hero-figures.avif");
   assert.ok(
-    photo > -1 && marque > photo,
-    "l'ordre du hero doit etre photographie -> mot-marque",
+    marque > -1 && figures > marque,
+    "l'ordre du hero doit rester metal -> mot-marque -> corps decoupes",
   );
 
-  /* La photographie EST le LCP de cet ecran. */
+  /* L'ordre des <source> suit le poids MESURE : sur cette decoupe AVIF bat
+     WebP (195 Ko contre 289). Se tromper d'ordre coute le surpoids a chaque
+     visite, silencieusement. */
+  const bloc = html.slice(figures - 200, figures + 600);
+  assert.ok(
+    bloc.indexOf("hero-figures.avif") < bloc.indexOf("hero-figures.webp"),
+    "la decoupe doit proposer AVIF avant WebP : il est plus leger",
+  );
+
+  /* Les corps SONT le LCP : plus de photographie de fond, donc plus rien
+     d'autre a prioriser. */
   assert.match(
     html,
-    /campagne-duo-1484\.webp\?v=v8"[^>]*decoding="sync"[^>]*fetchPriority="high"/,
+    /hero-figures\.webp\?v=v8"[^>]*decoding="sync"[^>]*fetchPriority="high"/,
   );
-  assert.match(html, /campagne-duo-1484\.webp\?v=v8" alt="AJ Luxury —/);
+
+  /* Et ils portent la description de la photographie, une seule fois : il n'y
+     a plus de calque de fond pour la porter a leur place. */
+  assert.match(html, /hero-figures\.webp\?v=v8" alt="AJ Luxury —/);
 
   /* LE MOT-MARQUE EST LE LOGO LUI-MEME, ET IL EST LE h1.
      Adam, 21/08 : « reprends exactement le logo, pas juste la typo ». Le
@@ -718,21 +708,26 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
 
   /* Le rapport de la decoupe est pose en variable CSS : le navigateur reserve
      la place exacte des corps avant decodage, donc aucun saut de mise en page. */
-  assert.match(html, /--aj-hero-photo-ratio:0\.6/);
+  assert.match(html, /--aj-hero-figures-ratio:0\.6/);
 
   /* Plus une seule video sur l'accueil, donc plus de bouton pour la figer. */
   assert.doesNotMatch(html, /<video/);
   assert.doesNotMatch(html, /Figer le métal/);
   assert.doesNotMatch(html, /aj-film__hero-|aj-film__living-duo|aj-film__liquid-overlay/);
 
-  /* PLUS AUCUN CHAMP METALLIQUE SUR CET ECRAN. Il y en avait un, plein cadre,
-     monte en WebGL a l'intersection. Adam l'a rejete le 22/08 : la
-     photographie le remplace entierement. Ce test interdit son retour sous
-     toutes ses formes — le conteneur differe, le canevas monte, et la classe
-     du canevas. Un reste invisible a une seule taille d'ecran suffirait a
-     faire reapparaitre la scene refusee. */
-  assert.doesNotMatch(html, /data-metallic-mounted/);
-  assert.doesNotMatch(html, /metallic-field__canvas/);
+  /* LE METAL LIQUIDE. Un champ, et un seul : le MONDE du hero, plein cadre.
+     Il doit arriver NON MONTE dans le HTML serveur — le WebGL ne se cree qu'a
+     l'intersection, donc il ne peut peser ni sur le premier rendu ni sur le
+     LCP. */
+  assert.equal((html.match(/data-metallic-mounted="false"/g) ?? []).length, 1);
+  assert.doesNotMatch(html, /class="metallic-field__canvas"/);
+  /* Il est decoratif et vit ENTRE le fond et les corps : jamais au-dessus des
+     modeles, jamais annonce a un lecteur d'ecran. */
+  const metal = html.indexOf('data-metallic-mounted="false"');
+  assert.ok(
+    metal > -1 && metal < marque && marque < figures,
+    "le champ metallique doit rester DERRIERE le mot-marque et les corps",
+  );
   assert.doesNotMatch(html, /hero-identity-overlay-/);
   assert.doesNotMatch(html, /images\/client\/hero-duo-(?:static|cutout)/);
 

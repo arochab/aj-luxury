@@ -43,46 +43,30 @@ export const HERO_PORTRAIT_MAX_ASPECT = 4 / 5;
 
 export const HERO_PORTRAIT_MEDIA = "(max-aspect-ratio: 4 / 5)";
 
-/** LA PHOTOGRAPHIE DE CAMPAGNE, ENTIERE.
+/** Les deux corps détourés, socle noir compris.
  *
- *  Remplacement demande par Adam le 22/08/2026. La scene precedente
- *  superposait deux corps DETOURES sur un champ de metal calcule ; elle est
- *  supprimee, pas melangee. Ce qui est servi ici est la prise de vue de studio
- *  telle quelle, fond compris.
+ *  Fabriqué par `scripts/build_hero_figures.py` depuis le master approuvé,
+ *  rogné sur la boîte englobante de l'alpha : aucun mégapixel transparent
+ *  n'est transporté. Les bords sont décontaminés du gris de studio, sans quoi
+ *  chaque cheveu porterait un liseré clair sur le métal sombre.
  *
- *  Trois consequences directes, et elles sont toutes des gains :
- *
- *  - plus aucun liseré de detourage dans les cheveux, defaut constate a
- *    l'echelle 1:1 le 22/08 ;
- *  - plus de canevas WebGL sur le premier ecran, donc le budget de
- *    composition revient a la page ;
- *  - la lumiere des corps et celle du fond viennent de la meme prise de vue,
- *    ce qu'aucune composition ne garantissait.
- *
- *  Master : 1484 x 2229, la source la moins compressee dont dispose le
- *  projet. Mesure le 22/08 : le JPEG de 1115 Ko n'est que 1 % plus fin que le
- *  WebP de 177 Ko, donc la resolution est le vrai plafond, pas l'encodage.
- *
- *  AVIF ECARTE, ET C'EST MESURE. Sur cette photographie il pese PLUS lourd
- *  que le WebP a qualite comparable : 240 Ko contre 188 en pleine largeur.
- *  Le servir couterait des octets sans rien apporter. */
-export const HERO_PHOTO = {
-  webp1484: versioned("/media/images/client/campagne-duo-1484.webp"),
-  webp1100: versioned("/media/images/client/campagne-duo-1100.webp"),
-  webp760: versioned("/media/images/client/campagne-duo-760.webp"),
-  largeur: 1484,
-  hauteur: 2229,
-  /** Teinte du fond de studio, relevee sur les bords haut et bas du master.
-   *  Elle prolonge la photographie quand le cadre est plus large qu'elle, au
-   *  lieu de la recadrer et de couper les sujets. */
-  fondHaut: "#2b2839",
-  fondBas: "#282126",
-  alt: "AJ Luxury — deux mannequins portent le boxer Apollon Lilas Céleste, prise de vue de studio.",
+ *  L'ordre des formats suit le poids mesuré : AVIF 195 Ko contre WebP 289. */
+export const HERO_FIGURES = {
+  avif: versioned("/media/images/client/hero-figures.avif"),
+  webp: versioned("/media/images/client/hero-figures.webp"),
+  largeur: 1355,
+  hauteur: 2020,
+  /** Vignette 24 px aplatie sur le noir de marque : couleur posée au premier
+   *  paint, zéro requête, zéro décalage de mise en page. */
+  lqip:
+    "data:image/webp;base64,UklGRnwBAABXRUJQVlA4IHABAADwBwCdASoYACQAPrVUpU4nJKMiMAgA4BaJZgDE2AZbxu2p3AvyEhAA/uW+K9DfEdNhQDaf8IKCOgZQgIoLDu6vj4JvHYe+XWH4y7aYhWk6fNCUEa/7snKzptbSpQLp/552+XPu0Rv1cNsrdEKqlURkEmlIJuIiZ2//ltS0bwpKuP8gl+/99ab85+la6qEAAAA=",
+  /** Décrit la photographie, une seule fois, pour tout le premier écran. */
+  alt: "AJ Luxury — Jérémy et Alex portent le boxer Apollon Lilas Céleste.",
 } as const;
 
-/** Rapport largeur/hauteur de la photographie. Le CSS reserve sa place exacte
- *  avant decodage : aucun saut de mise en page. */
-export const HERO_PHOTO_RATIO = HERO_PHOTO.largeur / HERO_PHOTO.hauteur;
+/** Rapport largeur/hauteur de la découpe. Le CSS s'en sert pour réserver la
+ *  place exacte des figures avant leur décodage : aucun saut de mise en page. */
+export const HERO_FIGURES_RATIO = HERO_FIGURES.largeur / HERO_FIGURES.hauteur;
 
 /** Le logo de la maison, servi en grand au premier écran ET en petit dans la
  *  barre. C'est le MÊME dessin : l'atterrissage du mot-marque est donc un vrai

@@ -5,12 +5,13 @@
 
 import type { CSSProperties } from "react";
 import {
+  HERO_FIGURES,
+  HERO_FIGURES_RATIO,
   HERO_LOGO,
-  HERO_PHOTO,
-  HERO_PHOTO_RATIO,
   HERO_PORTRAIT_MEDIA,
   HERO_VERSION,
 } from "../../lib/hero";
+import DeferredMetallicField from "./DeferredMetallicField";
 import { T } from "../../lib/i18n/TranslatedText";
 import { useAjMotion } from "./useAjMotion";
 import styles from "./Hero.module.css";
@@ -18,30 +19,19 @@ import styles from "./Hero.module.css";
 /* ==========================================================================
    Hero — le premier écran
    --------------------------------------------------------------------------
-   Le mouvement en une phrase : la photographie de campagne se pose, le nom de
-   la maison se lève par-dessus, puis la même caméra continue au défilement —
-   ce n'est pas une entrée suivie d'un effet de scroll, c'est un seul
-   mouvement d'appareil.
+   Le mouvement en une phrase : un champ de métal s'éveille, la caméra se
+   détend, le nom de la maison se lève DERRIÈRE les corps, puis la même caméra
+   continue au défilement — ce n'est pas une entrée suivie d'un effet de
+   scroll, c'est un seul mouvement d'appareil.
 
    Ce qui est animé : transform et opacity, rien d'autre. La seule propriété
    non transformée qui bouge est `background-position` sur le mot-marque, sur
    un unique élément de la page.
 
-   REMPLACEMENT DU 22/08/2026. Cet écran superposait deux corps DÉCOUPÉS sur
-   un champ de métal calculé en WebGL. Adam a rejeté cette scène. Elle est
-   supprimée, pas atténuée : plus de canevas, plus de découpe, plus de second
-   plan, plus de calque de métal. Ce qui est servi est la prise de vue de
-   studio telle quelle, fond compris.
-
-   TROIS GAINS DIRECTS, et ils ne sont pas théoriques. Plus aucun liseré de
-   détourage dans les cheveux, défaut constaté à l'échelle 1:1. Plus de canevas
-   WebGL sur le premier écran, donc le budget de composition revient à la page.
-   Et la lumière des corps et celle du fond viennent enfin de la même prise de
-   vue, ce qu'aucune composition ne pouvait garantir.
-
-   LES CORPS NE SONT JAMAIS REDESSINÉS. La garantie tient toujours, et elle
-   est même devenue plus forte : il n'y a plus de traitement du tout entre la
-   photographie validée et l'écran.
+   LES CORPS NE SONT JAMAIS REDESSINÉS. C'est la garantie d'architecture de
+   cet écran, et elle est structurelle, pas déclarative : les pixels des deux
+   modèles sortent de la photographie validée et sont posés PAR-DESSUS tout ce
+   qui bouge. Un générateur ne se trouve nulle part sur ce chemin.
    ========================================================================== */
 
 /** Met une animation en veille dès qu'elle n'est plus à l'image, et quand
@@ -85,14 +75,14 @@ function veillerSurAnimation(
 export default function Hero() {
   const racine = useAjMotion<HTMLElement>(({ gsap, mm, racine: noeud }) => {
     const q = gsap.utils.selector(noeud);
-    // Un plan, une chambre : la photographie et sa camera.
+    // Deux plans, deux chambres : un seul tween pilote les deux a l'identique.
     const plans = q(`.${styles.plan}`);
     const scenes = q(`.${styles.scene}`);
     const mot = q(`.${styles.marqueBoite}`)[0];
     const eclat = q(`.${styles.marqueEclat}`)[0];
-    const photo = q(`.${styles.photo}`)[0];
+    const figures = q(`.${styles.figures}`)[0];
     const volet = q(`.${styles.volet}`)[0];
-    if (!plans.length || !scenes.length || !mot || !eclat || !photo) return;
+    if (!plans.length || !scenes.length || !mot || !eclat || !figures) return;
 
     mm.add(
       {
@@ -128,14 +118,11 @@ export default function Hero() {
           // Les corps entrent les derniers et de très peu : ils sont le sujet,
           // ils n'ont pas à faire d'effet. 18 px de montée suffisent à les
           // faire se poser plutôt qu'apparaître.
-          /* La photographie se pose : elle monte de 14 px et s'ouvre. Pas de
-             zoom d'entree — un agrandissement arbitraire sur une prise de vue
-             de studio ne raconte rien et coute de la nettete. */
           .fromTo(
-            photo,
-            { y: 14, opacity: 0 },
-            { y: 0, opacity: 1, duration: 1.7, ease: "expo.out" },
-            0.16,
+            figures,
+            { y: 18, opacity: 0 },
+            { y: 0, opacity: 1, duration: 1.6, ease: "expo.out" },
+            0.18,
           )
           // Le mot se lève DERRIÈRE eux : il monte de sa propre hauteur, il
           // sort du sol, il n'apparaît pas.
@@ -241,23 +228,12 @@ export default function Hero() {
              CRÉATION du tween, c'est-à-dire en plein milieu de l'arrivée :
              mesuré, le retour en haut de page rendait la caméra à 1,13 et le
              mot à l'opacité 0 — le premier écran revenait VIDE. */
-          /* AUCUNE DERIVE VERTICALE, ET C'EST UN CORRECTIF DU 22/08/2026.
-             La composition precedente pouvait deriver : les corps etaient
-             DECOUPES, donc rien ne pouvait laisser voir un bord. La
-             photographie entiere, elle, tient exactement la hauteur du cadre
-             — la faire monter de 6 % decouvrait une BANDE VIDE sous elle,
-             constatee au navigateur a mi-course, bord de l'image a 469 px
-             pour une fenetre de 900.
-
-             Il ne reste donc que l'echelle. Elle ne peut jamais decouvrir un
-             bord puisqu'elle ne fait que grandir, et un leger rapprochement
-             au defilement se lit comme une camera qui avance — pas comme un
-             parallaxe applique par-dessus. */
           .fromTo(
             plans,
-            { scale: 1 },
+            { scale: 1, yPercent: 0 },
             {
-              scale: etroit ? 1.10 : 1.13,
+              scale: etroit ? 1.12 : 1.16,
+              yPercent: -6,
               ease: "none",
               duration: 1,
               immediateRender: false,
@@ -453,38 +429,28 @@ export default function Hero() {
       aria-labelledby="aj-hero-marque"
       style={
         {
-          "--aj-hero-photo-ratio": String(HERO_PHOTO_RATIO),
+          "--aj-hero-figures-ratio": String(HERO_FIGURES_RATIO),
         } as CSSProperties
       }
     >
-      {/* ── LA PHOTOGRAPHIE, ENTIERE ───────────────────────────────────
-          Remplacement demandé par Adam le 22/08/2026. La scène précédente
-          superposait deux corps DÉTOURÉS sur un champ de métal calculé en
-          WebGL. Elle est SUPPRIMÉE, pas atténuée : plus de canevas, plus de
-          découpe, plus de second plan. Ce qui est servi est la prise de vue
-          de studio telle quelle, fond compris.
-
-          Un seul plan reste donc, et le mot-marque se pose PAR-DESSUS. La
-          structure à deux plans frères n'a plus d'objet : elle existait pour
-          intercaler le mot entre le métal et les corps découpés. */}
+      {/* Le métal et les corps sont deux PLANS frères, pilotés par la même
+          caméra, et le mot-marque est intercalé entre eux. Il garde donc son
+          occultation par les corps tout en restant libre de quitter la scène
+          pour aller se poser dans la barre. Voir Hero.module.css, « DEUX PLANS
+          FRÈRES ». */}
       <div className={styles.plan}>
         <div className={styles.scene}>
-          <picture className={styles.photo}>
-            <source
-              type="image/webp"
-              srcSet={`${HERO_PHOTO.webp760} 760w, ${HERO_PHOTO.webp1100} 1100w, ${HERO_PHOTO.webp1484} 1484w`}
-              sizes="(max-aspect-ratio: 1/1) 100vw, 62vh"
-            />
-            <img
-              src={HERO_PHOTO.webp1484}
-              alt={HERO_PHOTO.alt}
-              width={HERO_PHOTO.largeur}
-              height={HERO_PHOTO.hauteur}
-              decoding="sync"
-              loading="eager"
-              fetchPriority="high"
-            />
-          </picture>
+          {/* ── LE MÉTAL LIQUIDE ─────────────────────────────────────────
+              Le monde, pas un décor. Plein cadre, calculé au navigateur,
+              donc net à toute taille et à tout DPR — c'est ce qui supprime
+              le plafond de résolution que la photographie de fond imposait.
+              Le composant est celui déjà écrit pour ce rôle : montage
+              différé à l'intersection donc hors du chemin du LCP, 30 i/s au
+              plafond, repli en dégradé CSS sans WebGL, arrêt complet en
+              mouvement réduit. */}
+          <div className={styles.metal} aria-hidden="true">
+            <DeferredMetallicField variant="reference" motion="normal" />
+          </div>
         </div>
       </div>
 
@@ -498,15 +464,40 @@ export default function Hero() {
             alt="AJ Luxury"
             width={HERO_LOGO.largeur}
             height={HERO_LOGO.hauteur}
-            /* PAS de fetchPriority high ici : le LCP de cet écran, c'est la
-               PHOTOGRAPHIE. Le logo reste derrière le volet le temps de
-               l'ouverture, il n'a aucune raison de disputer la priorité. */
+            /* PAS de fetchPriority high ici : le LCP de cet écran, ce sont les
+               CORPS. Marquer le logo prioritaire faisait émettre par React un
+               préchargement de l'actif 720 px, que le navigateur n'utilisait
+               pas ensuite puisque le srcSet lui fait choisir le @2x — un
+               avertissement de ressource préchargée et jamais servie, relevé
+               au navigateur. Le logo reste par ailleurs derrière le volet
+               pendant 1,2 s : il n'a aucune raison de disputer la priorité. */
             decoding="async"
             loading="eager"
           />
           <span className={styles.marqueEclat} aria-hidden="true" />
         </span>
       </h1>
+
+      <div className={styles.plan}>
+        <div className={styles.scene}>
+          {/* Les deux corps, socle noir compris. Un seul actif pour toutes
+              les tailles d'écran : c'est un sujet, pas une scène — on ne le
+              recadre pas, on le place. */}
+          <picture className={styles.figures}>
+            <source type="image/avif" srcSet={HERO_FIGURES.avif} />
+            <source type="image/webp" srcSet={HERO_FIGURES.webp} />
+            <img
+              src={HERO_FIGURES.webp}
+              alt={HERO_FIGURES.alt}
+              width={HERO_FIGURES.largeur}
+              height={HERO_FIGURES.hauteur}
+              decoding="sync"
+              loading="eager"
+              fetchPriority="high"
+            />
+          </picture>
+        </div>
+      </div>
 
       <div className={styles.voile} aria-hidden="true" />
 
