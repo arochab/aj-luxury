@@ -102,6 +102,57 @@ alors que plus rien ne les sert : ~3,3 Mo de poids mort. Conservés comme retour
 arrière tant qu'Adam n'a pas validé à l'écran. Leur suppression exigera de
 réécrire `tests/hero-video.test.mjs`, qui vérifie encore leurs budgets d'octets.
 
+---
+
+# Déploiement de prévisualisation — 22/08/2026
+
+**Version `402e6ff5-e090-4385-af0f-08027bcbff05`**, déployée sur
+`https://aj-luxury-awwwards-branch-preview.adam-chabbi94.workers.dev`
+depuis `cloudflare.awwwards-preview.jsonc` (`APP_ENV=preview`, donc mode
+commerce `closed`). **La production n'est pas touchée** : elle exige la
+validation explicite d'Adam puis de Jérémy.
+
+## Vérifié EN LIGNE, pas seulement en local
+
+- **13 routes** : statuts corrects (dont deux 404 servant la page dessinée),
+  un seul `h1` par page, zéro débordement horizontal.
+- Premier écran : `data-hero-version=v8`, logo à 954 px, `hero-figures.avif`
+  servi, logo de barre à l'opacité 0 — la marque n'est écrite qu'une fois.
+- Mentions légales : SIREN et SIRET du siège présents, **SIRET fermé absent**,
+  **aucun numéro de TVA affirmé**, Belmont et RNE présents.
+- Fiche produit : prix qualifié, **aucune mention TTC**.
+- 150 images par seconde sur le premier écran.
+
+## PIÈGE DE MESURE À CONNAÎTRE — il m'a fait conclure faux
+
+Après une longue session Playwright, le navigateur de test **se dégrade à
+1 image par seconde**. Conséquence : la première capture du déploiement
+montrait un premier écran NOIR, et j'en ai conclu que le volet ne se levait
+pas en ligne. C'était faux.
+
+Le contrôle qui a tranché : mesurer les images par seconde **en local ET en
+ligne**. Les deux donnaient 1 fps, et retirer le canvas WebGL n'y changeait
+rien — donc le défaut n'était ni le métal, ni le déploiement, mais le
+harnais. Après redémarrage du navigateur : 150 fps et volet entièrement
+ouvert.
+
+**Règle pour les prochaines sessions : avant de conclure à un défaut de
+performance ou à un écran noir, redémarrer le navigateur et re-mesurer.**
+
+## État de la suite complète
+
+`npm test` — six lots front **tous verts** : 121, 24, 12, 1, 1, 59.
+
+Le septième lot (backend/préprod, 48 tests) porte 6 rouges, **aucun causé par
+cette session** :
+
+- `the real current source branch is governed…` échoue **par construction**
+  sur une branche Claude : la liste `allowed_source_branches` de
+  `.openai/preprod-demo-only.json` ne contient que cinq branches `codex/*`, et
+  ce fichier n'a jamais été modifié ici ;
+- les cinq autres sont la famille D1/préprod qui exige les quatre zones
+  provisionnées, déjà documentée comme dépendante de l'environnement.
+
 ## Vérifié APRÈS le correctif du volet (reprise du 21/08 au soir)
 
 - **Mouvement réduit** : volet jamais posé, aucune échelle, composition
