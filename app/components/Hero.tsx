@@ -367,7 +367,21 @@ export default function Hero() {
                 x: ecartX,
                 y: ecartY,
                 scale: echelle,
-                ease: "none",
+                /* UNE COURBE DESSINEE, ET NON UNE RAMPE. En lineaire, le mot
+                   parcourt la meme distance a chaque pixel defile : c'est
+                   juste, mais ca se lit comme un curseur qu'on tire, pas comme
+                   un objet qui se pose.
+
+                   power1.inOut donne un depart retenu, une traversee franche
+                   et une arrivee qui decelere. Le geste devient intentionnel.
+                   Le choix de power1 et non power2 est delibere : au-dela, la
+                   partie centrale s'emballe et le mouvement redevient brusque
+                   au milieu de la course.
+
+                   Les extremites ne bougent pas : l'atterrissage reste au meme
+                   endroit et a la meme progression, donc la passation avec la
+                   barre n'est pas touchee. */
+                ease: "power1.inOut",
                 /* DUREE EXPLICITE, ET C'EST UN CORRECTIF. Un tween sans duree
                    prend 0,5 s par defaut ; dans une timeline de course pilotee
                    au scrub, il ne couvrait donc que la MOITIE du defilement.

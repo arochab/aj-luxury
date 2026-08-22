@@ -368,9 +368,24 @@ function MetallicCanvas({
       vec2 marcher(vec3 origine, vec3 direction) {
         float distance = 0.0;
         float touche = 0.0;
+        /* LA TOLERANCE S'OUVRE AVEC LA DISTANCE, ET C'EST LA CORRECTION DU
+           PIQUETE. Constate a l'ecran le 22/08 : un mouchetage noir entourait
+           les silhouettes, que j'ai d'abord pris pour un lisere de detourage
+           avant de zoomer et de voir qu'il vient du METAL.
+
+           Cause : un seuil de contact CONSTANT. Loin de la camera, un pixel
+           couvre une portion de scene bien plus large ; exiger la meme
+           precision qu'au premier plan fait manquer la surface un rayon sur
+           deux aux incidences rasantes, et un rayon manque devient un point
+           noir. Le voisin, lui, touche. D'ou le grain.
+
+           On fait donc croitre le seuil avec la distance parcourue : chaque
+           rayon exige une precision proportionnee a ce qu'il represente
+           reellement a l'ecran. C'est le principe du cone de rayon, et il ne
+           coute aucun pas supplementaire. */
         for (int i = 0; i < 56; i++) {
           float pas = carteScene(origine + direction * distance);
-          if (pas < 0.0016) { touche = 1.0; break; }
+          if (pas < 0.0016 + distance * 0.0022) { touche = 1.0; break; }
           if (distance > 6.4) break;
           distance += pas * 0.55;
         }
@@ -631,6 +646,28 @@ function MetallicCanvas({
 
           float calmCenter = 1.0 - smoothstep(0.08, 0.34, abs(uv.x - 0.5));
           referenceBase *= 1.0 - calmCenter * 0.19;
+
+          /* ── LA ZONE DES TETES ───────────────────────────────────────────
+             C'est le seul endroit ou le bord de la decoupe rencontre le metal
+             sur une matiere FINE : les cheveux. Partout ailleurs la silhouette
+             est franche, epaule ou cuisse, et l'escalier de l'alpha ne se voit
+             pas. Sur une meche, il se voit des que le fond est clair.
+
+             Quatre tentatives de correction du detourage lui-meme ont echoue,
+             toutes chiffrees le 22/08 : deux erosions, le modele portrait a
+             resolution reduite, puis le meme par bandes a pleine resolution et
+             sans couture. Le meilleur masque disponible est deja servi.
+
+             Le defaut ne vient donc pas de la decoupe, il vient du CONTRASTE
+             qui la revele. On assombrit le metal derriere les tetes, et le
+             bord cesse d'etre lisible sans qu'un seul pixel du sujet change.
+
+             La zone est large et sa transition longue : un assombrissement
+             net creerait une tache, ce qui serait pire que le defaut. */
+          float zoneTetes =
+            smoothstep(0.60, 0.93, uv.y) *
+            (1.0 - smoothstep(0.09, 0.44, abs(uv.x - 0.52)));
+          referenceBase *= 1.0 - zoneTetes * 0.52;
           material = referenceBase;
         }
 
