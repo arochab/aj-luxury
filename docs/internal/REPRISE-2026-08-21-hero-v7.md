@@ -688,3 +688,47 @@ laisse une ligne franche en travers d'une chevelure.
 
 **Rien n'a été modifié.** `MODELE` est resté `birefnet-general-lite` et le
 découpage servi est celui d'origine, restauré et vérifié intact.
+
+## 4. Segmentation portrait PAR BANDES, pleine résolution — la méthode
+marche, le résultat est rejeté
+
+La piste ouverte plus haut a été testée. Le master est découpé en quatre bandes
+de 820 px avec **340 px de recouvrement**, chacune segmentée par le modèle
+portrait à sa résolution native, puis les masques sont recousus par une rampe
+en cosinus : au centre du recouvrement les deux bandes contribuent à parts
+égales, aux extrémités chacune reprend seule la main.
+
+**La couture est invisible, et c'est mesuré.** Aux six lignes de raccord, la
+variation verticale du masque vaut 0,0008 à 0,0032 pour une moyenne de 0,0018 :
+aucune n'atteint le triple de la moyenne, seuil au-delà duquel une ligne
+franche apparaîtrait. Le recouvrement généreux était bien la condition, et il
+suffit.
+
+**Mais le résultat reste moins bon que le modèle général :**
+
+| | Général (servi) | Portrait par bandes |
+|---|---|---|
+| **Pixels violets** | **1 729** | **1 894** |
+| Saturation du liseré | 0,5838 | 0,5701 |
+| Pixels de bord | 48 389 | 50 128 |
+
+Vérifié à l'œil sur la naissance des cheveux, fond clair, zoom ×1,9 :
+`.playwright-mcp/remplacement-2026-08-22/cheveux-bandes.png`. Le candidat est
+plus MOU ; le découpage servi a des mèches plus franches.
+
+## Conclusion, après quatre tentatives
+
+Le liseré capillaire n'est pas corrigeable en changeant de modèle ni en
+post-traitant le découpage. `birefnet-general-lite` est, sur cette
+photographie, **le meilleur des deux modèles disponibles** — y compris face au
+modèle portrait à pleine résolution et sans couture.
+
+Ce qui reste visible près des cheveux sur le site tient davantage à l'escalier
+du bord alpha contre un métal très clair qu'à une contamination de couleur : la
+même découpe, posée sur fond clair en planche de contrôle, est propre.
+
+Deux pistes non tentées, si le sujet revient : adoucir le métal derrière la
+zone des têtes plutôt que le découpage, ou obtenir une prise de vue sur fond
+uni contrasté, qui rendrait le détourage trivial.
+
+**Rien n'a été modifié.** Quatre tentatives, quatre rejets, tous chiffrés.
