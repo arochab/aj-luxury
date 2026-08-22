@@ -204,7 +204,20 @@ export default function Hero() {
             trigger: noeud,
             start: "top top",
             end: "bottom top",
-            scrub: 0.6,
+            /* 0,25 et non 0,6. Adam, 22/08 : « le scroll n'est pas fluide ».
+               Mesuré : 154 images par seconde PENDANT le défilement, et la
+               barre comme son filet sont entièrement transparents. Ce n'était
+               donc ni une chute de performance, ni un fond qui tranche le mot.
+
+               C'est le lissage lui-même. À 0,6 l'animation traîne jusqu'à six
+               dixièmes de seconde derrière le doigt : on pousse, le mot part
+               en retard, puis rattrape tout seul. Cette dérive se lit comme un
+               flottement, pas comme de la douceur — et sur un mouvement qui
+               doit ATTERRIR au pixel, elle détruit la précision.
+
+               0,25 garde de quoi absorber la molette crantée sans que le mot
+               cesse de suivre la main. */
+            scrub: 0.25,
             invalidateOnRefresh: true,
           },
         });

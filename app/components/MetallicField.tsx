@@ -130,7 +130,7 @@ function MetallicCanvas({
         // L'horizon. Volontairement etroit : une transition douce donnerait
         // un degrade, et un degrade ne se lit jamais comme un reflet.
         float ciel = smoothstep(-0.035, 0.055, y);
-        float valeur = mix(0.022, 0.60, ciel);
+        float valeur = mix(0.018, 0.94, ciel);
 
         // Le sol absorbe : sous l'horizon, le metal doit plonger vers le noir.
         valeur = mix(valeur, 0.012, (1.0 - smoothstep(-0.62, -0.14, y)) * 0.85);
@@ -141,10 +141,10 @@ function MetallicCanvas({
           smoothstep(0.30, 0.355, y) * (1.0 - smoothstep(0.50, 0.565, y));
         float rampeBasse =
           smoothstep(-0.40, -0.355, y) * (1.0 - smoothstep(-0.235, -0.185, y));
-        valeur += rampeHaute * 0.95 + rampeBasse * 0.42;
+        valeur += rampeHaute * 1.30 + rampeBasse * 0.62;
 
         // Une lueur laterale, pour que les plis de profil ne soient pas morts.
-        valeur += smoothstep(0.55, 0.98, abs(x)) * 0.16;
+        valeur += smoothstep(0.50, 0.98, abs(x)) * 0.26;
 
         return clamp(valeur, 0.0, 1.5);
       }
@@ -344,7 +344,7 @@ function MetallicCanvas({
              MATIERE. Terme purement spatial : la periodicite de la boucle, qui
              ne depend que de u_phase, n'est pas touchee. */
           float membrane = sin(
-            referenceSurface * 13.2 +
+            referenceSurface * 8.2 +
             referenceReflection.x * 2.6 +
             u_phase
           ) * 0.5 + 0.5;
@@ -494,8 +494,8 @@ function MetallicCanvas({
              l'impression de brume — se réduit. C'est le même geste qu'un
              contraste en post-production, appliqué ici à la source. */
           referenceBase = smoothstep(
-            vec3(0.075),
-            vec3(0.83),
+            vec3(0.10),
+            vec3(0.66),
             referenceBase
           );
 
