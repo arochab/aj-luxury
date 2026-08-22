@@ -70,9 +70,25 @@ const configuration = {
 };
 const configurationPath = join(staging, "wrangler.production.json");
 writeFileSync(configurationPath, `${JSON.stringify(configuration, null, 2)}\n`, { flag: "wx" });
+/* On lance l'entrée JavaScript de wrangler avec le node courant, PAS `npx`.
+   Deux raisons, dans cet ordre.
+
+   1. Correctness. Depuis le correctif de la CVE-2024-27980, Node refuse de
+      spawn un `.cmd` sans `shell: true` : `spawnSync npx.cmd` échoue en
+      EINVAL sur Windows. Le chemin de migration de production était donc
+      inutilisable sur cette plateforme — constaté ici même le 22/08/2026.
+
+   2. Sécurité. La correction évidente serait `shell: true`. Elle rouvrirait
+      exactement ce que la CVE ferme : le chemin de configuration passerait
+      par l'interpréteur de commandes. Résoudre le binaire nous-mêmes évite le
+      shell entièrement, sur toutes les plateformes.
+
+   `npx` ne servait qu'à localiser wrangler ; on connaît son emplacement. */
+const wranglerEntry = join(root, "node_modules", "wrangler", "bin", "wrangler.js");
+assert.ok(existsSync(wranglerEntry), "wrangler introuvable : exécuter npm install.");
 const result = spawnSync(
-  process.platform === "win32" ? "npx.cmd" : "npx",
-  ["wrangler", "d1", "migrations", "apply", "DB", "--remote", "--config", configurationPath],
+  process.execPath,
+  [wranglerEntry, "d1", "migrations", "apply", "DB", "--remote", "--config", configurationPath],
   { cwd: staging, stdio: "inherit", shell: false },
 );
 if (result.error) throw result.error;
