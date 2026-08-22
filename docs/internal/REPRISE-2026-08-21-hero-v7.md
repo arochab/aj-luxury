@@ -473,3 +473,83 @@ ce qui précède, qui vient d'exécutions par lots.
 - Ne pas écrire de secret dans un fichier, y compris un `.env` local.
 - Ne pas toucher à `.openai/preprod-demo-only.json` pour faire passer le test.
 - Ne pas modifier `db/seed.ts` avant la décision d'Adam sur le stock.
+
+## ADDENDUM — la suite complète a fini, et elle corrige le relais ci-dessus
+
+Lancée en arrière-plan pendant la pause, terminée. **`npm test` sort en code 1.**
+
+### Correction 1 — les chiffres du relais ne décrivent pas la suite
+
+J'ai écrit « 58 sur 58 » et « 81 sur 82 ». Ces nombres restent vrais **pour les
+lots concernés, lancés séparément**. Ils ne décrivent pas `npm test`, et il ne
+faut pas les présenter comme tels.
+
+`npm test` est une chaîne `&&` : elle s'arrête au premier maillon rouge. Elle
+s'est arrêtée à `tests/d1-migrations.test.mjs`. **Tout ce qui suit n'a jamais
+été exécuté** : `test:email-data-d1`, `test:fulfillment`, `test:gate-c`,
+`test:preprod-demo`, `test:last-mile`, le lot i18n et HTML rendu, et
+`test:lot2-policies`.
+
+Autrement dit, aucune exécution de bout en bout n'existe à ce jour. Il faut la
+produire avant toute affirmation globale sur l'état des tests.
+
+### Correction 2 — le test de gouvernance de branche a PASSÉ
+
+J'ai affirmé à deux reprises qu'il échoue « par construction » sur une branche
+Claude, la liste `allowed_source_branches` ne contenant que des branches
+`codex/*`.
+
+**C'est contredit.** `tests/backend-core.test.mjs` se trouve dans le premier
+maillon de la chaîne. Il a été exécuté, il est passé, et la chaîne a continué
+jusqu'à `test:email-data`. S'il avait échoué, rien après lui n'aurait tourné.
+
+La différence avec mon exécution par lots vingt minutes plus tôt : **l'arbre
+était sale à ce moment-là** (modifications de tests non commitées), il est
+propre maintenant. C'est la piste, pas la conclusion.
+
+**Ne pas reprendre mon explication « échoue par construction » sans l'avoir
+revérifiée.** Elle est probablement fausse.
+
+### Le seul rouge, décrit exactement
+
+```
+tests/d1-migrations.test.mjs:351
+Wrangler applies the canonical D1 chain 0000 to 0007 on empty and
+journaled databases, then replays as a no-op
+  AssertionError: actual 'ETIMEDOUT', expected undefined
+  durée : 14 952 279 ms, soit 4 h 09
+```
+
+Ce qui est **établi** :
+
+- L'échec est un `ETIMEDOUT` de `spawnSync`, plafonné à 60 s par appel dans
+  `runWrangler`. Ce n'est pas une assertion métier : le test a gelé.
+- La base visée est **locale**, pas distante — la sortie dit `Resource
+  location: local`. Aucun lien avec la base de production créée aujourd'hui.
+- **Ce n'est pas le bug Windows corrigé ce matin.** Ce test utilise déjà
+  `spawnSync(process.execPath, [wranglerCliPath, ...])`, exactement le motif
+  vers lequel j'ai fait converger `scripts/production-d1-migrations.mjs`.
+- Wrangler démarre ici en **1,3 s à chaud, 8,7 s à froid**, mesuré trois fois.
+  Un plafond de 60 s n'est donc pas atteint par une lenteur ordinaire.
+
+Ce qui n'est **pas** établi, et qu'il ne faut pas inventer :
+
+- La cause du gel. Attente sur une entrée interactive sans terminal, accès
+  réseau bloqué par le bac à sable, ou pathologie d'entrées-sorties : aucune
+  des trois n'est démontrée.
+- Si l'échec préexiste à cette séance. **À vérifier en premier**, sur un
+  commit antérieur, avant de chercher un coupable dans le travail du jour.
+
+Piste à explorer sans s'y enfermer : `executeD1` lance **un processus wrangler
+par commande SQL**, à l'intérieur de boucles. Le volume d'invocations est le
+premier suspect de la durée, pas nécessairement du gel lui-même.
+
+### Ce que cela change pour la reprise
+
+Rien sur les trois blocages — stock, secrets, accord de Jérémy. Ils restent
+intacts et prioritaires.
+
+Cela ajoute une tâche, à ma charge : obtenir une exécution complète de
+`npm test`, et savoir si ce gel préexiste. Tant qu'elle n'existe pas, **aucune
+affirmation globale sur l'état des tests ne doit être faite**, ni par moi ni
+dans un document remis à Jérémy.
