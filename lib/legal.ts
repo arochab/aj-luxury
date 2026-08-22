@@ -102,11 +102,25 @@ export const HOSTING_PROVIDER = {
   website: "https://www.cloudflare.com",
 } as const;
 
-export const MEDIATOR = {
-  name: "À sélectionner et conventionner avant l’ouverture des ventes",
-  address: "À compléter",
-  website: "À compléter",
-} as const;
+/*
+  `null` TANT QU'AUCUN MÉDIATEUR N'EST CONVENTIONNÉ, pour la même raison que
+  le téléphone plus haut : une page de CGV qui affiche « À compléter, À
+  compléter » ne satisfait pas davantage l'article L612-1 du code de la
+  consommation, et signale au lecteur une marque qui n'est pas prête.
+
+  Relevé sur la prévisualisation déployée le 22/08/2026 : la phrase rendue
+  était « le médiateur conventionné par AJ Luxury : À sélectionner et
+  conventionner avant l'ouverture des ventes, À compléter, À compléter. »
+
+  À la place, la page dit ce qui est vrai : la vente n'est pas ouverte, et le
+  médiateur sera désigné avant qu'elle le soit. Dès qu'il l'est, poser l'objet
+  ici suffit : la phrase définitive réapparaît.
+*/
+export const MEDIATOR: Readonly<{
+  name: string;
+  address: string;
+  website: string;
+}> | null = null;
 
 export const PRELAUNCH_BLOCKERS = [
   "régime de TVA du vendeur et mention associée sur les prix",

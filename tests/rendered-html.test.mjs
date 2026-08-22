@@ -1011,6 +1011,19 @@ test("terms cover the 2026 consumer baseline without a blanket underwear exclusi
   assert.match(html, /n’est pas exclu du seul fait que le produit est un sous-vêtement/i);
   assert.match(html, /médiateur conventionné/i);
   assert.doesNotMatch(html, /plateforme (?:européenne )?(?:de )?règlement en ligne|ec\.europa\.eu\/consumers\/odr/i);
+
+  /* AUCUN TEXTE D'ATTENTE SUR DES CONDITIONS GENERALES DE VENTE. Releve le
+     22/08/2026 sur la previsualisation deployee : la phrase rendue etait
+     « le mediateur conventionne par AJ Luxury : A selectionner et
+     conventionner avant l'ouverture des ventes, A completer, A completer. »
+     Trois marqueurs d'inachevement dans une seule phrase, sur la page qu'un
+     client lit pour se rassurer.
+
+     Ces « A completer » ne satisfaisaient pas davantage l'article L612-1 que
+     leur absence. La page dit desormais l'echeance. Ce test empeche qu'un
+     futur champ vide reintroduise le probleme ailleurs sur la page. */
+  assert.doesNotMatch(html, /À compléter/);
+  assert.doesNotMatch(html, /À sélectionner/);
 });
 
 test("privacy and cookies describe the actual preview storage and no fictitious tracker", async () => {

@@ -249,9 +249,23 @@ export default function TermsPage() {
           Toute réclamation doit d’abord être adressée à{" "}
           <a href={`mailto:${LEGAL_CONTACT.email}`}>{LEGAL_CONTACT.email}</a>.
           Après une démarche écrite préalable restée sans solution, le
-          consommateur peut saisir gratuitement le médiateur conventionné par AJ
-          Luxury : <strong>{MEDIATOR.name}</strong>, {MEDIATOR.address},{" "}
-          {MEDIATOR.website}.
+          consommateur peut saisir gratuitement un médiateur de la
+          consommation.{" "}
+          {/* Voir MEDIATOR dans lib/legal.ts : tant qu'aucun médiateur n'est
+              conventionné, la page dit l'échéance plutôt que d'afficher des
+              « À compléter » sur des conditions générales de vente. */}
+          {MEDIATOR ? (
+            <>
+              Le médiateur conventionné par AJ Luxury est{" "}
+              <strong>{MEDIATOR.name}</strong>, {MEDIATOR.address},{" "}
+              {MEDIATOR.website}.
+            </>
+          ) : (
+            <>
+              Le médiateur conventionné par AJ Luxury sera désigné avant
+              l’ouverture des ventes et ses coordonnées seront publiées ici.
+            </>
+          )}
         </p>
         <p>
           Les CGV sont soumises au droit français, sans priver le consommateur
