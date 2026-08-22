@@ -154,12 +154,45 @@ export default function Hero() {
             { y: 0, opacity: 1, duration: 1.5, ease: "expo.out" },
             0.62,
           )
-          /* LE NOM. Il se lève DERRIÈRE eux : il monte de sa propre hauteur,
-             il sort du sol, il n'apparaît pas. */
+          /* ── LE NOM EST TAILLE PAR LA LUMIERE ─────────────────────────
+             REECRIT LE 22/08/2026, deuxieme passe sur l'arrivee.
+
+             La premiere version le faisait MONTER : yPercent 108 vers 0, puis
+             une opacite. C'etait bien minute, et c'etait quand meme banal —
+             glisser et s'estomper est le geste le plus courant du web, et
+             aucun reglage de tempo ne rend remarquable un geste ordinaire.
+             Adam l'a redit apres la reecriture du tempo, ce qui prouve que le
+             probleme n'etait pas le tempo.
+
+             Le nom est donc DEVOILE, de gauche a droite, par une lame de
+             lumiere qui court sur le metal. Le mot n'arrive pas : il apparait
+             la ou la lumiere est deja passee, comme si elle le degageait de la
+             matiere. C'est le seul geste de cet ecran qui parle de ce que la
+             marque fabrique.
+
+             POURQUOI clip-path ALORS QUE LA DOCTRINE DIT transform ET opacity.
+             C'est une exception assumee, la deuxieme du fichier apres
+             background-position sur la brillance. Elle porte sur UN element,
+             pendant 1,4 s, une seule fois au chargement. Aucune alternative en
+             transform ne produit un devoilement directionnel : un masque qui
+             translate exigerait un conteneur en overflow, donc un contexte
+             d'empilement supplementaire autour du mot — et ce mot doit
+             justement rester libre de quitter la scene pour aller se poser
+             dans la barre. Le cout d'un contexte d'empilement serait plus
+             lourd que celui d'un clip-path.
+
+             La montee residuelle de 14 % donne du poids : le mot se pose en
+             meme temps qu'il se decouvre, il ne se contente pas d'apparaitre a
+             plat. */
           .fromTo(
             mot,
-            { yPercent: 108, opacity: 0 },
-            { yPercent: 0, opacity: 1, duration: 1.5, ease: "expo.out" },
+            { yPercent: 14, opacity: 1, clipPath: "inset(0% 100% 0% 0%)" },
+            {
+              yPercent: 0,
+              clipPath: "inset(0% 0% 0% 0%)",
+              duration: 1.4,
+              ease: "power2.inOut",
+            },
             1.15,
           )
           /* LES MOTS, en dernier, quand il ne reste plus rien à découvrir. */
@@ -205,7 +238,11 @@ export default function Hero() {
                premiere passe part donc la, et le geste se lit comme le metal
                qui prend la lumiere en se levant, pas comme un reflet
                decoratif qui tournait deja. */
-            delay: 2.5,
+            /* La lame part AVEC le devoilement, pas apres. Le nom se decouvre
+               de 1,15 a 2,55 s ; la lumiere traverse sur le meme intervalle,
+               donc l'oeil lit une cause et un effet, pas deux animations qui
+               se suivent. */
+            delay: 1.15,
           },
         );
 
