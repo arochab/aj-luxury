@@ -81,6 +81,7 @@ export default function Hero() {
     const mot = q(`.${styles.marqueBoite}`)[0];
     const eclat = q(`.${styles.marqueEclat}`)[0];
     const figures = q(`.${styles.figures}`)[0];
+    const metal = q(`.${styles.metal}`)[0];
     const volet = q(`.${styles.volet}`)[0];
     if (!plans.length || !scenes.length || !mot || !eclat || !figures) return;
 
@@ -107,42 +108,72 @@ export default function Hero() {
 
         const arrivee = gsap.timeline();
 
+        /* ── LA PARTITION DE L'ARRIVEE ──────────────────────────────────
+           REECRITE LE 22/08/2026. Adam : « l'arrivee sur site n'est toujours
+           pas assez qualitative ».
+
+           Ce qui n'allait pas, releve en lisant les temps plutot qu'en
+           regardant : TOUT arrivait entre 0,06 et 2,08 seconde, et quatre
+           elements sur cinq bougeaient deja avant la premiere seconde. Le
+           metal, qui EST le monde de cette marque, n'avait aucun temps a lui :
+           il etait simplement la quand le rideau se levait. On ne montrait
+           donc pas une arrivee, on levait un rideau sur une image finie.
+
+           La nouvelle partition raconte quatre temps, dans cet ordre :
+
+             LE MONDE   le metal se leve seul, dans le noir
+             LE SUJET   les corps se posent dedans
+             LE NOM     la marque monte derriere eux
+             LES MOTS   la copie, en dernier
+
+           Chaque temps attend que le precedent ait dit ce qu'il avait a dire.
+           C'est ce qui separe une sequence d'un empilement. */
         arrivee
+          /* LE MONDE. Le metal ne se contente pas d'apparaitre : il monte en
+             lumiere depuis le noir et se detend d'un sur-cadrage. Une seconde
+             et demie pendant laquelle il n'y a que lui a regarder. */
+          .fromTo(
+            metal,
+            { opacity: 0, scale: 1.06 },
+            { opacity: 1, scale: 1, duration: 1.5, ease: "power2.out" },
+            0,
+          )
           // La caméra se détend d'un sur-cadrage serré vers le repos.
           .fromTo(
             scenes,
             { scale: etroit ? 1.1 : 1.13 },
-            { scale: 1, duration: 2.6, ease: "expo.out" },
+            { scale: 1, duration: 3.0, ease: "expo.out" },
             0,
           )
-          // Les corps entrent les derniers et de très peu : ils sont le sujet,
-          // ils n'ont pas à faire d'effet. 18 px de montée suffisent à les
-          // faire se poser plutôt qu'apparaître.
+          /* LE SUJET. Ils entrent quand le monde existe, pas avant. De très
+             peu : ils sont le sujet, ils n'ont pas à faire d'effet. 18 px de
+             montée suffisent à les faire se poser plutôt qu'apparaître. */
           .fromTo(
             figures,
             { y: 18, opacity: 0 },
-            { y: 0, opacity: 1, duration: 1.6, ease: "expo.out" },
-            0.18,
+            { y: 0, opacity: 1, duration: 1.5, ease: "expo.out" },
+            0.62,
           )
-          // Le mot se lève DERRIÈRE eux : il monte de sa propre hauteur, il
-          // sort du sol, il n'apparaît pas.
+          /* LE NOM. Il se lève DERRIÈRE eux : il monte de sa propre hauteur,
+             il sort du sol, il n'apparaît pas. */
           .fromTo(
             mot,
             { yPercent: 108, opacity: 0 },
             { yPercent: 0, opacity: 1, duration: 1.5, ease: "expo.out" },
-            0.5,
+            1.15,
           )
+          /* LES MOTS, en dernier, quand il ne reste plus rien à découvrir. */
           .fromTo(
             q(`.${styles.ligne}`),
             { yPercent: 118 },
-            { yPercent: 0, duration: 1.15, ease: "expo.out", stagger: 0.08 },
-            0.86,
+            { yPercent: 0, duration: 1.15, ease: "expo.out", stagger: 0.09 },
+            1.62,
           )
           .fromTo(
             q(`.${styles.lien}`),
             { opacity: 0, y: 14 },
             { opacity: 1, y: 0, duration: 0.9, ease: "power2.out" },
-            1.18,
+            2.05,
           );
 
         /* Le volet part une fraction apres le debut : les valeurs de depart
@@ -151,7 +182,7 @@ export default function Hero() {
         if (volet) {
           arrivee.to(
             volet,
-            { scaleY: 0, duration: 1.15, ease: "power4.inOut" },
+            { scaleY: 0, duration: 1.35, ease: "power4.inOut" },
             0.06,
           );
         }
@@ -169,6 +200,12 @@ export default function Hero() {
             ease: "power1.inOut",
             repeat: -1,
             repeatDelay: 4.6,
+            /* La lumiere traverse le nom AU MOMENT OU IL SE POSE, et non a un
+               instant quelconque du chargement. Le mot arrive a 2,65 s ; la
+               premiere passe part donc la, et le geste se lit comme le metal
+               qui prend la lumiere en se levant, pas comme un reflet
+               decoratif qui tournait deja. */
+            delay: 2.5,
           },
         );
 
