@@ -20,8 +20,10 @@ export type HomeColorway = {
   slug: "rose-pale" | "lilas-bleu-clair" | "pourpre";
   nameKey: TranslationKey;
   descriptionKey: TranslationKey;
-  still: string;
-  worn: string;
+  image: string;
+  width: number;
+  height: number;
+  position: string;
   priceCents: number;
   swatch: string;
 };
@@ -42,30 +44,6 @@ function ArrowIcon({ direction = "right" }: { direction?: "right" | "down" }) {
     </svg>
   );
 }
-
-const editorialImages = [
-  {
-    src: "/images/client/editorial-pourpre-chair.webp",
-    alt: "AJ Luxury — Jérémy — Apollon Pourpre Impérial",
-    className: styles.editorialMain,
-    width: 1864,
-    height: 2600,
-  },
-  {
-    src: "/images/client/campaign-duo-lilas-seated.webp",
-    alt: "AJ Luxury — Alex et Jérémy — Apollon Lilas Céleste",
-    className: styles.editorialSupport,
-    width: 1484,
-    height: 2229,
-  },
-  {
-    src: "/images/client/editorial-rose-profile.webp",
-    alt: "AJ Luxury — Alex — Apollon Rose Velours",
-    className: styles.editorialSupport,
-    width: 1731,
-    height: 2600,
-  },
-] as const;
 
 export default function HomeExperienceV9({ colorways, commerceOpen }: Props) {
   const { t } = useI18n();
@@ -123,14 +101,24 @@ export default function HomeExperienceV9({ colorways, commerceOpen }: Props) {
         </div>
 
         <figure className={styles.heroMedia}>
-          <img
-            src="/images/client/campagne-duo-lilas-master.jpg"
-            alt="AJ Luxury — Alex et Jérémy portent Apollon Lilas Céleste"
-            width={1484}
-            height={2229}
-            fetchPriority="high"
-            decoding="async"
-          />
+          <picture>
+            <source
+              media="(max-width: 720px)"
+              srcSet="/images/client/hero-v6-portrait-720x934-poster.webp"
+            />
+            <source
+              media="(max-width: 1100px)"
+              srcSet="/images/client/hero-v6-tablet-1440x810-poster.webp"
+            />
+            <img
+              src="/images/client/hero-v6-xl-native-1920x1080-poster.webp"
+              alt="AJ Luxury — Alex et Jérémy portent Apollon Lilas Céleste dans le décor architectural de la maison"
+              width={1920}
+              height={1080}
+              fetchPriority="high"
+              decoding="async"
+            />
+          </picture>
         </figure>
       </section>
 
@@ -198,23 +186,17 @@ export default function HomeExperienceV9({ colorways, commerceOpen }: Props) {
           </div>
         </div>
 
-        <div className={styles.colorwayMedia} key={active.slug}>
-          <figure className={styles.stillFrame}>
+        <div
+          className={styles.colorwayMedia}
+          key={active.slug}
+          style={{ "--media-position": active.position } as CSSProperties}
+        >
+          <figure className={styles.colorwayFrame}>
             <img
-              src={active.still}
-              alt={t("sequence.stillAlt").replace("{color}", t(active.nameKey))}
-              width={1024}
-              height={1536}
-              loading="lazy"
-              decoding="async"
-            />
-          </figure>
-          <figure className={styles.wornFrame}>
-            <img
-              src={active.worn}
+              src={active.image}
               alt={t("sequence.bodyAlt").replace("{color}", t(active.nameKey))}
-              width={1731}
-              height={2600}
+              width={active.width}
+              height={active.height}
               loading="lazy"
               decoding="async"
             />
@@ -225,10 +207,10 @@ export default function HomeExperienceV9({ colorways, commerceOpen }: Props) {
       <section className={styles.material} aria-labelledby="home-material-title">
         <figure className={styles.materialMedia}>
           <img
-            src="/images/client/product-pourpre-detail.webp"
+            src="/images/client/raw/product-rose-detail.webp"
             alt={t("product.feature.5")}
-            width={1731}
-            height={2600}
+            width={2000}
+            height={1331}
             loading="lazy"
             decoding="async"
           />
@@ -283,18 +265,16 @@ export default function HomeExperienceV9({ colorways, commerceOpen }: Props) {
         </div>
 
         <div className={styles.editorialMedia}>
-          {editorialImages.map((image) => (
-            <figure className={image.className} key={image.src}>
-              <img
-                src={image.src}
-                alt={image.alt}
-                width={image.width}
-                height={image.height}
-                loading="lazy"
-                decoding="async"
-              />
-            </figure>
-          ))}
+          <figure className={styles.editorialMain}>
+            <img
+              src="/images/client/campaign-duo-pourpre.webp"
+              alt="AJ Luxury — Alex et Jérémy portent Apollon Pourpre Impérial"
+              width={2000}
+              height={1882}
+              loading="lazy"
+              decoding="async"
+            />
+          </figure>
         </div>
       </section>
     </div>

@@ -71,10 +71,10 @@ test("the redesigned homepage only references retained repository assets", async
     projectFile("app/components/HomeExperienceV9.tsx"),
     "utf8",
   );
-  const sources = [...`${page}\n${experience}`.matchAll(/(?:src|still|worn)\s*(?:=|:)\s*["'](\/images\/[^"']+)["']/g)]
+  const sources = [...`${page}\n${experience}`.matchAll(/(?:srcSet|src|image)\s*(?:=|:)\s*["'](\/images\/[^"']+)["']/g)]
     .map((match) => match[1]);
 
-  assert.ok(sources.length >= 10, `expected retained visual sources, got ${sources.length}`);
+  assert.ok(sources.length >= 8, `expected retained visual sources, got ${sources.length}`);
   assert.equal(new Set(sources).size, sources.length, "homepage visual sources must not be duplicated");
 
   for (const source of sources) {

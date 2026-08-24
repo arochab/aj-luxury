@@ -643,21 +643,19 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
   assert.match(html, /Reveal Your[\s\S]*Inner[\s\S]*Beauty/);
   assert.match(
     html,
-    /campagne-duo-lilas-master\.jpg"[^>]*fetchPriority="high"[^>]*decoding="async"/,
+    /hero-v6-xl-native-1920x1080-poster\.webp"[^>]*fetchPriority="high"[^>]*decoding="async"/,
   );
-  assert.match(html, /campagne-duo-lilas-master\.jpg" alt="AJ Luxury —/);
-  assert.match(
-    html,
-    /<link rel="preload" as="image" href="\/images\/client\/campagne-duo-lilas-master\.jpg" fetchPriority="high"/,
-  );
+  assert.match(html, /hero-v6-xl-native-1920x1080-poster\.webp" alt="AJ Luxury —/);
+  assert.match(html, /hero-v6-portrait-720x934-poster\.webp/);
+  assert.match(html, /hero-v6-tablet-1440x810-poster\.webp/);
   assert.equal(
-    (html.match(/campagne-duo-lilas-master\.jpg/g) ?? []).length,
-    2,
-    "le master doit apparaître une fois dans le preload et une fois dans l'image",
+    (html.match(/hero-v6-xl-native-1920x1080-poster\.webp/g) ?? []).length,
+    1,
+    "le poster desktop ne doit être rendu qu'une fois dans l'image prioritaire",
   );
 
   /* Aucun vestige du film remplacé ne doit repasser dans le bundle rendu. */
-  assert.doesNotMatch(html, /data-hero-version|hero-figures|hero-v[67]-/);
+  assert.doesNotMatch(html, /data-hero-version|hero-figures|hero-v7-/);
   assert.doesNotMatch(html, /data-metallic-mounted|metallic-field__canvas/);
   assert.doesNotMatch(html, /<video|Figer le métal/);
   assert.doesNotMatch(html, /aj-film__hero-|aj-film__living-duo|aj-film__liquid-overlay/);
@@ -696,7 +694,7 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
   assert.match(html, /6\s*%[\s\S]*élasthanne/i);
   assert.match(
     html,
-    /apollon-rose-lyre-v1\.webp[\s\S]*apollon-lilas-lyre-v1\.webp[\s\S]*apollon-pourpre-lyre-v1\.webp/,
+    /editorial-rose-profile\.webp[\s\S]*editorial-lilas-chair\.webp[\s\S]*editorial-pourpre-chair\.webp/,
   );
   assert.doesNotMatch(html, /Un modèle décliné en trois coloris/i);
   assert.doesNotMatch(html, /data-hero-fusion/);
