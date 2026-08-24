@@ -12,6 +12,28 @@ Ces règles s’appliquent à toute évolution visuelle du projet, quel que soit
 - Ne jamais réintroduire une limitation « France métropolitaine » ou une exclusion générale de la livraison internationale sans instruction explicite et datée d’Adam.
 - Le contrat commercial AJ Luxury reste strictement bipartite entre AJ Luxury, représentée par Jérémy SCHEPPLER, et Adam CHABBI.
 
+## Où se trouve l'état courant
+
+Ce fichier porte les standards permanents. Il ne décrit pas ce qui est en
+cours. Avant toute reprise, lire dans cet ordre :
+
+1. `docs/internal/REPRISE-2026-08-21-hero-v7.md` — l'état vivant du front,
+   tenu à jour à chaque pause : ce qui est livré, ce qui est cassé, ce qui a
+   été tenté et rejeté, et les pièges de mesure rencontrés.
+2. Le dernier document `docs/internal/AUDIT-*` ou `HANDOFF-*` par date, s'il
+   est postérieur.
+3. `git log --oneline -25` et `git status` sur la branche courante.
+
+**Pourquoi cette section existe.** Constaté le 23/08/2026 : `WORKSPACE.md`
+désignait encore un handoff du 17/08 comme point de reprise, alors que six
+jours de travail et quatre documents plus récents existaient. Un agent suivant
+la chaîne documentée atterrissait à côté de l'état réel. Ce fichier étant lu
+en premier et nativement par Codex, le routage y appartient.
+
+**Règle de tenue.** Un document de reprise remplacé reçoit un marqueur
+`SUPERSEDED` en tête. Les pointeurs ci-dessus se mettent à jour dans le même
+commit que le document qu'ils désignent, jamais plus tard.
+
 ## Gouvernance et légèreté du dossier
 
 - Maintenir un seul livrable canonique courant par usage ; supprimer les brouillons remplacés, rendus de contrôle, caches, profils temporaires et copies de déploiement devenus reproductibles après validation.
