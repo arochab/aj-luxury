@@ -1,338 +1,56 @@
-/* eslint-disable @next/next/no-img-element -- médias client déjà optimisés : aucun runtime d'image à charger */
-
-import Link from "next/link";
-import type { CSSProperties } from "react";
-import Hero from "./components/Hero";
 import StoreFooter from "./components/StoreFooter";
 import StoreHeader from "./components/StoreHeader";
-import ClientCopyText from "./components/ClientCopyText";
-import LocalizedPrice from "./components/LocalizedPrice";
-import ApollonGuidedSequence from "./components/ApollonGuidedSequence";
-import HomeGsapExperience from "./components/HomeGsapExperience";
-import { T } from "../lib/i18n/TranslatedText";
-import { formatPrice, getProducts } from "../lib/products";
+import HomeExperienceV9, {
+  type HomeColorway,
+} from "./components/HomeExperienceV9";
+import { getProducts } from "../lib/products";
 import { getServerCommerceRuntimeMode } from "../lib/commerce/commerce-runtime.server";
-import { editorialMoodboardImages } from "../lib/editorial-moodboard";
-import styles from "./components/Accueil.module.css";
 
-/* ==========================================================================
-   Accueil — portage de _design-reference/claude-design-accueil.html
-   --------------------------------------------------------------------------
-   Quatre écrans portent le récit : #haut (le film), #plaque (le diptyque
-   Apollon), #coloris, #matiere. Deux clôtures les suivent, l'éditorial et la
-   signature, comme dans la maquette.
-
-   Ce que le portage change par rapport à la maquette, et pourquoi :
-     • la maquette simule le commerce (sélecteur de taille, bouton « Ajouter »,
-       formulaire de newsletter). Le vrai site a un vrai panier et de vraies
-       fiches produit : les cartes de coloris mènent aux fiches, la barre de
-       tailles devient une ligne de spécification, et le bouton devient un lien
-       vers la boutique. On n'imite pas un tunnel d'achat qui existe ailleurs ;
-     • l'en-tête et le pied restent StoreHeader / StoreFooter, qui portent la
-       navigation, le sélecteur de langue et le panier réels.
-
-   L'en-tête est le PREMIER ENFANT DIRECT de <main class="aj-home">, hors du
-   film et hors de HomeGsapExperience. Ce n'est pas cosmétique : `.aj-film`
-   porte `overflow: hidden`, et un tel ancêtre annule le `position: sticky` de
-   StoreChrome.module.css:35. Rendue dans le film, la barre sortait du champ
-   avec lui et l'utilisateur traversait ensuite ~11 hauteurs d'écran — #plaque,
-   #coloris, #matiere, éditorial, clôture — sans logo, sans menu et sans
-   panier, sur un site marchand. `.aj-home` porte `overflow-x: clip`, que
-   estDansUnConteneurDeDefilement() (StoreHeader.tsx:62) autorise
-   explicitement : la barre y colle, et sa dérobade au scroll reste câblée.
-   ========================================================================== */
-
-/** L'ordre de la maquette : rose, lilas, pourpre. */
-const ORDRE_COLORIS = ["rose-pale", "lilas-bleu-clair", "pourpre"] as const;
-
-/** Qui pose pour quelle image de la campagne. */
-const SIGNATURES: Record<string, string> = {
-  "portrait-left": "Jérémy",
-  duo: "Alex et Jérémy",
-  "portrait-right": "Alex",
-};
+const HOME_COLORWAYS = [
+  {
+    slug: "rose-pale",
+    nameKey: "sequence.color.rose",
+    descriptionKey: "product.description.rose-pale",
+    still: "/images/editorial/isabelle-apollon/apollon-rose-lyre-v1.webp",
+    worn: "/images/client/apollon-world/apollon-rose-model-color-v2.webp",
+  },
+  {
+    slug: "lilas-bleu-clair",
+    nameKey: "sequence.color.lilac",
+    descriptionKey: "product.description.lilas-bleu-clair",
+    still: "/images/editorial/isabelle-apollon/apollon-lilas-lyre-v1.webp",
+    worn: "/images/client/apollon-world/apollon-lilas-model-color-v2.webp",
+  },
+  {
+    slug: "pourpre",
+    nameKey: "sequence.color.purple",
+    descriptionKey: "product.description.pourpre",
+    still: "/images/editorial/isabelle-apollon/apollon-pourpre-lyre-v1.webp",
+    worn: "/images/client/apollon-world/apollon-pourpre-model-color-v2.webp",
+  },
+] as const;
 
 export default function Home() {
-  const produits = getProducts();
-  /* Lu ici pour la meme raison que sur la fiche : tant que la vente n'est pas
-     ouverte, aucun chiffre ne s'affiche sans sa qualification. */
-  const modeCommerce = getServerCommerceRuntimeMode();
-  /* Un seul prix pour les trois coloris — même lecture que app/shop/page.tsx:31. */
-  const prixCents = produits[0]?.priceCents ?? null;
-  /* Ce que la séquence guidée consomme, et rien de plus. `image`, `nom` et
-     `swatch` alimentaient la grille de trois cartes qui vient d'être retirée :
-     les garder ici laisserait croire que l'accueil rejoue encore le catalogue. */
-  const coloris = ORDRE_COLORIS.map((slug) => {
-    const produit = produits.find((item) => item.slug === slug) ?? produits[0];
+  const products = getProducts();
+  const commerceOpen = getServerCommerceRuntimeMode() === "production";
+
+  const colorways: HomeColorway[] = HOME_COLORWAYS.map((entry) => {
+    const product = products.find((candidate) => candidate.slug === entry.slug);
+    if (!product) {
+      throw new Error(`Missing homepage product: ${entry.slug}`);
+    }
+
     return {
-      slug: produit.slug,
-      tagline: produit.tagline,
-      prix: formatPrice(produit.priceCents),
+      ...entry,
+      priceCents: product.priceCents,
+      swatch: product.swatch,
     };
   });
 
   return (
-    <main className="aj-home">
+    <main className="aj-home aj-home-v9">
       <StoreHeader />
-
-      <HomeGsapExperience>
-        {/* ── 01 · Le film ─────────────────────────────────────────────── */}
-        <span id="accueil" aria-hidden="true" />
-        {/* ── 01 · Le premier écran ─────────────────────────────────────
-            Plus de section `.aj-film` : son décalage de recouvrement de la
-            barre collante vit désormais dans Hero.module.css, à côté de
-            l'écran qu'il concerne, au lieu d'un fichier global de 6100
-            lignes. */}
-        <Hero />
-
-        {/* ── LES COUTURES ────────────────────────────────────────────────
-            La règle tient en une phrase : le blanc d'une couture est la
-            teinte des hautes lumières de l'image qu'elle borde — moyenne RGB
-            des pixels au 95e percentile de luminance, relevée au navigateur
-            sur 400 px côté image, typo exclue — portée à la clarté L* = 93
-            avec une chromie plafonnée à 6, sur une bande pleine largeur de
-            hauteur constante `--couture-h`. Valeurs relevées le 21/08 à
-            1920x1080 (chaque jonction dans son état réel d'arrivée, mur
-            pourpre compris) : preuves et calcul dans
-            .playwright-mcp/chantier4-coutures-20260821/.
-            Deux exceptions, par la règle elle-même : l'intérieur de la
-            séquence épinglée (un effet de scroll n'est pas une jonction) et
-            clôture -> pied de page (aucune image ne borde la jonction). */}
-
-        {/* ── 02 · La plaque ───────────────────────────────────────────── */}
-        <span
-          aria-hidden="true"
-          className={styles.couture}
-          style={{ "--couture-blanc": "rgb(237, 234, 235)" } as CSSProperties}
-        />
-        <span id="apollon" aria-hidden="true" />
-        <ApollonGuidedSequence coloris={coloris} />
-
-        {/* ── 03 · Les coloris ─────────────────────────────────────────── */}
-        <span
-          aria-hidden="true"
-          className={styles.couture}
-          style={{ "--couture-blanc": "rgb(243, 233, 229)" } as CSSProperties}
-        />
-        <span id="collection" aria-hidden="true" />
-        <section
-          className={styles.coloris}
-          id="coloris"
-          aria-labelledby="aj-coloris-titre"
-        >
-          {/* ── LA GRILLE DE TROIS CARTES A ÉTÉ RETIRÉE ─────────────────
-              Elle montrait les trois coloris portés, leur nom, leur prix et
-              leur lien vers la fiche — c'est-à-dire, mot pour mot, ce que les
-              trois panneaux de la séquence guidée viennent de dire sur neuf
-              écrans. Mesuré au navigateur le 20/08 à 1920x1080, avant reprise :
-              la grille faisait 1905x948, soit 100 %vw et 87,8 %vh, avec des
-              cartes de 632x948 quand la prise de la séquence fait 687x1033. Le
-              bloc le plus générique de la page rendait donc le produit à 92 %
-              de la taille du geste central, et prenait plus de largeur d'écran
-              que lui.
-
-              Rien n'est perdu. Chaque panneau de la séquence porte le nom du
-              coloris, sa phrase, sa ligne « tagline · prix » et son lien
-              « Découvrir » vers `/products/<slug>` ; les onglets 01/02/03
-              donnent accès aux trois, et `/shop` reste à un clic ci-dessous.
-              Ce qui suit est ce que la séquence ne dit pas : la plage de
-              tailles, le prix seul, la composition, l'entrée en boutique.
-
-              « La collection » laissait entendre que la maison tient tout
-              entière dans cette grille. Le titre nomme maintenant le rang
-              d'Apollon. La clé home.apollonEyebrow existait déjà dans les cinq
-              langues et n'était câblée nulle part. */}
-          <h2 className="aj-sr-only" id="aj-coloris-titre">
-            <T id="home.apollonEyebrow" />
-          </h2>
-
-          {/* ── LE COLOPHON ────────────────────────────────────────────
-              CE BLOC ETAIT UN TABLEAU DE BORD. Trois statistiques sans rapport
-              sur une rangee, et le SEUL aplat opaque de la page : un bouton
-              blanc de 56 px de haut, de gabarit, qui n'existait nulle part
-              ailleurs dans le site.
-
-              Il disait aussi trois fois la meme chose en 900 px de haut :
-              « TAILLES S · M · L · XL », puis « 94 % Modal · 03 Coloris ·
-              S—XL Tailles », puis l'ecran matiere juste dessous qui pose
-              94 et 6 en chiffres de 70 px. La note recapitulative part donc
-              entierement : la composition appartient a l'ecran matiere, les
-              trois coloris viennent d'etre montres sur neuf ecrans, et la
-              plage de tailles se dit une fois, ici.
-
-              Restent trois faits, chacun dit une seule fois : ce que c'est et
-              combien, dans quelles tailles, et par ou entrer. Aucun cadre,
-              aucun aplat — le lien reprend la grammaire de filet du premier
-              ecran, qui est celle de tout le site. */}
-          <div className={styles.colorisPied}>
-            {/* LE SEUL CHIFFRE DE L'ACCUEIL NE PEUT PAS ETRE NU. Releve au
-                navigateur : la page affichait « APOLLON 29,99 € » sans qu'une
-                seule ligne, nulle part sur l'accueil, ne dise que la vente
-                n'est pas ouverte — alors que la boutique et la fiche le
-                disent toutes deux. Un chiffre isole se lit comme un prix de
-                vente. La cle existe deja dans les cinq langues. */}
-            <p className="aj-home__prix">
-              <span className="aj-home__prix-mention">
-                <T id="nav.apollon" />
-              </span>
-              <span className="aj-home__prix-chiffre">
-                <LocalizedPrice amountCents={prixCents} />
-              </span>
-              {modeCommerce !== "production" && (
-                <span className="aj-home__prix-etat">
-                  <T id="product.priceLabel" />
-                </span>
-              )}
-            </p>
-
-            {/* Ligne de specification, PAS un selecteur. Le choix de taille
-                appartient a la fiche produit, seul ecran qui connait le stock
-                par taille (ProductPurchase.tsx:38, availability resolue
-                serveur dans products/[slug]/page.tsx:57). Dessiner ici quatre
-                boutons inertes promettait une action qui n'existait pas. */}
-            <p className={styles.tailles}>
-              <span className={styles.taillesIntitule}>
-                <T id="home.sizes" />
-              </span>
-              <span className={styles.taillesPlage}>S · M · L · XL</span>
-            </p>
-
-            <Link className={styles.colorisAction} href="/shop">
-              <span className={styles.colorisActionMot}>
-                <T id="home.viewBoutique" />
-              </span>
-              <span aria-hidden="true">↗</span>
-            </Link>
-          </div>
-        </section>
-
-        {/* ── 04 · La matière ──────────────────────────────────────────── */}
-        <span
-          aria-hidden="true"
-          className={styles.couture}
-          style={{ "--couture-blanc": "rgb(246, 231, 231)" } as CSSProperties}
-        />
-        <section
-          className={styles.matiere}
-          id="matiere"
-          aria-labelledby="aj-matiere-titre"
-        >
-          <div className={styles.matiereCadre}>
-            <img
-              src="/images/client/product-pourpre-detail.webp"
-              alt="Ceinture premium de 3,5 cm, logo métallique AJ Luxury"
-              width={1731}
-              height={2600}
-              loading="lazy"
-              fetchPriority="low"
-              decoding="async"
-              sizes="(max-width: 760px) 100vw, 50vw"
-            />
-          </div>
-
-          <div className={styles.matiereTexte}>
-            <h2 className="aj-sr-only" id="aj-matiere-titre">
-              <T id="product.feature.2" />
-            </h2>
-            <p className={`aj-reveal ${styles.composition}`}>
-              <span className={styles.compositionChiffre}>94</span>
-              <span className={styles.compositionMot}>
-                <T id="home.materialModal" />
-              </span>
-              <span className={styles.compositionChiffre}>6</span>
-              <span className={styles.compositionMot}>
-                <T id="home.materialElastane" />
-              </span>
-            </p>
-            <p className={`aj-reveal ${styles.matiereEnonce}`}>
-              <T id="home.apollonStatement" />
-            </p>
-            <span className={`aj-reveal ${styles.matiereLabel}`}>
-              <T id="product.feature.5" />
-            </span>
-          </div>
-        </section>
-
-        {/* ── 05 · Éditorial ───────────────────────────────────────────── */}
-        <span
-          aria-hidden="true"
-          className={styles.couture}
-          style={{ "--couture-blanc": "rgb(245, 232, 229)" } as CSSProperties}
-        />
-        <section className={styles.editorial} aria-labelledby="aj-editorial-titre">
-          <h2 className="aj-sr-only" id="aj-editorial-titre">
-            <T id="home.incarnationEyebrow" />
-          </h2>
-          <div className={styles.editorialGrille}>
-            {editorialMoodboardImages.map((image) => (
-              <figure className={`aj-reveal ${styles.editorialFigure}`} key={image.src}>
-                <img
-                  src={image.src}
-                  alt={image.alt}
-                  width={image.width}
-                  height={image.height}
-                  loading="lazy"
-                  fetchPriority="low"
-                  decoding="async"
-                  sizes="(max-width: 760px) 100vw, 33vw"
-                />
-                <figcaption>{SIGNATURES[image.crop] ?? "AJ Luxury"}</figcaption>
-              </figure>
-            ))}
-          </div>
-        </section>
-
-        {/* ── 06 · Clôture ─────────────────────────────────────────────── */}
-        <span
-          aria-hidden="true"
-          className={styles.couture}
-          style={{ "--couture-blanc": "rgb(246, 231, 233)" } as CSSProperties}
-        />
-        <span id="histoire" aria-hidden="true" />
-        <section className={styles.cloture} aria-labelledby="aj-cloture-titre">
-          <div className={styles.clotureBloc}>
-            {/* story.quote est monté au premier écran : le garder ici en ferait
-                la même phrase dite deux fois, à deux corps proches, sur la même
-                page — et la clôture, arrivant après dix écrans, gagnerait contre
-                l'ouverture. La clôture prend donc l'énoncé de maison, story.lead,
-                qui existe déjà dans les cinq dictionnaires et qui ne redit ni la
-                phrase du haut ni le paragraphe d'en dessous (« Apollon ouvre la
-                collection »). */}
-            <h2
-              className={`aj-reveal aj-display ${styles.clotureTitre}`}
-              id="aj-cloture-titre"
-            >
-              <T id="story.lead" />
-            </h2>
-            {/* Ce paragraphe reprenait mot pour mot la phrase de clôture
-                juste au-dessus, enveloppée dans « Chez AJ Luxury, nous sommes
-                convaincus que » : la plus belle ligne du site était désamorcée
-                par sa propre redite. Il porte maintenant la seule information
-                que l'accueil ne donnait nulle part — le rang d'Apollon. C'est
-                une intention, pas un catalogue : rien n'y laisse croire qu'un
-                autre modèle est déjà achetable. */}
-            <p className={`aj-reveal ${styles.clotureTexte}`}>
-              <ClientCopyText copyKey="brandStory" />
-            </p>
-            {/* La boutique passe EN PREMIER et prend le rang principal : c'est
-                la seule action commerciale de la fin de page. Elle reprend le
-                libellé de `#coloris` — `/shop` était appelée « Voir toute la
-                boutique » là-haut et « Découvrir la collection » ici, deux
-                noms pour une même destination sur une même page. Un seul
-                libellé, donc une seule idée. Le récit reste accessible, en
-                second rang. */}
-            <div className={`aj-reveal ${styles.clotureActions}`}>
-              <Link href="/shop">
-                <T id="home.viewBoutique" />
-              </Link>
-              <Link href="/notre-histoire">
-                <T id="home.discoverStory" />
-              </Link>
-            </div>
-          </div>
-        </section>
-      </HomeGsapExperience>
-
+      <HomeExperienceV9 colorways={colorways} commerceOpen={commerceOpen} />
       <StoreFooter />
     </main>
   );

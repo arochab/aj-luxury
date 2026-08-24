@@ -182,6 +182,7 @@ export default function StoreHeader({
              `onUpdate` : lire une hauteur à chaque cran de défilement forcerait
              un calcul de mise en page par image. */
           let seuil = 140;
+          const toujoursVisible = pathname === "/";
           const mesurerSeuil = () => {
             const ancrage = document.querySelector("[data-aj-tete-seuil]");
             seuil =
@@ -197,7 +198,7 @@ export default function StoreHeader({
             cachee = false;
             gsap.to(tete, {
               yPercent: 0,
-              duration: 0.42,
+              duration: 0.24,
               ease: "power2.out",
               overwrite: true,
             });
@@ -208,7 +209,7 @@ export default function StoreHeader({
             cachee = true;
             gsap.to(tete, {
               yPercent: -100,
-              duration: 0.36,
+              duration: 0.2,
               ease: "power2.in",
               overwrite: true,
             });
@@ -226,7 +227,7 @@ export default function StoreHeader({
               const y = self.scroll();
               tete.classList.toggle(styles.headerPose, y > 8);
               if (!anime) return;
-              if (y <= seuil) {
+              if (toujoursVisible || y <= seuil) {
                 montrer();
                 return;
               }

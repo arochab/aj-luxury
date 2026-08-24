@@ -535,7 +535,7 @@
 
   .carteRevers,
   .carteReversFond {
-    transition: transform 0.86s var(--e1);
+    transition: transform 0.38s var(--e1);
   }
 
   .carteLien:hover .carteRevers,
@@ -566,7 +566,7 @@
      Ce qui sort du cadre sort toujours par le bas, jamais par le crâne. */
   object-position: center top;
   transform: scale(1);
-  transition: transform 1.1s var(--e1);
+  transition: transform 0.42s var(--e1);
   /* PAS de `will-change` ici. Il vivait sur le span wrapper de la version
      précédente ; posé sur l'<img> que next/image positionne en absolu, il la
      promeut dans sa propre couche de composition et la troisième carte est
@@ -593,7 +593,7 @@
   height: 2px;
   background: var(--bq-accent, var(--aj-encre));
   opacity: 0.55;
-  transition: opacity 700ms var(--e1);
+  transition: opacity 180ms var(--e1);
 }
 
 /* LA MÉTADONNÉE EST SOUS L'IMAGE, SUR LE SOL DE LA PAGE, JAMAIS DESSUS.

@@ -135,7 +135,7 @@ export function AjScrollReveal({ className, children }: AjScrollRevealProps) {
                 trigger: media,
                 start: "top bottom",
                 end: "bottom top",
-                scrub: 0.6,
+                scrub: true,
                 invalidateOnRefresh: true,
               },
             },

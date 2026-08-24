@@ -103,9 +103,9 @@
   /* --- Durées -----------------------------------------------------------
      Trois durées suffisent. Elles servent à l'ouverture et aux survols ; tout
      ce qui est piloté au scroll n'a pas de durée, il a un scrub. */
-  --aj-d-court: 0.75s; /* révélations, survols */
-  --aj-d-long: 1.15s; /* montée de la signature, volet, brillance */
-  --aj-d-ample: 2.6s; /* détente du sur-cadrage sur le film */
+  --aj-d-court: 0.18s; /* réponse directe des contrôles et survols */
+  --aj-d-long: 0.48s; /* révélations éditoriales sans attente perceptible */
+  --aj-d-ample: 0.9s; /* uniquement pour une entrée d'image au chargement */
 
   /* --- Gouttière et constantes de gabarit -------------------------------- */
   --gut: clamp(20px, 4vw, 68px);

@@ -198,6 +198,29 @@
   opacity: 0;
 }
 
+/* L'accueil v9 est de nouveau dans le flux : son premier écran commence sous
+   la barre, il ne faut donc plus laisser transparaître une image derrière le
+   chrome. Le sélecteur est volontairement borné à cette version pour ne pas
+   modifier l'ancien film conservé dans l'historique du dépôt. */
+:global(.aj-home.aj-home-v9) > .header,
+:global(.aj-home.aj-home-v9) > .header.headerPose {
+  --chrome-fond: var(--aj-header-fond);
+  background: var(--chrome-fond);
+  border-bottom-color: var(--chrome-filet);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  text-shadow: none;
+}
+
+:global(.aj-home.aj-home-v9) > .header::before,
+:global(.aj-home.aj-home-v9) > .header.headerPose::before {
+  opacity: 0;
+}
+
+:global(.aj-home.aj-home-v9) > .header .brandImage {
+  filter: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   :global(.aj-home) > .header,
   :global(.aj-home) > .header .brandImage {

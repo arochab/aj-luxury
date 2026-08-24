@@ -110,7 +110,7 @@ export default function NotreHistoirePage() {
                accessible reste celui des nœuds descendants, et des <span>
                génériques ne le fragmentent pas — un aria-label posé sur un
                paragraphe serait, lui, interdit par ARIA. */
-            const revelerLignes = (cible: HTMLElement | null, decalage = 0.085) => {
+            const revelerLignes = (cible: HTMLElement | null, decalage = 0.035) => {
               if (!cible) return;
               const coupe = new SplitText(cible, {
                 type: "lines",
@@ -122,7 +122,7 @@ export default function NotreHistoirePage() {
               coupes.push(coupe);
               gsap.from(coupe.lines, {
                 yPercent: 112,
-                duration: 1.05,
+                duration: 0.56,
                 stagger: decalage,
                 // expo.out est le built-in le plus proche de --e1
                 // cubic-bezier(.16, 1, .3, 1) : sortie longue, arrivée sèche.
@@ -138,14 +138,14 @@ export default function NotreHistoirePage() {
 
             const revelerBloc = (
               cibles: Array<HTMLElement | null>,
-              decalage = 0.1,
+              decalage = 0.05,
             ) => {
               const reels = cibles.filter((c): c is HTMLElement => Boolean(c));
               if (!reels.length) return;
               gsap.from(reels, {
                 opacity: 0,
                 yPercent: 14,
-                duration: 0.95,
+                duration: 0.48,
                 stagger: decalage,
                 ease: "expo.out",
                 scrollTrigger: {
@@ -181,7 +181,7 @@ export default function NotreHistoirePage() {
                     trigger: declencheur,
                     start: bornes.start,
                     end: bornes.end,
-                    scrub: 0.6,
+                    scrub: true,
                     invalidateOnRefresh: true,
                   },
                 },
@@ -226,9 +226,9 @@ export default function NotreHistoirePage() {
 
             // ── Le texte des chapitres ─────────────────────────────────────
             tous(styles.titreChapitre).forEach((titre) => revelerLignes(titre));
-            tous(`${styles.corps} > p`).forEach((p) => revelerLignes(p, 0.06));
+            tous(`${styles.corps} > p`).forEach((p) => revelerLignes(p, 0.025));
             revelerLignes(un(styles.titreDuo));
-            revelerLignes(un(styles.duoDeclaration), 0.05);
+            revelerLignes(un(styles.duoDeclaration), 0.025);
             // La signature suit la citation, jamais l'inverse : c'est une
             // attribution, elle n'a de sens qu'après la phrase.
             revelerBloc([un(styles.duoSignature)], 0);
@@ -241,7 +241,7 @@ export default function NotreHistoirePage() {
               gsap.from(portraits, {
                 opacity: 0,
                 yPercent: 7,
-                duration: 1.15,
+                duration: 0.62,
                 ease: "expo.out",
                 scrollTrigger: {
                   trigger: scene,
@@ -284,8 +284,8 @@ export default function NotreHistoirePage() {
               gsap.from(Array.from(chiffres.children), {
                 opacity: 0,
                 yPercent: 34,
-                duration: 0.95,
-                stagger: 0.07,
+                duration: 0.48,
+                stagger: 0.04,
                 ease: "expo.out",
                 scrollTrigger: {
                   trigger: chiffres,
@@ -296,12 +296,12 @@ export default function NotreHistoirePage() {
               });
             }
 
-            revelerBloc(tous(`${styles.finitions} > li`), 0.08);
+            revelerBloc(tous(`${styles.finitions} > li`), 0.04);
 
             // ── 04 · Clôture ───────────────────────────────────────────────
             // Le titre porte le métal : il se révèle en bloc, sans découpe.
             // Voir le commentaire de .clotureTitre dans Recit.module.css.
-            revelerBloc([un(styles.clotureTitre), un(styles.clotureAction)], 0.14);
+            revelerBloc([un(styles.clotureTitre), un(styles.clotureAction)], 0.06);
 
             return () => {
               coupes.forEach((coupe) => coupe.revert());

@@ -633,103 +633,52 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
   assert.match(html, /Pourpre Impérial/);
   assert.match(html, /Rose Velours/);
   assert.match(html, /Lilas Céleste/);
-  /* ── LE CONTRAT DU HERO v7 ────────────────────────────────────────────
-     Le premier ecran n'est plus une video mais une photographie vivante en
-     deux calques. Le contrat v6 verrouillait la mecanique de la video —
-     autoPlay, loop, poster, backdrop, stage, reflet metallique — et decrivait
-     donc un produit qui n'existe plus. Il est REECRIT sur ce que la v7 promet,
-     et ce qu'elle promet est plus fort : le geste de la maison est verifiable
-     dans le HTML rendu, pas seulement a l'oeil. */
-  assert.match(html, /data-hero-version="v8"/);
-  assert.doesNotMatch(html, /hero-v6-|hero-v7-|data-hero-version="video-v[67]"/);
-
-  /* LA PROVENANCE DES VISAGES, VERIFIEE DANS LE HTML RENDU. Adam a refuse le
-     21/08 les masters issus d'un modele generatif : les visages y etaient
-     deformes. Le premier ecran ne doit donc servir QUE la decoupe faite a
-     partir de la photographie de studio validee. */
-  assert.ok(html.includes("hero-figures.avif?v=v8"), "hero-figures.avif manquant");
-  assert.ok(html.includes("hero-figures.webp?v=v8"), "hero-figures.webp manquant");
-
-  /* L'ORDRE DES CALQUES. C'est l'invariant central du bureau : le metal est
-     le monde, le mot passe ENTRE, les corps se posent par-dessus. Inverser
-     metal et corps mettrait le champ anime DEVANT les modeles ; passer le mot
-     apres les corps lui ferait perdre sa seule idee. */
-  const marque = html.indexOf('id="aj-hero-marque"');
-  const figures = html.indexOf("hero-figures.avif");
-  assert.ok(
-    marque > -1 && figures > marque,
-    "l'ordre du hero doit rester metal -> mot-marque -> corps decoupes",
-  );
-
-  /* L'ordre des <source> suit le poids MESURE : sur cette decoupe AVIF bat
-     WebP (195 Ko contre 289). Se tromper d'ordre coute le surpoids a chaque
-     visite, silencieusement. */
-  const bloc = html.slice(figures - 200, figures + 600);
-  assert.ok(
-    bloc.indexOf("hero-figures.avif") < bloc.indexOf("hero-figures.webp"),
-    "la decoupe doit proposer AVIF avant WebP : il est plus leger",
-  );
-
-  /* Les corps SONT le LCP : plus de photographie de fond, donc plus rien
-     d'autre a prioriser. */
+  /* ── LE CONTRAT DE L'ACCUEIL v9 ───────────────────────────────────────
+     Le hero n'est plus une démonstration WebGL ni un plan épinglé. Il doit
+     rendre immédiatement une hiérarchie lisible et la photographie de studio
+     existante, sans dérivé ni calque généré. Ce contrat verrouille la sortie
+     réellement servie, pas une mécanique d'animation interne. */
+  assert.match(html, /<main class="aj-home aj-home-v9">/);
+  assert.match(html, /id="home-hero-title"/);
+  assert.match(html, /Reveal Your[\s\S]*Inner[\s\S]*Beauty/);
   assert.match(
     html,
-    /hero-figures\.webp\?v=v8"[^>]*decoding="sync"[^>]*fetchPriority="high"/,
+    /campagne-duo-lilas-master\.jpg"[^>]*fetchPriority="high"[^>]*decoding="async"/,
+  );
+  assert.match(html, /campagne-duo-lilas-master\.jpg" alt="AJ Luxury —/);
+  assert.match(
+    html,
+    /<link rel="preload" as="image" href="\/images\/client\/campagne-duo-lilas-master\.jpg" fetchPriority="high"/,
+  );
+  assert.equal(
+    (html.match(/campagne-duo-lilas-master\.jpg/g) ?? []).length,
+    2,
+    "le master doit apparaître une fois dans le preload et une fois dans l'image",
   );
 
-  /* Et ils portent la description de la photographie, une seule fois : il n'y
-     a plus de calque de fond pour la porter a leur place. */
-  assert.match(html, /hero-figures\.webp\?v=v8" alt="AJ Luxury —/);
-
-  /* LE MOT-MARQUE EST LE LOGO LUI-MEME, ET IL EST LE h1.
-     Adam, 21/08 : « reprends exactement le logo, pas juste la typo ». Le
-     premier essai reconstruisait le lettrage en Manrope a l'interlettrage
-     releve sur le fichier ; c'etait fidele a la typographie et ca restait un
-     pastiche, puisque le monogramme AJ est un dessin et non de la type.
-     Le nom de la maison est porte une seule fois, par le texte alternatif. */
-  assert.match(html, /<h1 class="[^"]*" id="aj-hero-marque">/);
-  assert.match(html, /alt="AJ Luxury"/);
-  assert.doesNotMatch(html, /aj-metal[^"]*">AJ Luxury</);
-
-  /* C'EST LE MEME FICHIER QUE CELUI DE LA BARRE. C'est ce qui fait de
-     l'atterrissage un vrai changement d'echelle et non un fondu entre deux
-     objets differents. Si un jour les deux divergent, le vol devient un
-     remplacement visible : le test le dira. */
-  const logoBarre = html.indexOf('data-aj-marque="entete"');
-  assert.ok(logoBarre > -1, "le point d'accroche du logo de barre a disparu");
-  assert.ok(
-    (html.match(/aj-luxury-logo\.webp/g) ?? []).length >= 2,
-    "le hero et la barre doivent servir le MEME fichier de logo",
-  );
-
-  /* La barre reste posee tant que le premier ecran est la : le grand logo ne
-     peut pas atterrir sur une barre qui vient de se derober. */
-  assert.match(html, /data-aj-tete-seuil/);
-
-  /* Le rapport de la decoupe est pose en variable CSS : le navigateur reserve
-     la place exacte des corps avant decodage, donc aucun saut de mise en page. */
-  assert.match(html, /--aj-hero-figures-ratio:0\.6/);
-
-  /* Plus une seule video sur l'accueil, donc plus de bouton pour la figer. */
-  assert.doesNotMatch(html, /<video/);
-  assert.doesNotMatch(html, /Figer le métal/);
+  /* Aucun vestige du film remplacé ne doit repasser dans le bundle rendu. */
+  assert.doesNotMatch(html, /data-hero-version|hero-figures|hero-v[67]-/);
+  assert.doesNotMatch(html, /data-metallic-mounted|metallic-field__canvas/);
+  assert.doesNotMatch(html, /<video|Figer le métal/);
   assert.doesNotMatch(html, /aj-film__hero-|aj-film__living-duo|aj-film__liquid-overlay/);
 
-  /* LE METAL LIQUIDE. Un champ, et un seul : le MONDE du hero, plein cadre.
-     Il doit arriver NON MONTE dans le HTML serveur — le WebGL ne se cree qu'a
-     l'intersection, donc il ne peut peser ni sur le premier rendu ni sur le
-     LCP. */
-  assert.equal((html.match(/data-metallic-mounted="false"/g) ?? []).length, 1);
-  assert.doesNotMatch(html, /class="metallic-field__canvas"/);
-  /* Il est decoratif et vit ENTRE le fond et les corps : jamais au-dessus des
-     modeles, jamais annonce a un lecteur d'ecran. */
-  const metal = html.indexOf('data-metallic-mounted="false"');
-  assert.ok(
-    metal > -1 && metal < marque && marque < figures,
-    "le champ metallique doit rester DERRIERE le mot-marque et les corps",
+  /* Le logo de barre reste la seule image de marque : aucun doublon animé ne
+     vient s'y superposer, et le header conserve son point d'accroche stable. */
+  assert.match(html, /data-aj-marque="entete"/);
+  assert.equal(
+    (html.match(/aj-luxury-logo\.webp/g) ?? []).length,
+    2,
+    "le logo doit apparaître une fois dans le preload et une fois dans le header",
   );
-  assert.doesNotMatch(html, /hero-identity-overlay-/);
-  assert.doesNotMatch(html, /images\/client\/hero-duo-(?:static|cutout)/);
+  assert.match(html, /data-aj-tete-seuil/);
+
+  /* Les coloris sont de vrais onglets : l'état actif, le panneau associé et
+     l'accès direct au produit sont présents dès le rendu serveur. */
+  assert.match(html, /role="tablist"/);
+  assert.equal((html.match(/role="tab"/g) ?? []).length, 3);
+  assert.equal((html.match(/aria-selected="true"/g) ?? []).length, 1);
+  assert.match(html, /role="tabpanel"/);
+  assert.match(html, /href="\/products\/lilas-bleu-clair"/);
 
   assert.match(html, /href="\/"[^>]*aria-current="page"[^>]*>Accueil</);
   assert.match(html, />Notre histoire</);
@@ -737,7 +686,11 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
      toute la boutique » dans #coloris et « Decouvrir la collection » en
      cloture : deux noms pour une meme destination, sur un meme ecran. Le test
      verrouille l'unicite, pas la formule. */
-  assert.match(html, /href="\/shop"[^>]*>Voir toute la boutique</);
+  assert.equal(
+    (html.match(/href="\/shop"[^>]*><span>Voir toute la boutique<\/span>/g) ?? [])
+      .length,
+    2,
+  );
   assert.doesNotMatch(html, /Découvrir la collection/);
   assert.match(html, /94\s*%[\s\S]*modal/i);
   assert.match(html, /6\s*%[\s\S]*élasthanne/i);
