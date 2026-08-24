@@ -102,6 +102,7 @@ export default function StoreHeader({
   const ouvertureMenu = useRef<{ play: () => void; reverse: () => void } | null>(
     null,
   );
+  const boutonMenu = useRef<HTMLButtonElement>(null);
   const menuId = useId();
 
   const basculerMenu = useCallback(() => {
@@ -139,7 +140,10 @@ export default function StoreHeader({
   useEffect(() => {
     if (!menuOuvert) return;
     const surTouche = (evenement: KeyboardEvent) => {
-      if (evenement.key === "Escape") setMenuOuvert(false);
+      if (evenement.key === "Escape") {
+        setMenuOuvert(false);
+        requestAnimationFrame(() => boutonMenu.current?.focus());
+      }
     };
     document.addEventListener("keydown", surTouche);
     return () => document.removeEventListener("keydown", surTouche);
@@ -158,7 +162,7 @@ export default function StoreHeader({
           reduit: "(prefers-reduced-motion: reduce)",
           // Le menu n'existe qu'ici : c'est la seule taille où le panneau est
           // un panneau et non six cibles alignées dans la barre.
-          etroit: "(max-width: 560px)",
+          etroit: "(max-width: 760px)",
         },
         (contexte) => {
           const { anime, etroit } = contexte.conditions as {
@@ -263,28 +267,13 @@ export default function StoreHeader({
               `.${styles.menuPanneau}`,
             );
             if (panneau && anime) {
-              const cibles = panneau.querySelectorAll<HTMLElement>(
-                "a, select, label",
-              );
               const partition = gsap
                 .timeline({ paused: true })
                 .fromTo(
                   panneau,
-                  { autoAlpha: 0, y: -14 },
-                  { autoAlpha: 1, y: 0, duration: 0.44, ease: "expo.out" },
+                  { autoAlpha: 0 },
+                  { autoAlpha: 1, duration: 0.32, ease: "power2.out" },
                   0,
-                )
-                .fromTo(
-                  cibles,
-                  { autoAlpha: 0, y: 18 },
-                  {
-                    autoAlpha: 1,
-                    y: 0,
-                    duration: 0.52,
-                    ease: "expo.out",
-                    stagger: 0.045,
-                  },
-                  0.08,
                 );
               ouvertureMenu.current = partition;
               // La visibilité appartient désormais à GSAP, pas au CSS.
@@ -345,6 +334,7 @@ export default function StoreHeader({
       </Link>
 
       <button
+        ref={boutonMenu}
         type="button"
         className={styles.menuBouton}
         aria-controls={menuId}

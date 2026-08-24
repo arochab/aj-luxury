@@ -2511,11 +2511,13 @@ function withSecurityHeaders(
   response: Response,
   pathname: string,
   environment: string | undefined,
+  allowLocalPreviewFrame = false,
 ): Response {
   const headers = new Headers(response.headers);
   headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
   headers.set("X-Content-Type-Options", "nosniff");
-  headers.set("X-Frame-Options", "DENY");
+  if (allowLocalPreviewFrame) headers.delete("X-Frame-Options");
+  else headers.set("X-Frame-Options", "DENY");
   headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()");
   headers.set("Cross-Origin-Opener-Policy", "same-origin");
   if (environment === "production") {
@@ -2941,6 +2943,9 @@ const worker = {
       await serveApplication(request, env, ctx),
       url.pathname,
       env?.APP_ENV,
+      (env === undefined || env.APP_ENV === undefined) &&
+        (url.hostname === "localhost" || url.hostname === "127.0.0.1") &&
+          url.searchParams.get("frontend-design") === "round-4",
     );
   },
 };

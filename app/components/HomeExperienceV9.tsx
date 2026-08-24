@@ -5,15 +5,20 @@
 
 import Link from "next/link";
 import {
+  useEffect,
   useState,
   type CSSProperties,
   type KeyboardEvent,
-  type MouseEvent,
 } from "react";
 import type { TranslationKey } from "../../lib/i18n/dictionaries";
 import { useI18n } from "../../lib/i18n/I18nProvider";
 import LocalizedPrice from "./LocalizedPrice";
 import ClientCopyText from "./ClientCopyText";
+import {
+  HOME_V9_ANATOMY,
+  HOME_V9_ASSETS,
+  HOME_V9_COPY,
+} from "./HomeExperienceV9.content";
 import styles from "./HomeExperienceV9.module.css";
 
 export type HomeColorway = {
@@ -47,19 +52,32 @@ function ArrowIcon({ direction = "right" }: { direction?: "right" | "down" }) {
 
 export default function HomeExperienceV9({ colorways, commerceOpen }: Props) {
   const { t } = useI18n();
-  const [activeIndex, setActiveIndex] = useState(1);
+  const [activeIndex, setActiveIndex] = useState(() => {
+    const pourpreIndex = colorways.findIndex(
+      (colorway) => colorway.slug === HOME_V9_COPY.productSlug,
+    );
+    return pourpreIndex >= 0 ? pourpreIndex : 0;
+  });
   const active = colorways[activeIndex] ?? colorways[0];
+
+  useEffect(() => {
+    if (
+      window.self === window.top ||
+      new URLSearchParams(window.location.search).get("frontend-design") !==
+        "round-4"
+    ) {
+      return;
+    }
+    window.parent.postMessage(
+      { round: "round-4", type: "aj-luxury-preview-ready" },
+      "*",
+    );
+  }, []);
 
   if (!active) return null;
 
-  const moveToApollon = (event: MouseEvent<HTMLAnchorElement>) => {
-    const section = document.getElementById("apollon");
-    if (!section) return;
-    event.preventDefault();
-    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    section.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "start" });
-    window.history.replaceState(null, "", "#apollon");
-  };
+  const heroProduct =
+    colorways.find((colorway) => colorway.slug === "pourpre") ?? active;
 
   const moveBetweenColorways = (
     event: KeyboardEvent<HTMLButtonElement>,
@@ -84,46 +102,56 @@ export default function HomeExperienceV9({ colorways, commerceOpen }: Props) {
       <section
         className={styles.hero}
         data-aj-tete-seuil=""
+        data-fd-id={HOME_V9_ANATOMY[0]}
         aria-labelledby="home-hero-title"
       >
         <div className={styles.heroCopy}>
-          <h1 className={styles.heroTitle} id="home-hero-title">
-            <span>Reveal Your</span>
+          <h1
+            className={styles.heroTitle}
+            data-fd-editable="text"
+            data-fd-id="text-hero-title"
+            id="home-hero-title"
+          >
+            <span>{HOME_V9_COPY.heroLineOne}</span>
             <span>
-              Inner <em>Beauty</em>
+              {HOME_V9_COPY.heroLineTwoLead}{" "}
+              <em>{HOME_V9_COPY.heroLineTwoAccent}</em>
             </span>
           </h1>
-          <p className={styles.heroModel}>{t("home.apollonEyebrow")}</p>
-          <a className={styles.textLink} href="#apollon" onClick={moveToApollon}>
-            <span>{t("hero.discover")} Apollon</span>
-            <ArrowIcon direction="down" />
-          </a>
+          <div className={styles.heroOffer} data-fd-id="offer-hero-apollon">
+            <p className={styles.heroModel}>{t("home.apollonEyebrow")}</p>
+            <p className={styles.heroPrice}>
+              <LocalizedPrice amountCents={heroProduct.priceCents} />
+            </p>
+            {!commerceOpen && (
+              <p className={styles.heroSaleState}>{t("product.priceLabel")}</p>
+            )}
+            <Link
+              className={`${styles.textLink} ${styles.heroCta}`}
+              data-fd-id="btn-hero-apollon"
+              href="/products/pourpre"
+            >
+              <span>{t("shop.discover")} Apollon</span>
+              <ArrowIcon />
+            </Link>
+          </div>
         </div>
 
         <figure className={styles.heroMedia}>
-          <picture>
-            <source
-              media="(max-width: 720px)"
-              srcSet="/images/client/hero-v6-portrait-720x934-poster.webp"
-            />
-            <source
-              media="(max-width: 1100px)"
-              srcSet="/images/client/hero-v6-tablet-1440x810-poster.webp"
-            />
-            <img
-              src="/images/client/hero-v6-xl-native-1920x1080-poster.webp"
-              alt="AJ Luxury — Alex et Jérémy portent Apollon Lilas Céleste dans le décor architectural de la maison"
-              width={1920}
-              height={1080}
-              fetchPriority="high"
-              decoding="async"
-            />
-          </picture>
+          <img
+            src={HOME_V9_ASSETS.hero}
+            alt="AJ Luxury — détail d’Apollon Pourpre Impérial"
+            width={1731}
+            height={2600}
+            fetchPriority="high"
+            decoding="async"
+          />
         </figure>
       </section>
 
       <section
         className={styles.colorways}
+        data-fd-id={HOME_V9_ANATOMY[1]}
         id="apollon"
         aria-labelledby="home-apollon-title"
       >
@@ -188,6 +216,7 @@ export default function HomeExperienceV9({ colorways, commerceOpen }: Props) {
 
         <div
           className={styles.colorwayMedia}
+          data-fd-id="media-colorway-active"
           key={active.slug}
           style={{ "--media-position": active.position } as CSSProperties}
         >
@@ -204,26 +233,24 @@ export default function HomeExperienceV9({ colorways, commerceOpen }: Props) {
         </div>
       </section>
 
-      <section className={styles.material} aria-labelledby="home-material-title">
+      <section
+        className={styles.material}
+        data-fd-id={HOME_V9_ANATOMY[2]}
+        aria-labelledby="home-material-title"
+      >
         <figure className={styles.materialMedia}>
           <img
-            src="/images/client/raw/product-rose-detail.webp"
+            src={HOME_V9_ASSETS.material}
             alt={t("product.feature.5")}
             width={2000}
             height={1331}
-            loading="lazy"
+            loading="eager"
             decoding="async"
           />
         </figure>
         <div className={styles.materialCopy}>
-          <h2 id="home-material-title">{t("home.apollonEyebrow")}</h2>
-          <div className={styles.materialPrice}>
-            <LocalizedPrice amountCents={colorways[0]?.priceCents ?? null} />
-            {!commerceOpen && <span>{t("product.priceLabel")}</span>}
-          </div>
-          <p className={styles.materialSizes}>
-            {t("home.sizes")} — S · M · L · XL
-          </p>
+          <p className={styles.materialLabel}>Apollon · Rose Velours</p>
+          <h2 id="home-material-title">{t("product.feature.5")}</h2>
           <dl className={styles.composition}>
             <div>
               <dt>94 %</dt>
@@ -233,10 +260,6 @@ export default function HomeExperienceV9({ colorways, commerceOpen }: Props) {
               <dt>6 %</dt>
               <dd>{t("home.materialElastane")}</dd>
             </div>
-            <div>
-              <dt className={styles.compositionText}>3,5 cm</dt>
-              <dd>{t("product.feature.5")}</dd>
-            </div>
           </dl>
           <Link className={styles.textLink} href="/shop">
             <span>{t("home.viewBoutique")}</span>
@@ -245,36 +268,53 @@ export default function HomeExperienceV9({ colorways, commerceOpen }: Props) {
         </div>
       </section>
 
-      <section className={styles.editorial} aria-labelledby="home-editorial-title">
-        <div className={styles.editorialCopy}>
-          <p className={styles.editorialLabel}>{t("home.incarnationEyebrow")}</p>
-          <h2 id="home-editorial-title">{t("story.lead")}</h2>
-          <p className={styles.editorialStatement}>
-            <ClientCopyText copyKey="brandStory" />
-          </p>
-          <div className={styles.editorialLinks}>
-            <Link className={styles.textLink} href="/shop">
+      <section
+        className={styles.campaignClosing}
+        data-fd-id={HOME_V9_ANATOMY[3]}
+        aria-labelledby="home-closing-title"
+      >
+        <figure
+          className={styles.campaignMedia}
+          data-fd-id="media-campaign-lilac"
+        >
+          <picture>
+            <source
+              media="(max-width: 760px)"
+              srcSet={HOME_V9_ASSETS.campaign.mobile}
+            />
+            <source
+              media="(max-width: 1100px)"
+              srcSet={HOME_V9_ASSETS.campaign.tablet}
+            />
+            <img
+              src={HOME_V9_ASSETS.campaign.desktop}
+              alt="AJ Luxury — Alex et Jérémy portent Apollon Lilas Céleste"
+              width={1484}
+              height={2229}
+              loading="eager"
+              decoding="async"
+            />
+          </picture>
+        </figure>
+        <div className={styles.closingCopy}>
+          <p className={styles.closingLabel}>Apollon · Lilas Céleste</p>
+          <h2
+            data-fd-editable="text"
+            data-fd-id="text-closing-apollon"
+            id="home-closing-title"
+          >
+            <ClientCopyText copyKey={HOME_V9_COPY.closingCopyKey} />
+          </h2>
+          <div className={styles.closingLinks}>
+            <Link
+              className={styles.textLink}
+              data-fd-id="btn-closing-shop"
+              href="/shop"
+            >
               <span>{t("home.viewBoutique")}</span>
               <ArrowIcon />
             </Link>
-            <Link className={styles.textLink} href="/notre-histoire">
-              <span>{t("home.discoverStory")}</span>
-              <ArrowIcon />
-            </Link>
           </div>
-        </div>
-
-        <div className={styles.editorialMedia}>
-          <figure className={styles.editorialMain}>
-            <img
-              src="/images/client/campaign-duo-pourpre.webp"
-              alt="AJ Luxury — Alex et Jérémy portent Apollon Pourpre Impérial"
-              width={2000}
-              height={1882}
-              loading="lazy"
-              decoding="async"
-            />
-          </figure>
         </div>
       </section>
     </div>

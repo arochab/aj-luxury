@@ -204,11 +204,11 @@
    modifier l'ancien film conservé dans l'historique du dépôt. */
 :global(.aj-home.aj-home-v9) > .header,
 :global(.aj-home.aj-home-v9) > .header.headerPose {
-  --chrome-fond: var(--aj-header-fond);
+  --chrome-fond: #08080a;
   background: var(--chrome-fond);
   border-bottom-color: var(--chrome-filet);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   text-shadow: none;
 }
 
@@ -671,7 +671,13 @@
   display: none;
 }
 
-@media (max-width: 560px) {
+@media (max-width: 760px) {
+  :global(.aj-home.aj-home-v9) > .header,
+  :global(.aj-home.aj-home-v9) > .header.headerPose {
+    top: 0;
+    transform: none !important;
+  }
+
   .header {
     /* Deux colonnes, une rangée : la marque, puis le bouton. Plus de filet
        intérieur, plus de seconde rangée. */
@@ -719,7 +725,7 @@
     height: 1px;
     background: currentColor;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.62);
-    transition: transform var(--aj-d-court) var(--e1);
+    transition: none;
   }
 
   .menuSigne::after {
@@ -735,9 +741,7 @@
     height: 1px;
     background: currentColor;
     box-shadow: inherit;
-    transition:
-      width var(--aj-d-court) var(--e1),
-      transform var(--aj-d-court) var(--e1);
+    transition: none;
   }
 
   /* ── LE SIGNE DEVIENT UNE CROIX ────────────────────────────────────

@@ -55,13 +55,15 @@ test("the homepage is a direct editorial document, not a scroll-controlled film"
   assert.doesNotMatch(page, /<ApollonGuidedSequence/);
   assert.doesNotMatch(experience, /gsap|ScrollTrigger|WebGL|MetallicField/);
   assert.doesNotMatch(css, /position:\s*sticky|100svh\s*\*/);
+  assert.doesNotMatch(css, /heroCopyIn|\.heroCopy[^}]*animation/s);
+  assert.doesNotMatch(css, /\.heroCopy[^}]*opacity:\s*0/s);
+  assert.match(css, /\.heroMedia img[^}]*animation:\s*heroMediaIn/s);
   assert.match(css, /min-height: calc\(100svh - var\(--aj-tete-h\)\)/);
 
   assert.match(experience, /role="tablist"/);
   assert.match(experience, /role="tabpanel"/);
   assert.match(experience, /ArrowRight/);
   assert.match(experience, /ArrowLeft/);
-  assert.match(experience, /prefers-reduced-motion: reduce/);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
 });
 
@@ -71,17 +73,41 @@ test("the redesigned homepage only references retained repository assets", async
     projectFile("app/components/HomeExperienceV9.tsx"),
     "utf8",
   );
-  const sources = [...`${page}\n${experience}`.matchAll(/(?:srcSet|src|image)\s*(?:=|:)\s*["'](\/images\/[^"']+)["']/g)]
+  const content = await readFile(
+    projectFile("app/components/HomeExperienceV9.content.ts"),
+    "utf8",
+  );
+  const homepageSources = `${page}\n${experience}\n${content}`;
+  const sources = [...homepageSources.matchAll(/(?:srcSet|src|image|hero|material|mobile|tablet|desktop)\s*(?:=|:)\s*["'](\/images\/[^"']+)["']/g)]
     .map((match) => match[1]);
 
-  assert.ok(sources.length >= 8, `expected retained visual sources, got ${sources.length}`);
+  const whitelist = [
+    "/images/client/campagne-duo-1100.webp",
+    "/images/client/campagne-duo-1484.webp",
+    "/images/client/campagne-duo-760.webp",
+    "/images/client/editorial-lilas-chair.webp",
+    "/images/client/editorial-pourpre-chair.webp",
+    "/images/client/editorial-rose-profile.webp",
+    "/images/client/raw/product-pourpre-detail.webp",
+    "/images/client/raw/product-rose-detail.webp",
+  ];
+
+  assert.deepEqual([...new Set(sources)].sort(), whitelist);
   assert.equal(new Set(sources).size, sources.length, "homepage visual sources must not be duplicated");
 
   for (const source of sources) {
     await access(projectFile(`public${source}`));
   }
 
-  assert.doesNotMatch(`${page}\n${experience}`, /generated_images|concept|placeholder-v1/);
+  assert.doesNotMatch(
+    homepageSources,
+    /generated_images|concept|placeholder-v1|hero-figures|identity-overlay|hero-v[67]-|apollon-world|editorial\/isabelle-apollon|campaign-duo-lilas-seated|campagne-duo-lilas-master|product-lilas-model|<video/i,
+  );
+  assert.equal(
+    (homepageSources.match(/\/images\/client\/raw\/product-pourpre-detail\.webp/g) ?? []).length,
+    1,
+    "the revised hero whitelist must use the exact retained Pourpre detail once",
+  );
 });
 
 test("homepage controls answer quickly and scroll-linked product motion has no lag", async () => {
@@ -94,10 +120,35 @@ test("homepage controls answer quickly and scroll-linked product motion has no l
     projectFile("app/components/ProductGalleryZoom.tsx"),
     "utf8",
   );
+  const storeHeader = await readFile(
+    projectFile("app/components/StoreHeader.tsx"),
+    "utf8",
+  );
+  const storeChrome = await readFile(
+    projectFile("app/components/StoreChrome.module.css"),
+    "utf8",
+  );
+  const worker = await readFile(projectFile("worker/index.ts"), "utf8");
+  const menuTimeline = storeHeader.match(
+    /const partition = gsap[\s\S]*?ouvertureMenu\.current = partition;/,
+  )?.[0] ?? "";
 
   assert.match(designSystem, /--aj-d-court:\s*0\.18s/);
   assert.match(homepageCss, /transition:[^;]*180ms/);
   assert.doesNotMatch(homepageCss, /transition:[^;]*(?:7\d{2,}|[1-9]\d{3,})ms/);
+  assert.doesNotMatch(storeHeader, /stagger:/);
+  assert.match(storeHeader, /duration:\s*0\.32/);
+  assert.doesNotMatch(storeHeader, /duration:\s*(?:0\.[6-9]|[1-9])/);
+  assert.match(menuTimeline, /autoAlpha:\s*0[\s\S]*autoAlpha:\s*1[\s\S]*duration:\s*0\.32/);
+  assert.doesNotMatch(menuTimeline, /stagger:|\b(?:x|y|xPercent|yPercent|scale|transform):/);
+  assert.match(storeHeader, /requestAnimationFrame\(\(\) => boutonMenu\.current\?\.focus\(\)\)/);
+  assert.match(storeChrome, /@media \(max-width: 760px\)/);
+  assert.match(storeChrome, /\.menuSigne[\s\S]*?transition:\s*none/);
+  assert.match(storeChrome, /\.menuBouton[\s\S]*?min-width:\s*44px[\s\S]*?min-height:\s*44px/);
+  assert.match(storeChrome, /\.menuPanneau \.navLink,[\s\S]*?min-height:\s*44px/);
+  assert.match(storeChrome, /\.aj-home\.aj-home-v9[\s\S]*?transform:\s*none\s*!important/);
+  assert.match(worker, /if \(allowLocalPreviewFrame\) headers\.delete\("X-Frame-Options"\)/);
+  assert.match(worker, /env === undefined \|\| env\.APP_ENV === undefined[\s\S]*url\.hostname === "localhost"[\s\S]*frontend-design[\s\S]*round-4/);
   assert.match(gallery, /scrub: true/);
   assert.doesNotMatch(gallery, /scrub:\s*0\.[1-9]/);
 });

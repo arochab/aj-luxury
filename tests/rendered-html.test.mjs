@@ -643,19 +643,30 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
   assert.match(html, /Reveal Your[\s\S]*Inner[\s\S]*Beauty/);
   assert.match(
     html,
-    /hero-v6-xl-native-1920x1080-poster\.webp"[^>]*fetchPriority="high"[^>]*decoding="async"/,
+    /product-pourpre-detail\.webp"[^>]*fetchPriority="high"[^>]*decoding="async"/,
   );
-  assert.match(html, /hero-v6-xl-native-1920x1080-poster\.webp" alt="AJ Luxury —/);
-  assert.match(html, /hero-v6-portrait-720x934-poster\.webp/);
-  assert.match(html, /hero-v6-tablet-1440x810-poster\.webp/);
+  assert.match(html, /product-pourpre-detail\.webp" alt="AJ Luxury — détail d’Apollon Pourpre Impérial"/);
   assert.equal(
-    (html.match(/hero-v6-xl-native-1920x1080-poster\.webp/g) ?? []).length,
-    1,
-    "le poster desktop ne doit être rendu qu'une fois dans l'image prioritaire",
+    (html.match(/product-pourpre-detail\.webp/g) ?? []).length,
+    2,
+    "le détail Pourpre doit apparaître une fois dans le preload et une fois dans l’image prioritaire",
   );
+  assert.doesNotMatch(html, /campaign-duo-pourpre\.webp|hero-pourpre-model\.webp/);
+  assert.match(html, /campagne-duo-760\.webp/);
+  assert.match(html, /campagne-duo-1100\.webp/);
+  assert.match(html, /campagne-duo-1484\.webp/);
+  assert.match(html, /product-rose-detail\.webp"[^>]*loading="eager"/);
+  assert.match(html, /Apollon · Rose Velours/);
+  assert.match(html, /Apollon · Lilas Céleste/);
+  assert.match(html, /href="\/products\/pourpre"/);
+  assert.match(html, /29,99(?:\s| |&nbsp;)€/);
+  assert.match(html, /Découvrir[\s\S]*Apollon/);
 
   /* Aucun vestige du film remplacé ne doit repasser dans le bundle rendu. */
-  assert.doesNotMatch(html, /data-hero-version|hero-figures|hero-v7-/);
+  assert.doesNotMatch(
+    html,
+    /data-hero-version|hero-figures|identity-overlay|hero-v[67]-|apollon-world|editorial\/isabelle-apollon|placeholder-v1|campaign-duo-lilas-seated|campagne-duo-lilas-master|product-lilas-model/,
+  );
   assert.doesNotMatch(html, /data-metallic-mounted|metallic-field__canvas/);
   assert.doesNotMatch(html, /<video|Figer le métal/);
   assert.doesNotMatch(html, /aj-film__hero-|aj-film__living-duo|aj-film__liquid-overlay/);
@@ -676,7 +687,11 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
   assert.equal((html.match(/role="tab"/g) ?? []).length, 3);
   assert.equal((html.match(/aria-selected="true"/g) ?? []).length, 1);
   assert.match(html, /role="tabpanel"/);
-  assert.match(html, /href="\/products\/lilas-bleu-clair"/);
+  assert.match(
+    html,
+    /id="home-colorway-pourpre"[^>]*aria-selected="true"|aria-selected="true"[^>]*id="home-colorway-pourpre"/,
+  );
+  assert.match(html, /href="\/products\/pourpre"/);
 
   assert.match(html, /href="\/"[^>]*aria-current="page"[^>]*>Accueil</);
   assert.match(html, />Notre histoire</);
