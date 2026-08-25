@@ -1,11 +1,15 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
-const releaseSha = "f".repeat(40);
+const plan = JSON.parse(readFileSync(`${root}drizzle/production-migrations.json`, "utf8"));
+const releaseSha = createHash("sha1")
+  .update(plan.ordered.map((name) => readFileSync(`${root}drizzle/${name}`)).join("\0"))
+  .digest("hex");
 
 test("production applicator materializes only the reviewed non-synthetic migration chain", () => {
   const result = spawnSync(process.execPath, ["scripts/production-d1-migrations.mjs"], {
@@ -16,7 +20,6 @@ test("production applicator materializes only the reviewed non-synthetic migrati
   assert.equal(result.status, 0, result.stderr);
   const report = JSON.parse(result.stdout);
   assert.equal(report.synthetic0008Included, false);
-  const plan = JSON.parse(readFileSync(`${root}drizzle/production-migrations.json`, "utf8"));
   const files = readdirSync(`${root}${report.staging}/migrations`).sort();
   assert.deepEqual(files, [...plan.ordered].sort());
   assert.equal(files.includes("0008_preprod_synthetic_demo_dataset.sql"), false);
