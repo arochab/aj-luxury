@@ -1,173 +1,125 @@
-# AJ Luxury — brief call Jérémy du 25 août 2026
+# AJ Luxury — brief simple pour le call avec Jérémy
 
-Document de travail interne pour Adam. Le PDF final sera produit uniquement
-après la fin du raccordement et de la recette réelle. Objectif du call : sortir
-avec toutes les décisions et pièces qui permettent une première commande
-réelle, puis l’ouverture au public. Durée conseillée : 30 minutes.
+Document de travail interne pour Adam. Le PDF final sera créé uniquement quand
+le site et la première vraie commande seront terminés.
 
-## Verdict en une phrase
+## But du call
 
-Le site, le paiement et le stock sont techniquement prêts à être raccordés,
-mais la vente publique doit rester fermée tant que le régime de TVA, l’activité
-e-commerce, le numéro professionnel, le médiateur et le stock par taille/couleur
-ne sont pas confirmés par Jérémy.
+Obtenir de Jérémy six éléments concrets. Ne lui poser aucune question
+technique sur le site, Stripe, Sendcloud, Resend, Cloudflare ou des clés.
 
-## 1. Ce qui est décidé
+## Phrase d’ouverture
+
+> Le site est presque prêt. De ton côté, j’ai besoin de six éléments simples :
+> la réponse de ton comptable sur la TVA, la déclaration de l’activité de vente
+> en ligne, le numéro OVH, l’inscription au médiateur, le comptage du stock et
+> les informations du fabricant. Adam et Codex s’occupent de toute la partie
+> technique.
+
+## Ce qui est déjà décidé
 
 | Sujet | Décision |
 |---|---|
-| Produit unitaire | 29,99 € |
-| Pack de 2 | 49,99 € — économie de 9,99 €, soit 16,66 % |
-| Pack de 3 | 69,99 € — économie de 19,98 €, soit 22,21 % |
-| Composition des packs | Deux ou trois coloris identiques ou différents ; pas de stock « pack » séparé |
-| Disponibilité | Un pack est proposé seulement si chaque taille/coloris choisi est réellement disponible |
-| Stock total | 756 pièces physiques : 730 vendables + 26 cadeaux/réserve |
-| Livraison au lancement | France métropolitaine, Corse comprise, et les 26 autres pays de l’Union européenne |
-| Hors Union européenne | EORI déjà valide ; ouverture séparée après validation des transporteurs, douanes, droits, taxes et retours |
-| Transport | Options Sendcloud réellement disponibles selon le pays et l’adresse ; prix et délai affichés avant paiement |
-| Expédition et retours | 3 A rue Principale, 67130 Belmont |
-| Téléphone | Aucun numéro personnel publié ; ligne OVH séparée à 1,19 € TTC/mois |
-| Médiateur | SMP, 30 € TTC pour 3 ans |
-| Premier client | Adam passe lui-même la première commande avec sa carte ; Codex ne paie pas |
+| 1 boxer | 29,99 € |
+| Pack de 2 | 49,99 € |
+| Pack de 3 | 69,99 € |
+| Composition des packs | Couleurs identiques ou différentes, selon le stock disponible |
+| Stock total | 756 pièces : 730 à vendre et 26 pour les cadeaux |
+| Zone de lancement | France, Corse et autres pays de l’Union européenne |
+| Hors Union européenne | Étape suivante ; le numéro EORI est déjà valide |
+| Téléphone public | Nouvelle ligne OVH à 1,19 € TTC par mois, jamais le numéro personnel |
+| Médiateur | SMP à 30 € TTC pour 3 ans |
+| Adresse d’expédition et de retour | 3 A rue Principale, 67130 Belmont |
+| Première commande | Adam la passera lui-même avec sa carte |
 
-## 2. Comment fonctionne réellement le stock
+## Les six choses que Jérémy doit faire
 
-Les packs ne créent pas de stock supplémentaire. Un pack de trois retire trois
-pièces des tailles et coloris choisis. Deux pièces identiques sont possibles si
-le stock de cette variante est au moins égal à deux.
+### 1. Envoyer une question à son comptable
 
-La ventilation commerciale équilibrée proposée est la suivante :
+Jérémy n’a pas à connaître la réponse lui-même. Il copie-colle simplement ce
+message à son comptable :
 
-| Coloris | S | M | L | XL | Total vendable |
-|---|---:|---:|---:|---:|---:|
-| Pourpre Impérial | 60 | 61 | 61 | 61 | 243 |
-| Rose Velours | 61 | 61 | 61 | 61 | 244 |
-| Lilas Céleste | 61 | 61 | 61 | 60 | 243 |
-| **Total** | **182** | **183** | **183** | **182** | **730** |
+> Je lance une boutique de sous-vêtements à 29,99 €, avec des ventes en France
+> et dans l’Union européenne. Est-ce que je dois facturer de la TVA ? Si oui,
+> quelle TVA dois-je appliquer aux clients français et aux clients des autres
+> pays européens ? Merci de me répondre par écrit.
 
-Hypothèse à confirmer pendant le call : 63 pièces physiques sur chacune des 12
-combinaisons couleur/taille. Les 26 cadeaux sont répartis à raison de 2 par
-combinaison, avec 1 pièce supplémentaire mise de côté sur Pourpre S et Lilas XL.
-Si le comptage physique diffère, on corrige la grille avant l’import ; on ne
-triche jamais avec le stock affiché.
+Il transmet ensuite la réponse à Adam.
 
-## 3. Ce qui fonctionne déjà
+### 2. Ajouter l’activité de vente en ligne à son entreprise
 
-- Le site visuel est consultable sur la prévisualisation privée.
-- Le code gère panier, packs, paiement, stock, livraison, e-mails et retours.
-  Le checkout autorise la France et les 26 autres pays de l’Union européenne ;
-  le hors UE reste fermé.
-- Les contrôles automatiques critiques sont verts et la version candidate est
-  figée sur la branche Codex.
-- Le compte Stripe de Jérémy est vérifié en France : il peut encaisser et
-  recevoir les virements. La clé de connexion est chiffrée localement et n’est
-  ni dans Git ni dans le site.
-- Le domaine d’e-mail AJ Luxury est vérifié chez Resend.
-- Sendcloud contient l’intégration « AJ Luxury Site officiel », l’adresse de
-  Belmont et les deux transporteurs Mondial Relay et Colissimo.
-- La base de données de production existe déjà en Europe.
+Jérémy demande à son comptable ou réalise la formalité pour ajouter :
 
-## 4. Ce que Jérémy doit confirmer ou faire
+> Vente en ligne de vêtements et sous-vêtements.
 
-### Bloquants administratifs
+Il transmet le justificatif de dépôt. Son activité officielle visible est
+actuellement la production de films ; il faut donc ajouter la vente.
 
-1. **TVA France et Union européenne.** Demander à son comptable ou au Service
-   des impôts des entreprises :
-   « Mon entreprise individuelle est-elle en franchise en base de TVA, sans
-   option TVA, pour l’ensemble de mes activités en 2025 et 2026 ? Pour les
-   ventes à des particuliers dans les autres pays de l’Union européenne, dois-je
-   facturer la TVA française ou utiliser le guichet OSS ? »
-   - Si oui : le site affichera « TVA non applicable, article 293 B du CGI ».
-   - Si non : les prix resteront ceux payés par le client, TVA de 20 % incluse,
-     avec une marge hors taxe plus faible.
-2. **Activité e-commerce.** Ajouter la vente en ligne de sous-vêtements à
-   l’entreprise individuelle sur le Guichet unique INPI et transmettre l’accusé
-   de dépôt. Aujourd’hui, l’activité officielle visible est encore la production
-   de films.
-3. **Téléphone.** Le choix est fait, mais la ligne n’est pas encore souscrite.
-   Souscrire la ligne OVH dédiée à 1,19 € TTC/mois et donner le
-   numéro obtenu. Elle peut être filtrée et renvoyée vers un répondeur ; le
-   numéro personnel reste privé.
-4. **Médiateur.** Le choix est fait, mais le contrat n’est pas encore souscrit.
-   Souscrire SMP à 30 € TTC pour 3 ans au nom de l’entreprise
-   individuelle et transmettre l’attestation et les coordonnées contractuelles.
-   Le médiateur est un tiers indépendant qu’un client peut saisir gratuitement
-   si une réclamation n’a pas été résolue directement avec AJ Luxury.
+### 3. Ouvrir le numéro professionnel OVH
 
-### Bloquants produit et stock
+Jérémy souscrit la ligne OVH à 1,19 € TTC par mois et transmet le nouveau
+numéro. Son numéro personnel reste privé.
 
-5. Confirmer ou corriger les 12 quantités physiques : 3 couleurs × 4 tailles.
-6. Donner les mesures exactes S, M, L et XL, le pays de fabrication, les
-   instructions d’entretien et le fonctionnement exact du scellé d’hygiène.
-   La composition 94 % modal / 6 % élasthanne a été transmise par AJ Luxury,
-   mais doit encore être recoupée avec l’étiquette fabricant définitive.
-7. Confirmer que l’adresse de Belmont peut apparaître sur les colis et retours.
-   Cette adresse est déjà confirmée verbalement ; le call la clôt formellement.
-8. Prendre acte que l’EORI `FR944996487` est déjà valide dans le validateur
-   officiel européen. Pour ouvrir le Royaume-Uni, la Suisse, les États-Unis, le
-   Canada ou un autre pays hors Union européenne, il reste à valider avec
-   Sendcloud les transporteurs, déclarations douanières, droits, taxes et
-   retours par destination.
+### 4. S’inscrire auprès du médiateur SMP
 
-### Validation de la mise en ligne
+Jérémy souscrit SMP à 30 € TTC pour trois ans et transmet l’attestation reçue.
 
-9. Après les derniers changements, Jérémy vérifie la prévisualisation et
-   approuve directement la version exacte et la grille de stock exacte. Une
-   validation générale du projet ne suffit pas si la version change ensuite.
-10. Autoriser la régénération des clés Sendcloud actuellement masquées, uniquement
-   après avoir confirmé qu’aucun autre outil ne les utilise.
+### 5. Compter les boxers
 
-## 5. Coûts retenus
+Il faut le nombre réellement présent dans chacune de ces 12 cases :
 
-| Dépense | Coût | Pourquoi |
-|---|---:|---|
-| Ligne OVH Découverte | 1,19 € TTC/mois, sans engagement | Numéro public séparé, répondeur et filtrage |
-| Médiateur SMP | 30 € TTC pour 3 ans | Obligation légale avant vente aux particuliers |
-| Sendcloud | Offre gratuite au démarrage | Le client paie le tarif de livraison affiché avant paiement |
-| Stripe | Pas d’abonnement mensuel retenu | Commission prélevée uniquement lorsqu’un paiement est encaissé |
-| Resend | Offre actuelle suffisante pour le lancement | Confirmations de commande et d’expédition |
+| Coloris | S | M | L | XL |
+|---|---:|---:|---:|---:|
+| Pourpre Impérial |  |  |  |  |
+| Rose Velours |  |  |  |  |
+| Lilas Céleste |  |  |  |  |
 
-SMP facture en plus une médiation réellement ouverte : 150 € HT pour un dossier
-simple ou 350 € HT pour un dossier complexe. Le client ne paie pas cette
-médiation.
+Le total physique doit être vérifié. Ensuite, Adam et Codex retireront les 26
+pièces cadeaux pour obtenir le stock réellement vendu sur le site.
 
-## 6. Séquence après le call
+### 6. Envoyer les informations du fabricant
 
-1. Adam transmet à Codex les confirmations et justificatifs ci-dessus.
-2. Codex met à jour TVA, téléphone, médiateur, informations produit et stock.
-3. Adam valide la version exacte ; Jérémy valide ensuite directement la même
-   version et la même grille de stock.
-4. Codex raccorde Stripe, Sendcloud et Resend sur une ouverture contrôlée,
-   inaccessible au public.
-5. Adam passe lui-même la première commande avec sa carte.
-6. Codex vérifie paiement, baisse du stock, e-mail, étiquette et suivi.
-7. Le colis test est remis au transporteur. Une fois la preuve complète obtenue,
-   la même version est ouverte au public en France et dans l’Union européenne.
-8. Le hors Union européenne est ouvert séparément après validation des tarifs,
-   transporteurs, douanes, taxes et retours ; l’EORI est déjà valide.
+Jérémy envoie des photos nettes de l’étiquette et de l’emballage, ainsi que le
+tableau de tailles du fabricant. Nous devons pouvoir lire :
 
-## 7. Phrase d’ouverture du call
+- la composition ;
+- le pays de fabrication ;
+- les consignes de lavage ;
+- les mesures des tailles S, M, L et XL ;
+- le dispositif ou l’emballage qui protège le produit pour l’hygiène.
 
-> Le site et Stripe peuvent fonctionner. Pour ouvrir proprement, il nous manque
-> aujourd’hui quatre éléments administratifs et les confirmations produit et
-> stock.
-> Si on les clôt pendant ce call, je peux terminer le raccordement et te faire
-> valider la première commande réelle sans exposer ton numéro personnel.
+## Ce que Jérémy n’a pas à gérer
 
-## 8. Phrase de clôture du call
+Jérémy n’a aucune question technique à résoudre. Adam et Codex prennent en
+charge :
 
-> Je récapitule : tu m’envoies le régime TVA, l’accusé d’activité e-commerce,
-> le numéro OVH, l’attestation SMP, les mesures et informations produit, puis tu
-> confirmes les 12 lignes de stock. Je finalise la version ; Adam la valide,
-> ensuite tu approuves exactement la même version avant sa première commande.
+- la connexion de Stripe au site ;
+- la connexion de Sendcloud et des transporteurs ;
+- les confirmations de commande par e-mail ;
+- le domaine et l’hébergement ;
+- les clés de connexion et leur sécurité ;
+- l’import des 730 pièces vendables ;
+- les tests du paiement, du stock, de l’e-mail et de la livraison.
 
-## 9. Résultat obligatoire du call
+Si une validation de compte est nécessaire, Adam dira simplement à Jérémy quel
+bouton ouvrir ou quelle confirmation accepter. Jérémy n’a pas à diagnostiquer
+le fonctionnement d’un outil.
 
-- Une réponse fiscale écrite ou un engagement daté du comptable/SIE.
-- L’accusé de démarche d’activité e-commerce.
-- Le numéro OVH professionnel ou la preuve de souscription.
-- L’attestation SMP ou la preuve de souscription.
-- Les 12 quantités physiques couleur × taille.
-- Les mesures, l’origine, l’entretien et la preuve du dispositif d’hygiène.
-- La décision sur les pays hors UE prioritaires et leur traitement douanier.
-- L’accord pour régénérer les clés Sendcloud si elles ne servent nulle part ailleurs.
+## Ce qui se passe après le call
+
+1. Jérémy envoie les six éléments.
+2. Adam et Codex terminent le site et les connexions.
+3. Adam vérifie la version finale.
+4. Jérémy regarde le site et donne son accord final.
+5. Adam passe personnellement la première vraie commande.
+6. Adam et Codex vérifient le paiement, le stock, l’e-mail et la livraison.
+7. Le site est ouvert au public en France et dans l’Union européenne.
+8. Les pays hors Union européenne sont ajoutés ensuite, destination par
+   destination.
+
+## Phrase de clôture
+
+> Je récapitule : tu envoies le message à ton comptable, tu ajoutes l’activité
+> de vente en ligne, tu ouvres la ligne OVH, tu t’inscris chez SMP, tu comptes
+> les 12 stocks et tu m’envoies les informations du fabricant. Nous nous
+> occupons de toute la technique, puis je passe moi-même la première commande.
