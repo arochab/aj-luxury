@@ -28,6 +28,7 @@ const exactRoutes = new Map<string, LimitClass>([
   ["/api/commerce/admin/health", "operator"],
   ["/api/commerce/admin/reporting", "operator"],
   ["/api/commerce/admin/late-payment-refunds/dispatch", "operator"],
+  ["/api/commerce/admin/launch-stock-import", "operator"],
 ]);
 
 const cartLine = /^\/api\/commerce\/cart\/lines\/[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/;

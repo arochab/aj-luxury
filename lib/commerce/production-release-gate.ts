@@ -15,6 +15,7 @@ export type ProductionCommerceEnvironment = Readonly<{
   COMMERCE_ADAM_APPROVAL_SHA?: string;
   COMMERCE_JEREMY_APPROVAL_SHA?: string;
   COMMERCE_CONTROLLED_ORDER_PROOF_ID?: string;
+  COMMERCE_PROMOTED_FROM_VERSION_ID?: string;
   STOCK_MANIFEST_ID?: string;
   STOCK_MANIFEST_SHA256?: string;
   STOCK_MANIFEST_APPROVED_BY?: string;
@@ -62,6 +63,7 @@ export type ProductionReleaseBlocker =
   | "backup-restore-drill-unapproved"
   | "monitoring-alerts-unapproved"
   | "controlled-order-proof-missing"
+  | "promotion-source-version-missing"
   | "commerce-router-not-wired";
 
 export type ProductionReleaseGate = Readonly<{
@@ -108,6 +110,19 @@ function readMode(value: string | undefined): ProductionCommerceMode {
   return productionCommerceModes.includes(value as ProductionCommerceMode)
     ? value as ProductionCommerceMode
     : "closed";
+}
+
+export function productionEvidenceVersionId(
+  env: ProductionCommerceEnvironment,
+): string | null {
+  const currentVersionId = env.CF_VERSION_METADATA?.id ?? "";
+  if (!WORKER_VERSION_ID_PATTERN.test(currentVersionId)) return null;
+  if (readMode(env.COMMERCE_MODE) !== "live") return currentVersionId;
+  const candidateVersionId = env.COMMERCE_PROMOTED_FROM_VERSION_ID ?? "";
+  return WORKER_VERSION_ID_PATTERN.test(candidateVersionId) &&
+      candidateVersionId !== currentVersionId
+    ? candidateVersionId
+    : null;
 }
 
 function stripeIsReady(
@@ -214,6 +229,9 @@ function evaluateProductionReleaseGateInternal(
     !SAFE_REFERENCE_PATTERN.test(env.COMMERCE_CONTROLLED_ORDER_PROOF_ID ?? "")
   ) {
     blockers.push("controlled-order-proof-missing");
+  }
+  if (mode === "live" && productionEvidenceVersionId(env) === null) {
+    blockers.push("promotion-source-version-missing");
   }
 
   // Configuration can never attest that executable routing code is present.

@@ -86,6 +86,13 @@
     // Elles se posent au moment du deploiement, liees a un SHA precis :
     //
     //   COMMERCE_RELEASE_SHA           le SHA exact publie
+    //   COMMERCE_PROMOTED_FROM_VERSION_ID
+    //                                  en live, l'ID immutable de la version
+    //                                  controlled ayant passe la commande preuve
+    //   CLOUDFLARE_ACCESS_TEAM_DOMAIN  origine https://<team>.cloudflareaccess.com
+    //   CLOUDFLARE_ACCESS_AUD          audience de l'application Access owner
+    //   PRODUCTION_STOCK_IMPORT_ENABLED
+    //                                  true uniquement pendant l'import one-shot
     //   COMMERCE_ADAM_APPROVAL_SHA     le meme SHA, approuve par Adam
     //   COMMERCE_JEREMY_APPROVAL_SHA   le meme SHA, approuve par Jeremy
     //   STOCK_MANIFEST_ID              identifiant du comptage retenu

@@ -81,6 +81,49 @@ async function authenticatedOwnerHeaders(method, pathname) {
   };
 }
 
+async function approvedProductionStockManifest() {
+  const variants = launchVariantSeed.map((variant, index) => ({
+    variantId: variant.id,
+    internalReference: variant.internalReference,
+    physicalQuantity: variant.physicalQuantity,
+    giftingReserveQuantity: index === 0 || index === 11 ? 3 : 2,
+    safetyReserveQuantity: 0,
+    savReserveQuantity: 0,
+  }));
+  const unsigned = {
+    protocol: "ajl-launch-stock-import-v1",
+    manifestId: "stock-launch-20260825",
+    countedAt: "2026-08-25T08:00:00.000Z",
+    variants,
+    totals: {
+      physicalQuantity: 756,
+      giftingReserveQuantity: 26,
+      safetyReserveQuantity: 0,
+      savReserveQuantity: 0,
+      sellableQuantity: 730,
+    },
+  };
+  const payloadSha256 = await createLaunchStockPayloadSha256(unsigned);
+  return {
+    manifest: {
+      ...unsigned,
+      approvals: [
+        {
+          role: "stock_owner", signerId: "jeremy",
+          signedAt: "2026-08-25T08:30:00.000Z", payloadSha256,
+          attestation: "I_APPROVE_THIS_EXACT_STOCK_IMPORT",
+        },
+        {
+          role: "release_owner", signerId: "adam",
+          signedAt: "2026-08-25T08:31:00.000Z", payloadSha256,
+          attestation: "I_APPROVE_THIS_EXACT_STOCK_IMPORT",
+        },
+      ],
+    },
+    payloadSha256,
+  };
+}
+
 test("the production namespace is invisible outside production", async () => {
   const response = await productionCommerceApiResponse(
     new Request("https://preprod.example/api/commerce/health"),
@@ -127,6 +170,60 @@ test("controlled routes require the authenticated owner before touching D1", asy
   );
   assert.equal(response.status, 403);
   assert.equal((await response.json()).error.code, "CONTROLLED_ACCESS_REQUIRED");
+});
+
+test("the one-shot stock importer is wired before the stock gate but bound to owner, SHA and exact manifest", async () => {
+  const { manifest, payloadSha256 } = await approvedProductionStockManifest();
+  const pathname = "/api/commerce/admin/launch-stock-import";
+  const auth = await authenticatedOwnerHeaders("POST", pathname);
+  let calls = 0;
+  const env = {
+    ...controlled,
+    PRODUCTION_STOCK_IMPORT_ENABLED: "true",
+    STOCK_MANIFEST_ID: manifest.manifestId,
+    STOCK_MANIFEST_SHA256: payloadSha256,
+  };
+  const request = (confirmation) => new Request(`https://ajluxurystore.com${pathname}`, {
+    method: "POST",
+    headers: {
+      ...auth,
+      Origin: "https://ajluxurystore.com",
+      "Sec-Fetch-Site": "same-origin",
+      "Content-Type": "application/json",
+      "Idempotency-Key": `stock-import:${manifest.manifestId}`,
+      "X-AJ-Release-SHA": releaseSha,
+      "X-AJ-Stock-Import-Confirmation": confirmation,
+    },
+    body: JSON.stringify({ manifest }),
+  });
+  const rejected = await productionCommerceApiResponse(
+    request("WRONG"), env,
+    { stockImporter: async () => { calls += 1; throw new Error("not-called"); } },
+  );
+  assert.equal(rejected.status, 503);
+  assert.equal(calls, 0);
+
+  const accepted = await productionCommerceApiResponse(
+    request("IMPORT_756_PHYSICAL_26_GIFTS_730_SELLABLE"), env,
+    { stockImporter: async (_database, input) => {
+      calls += 1;
+      assert.equal(input.releaseSha, releaseSha);
+      assert.equal(input.workerVersionId, controlled.CF_VERSION_METADATA.id);
+      return {
+        disposition: "activated",
+        manifestId: manifest.manifestId,
+        payloadSha256,
+        releaseSha,
+        workerVersionId: controlled.CF_VERSION_METADATA.id,
+        physicalQuantity: 756,
+        giftingReserveQuantity: 26,
+        sellableQuantity: 730,
+      };
+    } },
+  );
+  assert.equal(accepted.status, 201);
+  assert.equal((await accepted.json()).data.sellableQuantity, 730);
+  assert.equal(calls, 1);
 });
 
 test("cart creation rejects a missing exact origin before touching D1", async () => {
@@ -271,7 +368,12 @@ test("live stock attestation recomputes the exact 12-line manifest and controlle
     DB: stockProofDatabase(proof, lines, releaseProof), STOCK_MANIFEST_ID: unsigned.manifestId,
     STOCK_MANIFEST_SHA256: payload, COMMERCE_RELEASE_SHA: releaseSha,
     COMMERCE_CONTROLLED_ORDER_PROOF_ID: "order-controlled-0001",
-    CF_VERSION_METADATA: controlled.CF_VERSION_METADATA,
+    COMMERCE_MODE: "live",
+    COMMERCE_PROMOTED_FROM_VERSION_ID: controlled.CF_VERSION_METADATA.id,
+    CF_VERSION_METADATA: {
+      ...controlled.CF_VERSION_METADATA,
+      id: "018f47ce-24bd-7b16-a1ea-4b3fc2d66b76",
+    },
   };
   assert.equal(await productionStockRuntimeAttested(env), true);
   const redistributed = lines.map((line, index) => index === 0
@@ -280,6 +382,7 @@ test("live stock attestation recomputes the exact 12-line manifest and controlle
   assert.equal(await productionStockRuntimeAttested({ ...env, DB: stockProofDatabase(proof, redistributed, releaseProof) }), false);
   assert.equal(await productionStockRuntimeAttested({ ...env, DB: stockProofDatabase({ ...proof, worker_version_id: crypto.randomUUID() }, lines, releaseProof) }), false);
   assert.equal(await productionStockRuntimeAttested({ ...env, STOCK_MANIFEST_SHA256: "c".repeat(64) }), false);
+  assert.equal(await productionStockRuntimeAttested({ ...env, COMMERCE_PROMOTED_FROM_VERSION_ID: env.CF_VERSION_METADATA.id }), false);
 });
 
 test("controlled payment session stays closed until refund schema and dispatcher are ready", async () => {

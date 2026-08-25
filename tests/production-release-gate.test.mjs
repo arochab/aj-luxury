@@ -3,12 +3,14 @@ import test from "node:test";
 import { evaluateProductionReleaseGate } from "../lib/commerce/production-release-gate.ts";
 
 const releaseSha = "a".repeat(40);
+const candidateVersionId = "018f47ce-24bd-7b16-a1ea-4b3fc2d66b75";
+const liveVersionId = "018f47ce-24bd-7b16-a1ea-4b3fc2d66b76";
 const base = Object.freeze({
   APP_ENV: "production",
   COMMERCE_MODE: "sandbox",
   COMMERCE_RELEASE_SHA: releaseSha,
   CF_VERSION_METADATA: {
-    id: "018f47ce-24bd-7b16-a1ea-4b3fc2d66b75",
+    id: candidateVersionId,
     tag: releaseSha,
     timestamp: "2026-08-15T01:00:00.000Z",
   },
@@ -79,20 +81,34 @@ test("public live remains closed until a controlled order proof is recorded", ()
     ...base,
     COMMERCE_MODE: "live",
     STRIPE_SECRET_KEY: "sk_live_redacted",
+    CF_VERSION_METADATA: { ...base.CF_VERSION_METADATA, id: liveVersionId },
   });
   assert.equal(missingProof.ready, false);
   assert.ok(missingProof.blockers.includes("controlled-order-proof-missing"));
+  assert.ok(missingProof.blockers.includes("promotion-source-version-missing"));
 
   const configured = evaluateProductionReleaseGate({
     ...base,
     COMMERCE_MODE: "live",
     STRIPE_SECRET_KEY: "sk_live_redacted",
     COMMERCE_CONTROLLED_ORDER_PROOF_ID: "proof-controlled-order-0001",
+    COMMERCE_PROMOTED_FROM_VERSION_ID: candidateVersionId,
+    CF_VERSION_METADATA: { ...base.CF_VERSION_METADATA, id: liveVersionId },
   });
   assert.equal(configured.ready, false);
   assert.equal(configured.evidenceComplete, true);
   assert.deepEqual(configured.blockers, ["commerce-router-not-wired"]);
   assert.equal(configured.capabilities.publicCommerce, false);
+
+  const selfPromotion = evaluateProductionReleaseGate({
+    ...base,
+    COMMERCE_MODE: "live",
+    STRIPE_SECRET_KEY: "sk_live_redacted",
+    COMMERCE_CONTROLLED_ORDER_PROOF_ID: "proof-controlled-order-0001",
+    COMMERCE_PROMOTED_FROM_VERSION_ID: liveVersionId,
+    CF_VERSION_METADATA: { ...base.CF_VERSION_METADATA, id: liveVersionId },
+  });
+  assert.ok(selfPromotion.blockers.includes("promotion-source-version-missing"));
 });
 
 test("approvals and exact origin are bound to the release", () => {

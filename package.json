@@ -28,10 +28,10 @@
     "test:gate-c": "node --experimental-strip-types --test tests/parcel-profiles.test.mjs tests/preprod-demo-boundary.test.mjs tests/preprod-order-payment-d1.test.mjs tests/preprod-owner-account-tracking-api.test.mjs tests/preprod-shipping-quote-api.test.mjs tests/preprod-shipping-client.test.mjs tests/preprod-synthetic-demo.test.mjs",
     "test:identity-access": "node --experimental-strip-types --test tests/identity-access-migration.test.mjs tests/identity-access-security.test.mjs",
     "test:lot2-policies": "node --experimental-strip-types --test tests/lot2-policies.test.mjs tests/lot2-security.test.mjs",
-    "test:last-mile": "node --experimental-strip-types --test tests/production-release-gate.test.mjs tests/production-commerce-api.test.mjs tests/production-commerce-client.test.mjs tests/production-migration-boundary.test.mjs tests/production-payment-effects-d1.test.mjs tests/production-operations-api.test.mjs tests/production-rate-limit.test.mjs tests/resend-email-provider.test.mjs tests/resend-webhook.test.mjs tests/sendcloud-shipping-label-provider.test.mjs tests/last-mile-ops.test.mjs tests/stripe-payment-provider.test.mjs",
+    "test:last-mile": "node --experimental-strip-types --test tests/cloudflare-access-owner.test.mjs tests/production-release-gate.test.mjs tests/production-commerce-api.test.mjs tests/production-commerce-client.test.mjs tests/production-migration-boundary.test.mjs tests/production-payment-effects-d1.test.mjs tests/production-operations-api.test.mjs tests/production-rate-limit.test.mjs tests/production-stock-import-d1.test.mjs tests/resend-email-provider.test.mjs tests/resend-webhook.test.mjs tests/sendcloud-shipping-label-provider.test.mjs tests/last-mile-ops.test.mjs tests/stripe-payment-provider.test.mjs",
     "test:preprod-demo": "node --experimental-strip-types --test tests/preprod-commerce-checkout.test.mjs tests/preprod-identity-demo.test.mjs",
     "prelint": "npm run check:analytics-boundary",
-    "lint": "eslint app lib tests --ignore-pattern dist --ignore-pattern .next",
+    "lint": "eslint app lib worker tests --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {

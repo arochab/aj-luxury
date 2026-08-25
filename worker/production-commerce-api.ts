@@ -7,13 +7,18 @@ import { D1ProductionDeliveryActivationStore } from "../lib/commerce/d1-producti
 import { D1LatePaymentRefundDispatcher } from "../lib/commerce/d1-late-payment-refunds.ts";
 import { ProductionDeliveryError } from "../lib/commerce/d1-production-delivery-store.ts";
 import { D1StripePaymentEffectsStore } from "../lib/commerce/d1-stripe-payment-effects.ts";
+import {
+  ProductionStockImportError,
+  activateProductionLaunchStock,
+  type ProductionStockImportReceipt,
+} from "../lib/commerce/d1-production-stock-import.ts";
 import type { DeliveryProviderPorts } from "../lib/commerce/delivery-provider.ts";
 import { DeliveryReferenceVault } from "../lib/commerce/delivery-reference-vault.ts";
 import { authorizeBrowserMutation, buildCsrfCookie, buildSessionCookie, clearCsrfCookie, clearSessionCookie, isTrustedMutationOrigin } from "../lib/commerce/identity-access-policy.ts";
 import { PaymentProviderError, verifyAndDeliverPaymentWebhook, type PaymentProviderPorts, type PaymentWebhookEffectsPort } from "../lib/commerce/payment-provider.ts";
 import { validateLaunchStockImport } from "../lib/commerce/launch-stock-import.ts";
 import { productionReleaseSchemaContractSha256 } from "../lib/commerce/production-schema-contract.ts";
-import { evaluateWiredProductionReleaseGate, type ProductionCommerceEnvironment } from "../lib/commerce/production-release-gate.ts";
+import { evaluateWiredProductionReleaseGate, productionEvidenceVersionId, type ProductionCommerceEnvironment } from "../lib/commerce/production-release-gate.ts";
 import { recordVerifiedResendWebhook, ResendWebhookError } from "../lib/commerce/resend-webhook.ts";
 import { createSendcloudProviderPorts } from "../lib/commerce/sendcloud-provider.ts";
 import { createStripePaymentProviderPorts } from "../lib/commerce/stripe-payment-provider.ts";
@@ -28,6 +33,10 @@ import {
   productionResendRuntimeInstalled,
 } from "./production-operations-runtime.ts";
 import { productionOutboundShippingRuntimeConfigured } from "./production-shipping-runtime.ts";
+import {
+  cloudflareAccessOwnerConfigurationValid,
+  cloudflareAccessOwnerRequestAuthenticated,
+} from "./cloudflare-access-owner.ts";
 
 const PREFIX = "/api/commerce/";
 const routes = Object.freeze({
@@ -40,6 +49,7 @@ const routes = Object.freeze({
   currentOrder: `${PREFIX}orders/current`,
   refundDispatch: `${PREFIX}admin/late-payment-refunds/dispatch`,
   account: `${PREFIX}account/current`, adminHealth: `${PREFIX}admin/health`,
+  stockImport: `${PREFIX}admin/launch-stock-import`,
 } as const);
 const lineRoute = /^\/api\/commerce\/cart\/lines\/([^/]+)$/;
 const known = new Set<string>(Object.values(routes));
@@ -52,6 +62,9 @@ export type ProductionCommerceRuntimeEnvironment = ProductionCommerceEnvironment
   COMMERCE_CART_HMAC_SECRET?: string;
   COMMERCE_CONTROLLED_OWNER_EMAIL?: string;
   COMMERCE_CONTROLLED_AUTH_HMAC_SECRET?: string;
+  CLOUDFLARE_ACCESS_TEAM_DOMAIN?: string;
+  CLOUDFLARE_ACCESS_AUD?: string;
+  PRODUCTION_STOCK_IMPORT_ENABLED?: string;
   STRIPE_SETTLEMENT_MODE?: string;
   LATE_PAYMENT_REFUND_DISPATCH_ENABLED?: string;
   CONTROLLED_PAYMENT_SESSION_ENABLED?: string;
@@ -72,6 +85,15 @@ export type ProductionCommerceRouterDependencies = Readonly<{
   deliveryProvider?: DeliveryProviderPorts;
   paymentProvider?: PaymentProviderPorts;
   paymentEffects?: PaymentWebhookEffectsPort;
+  stockImporter?: (
+    database: CommerceD1Database,
+    input: Readonly<{
+      manifest: unknown;
+      releaseSha: string;
+      workerVersionId: string;
+      activatedAt: string;
+    }>,
+  ) => Promise<ProductionStockImportReceipt>;
 }>;
 type CartSession = Readonly<{ cartId: string; csrf: string }>;
 
@@ -164,6 +186,8 @@ export async function controlledOwnerRequestAuthenticated(
   env: ProductionCommerceRuntimeEnvironment,
 ): Promise<boolean> {
   const expected = env.COMMERCE_CONTROLLED_OWNER_EMAIL?.trim().toLowerCase();
+  if (!expected) return false;
+  if (await cloudflareAccessOwnerRequestAuthenticated(request, env)) return true;
   const actual = request.headers.get("oai-authenticated-user-email")?.trim().toLowerCase();
   const userId = request.headers.get("oai-authenticated-user-id")?.trim();
   const secretValue = env.COMMERCE_CONTROLLED_AUTH_HMAC_SECRET ?? "";
@@ -255,13 +279,16 @@ function deliveryVault(env: ProductionCommerceRuntimeEnvironment): DeliveryRefer
 }
 function runtimeBlockers(env: ProductionCommerceRuntimeEnvironment, mode: string): string[] {
   const expectedSettlement = mode === "sandbox" ? "test" : "live";
+  const accessConfigured = cloudflareAccessOwnerConfigurationValid(env);
   return [
     ...(!env.DB ? ["database-binding-missing"] : []),
     ...(!secret(env) ? ["cart-session-secret-missing"] : []),
     ...(!deliveryVault(env) ? ["delivery-reference-vault-not-configured"] : []),
     ...(!productionRateLimitBindingsReady(env) ? ["production-rate-limits-not-configured"] : []),
-    ...(mode !== "live" && !controlledAuthConfigured(env)
-      ? ["controlled-auth-hmac-not-configured"] : []),
+    ...(mode === "sandbox" && !accessConfigured && !controlledAuthConfigured(env)
+      ? ["controlled-owner-auth-not-configured"] : []),
+    ...(["controlled", "live"].includes(mode) && !accessConfigured
+      ? ["cloudflare-access-owner-not-configured"] : []),
     ...(settlementMode(env) !== expectedSettlement ? ["stripe-settlement-mode-mismatch"] : []),
     ...(["controlled", "live"].includes(mode)
       ? [
@@ -485,9 +512,10 @@ export async function productionStockManifestRuntimeAttested(
   env: ProductionCommerceRuntimeEnvironment,
 ): Promise<boolean> {
   const metadata = env.CF_VERSION_METADATA;
+  const evidenceVersionId = productionEvidenceVersionId(env);
   if (!env.DB || !env.STOCK_MANIFEST_ID || !env.STOCK_MANIFEST_SHA256 ||
     !env.COMMERCE_RELEASE_SHA ||
-    !metadata?.id || !metadata.tag) return false;
+    !metadata?.id || !metadata.tag || !evidenceVersionId) return false;
   try {
     const proof = await env.DB.prepare(
       `SELECT manifest.id AS manifest_id, manifest.protocol, manifest.payload_sha256,
@@ -512,7 +540,7 @@ export async function productionStockManifestRuntimeAttested(
     ).first<Record<string, string | number>>();
     if (!proof || proof.schema_proven !== 1 ||
       proof.release_sha !== env.COMMERCE_RELEASE_SHA ||
-      proof.worker_version_id !== metadata.id) return false;
+      proof.worker_version_id !== evidenceVersionId) return false;
 
     const rows = await env.DB.prepare(
       `SELECT line.position, line.variant_id, line.internal_reference,
@@ -572,9 +600,11 @@ export async function productionStockRuntimeAttested(
   env: ProductionCommerceRuntimeEnvironment,
 ): Promise<boolean> {
   const metadata = env.CF_VERSION_METADATA;
+  const evidenceVersionId = productionEvidenceVersionId(env);
   if (!await productionStockManifestRuntimeAttested(env) || !env.DB ||
     !env.STOCK_MANIFEST_ID || !env.COMMERCE_RELEASE_SHA ||
-    !env.COMMERCE_CONTROLLED_ORDER_PROOF_ID || !metadata?.id || !metadata.tag) return false;
+    !env.COMMERCE_CONTROLLED_ORDER_PROOF_ID || !metadata?.id || !metadata.tag ||
+    !evidenceVersionId) return false;
   try {
     const release = await env.DB.prepare(
       `SELECT release.worker_version_id, release.worker_version_tag,
@@ -607,7 +637,7 @@ export async function productionStockRuntimeAttested(
     ).bind(env.COMMERCE_RELEASE_SHA, env.STOCK_MANIFEST_ID)
       .first<Record<string, string | number>>();
     return release?.controlled_order_proven === 1 &&
-      release.worker_version_id === metadata.id &&
+      release.worker_version_id === evidenceVersionId &&
       release.worker_version_tag === metadata.tag &&
       release.controlled_order_id === env.COMMERCE_CONTROLLED_ORDER_PROOF_ID &&
       release.stock_owner_id === release.jeremy_approver_id &&
@@ -627,6 +657,62 @@ export async function productionCommerceApiResponse(
   if (env?.APP_ENV !== "production") return json({ error: "not-found" }, 404);
   const line = lineRoute.exec(url.pathname);
   if (!known.has(url.pathname) && !line) return json({ error: "not-found" }, 404);
+  if (url.pathname === routes.stockImport) {
+    if (request.method !== "POST") return fail("METHOD_NOT_ALLOWED", 405);
+    if (env.COMMERCE_MODE !== "controlled" ||
+      env.PRODUCTION_STOCK_IMPORT_ENABLED !== "true") {
+      return fail("STOCK_IMPORT_CLOSED", 503);
+    }
+    if (!await controlledOwnerRequestAuthenticated(request, env)) {
+      return fail("CONTROLLED_ACCESS_REQUIRED", 403);
+    }
+    if (!env.COMMERCE_ORIGIN || url.origin !== env.COMMERCE_ORIGIN ||
+      !originOk(request, env.COMMERCE_ORIGIN)) return fail("ORIGIN_REJECTED", 403);
+    if (!env.DB) return fail("DATABASE_UNAVAILABLE", 503);
+    const releaseSha = env.COMMERCE_RELEASE_SHA ?? "";
+    const workerVersionId = env.CF_VERSION_METADATA?.id ?? "";
+    if (request.headers.get("X-AJ-Release-SHA") !== releaseSha ||
+      request.headers.get("X-AJ-Stock-Import-Confirmation") !==
+        "IMPORT_756_PHYSICAL_26_GIFTS_730_SELLABLE" ||
+      env.CF_VERSION_METADATA?.tag !== releaseSha ||
+      env.COMMERCE_ADAM_APPROVAL_SHA !== releaseSha ||
+      env.COMMERCE_JEREMY_APPROVAL_SHA !== releaseSha ||
+      env.STOCK_MANIFEST_APPROVED_BY !== "jeremy") {
+      return fail("STOCK_IMPORT_RELEASE_EVIDENCE_MISSING", 503);
+    }
+    const parsed = await body(request);
+    if (!parsed || !exact(parsed, ["manifest"])) return fail("INVALID_BODY", 400);
+    try {
+      const validated = await validateLaunchStockImport(parsed.manifest);
+      if (validated.manifestId !== env.STOCK_MANIFEST_ID ||
+        validated.payloadSha256 !== env.STOCK_MANIFEST_SHA256 ||
+        validated.approvedBy.stock_owner !== "jeremy" ||
+        validated.approvedBy.release_owner !== "adam" ||
+        request.headers.get("Idempotency-Key") !== `stock-import:${validated.manifestId}`) {
+        return fail("STOCK_IMPORT_MANIFEST_EVIDENCE_MISMATCH", 409);
+      }
+      const result = await (dependencies.stockImporter ?? activateProductionLaunchStock)(
+        env.DB,
+        {
+          manifest: parsed.manifest,
+          releaseSha,
+          workerVersionId,
+          activatedAt: new Date().toISOString(),
+        },
+      );
+      return json({ data: result }, result.disposition === "activated" ? 201 : 200);
+    } catch (cause) {
+      if (cause instanceof ProductionStockImportError) {
+        if (["DATABASE_NOT_EMPTY", "IMPORT_CONFLICT"].includes(cause.code)) {
+          return fail("STOCK_IMPORT_CONFLICT", 409);
+        }
+        if (["INVALID_RELEASE", "ACTIVATION_PRECEDES_APPROVAL"].includes(cause.code)) {
+          return fail("STOCK_IMPORT_RELEASE_EVIDENCE_MISSING", 503);
+        }
+      }
+      return fail("STOCK_IMPORT_UNAVAILABLE", 503);
+    }
+  }
   if (url.pathname === routes.resendWebhook) {
     if (request.method !== "POST") return fail("METHOD_NOT_ALLOWED", 405);
     if (!env.DB || !env.RESEND_WEBHOOK_SECRET || !env.COMMERCE_ORIGIN ||

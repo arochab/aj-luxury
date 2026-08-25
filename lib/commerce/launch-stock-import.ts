@@ -58,6 +58,7 @@ export type ValidatedLaunchStockImport = Readonly<{
   >[];
   totals: LaunchStockImportTotals;
   approvedBy: Readonly<Record<LaunchStockApprovalRole, string>>;
+  approvedAt: Readonly<Record<LaunchStockApprovalRole, string>>;
 }>;
 
 export class LaunchStockImportError extends Error {
@@ -383,6 +384,7 @@ export async function validateLaunchStockImport(
     );
   }
   const approvedBy = {} as Record<LaunchStockApprovalRole, string>;
+  const approvedAt = {} as Record<LaunchStockApprovalRole, string>;
   const signerIds = new Set<string>();
   for (const rawApproval of candidate.approvals) {
     if (!isPlainRecord(rawApproval)) {
@@ -420,6 +422,7 @@ export async function validateLaunchStockImport(
       );
     }
     approvedBy[role] = signerId;
+    approvedAt[role] = rawApproval.signedAt;
     signerIds.add(signerId);
   }
   if (!approvedBy.stock_owner || !approvedBy.release_owner) {
@@ -449,5 +452,6 @@ export async function validateLaunchStockImport(
     ),
     totals,
     approvedBy: Object.freeze({ ...approvedBy }),
+    approvedAt: Object.freeze({ ...approvedAt }),
   });
 }
