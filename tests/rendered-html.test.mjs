@@ -9,6 +9,40 @@ function schemaRows(type, tableByName) {
   }));
 }
 
+/* CE MOCK AVAIT UNE MIGRATION DE RETARD, ET C'EST CE QUI RENDAIT LE POINT DE
+   SANTE 503 DEPUIS DES SEMAINES.
+
+   Le worker refuse d'ouvrir la preproduction tant qu'il n'a pas prouve, objet
+   par objet, que le schema installe correspond exactement a son inventaire.
+   Ce tableau simule ce que sqlite_master repond. Onze objets y manquaient,
+   tous introduits par des migrations posterieures a la derniere mise a jour
+   du mock : le coffre de references transporteur et son trigger frere
+   (0011), les deux triggers de contrat de tarification transporteur (0010),
+   et les intentions de remboursement tardif (0014).
+
+   Le worker avait donc raison de fermer : le mock decrivait une base
+   incomplete. Corrige le 22/08/2026.
+
+   COMMENT LA LISTE A ETE ETABLIE, pour que la prochaine correction ne soit
+   pas une devinette. Deux comparaisons, pas une :
+
+   1. contre les constantes *_INVENTORY de worker/index.ts, qui SONT le
+      contrat que ce mock doit satisfaire ;
+   2. contre une vraie base D1 portant les 16 migrations de production, pour
+      verifier que chaque objet exige existe reellement et sur quelle table.
+
+   La premiere comparaison seule suffit. La seconde protege du cas ou le
+   worker exigerait un objet qu'aucune migration ne cree — ce qui fermerait
+   la production pour toujours sans qu'aucun test ne le dise.
+
+   Piege rencontre : comparer a la base en retapant la requete du worker A LA
+   MAIN fait manquer les clauses par nom exact, et donne une liste fausse. Il
+   faut lire les constantes, pas reecrire la requete.
+
+   Les objets trg_preprod_demo_* n'existent PAS en production, et c'est
+   voulu : la migration 0008 est exclue du plan de production. Ce mock simule
+   une preproduction, donc il les porte. Leur absence d'une base de
+   production n'est pas un defaut. */
 const governedSchemaRows = [
   ...schemaRows("table", {
     preprod_demo_dataset: "preprod_demo_dataset",
@@ -16,6 +50,10 @@ const governedSchemaRows = [
     delivery_option_snapshots: "delivery_option_snapshots",
     delivery_service_point_snapshots: "delivery_service_point_snapshots",
     shipping_document_metadata: "shipping_document_metadata",
+    /* Les deux tables ci-dessous ont ete ajoutees le 22/08/2026 : le mock
+       n'avait pas suivi les migrations 0011 et 0014. Note complete plus bas. */
+    delivery_provider_reference_vault: "delivery_provider_reference_vault",
+    late_payment_refund_intents: "late_payment_refund_intents",
   }),
   ...schemaRows("index", {
     idx_delivery_options_cart_expiry: "delivery_option_snapshots",
@@ -26,8 +64,32 @@ const governedSchemaRows = [
     ux_delivery_service_point_provider_ref:
       "delivery_service_point_snapshots",
     ux_shipping_document_reference: "shipping_document_metadata",
+    idx_delivery_reference_key_version: "delivery_provider_reference_vault",
+    ux_delivery_reference_owner: "delivery_provider_reference_vault",
+    idx_late_payment_refund_dispatch: "late_payment_refund_intents",
+    ux_late_payment_refund_active_lease: "late_payment_refund_intents",
+    ux_late_payment_refund_idempotency: "late_payment_refund_intents",
+    ux_late_payment_refund_order: "late_payment_refund_intents",
+    ux_late_payment_refund_payment: "late_payment_refund_intents",
+    ux_late_payment_refund_provider_refund: "late_payment_refund_intents",
+    ux_late_payment_refund_webhook: "late_payment_refund_intents",
+    ux_payments_order_active_checkout: "payments",
   }),
   ...schemaRows("trigger", {
+    trg_orders_provider_pricing_contract: "orders",
+    trg_shipping_quote_provider_pricing_contract: "shipping_quotes",
+    trg_delivery_option_initially_unselected: "delivery_option_snapshots",
+    trg_delivery_reference_immutable: "delivery_provider_reference_vault",
+    trg_delivery_reference_replay_guard: "delivery_provider_reference_vault",
+    trg_delivery_reference_retain: "delivery_provider_reference_vault",
+    trg_delivery_reference_validate_insert: "delivery_provider_reference_vault",
+    trg_late_payment_refund_lock_identity: "late_payment_refund_intents",
+    trg_late_payment_refund_retain: "late_payment_refund_intents",
+    trg_late_payment_refund_terminal_immutable: "late_payment_refund_intents",
+    trg_late_payment_refund_validate_claim_time: "late_payment_refund_intents",
+    trg_late_payment_refund_validate_insert: "late_payment_refund_intents",
+    trg_late_payment_refund_validate_success: "late_payment_refund_intents",
+    trg_late_payment_refund_validate_transition: "late_payment_refund_intents",
     trg_preprod_demo_cart_active_delete: "carts",
     trg_preprod_demo_cart_active_insert: "carts",
     trg_preprod_demo_cart_active_update: "carts",
@@ -392,7 +454,7 @@ test("public HTML advertises shared caching without using the forbidden Cache AP
     );
     assert.match(
       publicResponse.headers.get("cache-tag") ?? "",
-      /aj-luxury-html-2026-08-10-hero-v4/,
+      /aj-luxury-html-2026-08-21-hero-v6/,
     );
     await publicResponse.text();
 
@@ -571,69 +633,77 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
   assert.match(html, /Pourpre Impérial/);
   assert.match(html, /Rose Velours/);
   assert.match(html, /Lilas Céleste/);
-  assert.match(html, /data-hero-version="video-v4"/);
-  assert.match(html, /\/media\/images\/client\/hero-v4-/);
-  assert.match(html, /class="aj-film__hero-video"/);
-  assert.match(html, /class="aj-film__hero-backdrop"/);
-  assert.match(html, /class="aj-film__hero-stage"/);
-  assert.match(html, /class="aj-film__hero-poster"/);
-  assert.match(html, /hero-v4-portrait-720x934-poster\.webp\?v=v4/);
-  assert.match(html, /hero-v4-portrait-480x623-poster\.webp\?v=v4/);
-  assert.doesNotMatch(html, /hero-v4-portrait-720x934-poster\.avif\?v=v4/);
-  assert.match(html, /type="image\/avif"/);
-  assert.match(html, /hero-v4-tablet-1440x810-poster\.webp\?v=v4/);
-  assert.match(html, /hero-v4-tablet-1440x810-poster\.avif\?v=v4/);
-  assert.match(html, /hero-v4-desktop-1920x1080-poster\.webp\?v=v4/);
-  assert.match(html, /hero-v4-desktop-1920x1080-poster\.avif\?v=v4/);
-  assert.match(html, /hero-v4-xl-native-1920x1080-poster\.webp\?v=v4/);
-  assert.match(html, /hero-v4-xl-native-1920x1080-poster\.avif\?v=v4/);
+  /* ── LE CONTRAT DE L'ACCUEIL v10 ──────────────────────────────────────
+     Le document garde l'ordre production et les vrais assets AJ, puis ajoute
+     sa mise en scène uniquement au client. Le HTML initial reste achetable,
+     lisible et complet sans attendre GSAP. */
+  assert.match(html, /<main class="aj-home aj-home-v10">/);
+  assert.match(html, /id="home10-title"/);
+  assert.match(html, /Reveal Your[\s\S]*Inner Beauty/);
   assert.match(
     html,
-    /<video[^>]*autoPlay=""[^>]*muted=""[^>]*playsInline=""[^>]*preload="none"/,
+    /campaign-duo-pourpre\.webp"[^>]*fetchPriority="high"[^>]*decoding="async"/,
   );
-  assert.doesNotMatch(html, /<video[^>]*\sloop=""/);
-  assert.doesNotMatch(html, /<video[^>]*\ssrc=/);
-  assert.doesNotMatch(html, /<video[^>]*\sposter=/);
-  assert.doesNotMatch(html, /images\/client\/hero-duo-(?:static|cutout)/);
-  assert.match(html, /data-identity-source="client-approved-campaign-photo"/);
-  assert.match(html, /hero-identity-overlay-landscape-v1\.png/);
-  assert.match(html, /hero-identity-overlay-portrait-v1\.png/);
-  assert.match(html, /aj-film__hero-reflection/);
-  assert.equal(
-    (html.match(/data-metallic-mounted="false"/g) ?? []).length,
-    3,
-    "homepage metallic fields must remain unmounted during initial hero render",
+  assert.match(html, /campaign-duo-lilas-seated\.webp/);
+  assert.match(html, /product-rose-model\.webp/);
+  assert.match(html, /editorial-lilas-chair\.webp/);
+  assert.match(html, /editorial-rose-profile\.webp/);
+  assert.match(html, /editorial-pourpre-chair\.webp/);
+
+  /* Les trois produits canoniques et leurs routes PDP existent au premier
+     rendu. La motion ne porte jamais la responsabilité du contenu commerce. */
+  assert.equal((html.match(/data-motion="collection-card"/g) ?? []).length, 3);
+  assert.match(html, /product-rose-profile\.webp"[^>]*loading="lazy"[^>]*fetchPriority="low"/);
+  assert.match(html, /product-lilas-model\.webp"[^>]*loading="lazy"[^>]*fetchPriority="low"/);
+  assert.match(html, /product-card-pourpre\.webp"[^>]*loading="lazy"[^>]*fetchPriority="low"/);
+  assert.match(html, /href="#apollon"[^>]*>Aller au contenu principal<\/a>/);
+  assert.equal((html.match(/data-motion="collection-step"/g) ?? []).length, 3);
+  assert.equal((html.match(/aria-pressed="(?:true|false)"/g) ?? []).length, 3);
+  assert.match(html, /href="\/products\/rose-pale"/);
+  assert.match(html, /href="\/products\/lilas-bleu-clair"/);
+  assert.match(html, /href="\/products\/pourpre"/);
+  assert.match(html, /Rose Velours/);
+  assert.match(html, /Lilas Céleste/);
+  assert.match(html, /Pourpre Impérial/);
+  assert.match(
+    html,
+    /product-card-pourpre\.webp[\s\S]*product-rose-profile\.webp[\s\S]*product-lilas-model\.webp/,
   );
-  assert.doesNotMatch(html, /class="metallic-field__canvas"/);
-  assert.match(html, /Figer le métal/);
+  assert.match(
+    html,
+    /Chez AJ Luxury,[\s\S]*le véritable luxe commence[\s\S]*au plus près de soi/,
+  );
+
+  /* Aucun film, rendu métallique, asset généré ni classe CSS invalide ne doit
+     réapparaître dans le document réellement servi. */
+  assert.doesNotMatch(html, /<video|data-metallic-mounted|metallic-field__canvas|Figer le métal/);
+  assert.doesNotMatch(html, /generated_images|hero-figures|identity-overlay|hero-v[67]-|apollon-world/);
+  assert.doesNotMatch(html, /class="[^"]*\bundefined\b/);
+
+  /* Le chrome et les destinations restent ceux de la production validée. */
+  assert.match(html, /<header[^>]*>[\s\S]*aj-luxury-logo\.webp/);
+  assert.match(html, /aria-label="Navigation principale"/);
   assert.match(html, /href="\/"[^>]*aria-current="page"[^>]*>Accueil</);
   assert.match(html, />Notre histoire</);
-  assert.match(html, /href="\/shop"[^>]*>Découvrir la collection</);
-  assert.match(html, /94\s*%[\s\S]*modal/i);
-  assert.match(html, /6\s*%[\s\S]*élasthanne/i);
-  assert.match(
-    html,
-    /apollon-rose-lyre-v1\.webp[\s\S]*apollon-lilas-lyre-v1\.webp[\s\S]*apollon-pourpre-lyre-v1\.webp/,
-  );
-  assert.doesNotMatch(html, /Un modèle décliné en trois coloris/i);
-  assert.doesNotMatch(html, /data-hero-fusion/);
-  assert.doesNotMatch(html, /href="\/#collection"/);
-  assert.doesNotMatch(html, /href="\/#matiere"/);
-  assert.doesNotMatch(html, />La matière</);
-  assert.doesNotMatch(html, /aj-film__living-duo|aj-film__liquid-overlay/);
-  assert.doesNotMatch(
-    html,
-    /pika|Signature 01|Contour 02|Ligne 03|Motion 04|Libre 05|iStock|Getty/i,
-  );
+  assert.match(html, /href="\/shop"/);
+  assert.match(html, /href="\/notre-histoire"/);
+  assert.match(html, />Collection Apollon</);
+  assert.doesNotMatch(html, /data-hero-fusion|href="\/#matiere"|>La matière</);
+  assert.doesNotMatch(html, /pika|Signature 01|Contour 02|Ligne 03|Motion 04|Libre 05|iStock|Getty/i);
 });
 
+/* Tailles de galerie depuis la reprise des fiches du 19/08 (natures mortes) :
+   pourpre 5, rose 4, lilas 3. L'ancienne garde « >= 4 placeholders » était un
+   proxy calibré sur le catalogue d'avant ; l'invariant exact est plus fort —
+   chaque cadre porte son placeholder, la vue principale portant EN PLUS la
+   seule image pleine résolution : n placeholders, 1 full. */
 const productCases = [
-  ["/products/pourpre", "Pourpre Impérial"],
-  ["/products/rose-pale", "Rose Velours"],
-  ["/products/lilas-bleu-clair", "Lilas Céleste"],
+  ["/products/pourpre", "Pourpre Impérial", 5],
+  ["/products/rose-pale", "Rose Velours", 4],
+  ["/products/lilas-bleu-clair", "Lilas Céleste", 3],
 ];
 
-for (const [pathname, colorName] of productCases) {
+for (const [pathname, colorName, galerie] of productCases) {
   test(`server-renders ${pathname}`, async () => {
     const response = await render(pathname);
     assert.equal(response.status, 200);
@@ -641,7 +711,11 @@ for (const [pathname, colorName] of productCases) {
     const html = await response.text();
     assert.match(html, /Apollon/);
     assert.match(html, new RegExp(colorName));
-    assert.match(html, /Prix fictif, non commercial/);
+    /* Libelle corrige le 22/08 : quatre documents internes disent que
+       29,99 EUR est le prix VALIDE par le client, donc l'annoncer fictif etait
+       faux. Le garde-fou reste le meme — un montant nu se lirait comme une
+       offre active alors que la vente n'est pas ouverte. */
+    assert.match(html, /Vente non encore ouverte/);
     assert.match(html, /29,99(?:\s|&nbsp;|&#xA0;)*€/);
     assert.match(html, /Sélectionnez une taille/);
     assert.match(
@@ -658,8 +732,9 @@ for (const [pathname, colorName] of productCases) {
       1,
       "initial HTML keeps only the full-resolution lead gallery image",
     );
-    assert.ok(
-      (html.match(/data-gallery-media="placeholder"/g) ?? []).length >= 4,
+    assert.equal(
+      (html.match(/data-gallery-media="placeholder"/g) ?? []).length,
+      galerie,
       "every gallery frame keeps a lightweight visual placeholder",
     );
     assert.match(html, /Disponibilité simulée/);
@@ -697,7 +772,12 @@ test("server-renders the real boutique and its complete navigation", async () =>
   assert.equal(response.status, 200);
   const html = await response.text();
   assert.match(html, /<h1[^>]*>Apollon<\/h1>/);
-  assert.match(html, /3(?:<!-- -->)? coloris/);
+  /* Depuis la reprise du 19/08, la boutique NOMME les coloris au lieu de les
+     compter — « Coloris : Rose Velours · Lilas Céleste · Pourpre Impérial ». */
+  assert.match(
+    html,
+    /Coloris[\s\S]*Rose Velours[\s\S]*Lilas Céleste[\s\S]*Pourpre Impérial/,
+  );
   assert.match(html, /Pourpre Impérial/);
   assert.match(html, /Rose Velours/);
   assert.match(html, /Lilas Céleste/);
@@ -721,7 +801,14 @@ test("server-renders the real boutique and its complete navigation", async () =>
     /<h[1-6][^>]*>(?:Collection Apollon|Les trois coloris|3 produits)<\/h[1-6]>/,
   );
   assert.doesNotMatch(html, />\s*Best Seller\s*</i);
-  assert.doesNotMatch(html, /\d+[,.]\d{2}\s*(?:€|EUR)/i);
+  /* L'interdit « aucun prix en boutique » est tombé avec la reprise du 19/08 :
+     les trois coloris partagent UN prix et la boutique le dit une fois
+     (app/shop/page.tsx, LocalizedPrice). Le contrat devient : le prix unique,
+     jamais un prix par carte. */
+  assert.ok(
+    (html.match(/29,99(?:\s|&nbsp;|&#xA0;)*€/g) ?? []).length >= 1,
+    "the boutique states the single shared price",
+  );
 });
 
 test("server-renders the complete AJ Luxury story", async () => {
@@ -729,12 +816,28 @@ test("server-renders the complete AJ Luxury story", async () => {
   assert.equal(response.status, 200);
   const html = await response.text();
   assert.match(html, /Notre histoire/);
-  assert.match(html, /Le point de départ/);
-  assert.match(html, /Alex &amp; Jérémy/);
+  // Les trois mouvements sont nommés, plus jamais numérotés (retour du 19/08).
+  assert.match(html, /Le marbre/);
+  assert.match(html, /La lyre/);
+  assert.match(html, /Le laurier/);
+  assert.doesNotMatch(html, /<p[^>]*>0[123]<\/p>/);
+  assert.match(html, /Le vêtement que personne ne voit/);
+  assert.match(html, /Jérémy et Alex/);
+  // La seule prise de parole signée du site, et le seul endroit où le double
+  // rôle fondateurs/mannequins est explicité.
+  assert.match(html, /Apollon est notre premier modèle\. Il ne sera pas le dernier\./);
+  assert.match(html, /et les deux corps de toutes ces images/);
   assert.match(html, /Pas d’excès\. Simplement la justesse des détails\./);
-  assert.match(html, /campaign-duo-lilas-seated\.webp/);
-  assert.match(html, /product-lilas-model\.webp/);
-  assert.match(html, /story-jeremy-retouched\.jpeg/);
+  // Retour n°4, 19/08. Les deux portraits sont la seule référence NOMINATIVE
+  // du site : un prénom écrit sous un visage. Ils portaient Jérémy en Rose et
+  // Alex en Lilas, soit l'inverse de ce que montrent l'accueil, /shop et les
+  // fiches. Chacun porte désormais son coloris, et cette page ne peut plus
+  // dériver sans casser ce test.
+  assert.match(html, /editorial-lilas-chair\.webp/); // Jérémy — Lilas Céleste
+  assert.match(html, /hero-pourpre-model\.webp/); // Alex — Pourpre Impérial
+  assert.doesNotMatch(html, /story-jeremy-retouched\.jpeg/);
+  assert.doesNotMatch(html, /product-lilas-model\.webp/);
+  assert.match(html, /campaign-duo-pourpre\.webp/);
   assert.match(html, /product-pourpre-detail\.webp/);
   assert.match(html, />Accueil</);
   assert.match(
@@ -742,7 +845,10 @@ test("server-renders the complete AJ Luxury story", async () => {
     /href="\/notre-histoire"[^>]*aria-current="page"[^>]*>Notre histoire</,
   );
   assert.doesNotMatch(html, /Le premier chapitre/);
-  assert.doesNotMatch(html, /94\s*%\s*modal|6\s*%\s*élasthanne/);
+  /* L'interdit « pas de fiche technique dans le recit » est tombe avec la
+     section Le Laurier (reprise du recit, 19-20/08) : la matiere y est
+     presentee en composition — 94 MODAL · 6 ELASTHANNE — et cette section
+     fait partie du design courant, verifie par captures le 21/08. */
   assert.doesNotMatch(
     html,
     /intention d’image|casting|futurs? shootings?|compte officiel à confirmer/i,
@@ -770,19 +876,65 @@ for (const [pathname, marker] of informationCases) {
   });
 }
 
-test("legal notice exposes the required pre-launch checklist without invented company data", async () => {
+test("legal notice publishes the sourced seller identity and never the closed establishment", async () => {
   const response = await render("/legal-notice");
   assert.equal(response.status, 200);
   const html = await response.text();
   assert.match(html, /Éditeur du site/);
-  assert.match(html, /adresse du siège ou de domiciliation/);
-  assert.match(html, /SIREN, SIRET et mention RCS\/RNE/);
   assert.match(html, /Direction de la publication/);
   assert.match(html, /Cloudflare, Inc\./);
   assert.match(html, /\+33 1 73 01 52 44/);
   assert.match(html, /contact@ajluxurystore\.com/);
-  assert.match(html, /À compléter avant l’ouverture des ventes/);
-  assert.match(html, /à compléter/i);
+
+  /* L'IDENTITE EST DESORMAIS RENSEIGNEE, ET ELLE EST SOURCEE. Relevee le
+     22/08 sur l'Annuaire des Entreprises (INSEE, DGFiP, Douanes, INPI) et
+     recoupee avec l'adresse d'expediteur du compte Sendcloud. Le test ne
+     verifie plus l'absence de donnees, il verifie qu'elles sont LES BONNES. */
+  assert.match(html, /Jérémy Scheppler/);
+  assert.match(html, /944 996 487/);
+  assert.match(html, /944 996 487 00038/);
+  assert.match(html, /Belmont/);
+  assert.match(html, /Registre national des entreprises/);
+
+  /* LE SIRET FERME NE DOIT JAMAIS PARAITRE. L'entreprise compte trois
+     etablissements et un seul est en activite ; le 00020 de Belmont est ferme
+     depuis le 28/07/2026 et circule pourtant encore dans des annuaires
+     tiers. Le publier serait une mention legale fausse. */
+  assert.doesNotMatch(html, /944 996 487 00020|94499648700020/);
+  assert.doesNotMatch(html, /944 996 487 00012|94499648700012/);
+
+  /* LE NUMERO DE TVA EST PUBLIE, sur instruction explicite d'Adam du
+     22/08/2026. La cle de controle le confirme : (12 + 3 x (944996487 mod 97))
+     mod 97 = 58, donc FR58944996487 est bien LE numero de ce SIREN. */
+  assert.match(html, /FR\s?58\s?944\s?996\s?487/);
+
+  /* MAIS L'ETIQUETTE DU PRIX NE SUIT PAS. Publier le numero ne tranche pas le
+     regime : l'API officielle renvoie encore « tva: null », ce qui est le
+     comportement d'une franchise en base. Le montant affiche est le meme sous
+     les deux regimes, seule sa mention change. Tant que Jeremy n'a pas
+     repondu, aucune des deux n'est affirmee — c'est la seule position vraie
+     dans les deux cas, et ce test empeche de la trancher par inadvertance. */
+  assert.doesNotMatch(html, /\bTTC\b/);
+  assert.doesNotMatch(html, /293\s?B/);
+
+  /* AUCUN TEXTE D'ATTENTE NE RESTE VISIBLE. Adam confirme le 22/08 qu'aucune
+     ligne telephonique n'est ouverte. La ligne « Telephone » est donc omise
+     plutot que remplie d'un « a completer » : le placeholder ne satisfaisait
+     pas la LCEN et signalait en plus une marque non prete. Le manque est
+     porte par PRELAUNCH_BLOCKERS, pas par la page publique. */
+  assert.doesNotMatch(html, /À compléter/);
+
+  /* Attention au faux positif : l'hebergeur AFFICHE un telephone, celui de
+     Cloudflare France. Interdire la chaine « Telephone » ferait echouer le
+     test pour la mauvaise raison. Ce qui doit etre vrai, c'est qu'il n'en
+     reste QU'UN sur la page, et que c'est celui de l'hebergeur. */
+  const lignesTelephone = html.match(/<dt[^>]*>Téléphone<\/dt>/g) ?? [];
+  assert.equal(
+    lignesTelephone.length,
+    1,
+    "seul l’hébergeur doit porter un téléphone tant que l’éditeur n’en a pas",
+  );
+  assert.match(html, /\+33 1 73 01 52 44/);
 });
 
 test("terms cover the 2026 consumer baseline without a blanket underwear exclusion", async () => {
@@ -798,6 +950,19 @@ test("terms cover the 2026 consumer baseline without a blanket underwear exclusi
   assert.match(html, /n’est pas exclu du seul fait que le produit est un sous-vêtement/i);
   assert.match(html, /médiateur conventionné/i);
   assert.doesNotMatch(html, /plateforme (?:européenne )?(?:de )?règlement en ligne|ec\.europa\.eu\/consumers\/odr/i);
+
+  /* AUCUN TEXTE D'ATTENTE SUR DES CONDITIONS GENERALES DE VENTE. Releve le
+     22/08/2026 sur la previsualisation deployee : la phrase rendue etait
+     « le mediateur conventionne par AJ Luxury : A selectionner et
+     conventionner avant l'ouverture des ventes, A completer, A completer. »
+     Trois marqueurs d'inachevement dans une seule phrase, sur la page qu'un
+     client lit pour se rassurer.
+
+     Ces « A completer » ne satisfaisaient pas davantage l'article L612-1 que
+     leur absence. La page dit desormais l'echeance. Ce test empeche qu'un
+     futur champ vide reintroduise le probleme ailleurs sur la page. */
+  assert.doesNotMatch(html, /À compléter/);
+  assert.doesNotMatch(html, /À sélectionner/);
 });
 
 test("privacy and cookies describe the actual preview storage and no fictitious tracker", async () => {
@@ -807,7 +972,13 @@ test("privacy and cookies describe the actual preview storage and no fictitious 
   assert.match(privacyHtml, /Facturation et comptabilité/);
   assert.match(privacyHtml, /10 ans/);
   assert.match(privacyHtml, /CNIL/);
-  assert.match(privacyHtml, /ne conserve pas le cryptogramme/i);
+  /* Reformulé lors de la reprise des pages légales : même garantie, phrase
+     plus complète — ni réception ni conservation du numéro ou du
+     cryptogramme. */
+  assert.match(
+    privacyHtml,
+    /ne reçoit ni ne conserve le numéro complet de carte ou son\s+cryptogramme/i,
+  );
 
   const cookiesResponse = await render("/cookies");
   const cookiesHtml = await cookiesResponse.text();

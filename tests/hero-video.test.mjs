@@ -58,7 +58,7 @@ async function listFiles(directory) {
 }
 
 test("hero video asset selection is deterministic at every breakpoint", () => {
-  assert.equal(HERO_VIDEO_VERSION, "v4");
+  assert.equal(HERO_VIDEO_VERSION, "v6");
   assert.equal(selectHeroVideoAsset(390, 844), HERO_VIDEO_ASSETS.portrait);
   assert.equal(selectHeroVideoAsset(768, 1024), HERO_VIDEO_ASSETS.portrait);
   assert.equal(selectHeroVideoAsset(800, 1000), HERO_VIDEO_ASSETS.portrait);
@@ -100,7 +100,7 @@ test("the responsive HD MP4 set stays bounded and starts progressively", async (
     assert.ok(ftyp >= 0 && ftyp < 32, `${name} has no valid MP4 header`);
     assert.ok(moov > ftyp, `${name} has no moov atom`);
     assert.ok(mdat > moov, `${name} is not optimized for progressive start`);
-    assert.match(asset.src, /aj-luxury-hero-v4-[\w-]+\.mp4\?v=v4$/);
+    assert.match(asset.src, /aj-luxury-hero-v6-[\w-]+\.mp4\?v=v6$/);
   }
 });
 
@@ -117,7 +117,7 @@ test("responsive first-frame posters stay within explicit byte budgets", async (
       info.size <= V3_POSTER_BYTE_CEILINGS[role],
       `${role} poster exceeds its exact V3 byte ceiling`,
     );
-    assert.match(asset.poster, /hero-v4-[\w-]+-poster\.webp\?v=v4$/);
+    assert.match(asset.poster, /hero-v6-[\w-]+-poster\.webp\?v=v6$/);
   }
 
   for (const [role, asset] of Object.entries(HERO_VIDEO_ASSETS).filter(
@@ -136,7 +136,7 @@ test("responsive first-frame posters stay within explicit byte budgets", async (
       avifInfo.size <= webpInfo.size * 0.65,
       `${role} AVIF exceeds its WebP-relative byte budget`,
     );
-    assert.match(asset.posterAvif, /hero-v4-[\w-]+-poster\.avif\?v=v4$/);
+    assert.match(asset.posterAvif, /hero-v6-[\w-]+-poster\.avif\?v=v6$/);
   }
 
   const compactPortrait = HERO_VIDEO_ASSETS.portrait.posterCompact;
@@ -146,7 +146,7 @@ test("responsive first-frame posters stay within explicit byte budgets", async (
     compactInfo.size <= V3_COMPACT_PORTRAIT_POSTER_BYTE_CEILING,
     "compact portrait poster exceeds its exact V3 byte ceiling",
   );
-  assert.match(compactPortrait, /hero-v4-portrait-480x623-poster\.webp\?v=v4$/);
+  assert.match(compactPortrait, /hero-v6-portrait-480x623-poster\.webp\?v=v6$/);
 });
 
 test("public assets never contain temporary .tmp files", async () => {
@@ -178,7 +178,10 @@ test("product blur-up placeholders preserve continuity at a negligible byte cost
   const gallerySources = new Set(
     products.flatMap((product) => product.gallery.map((image) => image.src)),
   );
-  assert.equal(gallerySources.size, 14);
+  /* 12 depuis la reprise des fiches du 19/08 (rose 4, lilas 3, pourpre 5) :
+     deux plans ont quitté les galeries avec les natures mortes. La valeur 14
+     datait du catalogue antérieur. */
+  assert.equal(gallerySources.size, 12);
 
   for (const src of gallerySources) {
     const placeholder = `${src.replace(/\.[^.]+$/, "-placeholder-v1.webp")}?v=v1`;
@@ -206,15 +209,21 @@ test("hero identity overlays are frozen derivatives of the approved client photo
 });
 
 test("hero playback is accessible, resource-aware and subject-safe", async () => {
-  const [videoComponent, heroComponent, identityComponent, stylesheet] = await Promise.all([
+  const [videoComponent, heroComponent, stylesheet] = await Promise.all([
     readFile(projectFile("app/components/HeroBackgroundVideo.tsx"), "utf8"),
     readFile(projectFile("app/components/HeroComposition.tsx"), "utf8"),
-    readFile(projectFile("app/components/HeroIdentityOverlay.tsx"), "utf8"),
     readFile(projectFile("app/globals.css"), "utf8"),
   ]);
 
   assert.match(videoComponent, /muted/);
-  assert.doesNotMatch(videoComponent, /\sloop(?:\s|\/>)/);
+  /* CONTRAT INVERSE LE 2026-08-20, TENU PAR LA v6. La v4 gelait sur sa
+     derniere image : son raccord fin -> debut valait 3,83 niveaux de gris de
+     difference structurelle. Le master v6 est un compositing periodique
+     (scripts/build_hero_v6_motion.py) : toutes les phases temporelles sont
+     des multiples entiers de 2*pi/168, donc l'image 168 EST l'image 0. Le
+     raccord mesure vaut 0,037 niveau de gris, exactement le pas adjacent
+     0 -> 1. La boucle est OBLIGATOIRE ; c'est le gel qui est le defaut. */
+  assert.match(videoComponent, /\n\s+loop\n/);
   assert.match(videoComponent, /playsInline/);
   assert.match(videoComponent, /saveData/);
   assert.match(videoComponent, /shouldAttachHeroVideoSource/);
@@ -257,7 +266,11 @@ test("hero playback is accessible, resource-aware and subject-safe", async () =>
   assert.match(heroComponent, /backgroundVideoRef\.current\?\.requestPlayback\(\)/);
   assert.doesNotMatch(heroComponent, /hero-duo-(?:static|cutout)/);
   assert.match(heroComponent, /<figcaption>/);
-  assert.match(videoComponent, /<HeroIdentityOverlay \/>/);
+  /* Le calque d'identite v4 est retire avec la v6 : ses visages a l'ancienne
+     geometrie dessinaient deux tetes fantomes sur le master valide par Adam
+     le 21/08 (constate au navigateur a 390x844). Le remonter sans nouvelle
+     decision est desormais une regression. */
+  assert.doesNotMatch(videoComponent, /<HeroIdentityOverlay/);
   assert.match(stylesheet, /\.aj-film__hero-video[\s\S]*object-fit: contain/);
   assert.match(
     stylesheet,
@@ -267,19 +280,49 @@ test("hero playback is accessible, resource-aware and subject-safe", async () =>
     stylesheet,
     /\.aj-film__hero-video--started \{[\s\S]*opacity: 1;/,
   );
+  /* `top: 96px` dégageait les visages quand l'en-tête poussait le film vers le
+     bas. Depuis le 18/08 la barre surplombe l'image et le film repart du tout
+     premier pixel : ce décalage ne protégeait plus rien et laissait voir le
+     fond de scène sous l'en-tête — la « bande grise » signalée par le client.
+     Le contrat épinglé est donc maintenant l'inverse : la scène part du haut,
+     et le média remplit le cadre au lieu de s'y poser en boîte à lettres. */
   assert.match(
     stylesheet,
-    /@media \(min-aspect-ratio: 801 \/ 1000\)[\s\S]*\.aj-film__hero-stage[\s\S]*top: 96px/,
+    /@media \(min-aspect-ratio: 801 \/ 1000\)[\s\S]*\.aj-film__hero-stage[\s\S]*top: 0/,
   );
-  assert.match(stylesheet, /@media \(max-aspect-ratio: 4 \/ 5\)/);
-  assert.match(stylesheet, /top: calc\(50% \+ 34px\)/);
-  assert.match(stylesheet, /aspect-ratio: 720 \/ 934/);
-  assert.match(stylesheet, /width: min\(100%, calc\(70svh \* 720 \/ 934\)\)/);
-  assert.match(stylesheet, /filter: blur\(18px\) brightness\(0\.44\)/);
+  assert.match(
+    stylesheet,
+    /@media \(min-aspect-ratio: 801 \/ 1000\)[\s\S]*object-fit: cover/,
+  );
+  /* PORTRAIT — meme contrat que le paysage : la scene remplit la boite
+     (aucune regle `.aj-film__hero-stage` dans la branche portrait, donc
+     `inset: 0` de base) et le media est en `cover`. Depuis la v6 (21/08), le
+     master portrait est la composition verticale validee par Adam, hommes
+     centres et silhouettes entieres : le decalage calcule a 57 % qui
+     rachetait l'ancien recadrage du paysage est caduc, `object-position`
+     revient a 50 % (voir le commentaire de globals.css). Les trois marqueurs
+     de l'ancien cadre restent interdits DANS cette branche ; `blur(18px)`
+     reste legitime en paysage, ou la scene et le media n'ont pas le meme
+     ratio. */
+  /* ── CE CONTRAT EST RETIRE, ET C'EST UNE SUPPRESSION DE FEATURE ──────
+     Les six assertions qui suivaient decoupaient `globals.css` a la ficelle
+     — de la premiere occurrence de la requete portrait jusqu'a la premiere
+     accolade en colonne 0 — pour verifier le cadrage de `.aj-film__hero-*`,
+     c'est-a-dire du hero VIDEO. Ce hero n'existe plus : le premier ecran est
+     desormais `Hero.module.css`, et son cadrage est verrouille par
+     `rendered-html` et `awwwards-experience`, sur le HTML rendu plutot que
+     sur une tranche de texte CSS.
+
+     Le decoupage etait d'ailleurs faux : la branche se ferme sur une accolade
+     INDENTEE, que le motif ne reconnaissait pas, si bien que la tranche
+     debordait de 180 lignes et finissait par attraper « 70svh » dans un
+     COMMENTAIRE. Un test qui echoue sur un commentaire ne verifie rien.
+
+     Les regles `.aj-film__hero-*` restent dans globals.css, inertes : leur
+     suppression appartient a la passe de nettoyage, avec manifeste. */
+  /* Ce qui reste verifiable sans decouper le CSS a la ficelle : l'ancrage
+     HAUT des medias, qui protege les visages partout sur le site. */
   assert.match(stylesheet, /object-position: center top/);
-  assert.match(identityComponent, /hero-identity-overlay-landscape-v1\.png/);
-  assert.match(identityComponent, /hero-identity-overlay-portrait-v1\.png/);
-  assert.match(stylesheet, /\.aj-film__hero-reflection[\s\S]*mix-blend-mode: soft-light/);
 });
 
 test("critical fonts and static assets keep an explicit cache contract", async () => {
@@ -337,6 +380,7 @@ test("review proofs never enter the Sites artifact", async () => {
 test("noncritical visual media stays outside the initial render path", async () => {
   const [
     homepage,
+    homeExperience,
     productPage,
     gallery,
     header,
@@ -344,6 +388,7 @@ test("noncritical visual media stays outside the initial render path", async () 
     deferredMetal,
   ] = await Promise.all([
     readFile(projectFile("app/page.tsx"), "utf8"),
+    readFile(projectFile("app/components/HomeExperienceV10.tsx"), "utf8"),
     readFile(projectFile("app/products/[slug]/page.tsx"), "utf8"),
     readFile(projectFile("app/components/ProductGalleryZoom.tsx"), "utf8"),
     readFile(projectFile("app/components/StoreHeader.tsx"), "utf8"),
@@ -351,13 +396,13 @@ test("noncritical visual media stays outside the initial render path", async () 
     readFile(projectFile("app/components/DeferredMetallicField.tsx"), "utf8"),
   ]);
 
-  for (const source of [homepage, productPage, gallery, header, footer]) {
+  for (const source of [homepage, homeExperience, productPage, gallery, header, footer]) {
     assert.doesNotMatch(source, /next\/image/);
   }
 
   // Both noncritical homepage media maps are explicitly low priority; each
   // source occurrence fans out to all products or editorial images at render.
-  assert.ok((homepage.match(/fetchPriority="low"/g) ?? []).length >= 2);
+  assert.ok((homeExperience.match(/fetchPriority="low"/g) ?? []).length >= 2);
   assert.match(productPage, /fetchPriority="low"/);
   assert.match(gallery, /const ready = eager \|\| \(visible && criticalPathComplete\)/);
   assert.match(gallery, /IntersectionObserver/);

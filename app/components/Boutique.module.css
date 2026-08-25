@@ -1,0 +1,850 @@
+/* ==========================================================================
+   Boutique — /shop
+   --------------------------------------------------------------------------
+   Le langage de _design-reference/claude-design-accueil.html porté sur l'écran
+   qui vend : fond noir, gouttière unique, filets de 2px, plancher
+   typographique à 15px (--t0). Le lettrage métallique est réservé au titre de
+   page ; les noms de coloris sont en encre pleine, voir .carteNom.
+
+   RETOUR ADAM DU 20/08 — « les trois noms de coloris sont sous la ligne de
+   flottaison à toutes les tailles bureau ».
+
+   MESURE AVANT, à 1440x900 : en-tête 76 px, ouverture 293 px, carte 472x708.
+   Le nom « Rose Velours » ouvrait à y=970 et fermait à y=1006, soit 106 px
+   sous une ligne de flottaison à 900. À 1920x1080, y=1242.
+
+   DEUX CAUSES, DEUX CORRECTIONS, ET UN GAIN DE LUMIÈRE AU PASSAGE.
+   UN. L'ouverture empilait quatre blocs. Elle devient une bande à deux
+   colonnes au-delà de 900 px : l'identité règle sa hauteur EN PARALLÈLE de ce
+   qu'on en dit, au lieu de s'y ajouter.
+   DEUX. La carte imposait le ratio natif de la source (2/3), donc 708 px de
+   photographie dans une colonne de 472, et le nom était arrimé au bas de cette
+   photographie. Le cadre devient une CONSTANTE réglée sur la hauteur d'écran.
+   TROIS. Plus aucun texte n'est posé sur la photographie, donc le voile de
+   noir qui existait pour le rendre lisible est supprimé. Le vêtement, la
+   ceinture et la plaque métal sont rendus à leur luminance réelle.
+
+   RETOUR ADAM DU 20/08, SECOND TOUR — l'effondrement du téléphone.
+   La bande à deux colonnes ci-dessus règle le bureau et ne fait rien sous
+   900 px, où elle redevient une pile. Mesuré à 390x844 : en-tête 110 px, puis
+   étiquette, titre, chapô, filet, prix, mention de vente et lien — 455 px,
+   soit 54 % de l'écran — avant la première photographie, laquelle était
+   ensuite coupée de 14 px par la ligne de flottaison, son nom tombant 91 px
+   dessous, et les trois coloris s'étalant sur 2,25 écrans. L'étalon secondaire
+   ouvre sa boutique à 118 px sur 844, soit 14 %, sans une ligne de discours
+   au-dessus de la grille.
+   CORRECTION : sous 900 px, le bloc commercial passe SOUS la bande des trois
+   photographies ; il ne reste au-dessus que l'étiquette et « Apollon ». Aucune
+   copie n'est touchée, aucune source n'est recadrée, la fenêtre d'image reste
+   à 80,0 % exactement. Mesuré après : première photographie à 27,0 % (390),
+   30,0 % (360), 31,4 % (320) ; premier nom fermé à 708 / 663 / 613 px, tous
+   au-dessus de la ligne de flottaison ; le bureau ne bouge d'aucun pixel.
+
+   Aucun token n'est redéfini ici : tout vient de app/design-system.css. Les
+   seules variables locales sont préfixées --bq-.
+
+   Règle de mouvement : rien n'est masqué en CSS. Les états de départ sont
+   posés par GSAP (AjScrollReveal). Sans JS, la page est déjà lisible.
+   ========================================================================== */
+
+.boutique {
+  /* LA LARGEUR DE LA PAGE EST CELLE DES TROIS PHOTOGRAPHIES, ET RIEN D'AUTRE.
+     Ces quatre valeurs sont hoistées ici, et non gardées sur .grille, parce
+     que la bande de texte d'ouverture doit se régler sur la MÊME mesure que
+     les cadres. Une seule chaîne de causalité, dans un seul sens :
+       hauteur d'écran → --bq-h → --bq-w → --bq-bande → largeur du texte.
+     Jamais l'inverse. C'est ce qui interdit à une colonne de texte d'imposer
+     une hauteur de photographie, qui était le défaut d'origine. */
+  --bq-cadre: 0.832;
+  /* 54svh, et pas davantage : c'est 1280x800 qui borne, la taille où
+     l'ouverture reste la plus chère par rapport à la hauteur d'écran. À 56svh
+     le nom fermait à 18 px de la ligne de flottaison — visible, mais collé au
+     bord, ce qui se lit comme une coupe. À 54svh il garde 34 px sous lui. */
+  --bq-h: clamp(320px, 54svh, 600px);
+  --bq-w: calc(var(--bq-h) * var(--bq-cadre));
+  /* Trois cadres et leurs deux coutures de 2 px. */
+  --bq-bande: calc(3 * var(--bq-w) + 4px);
+  /* LA MARGE LATÉRALE DE LA BANDE DE TEXTE, hoistée ici pour que l'identité,
+     le bloc commercial et le conteneur d'ouverture ne puissent pas diverger.
+     `max()` fait de la gouttière de page un plancher : sous ~1500 px la bande
+     vaut la pleine largeur utile et la valeur retombe sur --gut ; au-delà,
+     elle vaut exactement l'inset des trois cadres, ce qui aligne « Apollon »
+     sur la première photographie au pixel. Le `100%` d'une variable custom est
+     résolu chez celui qui la consomme : porté par .ouverture à partir de
+     900 px, porté par .identite et .dire en dessous, il vaut dans les deux cas
+     la pleine largeur utile de la page. */
+  --bq-marge: max(var(--gut), calc((100% - var(--bq-bande)) / 2));
+  /* L'unité de respiration verticale de l'ouverture, servie deux fois : en
+     tête de section, puis entre l'identité et la première photographie. Une
+     seule valeur, donc aucune correction ponctuelle par marge arbitraire. */
+  --bq-rythme: clamp(16px, 2.4vh, 30px);
+
+  min-height: 100svh;
+  /* clip et non hidden : clip ne crée pas de conteneur de défilement, donc ne
+     peut pas casser une mesure de ScrollTrigger. */
+  overflow: clip;
+  background: var(--aj-noir);
+  color: var(--aj-encre);
+  font-family: var(--disp);
+  font-size: var(--t1);
+  line-height: 1.5;
+}
+
+/* La scène GSAP n'existe que comme portée de sélecteurs : elle ne doit rien
+   changer au flux. */
+.scene {
+  display: contents;
+}
+
+/* --- 01 · Ouverture ------------------------------------------------------ */
+
+/* LA BANDE DE TEXTE PREND EXACTEMENT LA LARGEUR DES TROIS CADRES RÉUNIS.
+   Mesuré à 1920 avant : le titre « Apollon » ouvrait à x=68 et la première
+   photographie à x=68 aussi, mais les trois cadres ne couvraient que 1455 des
+   1769 px disponibles — les 314 px restants étaient versés ENTRE les cadres,
+   157 px par intervalle, et la rangée se lisait comme trois affiches séparées
+   au lieu d'une collection. La grille les rassemble désormais (voir
+   .grille) ; l'ouverture se règle sur la même mesure pour que « Apollon » et
+   la première photographie ouvrent sur le même x. Mesuré après : 223/223.
+
+   UN SEUL APLAT DU HAUT DU TITRE AU BAS DU DERNIER NOM.
+   Deux raisons, dont une est une règle écrite du système.
+
+   LA RÈGLE. app/design-system.css réserve --aj-noir-abysse aux « seules
+   surfaces qui portent un titre en métal », parce que l'arrêt le plus sombre
+   du dégradé, #6d737b, ne tient que 4,18:1 sur ce noir-là et perd un point de
+   contraste à chaque point de L* rendu au fond. Le h1 « Apollon » est en
+   métal et vivait sur --aj-noir (L* 6,5) : mesuré 3,88:1, soit au-dessous de
+   l'écart déjà signalé. Sur abysse il revient à la valeur documentée.
+
+   LE TRAIT DE L'ÉTALON. Le premier écran de l'étalon principal est un seul
+   aplat tenu sans exception, et 97,4 % de son document ne porte qu'une seule
+   valeur de fond. Le nôtre en portait deux : ouverture à L* 6,5, lit de la
+   grille à L* 2,2, avec une couture visible à y=276 en plein premier écran.
+   Les deux surfaces n'en font plus qu'une ; la franchise du bord des
+   photographies vient désormais des photographies, pas d'un changement de
+   noir sous elles. Le reste de la page garde son échelle : le panneau matière
+   reste à --aj-noir-2 (L* 11,6), et c'est lui qui fait la respiration.
+
+   Le fond est à FOND PERDU et le contenu est en bande : la marge latérale est
+   donc portée par le padding et non par une largeur, sinon l'aplat s'arrêterait
+   au bord de la bande et rouvrirait une couture en L à 1920. `max()` fait de la
+   gouttière de page un plancher — sous ~1500 px la bande vaut la pleine largeur
+   utile et rien ne bouge ; à 768 elle valait déjà 691 px pour 691 disponibles,
+   c'est-à-dire le cas où la page était juste.
+
+   LA GRILLE EST MAINTENANT LE DEUXIÈME ENFANT DE CETTE SECTION, et non plus
+   une section voisine. C'est ce qui permet au bloc commercial de passer sous
+   les trois photographies en dessous de 900 px sans changer l'ordre du DOM :
+   trois enfants, une seule grille, et deux placements différents selon la
+   largeur. Le fond est le même des deux côtés de la grille, donc aucune
+   couture n'apparaît là où l'ancienne section s'arrêtait. */
+.ouverture {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  row-gap: var(--bq-rythme);
+  /* SOUS 900 px, LA MARGE LATÉRALE N'EST PAS PORTÉE PAR LE CONTENEUR. La
+     grille est le deuxième enfant de cette section, entre l'identité et le
+     bloc commercial, et elle doit garder sa propre gouttière et son propre
+     centrage ; c'est donc l'identité et le bloc commercial qui portent la
+     marge (voir .identite, .dire). Le fond, lui, reste ici : un seul aplat du
+     haut de « Apollon » au bas de la mention de vente. */
+  padding: var(--bq-rythme) 0 clamp(28px, 4vh, 56px);
+  background: var(--aj-noir-abysse);
+}
+
+/* Au-delà de 900 px, l'identité et le discours cessent de s'additionner.
+   C'est le geste du premier écran de l'étalon principal : le logotype tient la
+   colonne gauche à x=48, la phrase produit tient la colonne droite à x=1236,
+   et aucune des deux ne pousse l'autre vers le bas. `align-items: end` les
+   aligne sur leur dernière ligne, donc le prix et le titre partagent une même
+   assise au lieu de flotter. Mesure : 293 px d'ouverture deviennent ~150. */
+@media (min-width: 900px) {
+  .ouverture {
+    grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
+    align-items: end;
+    column-gap: clamp(28px, 3.4vw, 72px);
+    /* Ce qui séparait hier la bande de la première photographie était le
+       padding-bas de l'ouverture, clamp(14px, 2vh, 22px). C'est maintenant
+       l'écart de rangée, à la valeur identique : la mesure ne bouge d'aucun
+       pixel à 1920, 1440, 1280 et 1024. */
+    row-gap: clamp(14px, 2vh, 22px);
+    padding-inline: var(--bq-marge);
+    padding-bottom: 0;
+  }
+
+  /* LA BANDE OCCUPE LA PREMIÈRE RANGÉE, LA GRILLE LA SECONDE.
+     L'ordre du DOM est celui du téléphone — identité, photographies, bloc
+     commercial — et c'est le bureau qui remonte le bloc commercial en colonne
+     droite. Écrit dans l'autre sens, le focus clavier serait parti sur un lien
+     situé sous les trois photographies, hors écran ; ici le saut reste à
+     l'intérieur du premier écran. */
+  .identite {
+    grid-row: 1;
+    grid-column: 1;
+  }
+
+  .dire {
+    grid-row: 1;
+    grid-column: 2;
+  }
+
+  .grille {
+    grid-row: 2;
+    grid-column: 1 / -1;
+  }
+}
+
+.identite,
+.dire {
+  display: grid;
+  align-content: end;
+  gap: clamp(12px, 1.6vh, 18px);
+}
+
+/* Sous 900 px, la marge latérale vit sur ces deux blocs et non sur leur
+   conteneur : la grille passe entre eux et doit garder sa propre gouttière.
+   Au-delà de 900 px, la marge repasse sur .ouverture, qui la calcule une seule
+   fois pour la bande entière — d'où la règle écrite en `max-width` et non en
+   `min-width` : posée en dessous de la déclaration de base, elle ne peut pas se
+   faire écraser par elle. */
+@media (max-width: 899.98px) {
+  .identite,
+  .dire {
+    padding-inline: var(--bq-marge);
+  }
+}
+
+.eyebrow {
+  margin: 0;
+  color: var(--aj-encre-84);
+  font-size: var(--t0);
+  font-weight: var(--aj-w-gras);
+  letter-spacing: var(--aj-ls-label);
+  text-transform: uppercase;
+}
+
+/* SOUS 700 px, « BOUTIQUE · PREMIER MODÈLE » PASSAIT SUR DEUX LIGNES.
+   Mesuré le 20/08 à 320x700 : l'étiquette occupait 45 px au lieu de 22,5 —
+   24 signes à 15 px et 0,16 em demandaient plus que les 265 px de colonne. Ces
+   22,5 px sont exactement ce qui manquait pour tenir le seuil de 33 % avant la
+   première photographie, l'en-tête du site pesant déjà 110 px sur 700.
+   L'interlettrage descend donc à 0,10 em : le même levier, à la même valeur,
+   que celui déjà employé sur .carteTon entre 700 et 1023 px, et le sens de
+   l'étalon principal, qui laisse l'interlettrage à `normal` sur 2 330 éléments
+   et ne fait la hiérarchie que par l'échelle. Le corps reste à 15 px, plancher
+   dur, et la marge ainsi gagnée protège aussi les traductions plus longues. */
+@media (max-width: 699.98px) {
+  .eyebrow {
+    letter-spacing: 0.1em;
+  }
+}
+
+/* Encre pleine depuis le 20/08 : le dégradé métallique donnait 4,18:1 ici,
+   mesuré sur #08080a, et aucun fond ne peut le porter à 5,0:1. Voir
+   app/design-system.css, section « Lettrage métallique ». */
+.titre {
+  max-width: 14ch;
+  margin: 0;
+  color: var(--aj-encre);
+  font-family: var(--disp);
+  font-optical-sizing: auto;
+  /* 74 px valaient 67 px de hauteur de ligne pour un seul mot, dans une bande
+     empilée qui coûtait déjà 293 px. En bande à deux colonnes le titre ne
+     pousse plus rien : il est borné à 64 px, où il reste de loin le plus grand
+     caractère de la page — les noms de coloris plafonnent à 44 px. Le rapport
+     titre / nom passe de 1,68 à 1,45, et c'est voulu : la page vend trois
+     coloris, pas un mot. */
+  font-size: clamp(46px, 4.4vw, 64px);
+  font-weight: var(--aj-w-fin);
+  letter-spacing: var(--aj-ls-titre);
+  line-height: 0.9;
+}
+
+.chapo {
+  /* 42ch en colonne droite : la phrase tient sur deux lignes de 900 à 1920. */
+  max-width: 42ch;
+  margin: 0;
+  color: var(--aj-encre-90);
+  font-size: var(--t2);
+  font-weight: var(--aj-w-fin);
+  letter-spacing: var(--aj-ls-sous);
+  line-height: 1.4;
+}
+
+/* Le statut : le prix, puis la vérité commerciale, sur une seule ligne.
+   Ce bloc remplace le bandeau de quatre colonnes APOLLON / COLORIS / TAILLES /
+   COMPOSITION, qui était le composant le plus interchangeable du web
+   e-commerce. Il reste ici, et nulle part ailleurs : le prix ne se répète pas
+   sur les trois cartes, parce qu'il est le même pour les trois et parce qu'il
+   ne doit jamais s'afficher loin de la phrase qui dit que la vente n'est pas
+   encore ouverte. L'étalon secondaire porte un prix par carte parce que ses
+   35 pièces ont 35 prix. */
+.statut {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 10px clamp(20px, 2.4vw, 40px);
+  padding-top: clamp(14px, 1.8vh, 22px);
+  border-top: 1px solid var(--aj-filet);
+}
+
+/* Le prix, traité comme un chiffre d'affichage et non comme une mention. */
+.prix {
+  margin: 0;
+  font-family: var(--disp);
+  font-optical-sizing: auto;
+  font-size: var(--t4);
+  font-weight: var(--aj-w-fin);
+  letter-spacing: var(--aj-ls-grand);
+  line-height: 1;
+}
+
+/* Le refus commercial. Contraste mesuré : --aj-encre-84 (blanc à 0,88) sur
+   --aj-noir #14141a donne 15,4:1, très au-dessus du plancher de 5,0:1.
+   Le statut d'une boutique n'a pas à être discret. */
+.statutNote {
+  flex: 1 1 32ch;
+  margin: 0;
+  color: var(--aj-encre-84);
+  font-size: var(--t1);
+  font-weight: var(--aj-w-livre);
+  line-height: 1.5;
+}
+
+.statutLien {
+  /* Cible de 44 px de haut sans casser la ligne : le padding vertical
+     symétrique agrandit la boîte d'un lien en ligne, la hauteur de ligne du
+     paragraphe reste inchangée. Mesuré après correction. */
+  display: inline-block;
+  padding: 12px 0;
+  margin: -12px 0;
+  color: var(--aj-encre);
+  font-weight: var(--aj-w-moyen);
+  letter-spacing: 0.02em;
+  text-decoration: underline;
+  text-underline-offset: 5px;
+  text-decoration-thickness: 1px;
+}
+
+.statutLien:hover {
+  text-decoration-thickness: 2px;
+}
+
+/* Les faits produit, dans la colonne de la section matière. */
+.faits {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
+  gap: clamp(18px, 2.2vw, 34px);
+  margin: 0;
+  padding-top: clamp(20px, 2.6vh, 30px);
+  border-top: 1px solid var(--aj-filet);
+}
+
+.fait {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+}
+
+.fait dt {
+  color: var(--aj-encre-72);
+  font-size: var(--t0);
+  font-weight: var(--aj-w-gras);
+  letter-spacing: var(--aj-ls-label);
+  text-transform: uppercase;
+}
+
+.fait dd {
+  margin: 0;
+  font-size: var(--t1);
+  font-weight: var(--aj-w-livre);
+  line-height: 1.45;
+}
+
+/* --- 02 · La grille des coloris ------------------------------------------
+   LE CADRE EST LA CONSTANTE, LE COLORIS EST LA VARIABLE.
+
+   C'est le trait mesuré sur la grille produit de l'étalon secondaire : ses 16
+   cartes rendent toutes une image de exactement 339x424 px — 165x206 px à
+   390 —, alors que les fichiers sources font 475x475, 475x594 ou 475x665.
+   Rien n'est jamais rogné ni étiré, et 35 pièces se lisent comme une
+   collection parce que la géométrie ne bouge jamais et que seul le sol change.
+
+   NOTRE TRANSPOSITION. Nos trois sources partagent déjà un ratio unique,
+   1731x2600. Le cadre en montre les 80 % SUPÉRIEURS, à toutes les tailles :
+     --bq-cadre = 1731 / (2600 × 0,80) = 0,832.
+   Ce qui sort du cadre sort par le bas, sous la cuisse. Mesure par analyse de
+   la teinte du swatch sur les trois fichiers, colonnes centrales, 20/08 :
+     Rose Velours     bande produit 55,8 % → 70,0 %
+     Lilas Céleste    bande produit 57,0 % → 72,0 %
+     Pourpre Impérial bande produit 60,0 % → 73,0 %
+   Le sommet du crâne le plus haut est à 2,7 % (Rose). La fenêtre 0 → 80 %
+   garde donc le visage entier, la ceinture entière et le boxer entier sur les
+   trois, avec 7 points de marge sous le vêtement le plus bas. Ce n'est pas un
+   recadrage involontaire : c'est un cadrage déclaré, mesuré, et identique aux
+   quatre tailles de référence.
+
+   LA HAUTEUR SE MESURE EN ÉCRANS, PAS EN PIXELS. C'est le fait décisif de
+   l'étalon principal, dont les sections valent 1, 8, 13,25 ou 10,5 écrans,
+   identiquement à 1920, 1440, 768 et 390. Ici --bq-h vaut 56 % de la hauteur
+   d'écran, bornée à 320 px et 620 px, et la largeur du cadre s'en déduit —
+   jamais l'inverse. C'est ce qui interdit structurellement le défaut de la
+   version précédente, où la colonne imposait 708 px de photographie et
+   rejetait le nom hors de l'écran.
+
+   Quand la colonne est plus large que le cadre, le cadre est centré dans sa
+   cellule et l'air va au sol. C'est l'air de l'étalon secondaire, dont le
+   vêtement n'occupe qu'environ 40 % de sa cellule, identique dans chaque
+   cellule.
+   ========================================================================== */
+
+.grille {
+  display: grid;
+  /* Élément de grille ET conteneur de grille : sans min-width, la taille
+     minimale automatique remonterait le contenu des cadres et pourrait
+     déborder la rangée. */
+  min-width: 0;
+  /* Même raison que .colorisGrille sur l'accueil : trois articles ne tombent
+     jamais juste sur deux colonnes. `auto-fit` en passait par là de ~600 à
+     ~899 px — deux cartes en première rangée et la troisième seule, suivie
+     d'une cellule vide. On choisit donc explicitement une colonne ou trois,
+     jamais deux. */
+  grid-template-columns: minmax(0, var(--bq-w));
+  /* LES TROIS PHOTOGRAPHIES SE TOUCHENT, À TOUTES LES TAILLES.
+     C'est le trait le plus net de l'étalon secondaire — grille bord à bord,
+     gouttière réelle de 12 px sur des colonnes de 351, soit 3,4 % — et c'est
+     ce qui fait lire 35 pièces comme une collection plutôt que comme un
+     catalogue de vignettes. Mesuré chez nous le 20/08 : à 768 l'intervalle
+     valait 2 px et la rangée se lisait d'un bloc ; à 1920 il valait 157 px
+     pour des cadres de 485, soit 32 %, et les trois coloris se lisaient comme
+     trois affiches sans rapport.
+     `center` verse donc l'air aux marges de la page et non entre les cadres.
+     La bande de texte au-dessus se règle sur la même mesure (--bq-bande), si
+     bien que « Apollon » et la première photographie ouvrent toujours sur le
+     même x, à toutes les tailles. Les 2 px restants sont une couture, pas un
+     intervalle : ils marquent que ce sont trois états d'un même objet. */
+  justify-content: center;
+  gap: 2px;
+  /* La gouttière latérale est conditionnelle, voir la règle juste sous
+     celle-ci : passé 900 px elle est déjà portée par l'ouverture, qui la
+     calcule sur la bande des trois cadres. La reprendre ici la compterait deux
+     fois et rétrécirait chaque cadre de deux tiers de --gut. */
+  padding: 0 0 clamp(28px, 4vh, 56px);
+  margin: 0;
+  list-style: none;
+  /* Le même aplat que l'ouverture qui la contient désormais : redéclaré ici
+     pour que la grille reste juste si elle est un jour déplacée, jamais pour
+     créer un second niveau. Du haut de « Apollon » au bas de la mention de
+     vente, la boutique ne porte qu'une seule valeur de fond ; le panneau
+     matière (--aj-noir-2, L* 11,6) est la seule respiration de la page. */
+  background: var(--aj-noir-abysse);
+}
+
+@media (max-width: 899.98px) {
+  .grille {
+    padding-inline: var(--gut);
+  }
+}
+
+@media (min-width: 700px) {
+  .grille {
+    grid-template-columns: repeat(3, minmax(0, var(--bq-w)));
+  }
+}
+
+.carte {
+  position: relative;
+}
+
+/* GSAP est seul propriétaire du transform de .carteLien (le relais
+   data-aj-presse) : aucune transition CSS ici, sinon les deux moteurs se
+   disputeraient la même propriété. Le zoom de survol vit sur l'image
+   elle-même — les deux transforms sont sur des nœuds distincts. */
+.carteLien {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(14px, 1.8vh, 22px);
+  color: inherit;
+  text-decoration: none;
+}
+
+.carteCadre {
+  position: relative;
+  width: min(100%, var(--bq-w));
+  aspect-ratio: var(--bq-cadre);
+  /* min-height: 0 est OBLIGATOIRE à côté d'aspect-ratio sur un descendant de
+     grille : sans lui, la taille minimale automatique se déduit du ratio et de
+     la hauteur, et la carte impose une largeur supérieure à sa colonne. À
+     320x844 la version précédente perdait ainsi 23,6 % de chaque photo,
+     coupés en silence par main{overflow-x:clip}. */
+  min-height: 0;
+  overflow: hidden;
+  background: var(--aj-noir-media);
+}
+
+/* ── LE REVERS SE DÉVOILE EN VOLET ─────────────────────────────────────────
+   Le brief demande un révélateur d'image alternée et un survol par masque, là
+   où la carte n'avait qu'un agrandissement de 1,04 — le survol le plus banal
+   du commerce en ligne.
+
+   DEUX TRANSFORMATIONS QUI S'ANNULENT. La fenêtre monte de 100 % à 0 pendant
+   que l'image descend de −100 % à 0 : les deux se compensent exactement, donc
+   L'IMAGE NE BOUGE PAS. Ce qui se déplace est son cadre. On obtient un vrai
+   volet — le geste que le premier écran et la séquence emploient déjà — sans
+   animer autre chose que `transform`, ce que la doctrine du projet impose.
+   Un `clip-path` aurait été plus court à écrire et aurait coûté une passe de
+   peinture par image.
+
+   Réservé au pointeur fin : sur un écran tactile il n'y a pas de survol, et un
+   revers qui ne se dévoile jamais serait 300 Ko téléchargés pour rien — d'où
+   le `loading="lazy"` du calque. */
+.carteRevers {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  transform: translateY(100%);
+  will-change: transform;
+}
+
+.carteReversFond {
+  position: absolute;
+  inset: 0;
+  transform: translateY(-100%);
+}
+
+/* ── ZÉRO OCTET SUR UN ÉCRAN TACTILE ──────────────────────────────────────
+   Le revers était une <img> : mesuré au navigateur, les TROIS étaient
+   téléchargées sur téléphone — `loading="lazy"` ne sert à rien quand les
+   cartes sont déjà dans le champ — pour un survol qui n'existe pas sur
+   tactile. C'est de la bande passante payée par le visiteur mobile pour un
+   geste qu'il ne verra jamais.
+
+   L'image devient donc un FOND, et sa déclaration vit à l'intérieur de la
+   requête de média. Un navigateur ne va chercher le fond d'une règle qui ne
+   s'applique pas : sur un écran tactile, rien n'est demandé. Aucun
+   JavaScript, aucune hydratation, aucune détection à la main. */
+@media (hover: hover) and (pointer: fine) {
+  .carteReversFond {
+    background-image: var(--revers);
+    background-size: cover;
+    /* Même ancrage que le plan porté : ce qui sort du cadre sort par le bas. */
+    background-position: center top;
+  }
+
+  .carteRevers,
+  .carteReversFond {
+    transition: transform 0.38s var(--e1);
+  }
+
+  .carteLien:hover .carteRevers,
+  .carteLien:focus-visible .carteRevers,
+  .carteLien:hover .carteReversFond,
+  .carteLien:focus-visible .carteReversFond {
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .carteRevers,
+  .carteReversFond {
+    transition: none;
+  }
+}
+
+/* ENFANT DIRECT, et c'est un correctif. Le revers est lui aussi une <img>
+   dans `.carteCadre` : cette regle l'attrapait et son `scale` ecrasait la
+   contre-translation qui doit le tenir IMMOBILE pendant que sa fenetre
+   s'ouvre. Mesure au navigateur : l'image du revers se deplacait de 757 a
+   261 px au lieu de ne pas bouger — un glissement, pas un volet. */
+.carteCadre > img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* La fenêtre est ancrée en HAUT : c'est ce qui garantit le visage entier.
+     Ce qui sort du cadre sort toujours par le bas, jamais par le crâne. */
+  object-position: center top;
+  transform: scale(1);
+  transition: transform 0.42s var(--e1);
+  /* PAS de `will-change` ici. Il vivait sur le span wrapper de la version
+     précédente ; posé sur l'<img> que next/image positionne en absolu, il la
+     promeut dans sa propre couche de composition et la troisième carte est
+     ressortie NOIRE à 768x1024 — image chargée, `complete: true`, opacité 1,
+     et pourtant rien de peint. Le survol n'a pas besoin de cette promotion. */
+}
+
+/* Le filet d'accent : la couleur du coloris, jamais inventée — elle descend
+   du swatch produit par --bq-accent. Il ferme la photographie et pointe le nom
+   qui suit. C'est le seul endroit de la boutique où une teinte Apollon
+   apparaît hors photographie : elle reste attachée au produit, jamais à un
+   fond. La proportion tient le rationnement de l'étalon principal, dont
+   l'accent couvre cinq millièmes de pour cent du document : trois filets de
+   2 px sur trois cadres d'environ 500 px de haut, soit 0,4 % de leur aire.
+   Il est posé d'emblée à 55 % : c'est ce qui fait lire les trois cartes comme
+   trois états d'un même objet — « une seule pièce, trois lumières », dit le
+   chapô, encore faut-il que la page le montre. Le survol le porte à plein. */
+.carteFilet {
+  position: absolute;
+  z-index: 2;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  background: var(--bq-accent, var(--aj-encre));
+  opacity: 0.55;
+  transition: opacity 180ms var(--e1);
+}
+
+/* LA MÉTADONNÉE EST SOUS L'IMAGE, SUR LE SOL DE LA PAGE, JAMAIS DESSUS.
+   Les 16 cartes de l'étalon secondaire ne portent aucun texte sur la
+   photographie : la métadonnée tient dans 96 px sous l'image, 18,5 % de la
+   hauteur de carte, en une seule taille, une seule graisse, une seule
+   famille, sans bouton, sans pastille, sans nuancier, sans badge.
+
+   Nous en gardons le RAPPORT et pas les valeurs. Deux lignes seulement,
+   parce que le prix des trois coloris est identique et vit dans l'ouverture,
+   contre la phrase qui dit que la vente n'est pas ouverte. La ligne constante
+   est à --t0, notre plancher dur de 15 px, là où l'étalon descend à 10 px.
+   Le nom du coloris garde seul le corps d'affichage : trois noms de teinte
+   sont le seul capital narratif d'une gamme à un modèle.
+
+   Aligné à gauche, et non centré comme chez l'étalon : l'AGENTS impose
+   l'alignement à gauche pour tout texte d'achat. */
+.carteBas {
+  display: grid;
+  width: min(100%, var(--bq-w));
+  gap: clamp(6px, 0.8vh, 10px);
+}
+
+.carteTon {
+  color: var(--aj-encre-84);
+  font-size: var(--t0);
+  font-weight: var(--aj-w-moyen);
+  letter-spacing: var(--aj-ls-label);
+  text-transform: uppercase;
+}
+
+.carteNom {
+  display: block;
+  /* Le nom n'est pas en lettrage métallique, pour deux raisons mesurées.
+     CONTRASTE. Le dégradé --metal descend jusqu'à #6d737b, qui ne tient que
+     2,8:1 sur les zones claires ; en encre pleine sur le lit de la grille
+     (#08080a) le même texte mesure 20,1:1.
+     LECTURE. Le dégradé se calcule sur la boîte de l'élément : sur un nom en
+     deux mots, « Velours », « Céleste » et « Impérial » tombaient sur les
+     arrêts sombres et la rangée se lisait « Rose Lilas Pourpre ».
+     Le métal reste sur le h1 « Apollon », un mot unique et un très grand corps
+     sur fond plat : c'est le réglage pour lequel il a été conçu. */
+  color: var(--aj-encre);
+  font-family: var(--disp);
+  font-optical-sizing: auto;
+  font-size: var(--t4);
+  font-weight: var(--aj-w-fin);
+  letter-spacing: var(--aj-ls-titre);
+  line-height: 0.96;
+}
+
+/* ENTRE 700 ET 1023 px, LA COLONNE MESURE ~227 px ET LA MÉTADONNÉE DOIT S'Y
+   TENIR SUR DEUX LIGNES EXACTEMENT, comme sur les deux autres cartes.
+   Mesuré à 768x1024 avant correction : « APOLLON AU CRÉPUSCULE », 21 signes à
+   15 px et 0,16 em d'interlettrage, demandait 229 px pour 227 disponibles. Il
+   passait à la ligne, et le nom « Pourpre Impérial » descendait de 21 px sous
+   les deux autres — trois noms désalignés, ce que l'AGENTS compte comme un
+   défaut d'appariement.
+   Deux leviers, tous deux dans le sens de l'étalon principal, qui laisse son
+   interlettrage à `normal` sur 2 330 éléments et ne fait la hiérarchie que par
+   l'échelle : l'interlettrage de l'étiquette descend de 0,16 à 0,10 em (229 px
+   deviennent 210), et le nom passe de --t4 à --t3, où « Pourpre Impérial »
+   mesure 200 px. Le corps du texte ne descend jamais sous 15 px : c'est le
+   plancher dur, et c'est lui qui interdisait de régler cela par la taille. */
+@media (min-width: 700px) and (max-width: 1023px) {
+  .carteTon {
+    letter-spacing: 0.1em;
+  }
+
+  .carteNom {
+    font-size: var(--t3);
+  }
+}
+
+/* L'appel « DÉCOUVRIR → » posé en haut de chaque photographie est supprimé, et
+   avec lui le voile de noir qui n'existait que pour le rendre lisible.
+   `.carteVoile` et `.carteAction` sont retirés du fichier.
+
+   C'est la plus grande part de la réponse à « trop sombre ». L'ancien voile
+   valait 0,55 d'alpha au ras du haut de la carte et 0,90 au ras du bas, avec
+   un retour à zéro seulement entre 30 % et 88 % : les épaules et le bas des
+   cuisses étaient assombris en permanence pour protéger deux blocs de texte.
+   Il ne reste plus un seul mot sur la photographie, donc plus une seule
+   couche : la ceinture, la plaque métal et le vêtement sont rendus à leur
+   luminance réelle.
+
+   L'étalon secondaire ne pose aucun appel sur ses cartes non plus — la carte
+   entière est le lien. L'affordance passe par le nom, qui se souligne au
+   survol comme au clavier. */
+@media (hover: hover) {
+  .carteLien:hover /* ENFANT DIRECT, et c'est un correctif. Le revers est lui aussi une <img>
+   dans `.carteCadre` : cette regle l'attrapait et son `scale` ecrasait la
+   contre-translation qui doit le tenir IMMOBILE pendant que sa fenetre
+   s'ouvre. Mesure au navigateur : l'image du revers se deplacait de 757 a
+   261 px au lieu de ne pas bouger — un glissement, pas un volet. */
+.carteCadre > img {
+    transform: scale(1.04);
+  }
+}
+
+.carteLien:hover .carteNom,
+.carteLien:focus-visible .carteNom {
+  text-decoration: underline;
+  text-underline-offset: 10px;
+  text-decoration-thickness: 1px;
+}
+
+.carteLien:hover .carteFilet,
+.carteLien:focus-visible .carteFilet {
+  opacity: 1;
+}
+
+/* --- 03 · La matière ------------------------------------------------------
+   L'écho de #matiere : une colonne d'image en parallaxe, une colonne de
+   chiffres. Les deux nombres sont l'argument produit, pas une décoration. */
+
+.matiere {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+  margin-top: 2px;
+  /* Deuxième étage (L* 11,6), comme le panneau matière de l'accueil et celui
+     de /notre-histoire : les trois racontent la même chose et doivent porter
+     la même valeur. */
+  background: var(--aj-noir-2);
+}
+
+/* Au-delà de deux colonnes réelles, la photographie se resserre. Elle est au
+   ratio de sa source (0,745 avec le débord de parallaxe) : à moitié de
+   l’écran elle imposait 956 px de haut à une colonne de texte qui n’en
+   demandait que 420. Un vide né de deux hauteurs incompatibles est un défaut,
+   dit l’AGENTS ; on réduit donc la hauteur imposée plutôt que d’inventer du
+   texte pour la combler. À 1440, la photographie passe de 712x956 à 627x842
+   et reste le plan dominant de la section. */
+@media (min-width: 900px) {
+  .matiere {
+    grid-template-columns: minmax(0, 0.88fr) minmax(0, 1.12fr);
+  }
+}
+
+.matiereFrame {
+  position: relative;
+  /* Même correction que sur l'accueil : hauteur imposée + colonne étroite
+     donnaient un cadre de 0.45 en 768x1024, qui coupait les deux côtés du
+     boxer. Ratio de la source x le débord de parallaxe (112 %). */
+  aspect-ratio: 0.745;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--aj-noir-media);
+}
+
+.matiereMedia {
+  position: absolute;
+  inset: -6% 0;
+  height: 112%;
+  will-change: transform;
+}
+
+.matiereMedia img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* Le cadre porte le ratio de la source : la photo y entre en entier, il n'y
+     a plus de hublot à faire coulisser. */
+  object-position: center;
+}
+
+.matiereTexte {
+  display: flex;
+  flex-direction: column;
+  /* Le contenu occupait 233 px sur 956, soit 18 %, avec deux vides de 300 px :
+     pas une hiérarchie, le reste d’une hauteur imposée par la colonne
+     d’image. Deux corrections se combinent ici.
+     UN. Les faits produit descendus de l’ouverture épaississent le contenu.
+     DEUX. La colonne d’image se resserre (voir .matiere ci-dessus), donc la
+     hauteur à remplir baisse. Le remplissage passe de 18 à environ 50 %.
+     space-between a été essayé et écarté : il collait la signature au bas de
+     la colonne et rouvrait un trou unique de 570 px au milieu. */
+  justify-content: center;
+  gap: clamp(28px, 4vh, 52px);
+  padding: clamp(40px, 6vh, 80px) var(--gut);
+}
+
+/* Le bloc dense : chiffre de composition, phrase, faits produit. */
+.matiereBloc {
+  display: grid;
+  gap: clamp(22px, 3.2vh, 40px);
+}
+
+.composition {
+  display: flex;
+  align-items: baseline;
+  gap: clamp(16px, 2.2vw, 38px);
+  flex-wrap: wrap;
+}
+
+.chiffre {
+  font-family: var(--disp);
+  font-optical-sizing: auto;
+  font-variation-settings: "opsz" 72;
+  font-size: var(--t6);
+  font-weight: var(--aj-w-normal);
+  letter-spacing: var(--aj-ls-grand);
+  line-height: 0.86;
+}
+
+.compositionLabel {
+  font-size: var(--t0);
+  font-weight: var(--aj-w-moyen);
+  letter-spacing: var(--aj-ls-label);
+  text-transform: uppercase;
+}
+
+.matierePhrase {
+  max-width: 30ch;
+  margin: 0;
+  color: var(--aj-encre-90);
+  font-size: var(--t2);
+  font-weight: var(--aj-w-fin);
+  letter-spacing: var(--aj-ls-sous);
+  line-height: 1.4;
+}
+
+.matiereSignature {
+  color: var(--aj-encre-84);
+  font-size: var(--t0);
+  font-weight: var(--aj-w-moyen);
+  letter-spacing: var(--aj-ls-nav);
+  text-transform: uppercase;
+}
+
+/* --- Focus --------------------------------------------------------------- */
+
+.carteLien:focus-visible {
+  outline: 1px solid var(--aj-encre);
+  outline-offset: -3px;
+}
+
+/* --- Mouvement réduit -----------------------------------------------------
+   Variante statique lisible : les transitions tombent, rien ne disparaît.
+   Le filet d'accent et le nom sont posés d'emblée pour tout le monde, il n'y a
+   donc rien à forcer ici. */
+
+@media (prefers-reduced-motion: reduce) {
+  .carteCadre > img,
+  .carteFilet {
+    transition: none;
+  }
+}
+
+/* Un nom de coloris ne se coupe pas. Utilisé par la ligne COLORIS de la
+   section matière, où « Impérial » se retrouvait seul sur une seconde ligne. */
+.insecable {
+  white-space: nowrap;
+}

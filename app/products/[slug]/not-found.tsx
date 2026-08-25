@@ -1,12 +1,7 @@
-import Link from "next/link";
-import { T } from "../../../lib/i18n/TranslatedText";
+import PageIntrouvable from "../../components/PageIntrouvable";
 
+/* Le `notFound()` levé par la fiche quand le coloris n'existe pas. Sans ce
+   fichier, vinext rend « Not Found » en 9 octets au lieu de la page. */
 export default function NotFound() {
-  return (
-    <main className="not-found">
-      <p>AJ Luxury · Collection 01</p>
-      <h1><T id="common.notFoundTitle" /></h1>
-      <Link href="/#collection"><T id="common.backToCollection" /></Link>
-    </main>
-  );
+  return <PageIntrouvable />;
 }

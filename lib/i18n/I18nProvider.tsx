@@ -28,7 +28,25 @@ async function loadDictionary(
   if (cached) return cached;
 
   try {
-    const response = await fetch(`/media/i18n/${locale}.json?v=v4`, {
+    /*
+      Le jeton de version passe à v6 le 19/08. Il n'est pas décoratif : la
+      réponse est servie immuable et relue en `force-cache`, et le contrôle
+      `complete` juste en dessous exige que TOUTES les clés de fr.json soient
+      présentes. Un visiteur revenant avec l'ancien dictionnaire en cache
+      obtiendrait donc `null` dès qu'une clé est ajoutée, et tout le site
+      repasserait silencieusement en français pour les quatre autres langues.
+      La règle est donc : toute clé ajoutée ou retirée des dictionnaires
+      incrémente ce jeton. La passe récit en a ajouté huit (story.lead,
+      story.movement*, story.founders*, shop.firstModel, shop.intro) et passé
+      le jeton à v5. La passe boutique du 19/08 en ajoute cinq de plus —
+      shop.saleNotice, shop.notify, product.openingSoon et les deux formes de
+      product.availabilityAtOpening — d'où v6. Sans cette incrémentation, un
+      visiteur revenu avec le dictionnaire v5 en cache verrait le contrôle
+      `complete` échouer et la boutique repasser en français dans les quatre
+      autres langues.
+      Ce jeton est indépendant de celui des médias héro (lib/hero-video.ts).
+    */
+    const response = await fetch(`/media/i18n/${locale}.json?v=v6`, {
       cache: "force-cache",
     });
     if (!response.ok) return null;
@@ -54,12 +72,33 @@ function translateFrom(
   return dictionary[key] ?? fr[key];
 }
 
+/*
+  Ce que voient un moteur de recherche, un aperçu de lien partagé ou un onglet
+  ouvert en arrière-plan, c'est le titre du RENDU SERVEUR. Ce tableau le
+  remplace après hydratation pour le localiser : il ne doit donc jamais dire
+  autre chose que lui, sinon le site se présente sous deux noms selon le canal.
+
+  Deux routes en sont retirées le 19/08, parce que leur titre dépend du mode
+  d'exécution du commerce — un état que ce provider ne peut pas lire :
+
+  • `/checkout` pointait sur `checkout.preprodLabel` (« Livraison ·
+    préproduction ») alors que le serveur calcule « Commerce fermé »,
+    « Livraison préproduction » ou « Livraison et paiement » selon le mode. Le
+    client annonçait donc « préproduction » y compris boutique fermée, en
+    contradiction avec le contenu de la page ;
+  • `/account` disait « Compte » là où le serveur dit « Espace client fermé ».
+
+  Ces deux routes sont `noindex` et le serveur y est la bonne autorité : on
+  cesse de l'écraser plutôt que d'inventer côté client un état inconnu.
+
+  `/withdrawal` reste localisé ici — le point final de `info.withdrawal.title`
+  est déjà retiré plus bas — mais son `metadata.title` serveur, qui disait
+  « Renoncer au contrat », a été aligné sur ce même libellé.
+*/
 const PAGE_TITLE_KEYS: Record<string, TranslationKey> = {
   "/shop": "nav.shop",
   "/notre-histoire": "nav.story",
-  "/account": "nav.account",
   "/cart": "cart.title",
-  "/checkout": "checkout.preprodLabel",
   "/contact": "nav.contact",
   "/shipping-returns": "info.shipping.title",
   "/privacy": "info.privacy.title",

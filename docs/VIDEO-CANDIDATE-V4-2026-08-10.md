@@ -2,6 +2,14 @@
 
 **Statut : HISTORIQUE DU CANDIDAT TEST — PROMU EN VERSION SITES 31 LE 11 AOÛT 2026**
 
+> **DÉCISION DE BOUCLE REMPLACÉE LE 2026-08-20** — la section « Décision de lecture
+> et contrôle du raccord » ci-dessous, qui interdit `loop` et impose l'arrêt sur la
+> dernière image, n'est plus l'autorité courante. Elle est remplacée par
+> `docs/VIDEO-CANDIDATE-V5-2026-08-20.md`, qui livre un master réellement cyclique
+> et satisfait la condition posée ici même. Le reste de ce dossier — sources,
+> recette d'encodage, crop portrait, empreintes, preuves v3 — reste valide et
+> historique. Les quatre rendus v4 sont conservés sur disque comme repli.
+
 **Date : 10 août 2026**
 
 **Code d’intégration : hero vidéo, politique de mouvement et tests associés**

@@ -1,5 +1,5 @@
 import InfoPage, { InfoNotice } from "../components/InfoPage";
-import { LEGAL_CONTACT, LEGAL_VERSION } from "@/lib/legal";
+import { LEGAL_CONTACT, LEGAL_VERSION_DISPLAY } from "@/lib/legal";
 import { T } from "@/lib/i18n/TranslatedText";
 
 export const metadata = { title: "Livraison internationale et retours | AJ Luxury" };
@@ -7,7 +7,7 @@ export const metadata = { title: "Livraison internationale et retours | AJ Luxur
 export default function ShippingReturnsPage() {
   return (
     <InfoPage
-      eyebrow={<T id="info.shipping.eyebrow" values={{ version: LEGAL_VERSION }} />}
+      eyebrow={<T id="info.shipping.eyebrow" values={{ version: LEGAL_VERSION_DISPLAY }} />}
       title={<T id="info.shipping.title" />}
       status={<T id="info.shipping.status" />}
       officialFrenchOnly

@@ -2,7 +2,7 @@ import InfoPage, { InfoNotice } from "../components/InfoPage";
 import {
   HOSTING_PROVIDER,
   LEGAL_CONTACT,
-  LEGAL_VERSION,
+  LEGAL_VERSION_DISPLAY,
   SELLER_IDENTITY,
 } from "@/lib/legal";
 import { T } from "@/lib/i18n/TranslatedText";
@@ -12,7 +12,7 @@ export const metadata = { title: "Mentions légales | AJ Luxury" };
 export default function LegalNoticePage() {
   return (
     <InfoPage
-      eyebrow={<T id="info.legal.eyebrow" values={{ version: LEGAL_VERSION }} />}
+      eyebrow={<T id="info.legal.eyebrow" values={{ version: LEGAL_VERSION_DISPLAY }} />}
       title={<T id="info.legal.title" />}
       status={<T id="info.legal.status" />}
       officialFrenchOnly
@@ -60,10 +60,15 @@ export default function LegalNoticePage() {
               <a href={`mailto:${LEGAL_CONTACT.email}`}>{LEGAL_CONTACT.email}</a>
             </dd>
           </div>
-          <div>
-            <dt>Téléphone</dt>
-            <dd>{LEGAL_CONTACT.phone}</dd>
-          </div>
+          {/* La ligne n'existe que si le numéro existe. Voir LEGAL_CONTACT
+              dans lib/legal.ts : afficher un texte d'attente ne satisferait
+              pas davantage la LCEN et signalerait une marque non prête. */}
+          {LEGAL_CONTACT.phone ? (
+            <div>
+              <dt>Téléphone</dt>
+              <dd>{LEGAL_CONTACT.phone}</dd>
+            </div>
+          ) : null}
         </dl>
       </section>
 

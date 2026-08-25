@@ -143,14 +143,21 @@ function viteOutputModuleIds(result) {
   );
 }
 
+/* Ordre du catalogue : rose, lilas, pourpre. Il a changé le 18/08 avec le
+   commit 370334f, pour que la numérotation 01/02/03 des coloris soit la même
+   sur l'accueil et sur /shop — l'accueil impose ORDRE_COLORIS et la boutique
+   itère le catalogue. Les identifiants et les références internes sont
+   inchangés, seule leur énumération suit désormais l'ordre d'affichage.
+   Ce pin reste volontairement strict : un futur changement d'ordre doit être
+   une décision consciente, pas un effet de bord. */
 const COLORS = [
-  { code: "POU", slug: "pourpre", path: "/products/pourpre" },
   { code: "ROS", slug: "rose-pale", path: "/products/rose-pale" },
   {
     code: "LIL",
     slug: "lilas-bleu-clair",
     path: "/products/lilas-bleu-clair",
   },
+  { code: "POU", slug: "pourpre", path: "/products/pourpre" },
 ];
 const SIZES = ["S", "M", "L", "XL"];
 const EXPECTED_VARIANT_IDS = COLORS.flatMap((color) =>
@@ -229,7 +236,7 @@ test("catalogue imports are deeply frozen and provider snapshots cannot poison l
   firstProviderRead[0].price.amountCents = 1;
   const secondProviderRead = await mockCommerceProvider.listLaunchVariants();
   assert.equal(secondProviderRead.length, 12);
-  assert.equal(secondProviderRead[0].id, "variant_boxer_pourpre_s");
+  assert.equal(secondProviderRead[0].id, "variant_boxer_rose-pale_s");
   assert.equal(secondProviderRead[0].price.amountCents, 2999);
 
   const firstVariantRead = await mockCommerceProvider.getVariant(

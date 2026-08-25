@@ -121,10 +121,29 @@ test("the client purchase component receives only public stock states", () => {
   );
 
   assert.match(clientSource, /PublicStockBySize/);
-  assert.match(clientSource, /disabled=\{soldOut\}/);
+  /* `aria-disabled`, pas `disabled`. L'assertion attendait encore la forme
+     native, abandonnee depuis : un bouton nativement desactive sort de l'ordre
+     de tabulation et n'est plus annonce, donc le refus de vente devient muet
+     pour un lecteur d'ecran. Le contrat verifie ici est donc double, et plus
+     strict que l'ancien : la taille epuisee porte bien l'etat refuse, ET le
+     refus est reellement applique dans le gestionnaire de selection, pas
+     seulement signale visuellement. */
+  assert.match(clientSource, /aria-disabled=\{soldOut/);
+  assert.match(clientSource, /if \(isSoldOut\(size\)\) return;/);
   assert.match(clientSource, /product\.available/);
   assert.match(clientSource, /product\.lowStockSimulated/);
-  assert.doesNotMatch(clientSource, /product\.onlyLeft/);
+  /* L'interdiction seche de `product.onlyLeft` datait du temps ou ce composant
+     ne servait que la preproduction : afficher un compte exact y aurait ete un
+     chiffre invente. Depuis, une branche production existe et affiche le compte
+     reel. Interdire le libelle partout revenait a interdire une fonctionnalite
+     du magasin en ligne, pas a proteger une donnee.
+     Ce qui doit rester garanti est plus precis, et c'est ce qu'on verifie ici :
+     le chemin SIMULE ne divulgue jamais de compte, le compte exact appartient
+     au seul chemin reel. La forme ternaire est donc epinglee telle quelle. */
+  assert.match(
+    clientSource,
+    /simulated\s*\?\s*t\("product\.lowStockSimulated"\)\s*:\s*t\("product\.onlyLeft"\)/,
+  );
   assert.match(clientSource, /product\.soldOut/);
   assert.match(productPageSource, /getPublicStockBySize/);
   assert.match(productPageSource, /availability=\{availability\}/);
