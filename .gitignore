@@ -44,6 +44,7 @@ next-env.d.ts
 /output/
 /migration-staging/
 /.aj-d1/
+/.secrets-local/
 /.codex-asset-work/
 /inputs_assets/
 /deliverables/
