@@ -950,7 +950,7 @@ test("terms cover the 2026 consumer baseline without a blanket underwear exclusi
   assert.match(html, /mailto:contact@ajluxurystore\.com/);
   assert.doesNotMatch(html, /accéder au formulaire de rétractation/);
   assert.match(html, /accusé de réception/i);
-  assert.match(html, /n’est pas exclu du seul fait que le produit est un sous-vêtement/i);
+  assert.match(html, /n’exclut pas le droit de rétractation au seul motif que le\s+produit est un sous-vêtement/i);
   assert.match(html, /médiateur conventionné/i);
   assert.doesNotMatch(html, /plateforme (?:européenne )?(?:de )?règlement en ligne|ec\.europa\.eu\/consumers\/odr/i);
 

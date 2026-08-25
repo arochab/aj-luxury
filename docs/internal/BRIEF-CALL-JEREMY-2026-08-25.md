@@ -1,20 +1,13 @@
-# AJ Luxury — brief simple pour le call avec Jérémy
+# AJ Luxury — brief direct pour le call avec Jérémy
 
-Document de travail interne pour Adam. Le PDF final sera créé uniquement quand
-le site et la première vraie commande seront terminés.
+Document de travail interne pour Adam. Le PDF final sera créé seulement après
+la finalisation du site et la première vraie commande.
 
-## But du call
+## Verdict
 
-Obtenir de Jérémy six éléments concrets. Ne lui poser aucune question
-technique sur le site, Stripe, Sendcloud, Resend, Cloudflare ou des clés.
-
-## Phrase d’ouverture
-
-> Le site est presque prêt. De ton côté, j’ai besoin de six éléments simples :
-> la réponse de ton comptable sur la TVA, la déclaration de l’activité de vente
-> en ligne, le numéro OVH, l’inscription au médiateur, le comptage du stock et
-> les informations du fabricant. Adam et Codex s’occupent de toute la partie
-> technique.
+Jérémy n’a ni outil technique à choisir, ni diagnostic à faire, ni comptable à
+mandater pour ouvrir le site. Le call sert uniquement à obtenir trois réponses
+simples. Adam et Codex traitent le reste.
 
 ## Ce qui est déjà décidé
 
@@ -23,103 +16,95 @@ technique sur le site, Stripe, Sendcloud, Resend, Cloudflare ou des clés.
 | 1 boxer | 29,99 € |
 | Pack de 2 | 49,99 € |
 | Pack de 3 | 69,99 € |
-| Composition des packs | Couleurs identiques ou différentes, selon le stock disponible |
-| Stock total | 756 pièces : 730 à vendre et 26 pour les cadeaux |
-| Zone de lancement | France, Corse et autres pays de l’Union européenne |
-| Hors Union européenne | Étape suivante ; le numéro EORI est déjà valide |
-| Téléphone public | Nouvelle ligne OVH à 1,19 € TTC par mois, jamais le numéro personnel |
-| Médiateur | SMP à 30 € TTC pour 3 ans |
-| Adresse d’expédition et de retour | 3 A rue Principale, 67130 Belmont |
-| Première commande | Adam la passera lui-même avec sa carte |
+| Packs | Deux ou trois boxers, couleurs identiques ou différentes, selon le stock réel |
+| Stock | 756 physiques, dont 26 cadeaux et 730 vendables |
+| Ventilation vendable | 10 variantes à 61 et 2 variantes à 60 |
+| Lancement | France, Corse et Union européenne |
+| Hors UE | Étape suivante ; EORI déjà valide |
+| Retours | Pas d’exclusion générale liée à l’hygiène ; aucun emballage spécial à prouver |
+| Première commande | Adam la passe lui-même avec sa carte |
 
-## Les six choses que Jérémy doit faire
+### Ventilation des 730 unités vendables
 
-### 1. Envoyer une question à son comptable
+| Coloris | S | M | L | XL | Total |
+|---|---:|---:|---:|---:|---:|
+| Pourpre Impérial | 60 | 61 | 61 | 61 | 243 |
+| Rose Velours | 61 | 61 | 61 | 61 | 244 |
+| Lilas Céleste | 61 | 61 | 61 | 60 | 243 |
+| **Total** | **182** | **183** | **183** | **182** | **730** |
 
-Jérémy n’a pas à connaître la réponse lui-même. Il copie-colle simplement ce
-message à son comptable :
+## Les trois réponses de Jérémy
 
-> Je lance une boutique de sous-vêtements à 29,99 €, avec des ventes en France
-> et dans l’Union européenne. Est-ce que je dois facturer de la TVA ? Si oui,
-> quelle TVA dois-je appliquer aux clients français et aux clients des autres
-> pays européens ? Merci de me répondre par écrit.
+### 1. TVA : regarder une facture, pas appeler un comptable
 
-Il transmet ensuite la réponse à Adam.
+Question exacte :
 
-### 2. Ajouter l’activité de vente en ligne à son entreprise
+> Sur une facture que tu émets aujourd’hui, est-ce que tu ajoutes une ligne de
+> TVA : oui ou non ?
 
-Jérémy demande à son comptable ou réalise la formalité pour ajouter :
+S’il répond non, AJ Luxury applique la franchise en base et suit séparément les
+ventes européennes. Le seuil annuel de ventes à distance dans l’UE sera suivi
+automatiquement ; avant de dépasser 10 000 €, Adam et Codex prépareront la
+suite avec le SIE si nécessaire. S’il répond oui, il transmet simplement le
+taux et le numéro déjà utilisés. Aucun comptable n’est requis.
 
-> Vente en ligne de vêtements et sous-vêtements.
+### 2. Téléphone public : choisir un numéro, pas un fournisseur
 
-Il transmet le justificatif de dépôt. Son activité officielle visible est
-actuellement la production de films ; il faut donc ajouter la vente.
+Question exacte :
 
-### 3. Ouvrir le numéro professionnel OVH
+> Quel numéro peut-on afficher comme contact d’AJ Luxury sans publier ton
+> numéro personnel ?
 
-Jérémy souscrit la ligne OVH à 1,19 € TTC par mois et transmet le nouveau
-numéro. Son numéro personnel reste privé.
+Aucun fournisseur n’est imposé. Si Jérémy n’a déjà aucun autre numéro et refuse
+que son numéro personnel soit public, une ligne séparée reste la seule manière
+de respecter les mentions légales tout en protégeant sa vie privée. Adam choisit
+alors l’option la plus simple ; Jérémy n’a aucun réglage technique à faire.
 
-### 4. S’inscrire auprès du médiateur SMP
+### 3. Étiquette textile : une confirmation, aucune photo
 
-Jérémy souscrit SMP à 30 € TTC pour trois ans et transmet l’attestation reçue.
+Question exacte :
 
-### 5. Compter les boxers
+> Chaque boxer porte-t-il bien une étiquette fixée au produit indiquant
+> « 94 % modal, 6 % élasthanne » : oui ou non ?
 
-Il faut le nombre réellement présent dans chacune de ces 12 cases :
+Il n’a pas à envoyer l’emballage, le colis, des photos, le pays de fabrication,
+des consignes de lavage ou un scellé hygiène pour permettre la mise en ligne.
+La composition est déjà publiée sur le site. La seule vérification utile ici
+est que l’étiquette de composition existe réellement sur les produits vendus.
 
-| Coloris | S | M | L | XL |
-|---|---:|---:|---:|---:|
-| Pourpre Impérial |  |  |  |  |
-| Rose Velours |  |  |  |  |
-| Lilas Céleste |  |  |  |  |
+## Médiateur : Adam traite le choix
 
-Le total physique doit être vérifié. Ensuite, Adam et Codex retireront les 26
-pièces cadeaux pour obtenir le stock réellement vendu sur le site.
+SMP n’est pas imposé. En revanche, la loi impose qu’AJ Luxury ait conventionné
+un médiateur de la consommation compétent et publie ses coordonnées. Adam
+compare les offres référencées ; Jérémy doit seulement approuver et signer le
+choix final. Aucun médiateur ne sera affiché sans convention réelle.
 
-### 6. Envoyer les informations du fabricant
+## Formalité d’activité : après le démarrage, pas avant la première commande
 
-Jérémy envoie des photos nettes de l’étiquette et de l’emballage, ainsi que le
-tableau de tailles du fabricant. Nous devons pouvoir lire :
+L’activité officielle actuelle est la production de films. Jérémy devra ajouter
+« vente en ligne de vêtements et sous-vêtements » sur le guichet unique de
+l’INPI dans le mois suivant le démarrage. Il peut réaliser lui-même cette
+formalité ; aucun comptable n’est nécessaire. Ce dépôt n’est plus présenté
+comme un prérequis à la toute première commande.
 
-- la composition ;
-- le pays de fabrication ;
-- les consignes de lavage ;
-- les mesures des tailles S, M, L et XL ;
-- le dispositif ou l’emballage qui protège le produit pour l’hygiène.
+## Ce que Jérémy ne gère pas
 
-## Ce que Jérémy n’a pas à gérer
+- Stripe, Sendcloud, Resend, Cloudflare et leurs clés ;
+- les transporteurs et tarifs affichés au client ;
+- l’import des 730 unités et la logique des packs ;
+- les e-mails de commande ;
+- les tests de paiement, stock, e-mail et livraison ;
+- le choix technique du numéro ou du médiateur.
 
-Jérémy n’a aucune question technique à résoudre. Adam et Codex prennent en
-charge :
+## Phrase d’ouverture du call
 
-- la connexion de Stripe au site ;
-- la connexion de Sendcloud et des transporteurs ;
-- les confirmations de commande par e-mail ;
-- le domaine et l’hébergement ;
-- les clés de connexion et leur sécurité ;
-- l’import des 730 pièces vendables ;
-- les tests du paiement, du stock, de l’e-mail et de la livraison.
-
-Si une validation de compte est nécessaire, Adam dira simplement à Jérémy quel
-bouton ouvrir ou quelle confirmation accepter. Jérémy n’a pas à diagnostiquer
-le fonctionnement d’un outil.
-
-## Ce qui se passe après le call
-
-1. Jérémy envoie les six éléments.
-2. Adam et Codex terminent le site et les connexions.
-3. Adam vérifie la version finale.
-4. Jérémy regarde le site et donne son accord final.
-5. Adam passe personnellement la première vraie commande.
-6. Adam et Codex vérifient le paiement, le stock, l’e-mail et la livraison.
-7. Le site est ouvert au public en France et dans l’Union européenne.
-8. Les pays hors Union européenne sont ajoutés ensuite, destination par
-   destination.
+> J’ai seulement trois confirmations simples : est-ce que tes factures actuelles
+> comportent de la TVA, quel numéro peut être publié sans exposer ton téléphone
+> personnel, et est-ce que chaque boxer a bien son étiquette 94 % modal / 6 %
+> élasthanne ? Nous gérons tout le reste.
 
 ## Phrase de clôture
 
-> Je récapitule : tu envoies le message à ton comptable, tu ajoutes l’activité
-> de vente en ligne, tu ouvres la ligne OVH, tu t’inscris chez SMP, tu comptes
-> les 12 stocks et tu m’envoies les informations du fabricant. Nous nous
-> occupons de toute la technique, puis je passe moi-même la première commande.
+> C’est tout pour toi. Je finalise les connexions, je te montre la version
+> exacte, tu la valides, puis je passe moi-même la première commande avec ma
+> carte.

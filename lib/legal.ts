@@ -63,7 +63,8 @@ export const LEGAL_CONTACT = {
       entreprises renvoie « tva: null ». Le numéro ne doit donc pas être
       publié comme numéro de TVA intracommunautaire actif. La mention de prix
       et le traitement des ventes UE seront renseignés seulement après réponse
-      écrite du comptable ou du SIE sur la franchise, la TVA et l'OSS.
+      écrite du vendeur ou du SIE sur la franchise, la TVA et l'OSS. Le recours
+      à un comptable n'est pas imposé.
    ========================================================================== */
 export const SELLER_IDENTITY = {
   legalName: "Jérémy Scheppler, entrepreneur individuel",
@@ -124,9 +125,12 @@ export const MEDIATOR: Readonly<{
 export const PRELAUNCH_BLOCKERS = [
   "régime de TVA du vendeur et mention associée sur les prix",
   "numéro de téléphone de l’éditeur, exigé par l’article 6 III de la LCEN",
-  "activité de vente au détail à déclarer : l’activité enregistrée est la production de films (59.11B)",
   "médiateur de la consommation conventionné",
   "zones, transporteurs, tarifs et délais de livraison",
   "prestataire de paiement et moyens de paiement",
   "prestataires réellement utilisés pour les comptes, e-mails et la mesure d’audience",
+] as const;
+
+export const POSTLAUNCH_FORMALITIES = [
+  "déclarer l’ajout de l’activité de vente en ligne au guichet unique dans le mois suivant son démarrage",
 ] as const;

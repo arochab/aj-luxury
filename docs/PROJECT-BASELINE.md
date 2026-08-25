@@ -46,8 +46,10 @@ Dernière décision stock d’Adam : 25 août 2026.
 
 - Double attestation du manifeste exact : responsable stock et responsable release.
 - Grille UE/Royaume-Uni/États-Unis/Canada : transporteur, tarifs, délais, droits/taxes.
-- Poids/dimensions colis, fabrication, étiquettes, guide des tailles, entretien et
-  dispositif d’hygiène.
+- Poids/dimensions du colis pour les tarifs réels. La composition 94 % modal /
+  6 % élasthanne est confirmée et publiée ; Jérémy confirme simplement que
+  l’étiquette textile correspondante est fixée aux produits, sans envoyer de
+  photos d’emballage ni justifier un dispositif d’hygiène.
 - CGV, mentions légales, traductions et textes d’e-mails validés.
 - Comptes, contrats, vérifications d’identité et accès techniques des services tiers.
 - Gouvernance des comptes : tous les actifs structurants restent au nom d’AJ Luxury.

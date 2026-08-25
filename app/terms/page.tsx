@@ -151,20 +151,17 @@ export default function TermsPage() {
       </section>
 
       <section>
-        <h2>8. Sous-vêtements, essayage et hygiène</h2>
+        <h2>8. Sous-vêtements et essayage</h2>
         <p>
-          Le droit de rétractation n’est pas exclu du seul fait que le produit
-          est un sous-vêtement. Lorsque le produit est livré dans un emballage
-          ou avec un dispositif d’hygiène scellé, et qu’il ne peut être renvoyé
-          pour des raisons de protection de la santé ou d’hygiène après
-          descellement, l’exception légale peut s’appliquer.
+          AJ Luxury n’exclut pas le droit de rétractation au seul motif que le
+          produit est un sous-vêtement. Le client peut l’examiner comme il le
+          ferait en magasin, sans le porter au-delà de ce qui est nécessaire
+          pour vérifier sa nature, ses caractéristiques et sa taille.
         </p>
         <p>
-          Pour préserver son droit, le client doit vérifier la taille sans
-          porter le produit directement sur la peau, sans le laver, le tacher,
-          l’endommager ni retirer les étiquettes ou le dispositif d’hygiène.
-          Cette règle ne prive jamais le client de la garantie légale en cas de
-          défaut ou de non-conformité.
+          Une manipulation allant au-delà de cet examen peut uniquement donner
+          lieu à une dépréciation justifiée. Cette règle ne prive jamais le
+          client de la garantie légale en cas de défaut ou de non-conformité.
         </p>
       </section>
 

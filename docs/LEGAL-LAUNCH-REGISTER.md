@@ -1,6 +1,6 @@
 # AJ Luxury — registre juridique de pré-lancement
 
-Date de revue : 15 août 2026
+Date de revue : 25 août 2026
 
 Responsable de l’intégration : Adam CHABBI
 
@@ -10,11 +10,11 @@ Statut : socle rédigé et intégré, ouverture commerciale bloquée jusqu’aux
 
 | Document | Route | Contenu couvert | Statut |
 |---|---|---|---|
-| Conditions générales de vente | `/terms` | Produits, prix, commande, paiement, livraison, rétractation, hygiène, garanties, responsabilité, médiation | Socle complet ; identité, logistique, paiement et médiateur à compléter |
+| Conditions générales de vente | `/terms` | Produits, prix, commande, paiement, livraison, rétractation, garanties, responsabilité, médiation | Identité renseignée ; fiscalité, logistique, paiement et médiateur à finaliser |
 | Politique de confidentialité | `/privacy` | Finalités, bases légales, catégories de données, durées, destinataires, transferts, droits | Stripe, Sendcloud, Resend et Cloudflare nommés ; validation juridique finale requise |
 | Cookies et traceurs | `/cookies` | Stockages réellement utilisés, futur consentement, réglages | Conforme au prototype actuel ; à réviser avant tout nouvel outil |
-| Mentions légales | `/legal-notice` | Éditeur, publication, hébergeur, propriété intellectuelle, responsabilité | Hébergeur documenté ; identité vendeur à compléter |
-| Livraison et retours | `/shipping-returns` | Livraison, suivi, rétractation, hygiène, remboursement, non-conformité | Cadre défini ; valeurs opérationnelles à confirmer |
+| Mentions légales | `/legal-notice` | Éditeur, publication, hébergeur, propriété intellectuelle, responsabilité | Identité et hébergeur documentés ; téléphone public absent |
+| Livraison et retours | `/shipping-returns` | Livraison, suivi, rétractation, remboursement, non-conformité | Aucun scellé hygiène revendiqué ; valeurs opérationnelles à confirmer |
 | Rétractation en ligne | `/withdrawal` | Accès direct, informations requises, confirmation et accusé durable | Route visible ; backend et e-mail transactionnel à connecter |
 
 ## Décisions juridiques retenues
@@ -22,7 +22,9 @@ Statut : socle rédigé et intégré, ouverture commerciale bloquée jusqu’aux
 - Délai de rétractation : 14 jours à compter de la réception.
 - Retour : notification sous 14 jours, puis expédition sous 14 jours.
 - Remboursement : prix et livraison standard initiale, sous 14 jours, avec possibilité d’attendre le bien ou la preuve d’expédition.
-- Sous-vêtements : aucune exclusion générale. L’exception d’hygiène ne s’applique que si un produit scellé ne peut plus être renvoyé après descellement pour des raisons de santé ou d’hygiène.
+- Sous-vêtements : aucune exclusion générale du droit de rétractation et aucune
+  preuve d’emballage ou de scellé demandée. Seule une éventuelle dépréciation
+  liée à une manipulation excessive peut être justifiée.
 - Garantie légale de conformité : 2 ans à compter de la délivrance.
 - Garantie des vices cachés : action dans les 2 ans suivant la découverte du vice.
 - Stocks : aucune quantité interne publiée ; seuls les états disponible, stock faible ou épuisé sont destinés au client.
@@ -53,9 +55,8 @@ Statut : socle rédigé et intégré, ouverture commerciale bloquée jusqu’aux
 
 | Priorité | Information ou action requise | Responsable | Preuve attendue |
 |---|---|---|---|
-| Bloquant | Dénomination légale, forme, capital, siège, SIREN/SIRET, RCS/RNE, TVA | AJ Luxury | Extrait officiel à jour |
+| Bloquant | Régime de TVA et mention fiscale appliquée aux prix | AJ Luxury | Réponse oui/non issue d’une facture actuelle ; SIE seulement en cas de doute |
 | Bloquant | Téléphone public et directeur de publication | AJ Luxury | Validation écrite |
-| Bloquant | Adresse de retour | AJ Luxury | Validation écrite |
 | Bloquant | Médiateur de la consommation conventionné | AJ Luxury | Convention et coordonnées |
 | Bloquant | Pays, transporteurs, tarifs, délais, douane et responsabilité import | AJ Luxury + Adam | Matrice logistique validée |
 | Bloquant | Compte Stripe, bénéficiaire, moyens activés et webhook | AJ Luxury + Adam | Compte marchand et recette signée |
@@ -63,6 +64,8 @@ Statut : socle rédigé et intégré, ouverture commerciale bloquée jusqu’aux
 | Bloquant | DPA/registres Stripe, Sendcloud, Resend, Cloudflare et hébergement final | Adam + AJ Luxury | Registre des sous-traitants validé |
 | Bloquant | Règles actives de conservation et procédure d’effacement/anonymisation des commandes | AJ Luxury + conseil juridique + Adam | Politique versionnée, migration et tests de droits |
 | Bloquant si activé | Bandeau et gestionnaire de consentement avant analytics/marketing | Adam | Recette avant/après consentement |
+| Vérification produit | Étiquette de composition fixée au boxer | AJ Luxury | Confirmation oui/non ; aucune photo d’emballage requise |
+| Après démarrage | Ajout de l’activité de vente en ligne au RNE | AJ Luxury | Dépôt au guichet unique dans le mois suivant le changement |
 | Recommandé | Relecture par un professionnel du droit avant ouverture internationale | AJ Luxury | Avis et corrections tracés |
 
 ## Tests juridiques à inclure dans la recette commerce

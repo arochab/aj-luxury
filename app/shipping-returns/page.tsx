@@ -79,12 +79,12 @@ export default function ShippingReturnsPage() {
           {RETURN_ADDRESS.country}.
         </p>
         <p>
-          Les sous-vêtements doivent rester non portés, non lavés, non tachés,
-          avec leurs étiquettes et leur dispositif d’hygiène intact. Si un
-          produit scellé ne peut être renvoyé pour des raisons de santé ou
-          d’hygiène après descellement, l’exception légale au droit de
-          rétractation peut s’appliquer. Elle ne s’applique jamais au détriment
-          de la garantie légale de conformité.
+          AJ Luxury n’applique pas d’exclusion générale du droit de
+          rétractation aux sous-vêtements. Le client peut examiner le produit
+          comme il le ferait en magasin, sans le porter au-delà de ce qui est
+          nécessaire pour vérifier sa nature, ses caractéristiques et sa
+          taille. Les droits liés à un défaut ou à une non-conformité restent
+          intégralement applicables.
         </p>
       </section>
 
