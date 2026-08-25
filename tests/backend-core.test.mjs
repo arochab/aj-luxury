@@ -2257,7 +2257,7 @@ test("D1 cart mutations fail closed for unknown stock, expired carts and convert
       store.setCartLineQuantity({
         cartId: "cart_stock_guard",
         variantId,
-        quantity: 27,
+        quantity: 64,
         now: "2099-08-10T12:01:00.000Z",
       }),
     (error) => error instanceof CommerceError && error.code === "STOCK_UNAVAILABLE",

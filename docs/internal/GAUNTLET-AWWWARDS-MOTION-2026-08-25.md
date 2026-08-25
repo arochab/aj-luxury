@@ -9,7 +9,8 @@ Status: `ROUND 3 PASS — 9.50/10 — NO FATAL VETO`
 - Integration baseline already present on the Codex branch: `a3c2311`
 - Production truth, read-only: `https://ajluxurystore.com/`
 - Production source baseline: `origin/main:app/page.tsx`
-- Inventory truth: `730` units; no stock code or data is mutated by this front candidate.
+- Inventory truth: `756` physical units, including `26` gifting units and `730`
+  sellable units; the exact balanced allocation was decided after the visual jury.
 - Assets: existing AJ Luxury assets only. No image or campaign generation.
 - Production, domains and `cloudflare.production.jsonc`: no mutation without Adam then Jérémy validating the exact candidate.
 
@@ -169,8 +170,9 @@ is not yet safe to activate on either the preview or `ajluxurystore.com`:
 
 - production D1 exists but contains zero products, variants, inventory, orders
   and payments;
-- historical contracts still hard-code 756 physical units, while Adam confirms
-  730; the exact 12-SKU split and reserves are not present;
+- Adam has now decided 756 physical units equally distributed at 63 per SKU,
+  including 26 gifting units and 730 sellable units; the manifest still requires
+  its two distinct attestations before import;
 - the production Worker is not deployed and no Stripe, Sendcloud or Resend
   secrets are installed on it;
 - controlled checkout requires a server-side HMAC boundary not supplied by the
@@ -180,5 +182,6 @@ is not yet safe to activate on either the preview or `ajluxurystore.com`:
 
 Therefore no real payment, domain mutation or stock import is part of Round 3.
 The next safe commerce gate is one owner-only controlled order after the exact
-730-unit manifest, provider credentials and operational/legal controls are all
+756-unit physical manifest with 730 sellable units, provider credentials and
+operational/legal controls are all
 proved against one immutable release SHA.

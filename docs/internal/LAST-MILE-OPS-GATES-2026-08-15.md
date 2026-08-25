@@ -4,11 +4,14 @@ Statut au 15/08/2026 : **code prêt à intégrer, aucune capacité réelle activ
 
 ## Stock
 
-Le manifeste modèle `LAUNCH-STOCK-IMPORT.template.json` contient les 12 variantes et les 756 unités physiques transmises. Les valeurs `-1`, dates vides et empreintes vides sont volontairement non importables.
+Le manifeste modèle `LAUNCH-STOCK-IMPORT.template.json` contient les 12 variantes,
+756 unités physiques, 26 cadeaux et 730 unités vendables décidés par Adam le
+25/08/2026. Les dates et empreintes restent vides : le manifeste demeure
+volontairement non importable avant la double attestation.
 
 Gate d'import :
 
-1. Jérémy renseigne pour chaque variante les réserves cadeaux, sécurité et SAV, même si une valeur décidée est zéro.
+1. Contrôler la ventilation décidée : 63 physiques par variante, 26 cadeaux au total, sécurité 0, SAV 0 et 730 vendables.
 2. Les cinq totaux sont recalculés. La somme physique doit rester 756 et le vendable doit être `physique - cadeaux - sécurité - SAV`.
 3. Le SHA-256 canonique est calculé par `createLaunchStockPayloadSha256`.
 4. Le responsable stock et le responsable release, deux personnes distinctes, approuvent ce même SHA-256 après le comptage.

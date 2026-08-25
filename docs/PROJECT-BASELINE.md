@@ -8,6 +8,7 @@ la base visuelle ; le contrat et ses annexes gouvernent désormais les fonctions
 la recette, les responsabilités et les limites du forfait.
 
 Dernière mise à jour de la gouvernance des domaines et de la release Hero : 11 août 2026.
+Dernière décision stock d’Adam : 25 août 2026.
 
 ## Périmètre contractuel actuel
 
@@ -17,8 +18,10 @@ Dernière mise à jour de la gouvernance des domaines et de la release Hero : 11
 - Identité AJ Luxury distincte de la référence ABEL P.
 - Apollon, décliné en Pourpre Impérial, Rose Velours et Lilas Céleste.
 - Tailles S à XL, 94% modal, 6% élasthanne.
-- 756 unités confirmées en 3 coloris × 4 tailles : Pourpre 26/103/87/36,
-  Rose 26/103/87/36 et Lilas 26/102/88/36, dans l’ordre S/M/L/XL.
+- 756 unités physiques réparties à 63 par variante sur 3 coloris × 4 tailles.
+  26 unités sont isolées pour les cadeaux et 730 restent vendables : 10 variantes
+  à 61 vendables et 2 variantes à 60, selon
+  `docs/internal/STOCK-VENTILATION-DECISION-2026-08-25.md`.
 - Prix validé : 29,99 €.
 - Frontend et backend standard de commerce nécessaires au périmètre convenu.
 - Panier, paiement, comptes clients, commandes et e-mails transactionnels.
@@ -41,7 +44,7 @@ Dernière mise à jour de la gouvernance des domaines et de la release Hero : 11
 
 ### Prérequis à fournir ou valider par AJ Luxury
 
-- Quantités à isoler pour cadeaux/influenceurs et réserve de sécurité.
+- Double attestation du manifeste exact : responsable stock et responsable release.
 - Grille UE/Royaume-Uni/États-Unis/Canada : transporteur, tarifs, délais, droits/taxes.
 - Poids/dimensions colis, fabrication, étiquettes, guide des tailles, entretien et
   dispositif d’hygiène.

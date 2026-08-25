@@ -88,7 +88,8 @@ construire puis connecter.
 ## Manques et blocages
 
 - **Domaine `.fr`** : aucune action requise pour le lancement ; redirection traitée ultérieurement dans un handoff séparé.
-- **Jérémy** : confirmer réserves cadeaux/SAV et stock réellement vendable par variante.
+- **Adam + responsable stock** : attester le manifeste décidé à 756 physiques,
+  26 cadeaux et 730 vendables, lié au SHA de release.
 - **Jérémy** : fournir poids/dimensions du colis, origine, guide des tailles, entretien, étiquettes et dispositif d’hygiène.
 - **Jérémy / AJ Luxury** : ouvrir les comptes paiement, transport et e-mail avec double authentification et vérification d’identité ; aucun compte personnel Adam ne sera utilisé.
 - **Jérémy / AJ Luxury** : fermer médiateur, téléphone, TVA, identifiant douanier EORI, droits/taxes, sous-traitants et mentions, avec les conseils appropriés en appui.

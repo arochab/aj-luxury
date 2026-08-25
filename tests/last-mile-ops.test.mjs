@@ -23,9 +23,9 @@ function stockPayload() {
     variantId: variant.id,
     internalReference: variant.internalReference,
     physicalQuantity: variant.physicalQuantity,
-    giftingReserveQuantity: index === 0 ? 1 : 0,
-    safetyReserveQuantity: index === 1 ? 2 : 0,
-    savReserveQuantity: index === 2 ? 3 : 0,
+    giftingReserveQuantity: index === 0 || index === 11 ? 3 : 2,
+    safetyReserveQuantity: 0,
+    savReserveQuantity: 0,
   }));
   return {
     protocol: launchStockImportProtocol,
@@ -34,10 +34,10 @@ function stockPayload() {
     variants,
     totals: {
       physicalQuantity: 756,
-      giftingReserveQuantity: 1,
-      safetyReserveQuantity: 2,
-      savReserveQuantity: 3,
-      sellableQuantity: 750,
+      giftingReserveQuantity: 26,
+      safetyReserveQuantity: 0,
+      savReserveQuantity: 0,
+      sellableQuantity: 730,
     },
   };
 }
@@ -70,10 +70,12 @@ test("stock import reconciles the exact 12 variants, 756 units and three reserve
   const validated = await validateLaunchStockImport(await approvedStockManifest());
   assert.equal(validated.variants.length, 12);
   assert.equal(validated.totals.physicalQuantity, 756);
-  assert.equal(validated.totals.sellableQuantity, 750);
-  assert.equal(validated.variants[0].sellableQuantity, 25);
-  assert.equal(validated.variants[1].d1SafetyReserveQuantity, 2);
-  assert.equal(validated.variants[2].d1SafetyReserveQuantity, 3);
+  assert.equal(validated.totals.giftingReserveQuantity, 26);
+  assert.equal(validated.totals.sellableQuantity, 730);
+  assert.equal(validated.variants[0].sellableQuantity, 60);
+  assert.equal(validated.variants[1].sellableQuantity, 61);
+  assert.equal(validated.variants[11].sellableQuantity, 60);
+  assert.equal(validated.variants[1].d1SafetyReserveQuantity, 0);
   assert.deepEqual(validated.approvedBy, {
     stock_owner: "ajl-stock-owner",
     release_owner: "ajl-release-owner",
@@ -113,9 +115,9 @@ test("stock import fails closed on unsigned, reordered, overallocated or tampere
   });
   await t.test("payload changed after approval", async () => {
     const manifest = await approvedStockManifest();
-    manifest.variants[0].giftingReserveQuantity = 2;
-    manifest.totals.giftingReserveQuantity = 2;
-    manifest.totals.sellableQuantity = 749;
+    manifest.variants[0].giftingReserveQuantity = 4;
+    manifest.totals.giftingReserveQuantity = 27;
+    manifest.totals.sellableQuantity = 729;
     await assert.rejects(
       () => validateLaunchStockImport(manifest),
       (error) =>

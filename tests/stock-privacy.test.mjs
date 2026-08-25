@@ -25,8 +25,7 @@ function readTree(directory) {
 }
 
 const exactStockSignatures = [
-  /26\D{0,40}103\D{0,40}87\D{0,40}36/,
-  /26\D{0,40}102\D{0,40}88\D{0,40}36/,
+  /63\D{0,40}63\D{0,40}63\D{0,40}63/,
 ];
 
 function assertNoStockLeak(payload) {
@@ -40,7 +39,7 @@ function assertNoStockLeak(payload) {
   );
   assert.doesNotMatch(
     payload,
-    /(?:26|36|87|88|102|103)\s+(?:en stock|disponibles?)/i,
+    /(?:60|61|63)\s+(?:en stock|disponibles?)/i,
   );
 
   for (const signature of exactStockSignatures) {
@@ -74,9 +73,9 @@ async function render(pathname) {
 
 test("internal stock separates physical, reserved and available-to-sell", () => {
   assert.deepEqual(getInternalStockPosition("pourpre", "M"), {
-    physical: 103,
-    reserved: 0,
-    availableToSell: 103,
+    physical: 63,
+    reserved: 2,
+    availableToSell: 61,
   });
   assert.deepEqual(getInternalStockPosition("unknown", "S"), {
     physical: 0,
@@ -86,7 +85,7 @@ test("internal stock separates physical, reserved and available-to-sell", () => 
 });
 
 test("public stock projection never exposes a quantity above five", () => {
-  assert.deepEqual(toPublicStockStatus(103), { state: "available" });
+  assert.deepEqual(toPublicStockStatus(61), { state: "available" });
   assert.deepEqual(toPublicStockStatus(6), { state: "available" });
   assert.deepEqual(toPublicStockStatus(5), {
     state: "low-stock",

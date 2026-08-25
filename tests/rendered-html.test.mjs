@@ -745,11 +745,11 @@ for (const [pathname, colorName, galerie] of productCases) {
     );
     assert.doesNotMatch(
       html,
-      /(?:26|36|87|88|102|103)\s+(?:en stock|disponibles?)/i,
+      /(?:60|61|63)\s+(?:en stock|disponibles?)/i,
     );
     assert.doesNotMatch(
       html,
-      /(?:physical|reserved|availableToSell|inventoryQuantity|inventory)(?:\\?&quot;|\\?")?\s*:\s*(?:26|36|87|88|102|103)/i,
+      /(?:physical|reserved|availableToSell|inventoryQuantity|inventory)(?:\\?&quot;|\\?")?\s*:\s*(?:2|3|60|61|63)/i,
     );
     assert.doesNotMatch(
       html,

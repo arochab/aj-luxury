@@ -45,8 +45,9 @@ ou compte marchand doit être validé par Jérémy avant activation.
 
 - Apollon comporte 3 coloris × 4 tailles, soit 12 combinaisons de stock, pas 12 produits.
 - Le prix validé est de 29,99 €.
-- Le stock physique transmis totalise 756 unités : Pourpre 26/103/87/36,
-  Rose 26/103/87/36 et Lilas 26/102/88/36, dans l’ordre S/M/L/XL.
+- La décision stock du 25/08/2026 fixe 756 unités physiques à 63 par variante,
+  dont 26 cadeaux et 730 vendables. La ventilation exacte est consignée dans
+  `docs/internal/STOCK-VENTILATION-DECISION-2026-08-25.md`.
 - Les 12 références internes sont générées par l’application à partir du modèle, du
   coloris et de la taille. Aucun SKU ni EAN n’est demandé à Jérémy.
 - Les zones de lancement validées sont l’Union européenne, le Royaume-Uni, les
@@ -60,7 +61,7 @@ ou compte marchand doit être validé par Jérémy avant activation.
 
 ### Seuls apports encore attendus d’AJ Luxury
 
-- Quantités à isoler pour cadeaux/influenceurs et réserve de sécurité.
+- Double attestation du manifeste de stock exact après contrôle physique daté.
 - Poids/dimensions du colis prêt à partir, pays de fabrication,
   étiquettes physiques, entretien, guide des tailles et scellé d’hygiène.
 - KYC/RIB des comptes commerce ouverts au nom d’AJ Luxury, sans partage de mot de passe.
@@ -211,7 +212,7 @@ restent séquentielles.
 
 ### Phase 0 — décisions client et choix des prestataires
 
-1. Fixer les réserves cadeaux/influenceurs et sécurité sur le stock déjà transmis.
+1. Faire attester la décision stock du 25/08/2026 : 756 physiques, 26 cadeaux et 730 vendables.
 2. Compléter les informations colis, étiquettes, fabrication, entretien et tailles.
 3. Valider les prestataires de paiement, livraison et e-mail, ainsi que leurs coûts.
 4. Finaliser transport, droits/taxes, retours, médiateur et validation comptable.
