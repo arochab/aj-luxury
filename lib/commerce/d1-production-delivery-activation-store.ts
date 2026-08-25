@@ -90,10 +90,10 @@ function assertIdempotencyKey(value: string): void {
 
 async function normalizeProductionLaunchAddress(input: ShippingAddressInput) {
   const address = await normalizeShippingAddress(input);
-  if (address.address.countryCode !== "FR") {
+  if (address.zone !== "EU") {
     throw new ProductionDeliveryError(
       "INVALID_INPUT",
-      "Production delivery is available only in France.",
+      "Production delivery is available only in the European Union.",
     );
   }
   return address;

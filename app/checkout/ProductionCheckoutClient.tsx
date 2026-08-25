@@ -29,7 +29,15 @@ import LocalizedPrice from "../components/LocalizedPrice";
 import styles from "../cart/CommerceShell.module.css";
 
 const launchCountries = Object.freeze([
-  ["FR", "France"],
+  ["AT", "Autriche"], ["BE", "Belgique"], ["BG", "Bulgarie"],
+  ["HR", "Croatie"], ["CY", "Chypre"], ["CZ", "Tchéquie"],
+  ["DK", "Danemark"], ["EE", "Estonie"], ["FI", "Finlande"],
+  ["FR", "France"], ["DE", "Allemagne"], ["GR", "Grèce"],
+  ["HU", "Hongrie"], ["IE", "Irlande"], ["IT", "Italie"],
+  ["LV", "Lettonie"], ["LT", "Lituanie"], ["LU", "Luxembourg"],
+  ["MT", "Malte"], ["NL", "Pays-Bas"], ["PL", "Pologne"],
+  ["PT", "Portugal"], ["RO", "Roumanie"], ["SK", "Slovaquie"],
+  ["SI", "Slovénie"], ["ES", "Espagne"], ["SE", "Suède"],
 ] as const);
 
 type AddressForm = {

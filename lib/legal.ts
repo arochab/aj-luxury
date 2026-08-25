@@ -57,27 +57,13 @@ export const LEGAL_CONTACT = {
       00020 à Belmont (fermé le 28/07/2026). Ne jamais publier le 00020, qui
       circule encore dans des annuaires tiers.
 
-   2. LA TVA. Le numéro est publié sur instruction explicite d'Adam, répétée
-      le 22/08/2026. Ce qui est vérifié et ce qui ne l'est pas, sans mélange :
-
-      VÉRIFIÉ — la clé de contrôle. (12 + 3 × (944996487 mod 97)) mod 97 = 58.
-      FR58944996487 est donc bien le numéro intracommunautaire que la règle
-      française associe à ce SIREN. Ce n'est pas un numéro plausible, c'est LE
-      numéro de cette entreprise.
-
-      NON VÉRIFIÉ — son activation. L'API officielle
-      recherche-entreprises.api.gouv.fr renvoie encore « tva: null » au
-      22/08/2026, et VIES n'a pas répondu (erreur de service
-      MS_MAX_CONCURRENT_REQ, qui n'est pas un verdict d'invalidité). C'est le
-      comportement attendu d'une entreprise en franchise en base : le numéro
-      existe, mais n'est pas activé pour les échanges intracommunautaires.
-
-      CONSÉQUENCE SUR LES PRIX, et elle est indépendante de ce champ. Le
-      montant affiché est celui que le client paie sous les deux régimes ; seul
-      son ÉTIQUETTE dépend de la réponse de Jérémy. Assujetti : « TTC ».
-      Franchise en base : « TVA non applicable, article 293 B du CGI ». Tant
-      que la question n'est pas tranchée, aucune des deux mentions n'est
-      affirmée — c'est la seule position vraie dans les deux cas.
+   2. LA TVA. La clé de contrôle française permet de former FR58944996487,
+      mais elle ne prouve ni son attribution active ni le régime fiscal.
+      Contrôle du 25/08/2026 : VIES renvoie invalide et l'API officielle des
+      entreprises renvoie « tva: null ». Le numéro ne doit donc pas être
+      publié comme numéro de TVA intracommunautaire actif. La mention de prix
+      et le traitement des ventes UE seront renseignés seulement après réponse
+      écrite du comptable ou du SIE sur la franchise, la TVA et l'OSS.
    ========================================================================== */
 export const SELLER_IDENTITY = {
   legalName: "Jérémy Scheppler, entrepreneur individuel",
@@ -85,13 +71,14 @@ export const SELLER_IDENTITY = {
   registeredOffice: "3 A rue Principale, 67130 Belmont, France",
   registration:
     "SIREN 944 996 487 — SIRET du siège 944 996 487 00038 — immatriculée au Registre national des entreprises (RNE) le 28 mai 2025",
-  vatNumber: "FR 58 944 996 487",
+  vatNumber: null as string | null,
   publicationDirector: "Jérémy Scheppler",
 } as const;
 
-/** Numéro EORI, relevé sur la fiche officielle le 22/08/2026. Le handoff du
- *  17/08 le donnait « en attente » : il existe. Il reste à vérifier qu'il est
- *  activé auprès de la douane pour l'export hors Union européenne. */
+/** Numéro EORI relevé sur la fiche officielle le 22/08/2026 et déclaré valide
+ *  par le validateur EORI officiel de l'Union européenne le 25/08/2026.
+ *  Cette validation ne remplace pas la configuration des transporteurs,
+ *  déclarations, droits, taxes et retours pour chaque destination hors UE. */
 export const EORI_NUMBER = "FR944996487" as const;
 
 /**

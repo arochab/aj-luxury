@@ -77,10 +77,14 @@ async function fixture(
   return { sqlite, d1, event, expiry, request, effects: new D1StripePaymentEffectsStore(failEffectsAt === null ? d1 : new D1(sqlite, failEffectsAt), livemode) };
 }
 
-test("production delivery fails closed outside France and for known overseas postcodes", async () => {
+test("production delivery accepts the EU and fails closed outside it or in excluded territories", async () => {
+  const eu = await fixture(null, true, 1, {
+    postalCode: "10115", city: "Berlin", countryCode: "DE",
+  });
+  eu.sqlite.close();
   await assert.rejects(
     () => fixture(null, true, 1, {
-      postalCode: "10115", city: "Berlin", countryCode: "DE",
+      postalCode: "SW1A1AA", city: "London", countryCode: "GB",
     }),
     (error) => error?.name === "ProductionDeliveryError" && error.code === "INVALID_INPUT",
   );

@@ -161,10 +161,10 @@ function normalizeEmail(value: unknown): string {
 
 async function normalizeProductionLaunchAddress(input: ShippingAddressInput) {
   const address = await normalizeShippingAddress(input);
-  if (address.address.countryCode !== "FR") {
+  if (address.zone !== "EU") {
     throw new ProductionCheckoutError(
       "INVALID_INPUT",
-      "Production checkout is available only in France.",
+      "Production checkout is available only in the European Union.",
     );
   }
   return address;
@@ -263,8 +263,7 @@ export class D1ProductionCheckoutStore {
         WHERE line.cart_id = ? ORDER BY variant.sort_order, line.id`,
       ).bind(input.cartId).all<CheckoutLineRow>(),
       this.#database.prepare(
-        `SELECT ${orderColumns} FROM orders
-        WHERE cart_id = ? AND shipping_country_code = 'FR'`,
+        `SELECT ${orderColumns} FROM orders WHERE cart_id = ?`,
       ).bind(input.cartId).first<OrderRow>(),
     ]);
     const lines = lineResult.results;
@@ -475,8 +474,7 @@ export class D1ProductionCheckoutStore {
     }
     const [order, linesResult, reservation] = await Promise.all([
       this.#database.prepare(
-        `SELECT ${orderColumns} FROM orders
-        WHERE cart_id = ? AND shipping_country_code = 'FR'`,
+        `SELECT ${orderColumns} FROM orders WHERE cart_id = ?`,
       ).bind(input.cartId).first<OrderRow>(),
       this.#database.prepare(
         `SELECT internal_reference, product_name, color_name, size, quantity,
@@ -544,8 +542,7 @@ export class D1ProductionCheckoutStore {
   ): Promise<void> {
     assertFulfillmentTimestamp(now, "now");
     const order = await this.#database.prepare(
-      `SELECT ${orderColumns} FROM orders
-      WHERE id = ? AND shipping_country_code = 'FR'`,
+      `SELECT ${orderColumns} FROM orders WHERE id = ?`,
     ).bind(request.orderId).first<OrderRow>();
     if (
       !order || order.status !== "pending_payment" || receipt.provider !== "stripe" ||

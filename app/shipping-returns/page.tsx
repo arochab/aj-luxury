@@ -6,7 +6,7 @@ import {
 } from "@/lib/legal";
 import { T } from "@/lib/i18n/TranslatedText";
 
-export const metadata = { title: "Livraison en France et retours | AJ Luxury" };
+export const metadata = { title: "Livraison en Union européenne et retours | AJ Luxury" };
 
 export default function ShippingReturnsPage() {
   return (
@@ -28,18 +28,24 @@ export default function ShippingReturnsPage() {
       <section>
         <h2>Livraison</h2>
         <p>
-          Au lancement, AJ Luxury livre exclusivement en France métropolitaine,
-          Corse comprise. Les territoires ultramarins et les destinations
-          internationales ne sont pas encore desservis.
+          Au lancement, AJ Luxury livre en France métropolitaine, Corse comprise,
+          et dans les autres pays de l’Union européenne. Les territoires
+          ultramarins et les destinations hors Union européenne ne sont pas
+          encore desservis.
         </p>
         <p>
-          Selon l’adresse et la disponibilité du transporteur, la livraison est
-          proposée en Point Relais ou Locker Mondial Relay, en point de retrait
-          Colissimo ou à domicile avec Colissimo. Le coût réel et le délai
-          estimé de chaque option disponible sont affichés avant le paiement.
-          La commande est préparée sous un à deux jours ouvrés ; le délai total
-          indicatif est de trois à sept jours ouvrés. Le délai affiché lors de
-          la commande reste celui qui engage AJ Luxury.
+          Selon le pays, l’adresse et la disponibilité du transporteur, une
+          livraison en point de retrait ou à domicile est proposée. Le coût
+          réel, le transporteur et le délai estimé de chaque option disponible
+          sont affichés avant le paiement. La commande est préparée sous un à
+          deux jours ouvrés. Le délai affiché lors de la commande reste celui
+          qui engage AJ Luxury.
+        </p>
+        <p>
+          Le numéro EORI du vendeur est valide. L’ouverture hors Union
+          européenne reste néanmoins séparée jusqu’à validation des
+          transporteurs, déclarations douanières, droits, taxes et retours pour
+          chaque destination.
         </p>
       </section>
 

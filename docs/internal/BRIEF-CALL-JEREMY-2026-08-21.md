@@ -1,3 +1,5 @@
+SUPERSEDED — retained as history — replaced by `BRIEF-CALL-JEREMY-2026-08-25.md` on 2026-08-25
+
 # Brief de préparation — call Jérémy du 21 août 2026
 
 Document interne, pour Adam seul. Ne pas transmettre tel quel.

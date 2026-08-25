@@ -19,11 +19,11 @@ export default function LegalNoticePage() {
     >
       <InfoNotice warning>
         <p>
-          <strong>Identité à finaliser.</strong> La marque et le contact sont
-          connus ; la dénomination légale, l’immatriculation, le siège, le
-          téléphone et le directeur de publication doivent encore être fournis
-          par AJ Luxury. La boutique ne doit pas accepter de paiement avant leur
-          publication.
+          <strong>Ouverture à finaliser.</strong> L’identité du vendeur, son
+          immatriculation, son siège et le directeur de publication sont
+          publiés. Le téléphone professionnel et le régime de TVA doivent encore
+          être confirmés. La boutique ne doit pas accepter de paiement public
+          avant leur publication exacte.
         </p>
       </InfoNotice>
 
@@ -50,10 +50,12 @@ export default function LegalNoticePage() {
             <dt>Immatriculation</dt>
             <dd>{SELLER_IDENTITY.registration}</dd>
           </div>
-          <div>
-            <dt>TVA intracommunautaire</dt>
-            <dd>{SELLER_IDENTITY.vatNumber}</dd>
-          </div>
+          {SELLER_IDENTITY.vatNumber ? (
+            <div>
+              <dt>TVA intracommunautaire</dt>
+              <dd>{SELLER_IDENTITY.vatNumber}</dd>
+            </div>
+          ) : null}
           <div>
             <dt>E-mail</dt>
             <dd>

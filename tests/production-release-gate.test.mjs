@@ -54,7 +54,7 @@ test("complete sandbox evidence remains closed until the router is wired", () =>
   assert.equal(gate.ready, false);
   assert.equal(gate.evidenceComplete, true);
   assert.deepEqual(gate.blockers, ["commerce-router-not-wired"]);
-  assert.deepEqual(gate.launchZones, ["FR"]);
+  assert.deepEqual(gate.launchZones, ["EU"]);
   assert.equal(gate.capabilities.sandboxCheckout, false);
   assert.equal(gate.capabilities.realPayment, false);
   assert.equal(gate.capabilities.realDelivery, false);

@@ -858,7 +858,7 @@ test("server-renders the complete AJ Luxury story", async () => {
 });
 
 const informationCases = [
-  ["/shipping-returns", /Livraison en France et retours/],
+  ["/shipping-returns", /Livraison en Union européenne et retours/],
   ["/privacy", /Politique de confidentialité/],
   ["/terms", /Conditions générales de vente/],
   ["/contact", /Nous contacter/],
@@ -903,10 +903,11 @@ test("legal notice publishes the sourced seller identity and never the closed es
   assert.doesNotMatch(html, /944 996 487 00020|94499648700020/);
   assert.doesNotMatch(html, /944 996 487 00012|94499648700012/);
 
-  /* LE NUMERO DE TVA EST PUBLIE, sur instruction explicite d'Adam du
-     22/08/2026. La cle de controle le confirme : (12 + 3 x (944996487 mod 97))
-     mod 97 = 58, donc FR58944996487 est bien LE numero de ce SIREN. */
-  assert.match(html, /FR\s?58\s?944\s?996\s?487/);
+  /* LE NUMERO DE TVA N'EST PAS PUBLIE. La cle de controle permet de former un
+     candidat, mais VIES le renvoie invalide et l'API Entreprises renvoie
+     tva:null au 25/08/2026. Il ne reapparaitra qu'apres preuve du regime. */
+  assert.doesNotMatch(html, /FR\s?58\s?944\s?996\s?487/);
+  assert.doesNotMatch(html, /TVA intracommunautaire/);
 
   /* MAIS L'ETIQUETTE DU PRIX NE SUIT PAS. Publier le numero ne tranche pas le
      regime : l'API officielle renvoie encore « tva: null », ce qui est le
@@ -945,7 +946,9 @@ test("terms cover the 2026 consumer baseline without a blanket underwear exclusi
   assert.match(html, /deux ans à compter de la délivrance/i);
   assert.match(html, /prolongée de six mois/i);
   assert.match(html, /renouvelée pour deux ans/i);
-  assert.match(html, /accéder au formulaire de rétractation/);
+  assert.match(html, /modèle ci-dessous/);
+  assert.match(html, /mailto:contact@ajluxurystore\.com/);
+  assert.doesNotMatch(html, /accéder au formulaire de rétractation/);
   assert.match(html, /accusé de réception/i);
   assert.match(html, /n’est pas exclu du seul fait que le produit est un sous-vêtement/i);
   assert.match(html, /médiateur conventionné/i);
