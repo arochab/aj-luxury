@@ -3,9 +3,9 @@
   //  AJ LUXURY — PRODUCTION
   //
   //  CE FICHIER NE DOIT PAS ETRE DEPLOYE SANS DEUX ACCORDS.
-  //  AGENTS.md : validation explicite de la version candidate, par Adam
-  //  CHABBI d'abord, par Jeremy SCHEPPLER ensuite. Adam a donne la sienne
-  //  le 22/08/2026. Celle de Jeremy manque.
+  //  AGENTS.md : validation explicite de la version candidate exacte, par
+  //  Adam CHABBI d'abord, puis directement par Jeremy SCHEPPLER. Les accords
+  //  anterieurs au SHA courant ne valent pas approbation de cette release.
   //
   //  Aucune route ni domaine personnalise n'est declare ici, VOLONTAIREMENT.
   //  Brancher ajluxurystore.com est l'acte d'ouverture au public : il se
