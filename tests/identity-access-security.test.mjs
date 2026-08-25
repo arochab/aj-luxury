@@ -161,6 +161,7 @@ function createFixture(options = {}) {
         }
         const receipt = options.deliveryReceipt?.(delivery, utcNow) ?? {
           idempotencyKey: delivery.idempotencyKey,
+          providerMessageId: "email_identity_1",
           acceptedAt: utcNow,
         };
         deliveries.push(Object.freeze({ ...delivery }));
@@ -541,6 +542,7 @@ test("delivery activation requires an exact receipt and uses a fresh post-provid
     deliveryReceipt(delivery) {
       return {
         idempotencyKey: delivery.idempotencyKey,
+        providerMessageId: "email_identity_2",
         acceptedAt: "2026-08-11T12:00:01.000Z",
       };
     },
@@ -626,6 +628,7 @@ test("expiry or UTC clock failure during provider delivery revokes without activ
       deliveryReceipt(delivery) {
         return {
           idempotencyKey: delivery.idempotencyKey,
+          providerMessageId: "email_identity_3",
           acceptedAt: "2026-08-11T12:00:01.000Z",
         };
       },

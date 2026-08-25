@@ -106,6 +106,7 @@
   "cart.summary": "Récapitulatif",
   "cart.estimatedTotal": "Total estimé",
   "cart.subtotal": "Sous-total",
+  "cart.packSaving": "Avantage pack {count}",
   "cart.shipping": "Livraison",
   "cart.toDefine": "À définir",
   "cart.provisionalTotal": "Total provisoire",

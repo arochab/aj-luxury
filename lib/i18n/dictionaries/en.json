@@ -106,6 +106,7 @@
   "cart.summary": "Summary",
   "cart.estimatedTotal": "Estimated total",
   "cart.subtotal": "Subtotal",
+  "cart.packSaving": "Pack {count} saving",
   "cart.shipping": "Shipping",
   "cart.toDefine": "To be confirmed",
   "cart.provisionalTotal": "Provisional total",

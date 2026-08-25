@@ -14,6 +14,7 @@ import { PaymentProviderError, verifyAndDeliverPaymentWebhook, type PaymentProvi
 import { validateLaunchStockImport } from "../lib/commerce/launch-stock-import.ts";
 import { productionReleaseSchemaContractSha256 } from "../lib/commerce/production-schema-contract.ts";
 import { evaluateWiredProductionReleaseGate, type ProductionCommerceEnvironment } from "../lib/commerce/production-release-gate.ts";
+import { recordVerifiedResendWebhook, ResendWebhookError } from "../lib/commerce/resend-webhook.ts";
 import { createSendcloudProviderPorts } from "../lib/commerce/sendcloud-provider.ts";
 import { createStripePaymentProviderPorts } from "../lib/commerce/stripe-payment-provider.ts";
 import { LEGAL_VERSION } from "../lib/legal.ts";
@@ -34,7 +35,8 @@ const routes = Object.freeze({
   points: `${PREFIX}checkout/service-points`,
   select: `${PREFIX}checkout/delivery-options/select`,
   order: `${PREFIX}checkout/order`, payment: `${PREFIX}checkout/payment-session`,
-  webhook: `${PREFIX}webhooks/stripe`, currentOrder: `${PREFIX}orders/current`,
+  webhook: `${PREFIX}webhooks/stripe`, resendWebhook: `${PREFIX}webhooks/resend`,
+  currentOrder: `${PREFIX}orders/current`,
   refundDispatch: `${PREFIX}admin/late-payment-refunds/dispatch`,
   account: `${PREFIX}account/current`, adminHealth: `${PREFIX}admin/health`,
 } as const);
@@ -214,6 +216,7 @@ function map(cause: unknown): Response {
   if (cause instanceof CommerceError) {
     if (cause.code === "VARIANT_NOT_FOUND") return fail("VARIANT_NOT_FOUND", 404);
     if (cause.code === "STOCK_UNAVAILABLE") return fail("STOCK_UNAVAILABLE", 409);
+    if (cause.code === "MAX_QUANTITY") return fail("MAX_QUANTITY", 409);
     return fail("CART_UNAVAILABLE", 409);
   }
   if (cause instanceof ProductionCheckoutError) {
@@ -623,6 +626,34 @@ export async function productionCommerceApiResponse(
   if (env?.APP_ENV !== "production") return json({ error: "not-found" }, 404);
   const line = lineRoute.exec(url.pathname);
   if (!known.has(url.pathname) && !line) return json({ error: "not-found" }, 404);
+  if (url.pathname === routes.resendWebhook) {
+    if (request.method !== "POST") return fail("METHOD_NOT_ALLOWED", 405);
+    if (!env.DB || !env.RESEND_WEBHOOK_SECRET || !env.COMMERCE_ORIGIN ||
+      url.origin !== env.COMMERCE_ORIGIN) {
+      return fail("EMAIL_WEBHOOK_UNAVAILABLE", 503);
+    }
+    const raw = await bytes(request, 64 * 1024);
+    if (!raw) return fail("INVALID_WEBHOOK", 400);
+    try {
+      const received = await recordVerifiedResendWebhook({
+        database: env.DB,
+        rawBody: raw,
+        signingSecret: env.RESEND_WEBHOOK_SECRET,
+        eventId: request.headers.get("svix-id"),
+        timestamp: request.headers.get("svix-timestamp"),
+        signature: request.headers.get("svix-signature"),
+        now: new Date().toISOString(),
+        nowEpochSeconds: Math.floor(Date.now() / 1_000),
+      });
+      return json({ received: true, disposition: received.disposition });
+    } catch (cause) {
+      if (cause instanceof ResendWebhookError &&
+        ["INVALID_SIGNATURE", "INVALID_PAYLOAD"].includes(cause.code)) {
+        return fail("INVALID_WEBHOOK", 400);
+      }
+      return fail("EMAIL_WEBHOOK_UNAVAILABLE", 503);
+    }
+  }
   if (url.pathname === routes.webhook) {
     if (request.method !== "POST") return fail("METHOD_NOT_ALLOWED", 405);
     const configuredOrigin = env.COMMERCE_ORIGIN;
@@ -675,7 +706,7 @@ export async function productionCommerceApiResponse(
       blockers.push("stock-runtime-attestation-not-verified");
     }
     const ready = gate.ready && blockers.length === 0;
-    return json({ status: ready ? "ready" : "closed", environment: "production", mode: gate.mode, releaseSha: gate.releaseSha, origin: gate.origin, launchZones: gate.launchZones, blockers: [...gate.blockers, ...blockers], capabilities: { sandboxCheckout: ready && gate.mode === "sandbox", realPayment: ready && gate.mode === "controlled", realDelivery: ready && gate.mode === "controlled", transactionalEmail: ready && productionEmailDispatchRuntimeConfigured(env), returns: false, controlledOrder: ready && gate.mode === "controlled", publicCommerce: false }, routes: { cart: "wired", homeDelivery: "wired-provider-priced", order: "wired", paymentSession: "sandbox-or-controlled-with-durable-refund", servicePoint: "wired-encrypted", stripeWebhook: "atomic-d1-effects-and-late-refund-obligation", lateRefundDispatch: "wired-bounded-owner-only", returns: "partial-no-label-no-refund" } }, ready ? 200 : 503);
+    return json({ status: ready ? "ready" : "closed", environment: "production", mode: gate.mode, releaseSha: gate.releaseSha, origin: gate.origin, launchZones: gate.launchZones, blockers: [...gate.blockers, ...blockers], capabilities: { sandboxCheckout: ready && gate.mode === "sandbox", realPayment: ready && ["controlled", "live"].includes(gate.mode), realDelivery: ready && ["controlled", "live"].includes(gate.mode), transactionalEmail: ready && productionEmailDispatchRuntimeConfigured(env), returns: ready && gate.mode === "live" && env.RETURNS_WORKFLOW_ENABLED === "true", controlledOrder: ready && gate.mode === "controlled", publicCommerce: ready && gate.mode === "live" }, routes: { cart: "wired", homeDelivery: "wired-provider-priced", order: "wired", paymentSession: "sandbox-controlled-or-live-behind-release-gate", servicePoint: "wired-encrypted", stripeWebhook: "atomic-d1-effects-and-late-refund-obligation", resendWebhook: "svix-signed-idempotent-audit", lateRefundDispatch: "wired-bounded-owner-only", returns: "workflow-gated" } }, ready ? 200 : 503);
   }
   if (!gate.ready || !gate.origin || url.origin !== gate.origin) return fail("COMMERCE_CLOSED", 503);
   if (gate.mode !== "live" && !await controlledOwnerRequestAuthenticated(request, env)) {
@@ -821,11 +852,13 @@ export async function productionCommerceApiResponse(
     try { return json({ data: await new D1ProductionCheckoutStore(env.DB).createOrder({ cartId: current.cartId, quoteId: parsed.quoteId, optionId: parsed.optionId, servicePointId: typeof parsed.servicePointId === "string" ? parsed.servicePointId : null, address: parsed.address as never, email: parsed.email, idempotencyKey: key(request)!, termsVersion: LEGAL_VERSION, privacyVersion: LEGAL_VERSION, now: now() }) }, 201); } catch (cause) { return map(cause); }
   }
   if (url.pathname === routes.payment) {
-    if (!["sandbox", "controlled"].includes(gate.mode)) {
+    if (!["sandbox", "controlled", "live"].includes(gate.mode)) {
       return fail("PAYMENT_SESSION_NOT_ACTIVATED", 503);
     }
-    if (gate.mode === "controlled" && blockers.length > 0) {
-      return fail("CONTROLLED_PAYMENT_RUNTIME_NOT_READY", 503);
+    if (["controlled", "live"].includes(gate.mode) && blockers.length > 0) {
+      return fail(gate.mode === "controlled"
+        ? "CONTROLLED_PAYMENT_RUNTIME_NOT_READY"
+        : "LIVE_PAYMENT_RUNTIME_NOT_READY", 503);
     }
     const empty = await bytes(request, 1); if (!empty || empty.length) return fail("INVALID_BODY", 400);
     try {

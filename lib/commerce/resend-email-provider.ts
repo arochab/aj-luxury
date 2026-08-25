@@ -33,6 +33,22 @@ export type ResendEmailProviderConfig = Readonly<{
 }>;
 
 type EmailContent = Readonly<{ subject: string; text: string }>;
+const SAFE_PROVIDER_MESSAGE_ID = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,191}$/;
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function brandedHtml(content: EmailContent): string {
+  const title = escapeHtml(content.subject);
+  const body = escapeHtml(content.text).replaceAll("\n", "<br>");
+  return `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title></head><body style="margin:0;background:#f1eee8;color:#111"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f1eee8;padding:32px 16px"><tr><td align="center"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:620px;background:#fff"><tr><td style="background:#0a0a0a;color:#f4eee4;padding:28px 32px;font:600 18px Arial,sans-serif;letter-spacing:.18em">AJ LUXURY</td></tr><tr><td style="padding:40px 32px 24px"><h1 style="margin:0 0 24px;font:500 28px Georgia,serif;line-height:1.2">${title}</h1><p style="margin:0;font:16px Arial,sans-serif;line-height:1.65;color:#282828">${body}</p></td></tr><tr><td style="padding:24px 32px 32px;border-top:1px solid #e8e3db;font:12px Arial,sans-serif;line-height:1.5;color:#6b665e">AJ Luxury · ajluxurystore.com</td></tr></table></td></tr></table></body></html>`;
+}
 
 function requireMailbox(value: string, field: string): string {
   if (value.length > 254 || !SAFE_MAILBOX.test(value)) {
@@ -135,6 +151,7 @@ export class ResendEmailProvider implements TransactionalEmailProviderPort {
           to: [delivery.message.recipientEmail],
           subject: content.subject,
           text: content.text,
+          html: brandedHtml(content),
           ...(this.#replyTo ? { reply_to: this.#replyTo } : {}),
           tags: [
             { name: "kind", value: delivery.message.kind },
@@ -159,10 +176,14 @@ export class ResendEmailProvider implements TransactionalEmailProviderPort {
     }
     if (
       !payload || typeof payload !== "object" || Array.isArray(payload) ||
-      typeof (payload as Record<string, unknown>).id !== "string"
+      typeof (payload as Record<string, unknown>).id !== "string" ||
+      !SAFE_PROVIDER_MESSAGE_ID.test((payload as Record<string, unknown>).id as string)
     ) {
       throw new ResendEmailProviderError("ambiguous", "Email acceptance receipt is invalid.");
     }
-    return Object.freeze({ idempotencyKey: delivery.idempotencyKey });
+    return Object.freeze({
+      idempotencyKey: delivery.idempotencyKey,
+      providerMessageId: (payload as Record<string, string>).id,
+    });
   }
 }

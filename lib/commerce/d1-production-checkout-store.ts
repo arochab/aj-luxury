@@ -16,6 +16,7 @@ import {
   type ShippingAddressInput,
 } from "./fulfillment-domain.ts";
 import { prepareProductionDeliveryOrderSelection } from "./production-delivery-order-selection.ts";
+import { calculateAjPackPricing } from "./pack-pricing.ts";
 
 export type ProductionCheckoutErrorCode =
   | "INVALID_INPUT"
@@ -58,6 +59,7 @@ type OrderRow = Readonly<{
   currency: "EUR";
   email: string;
   subtotal_cents: number;
+  discount_cents: number;
   shipping_cents: number;
   tax_cents: number;
   total_cents: number;
@@ -140,7 +142,7 @@ export type CreateProductionOrderInput = Readonly<{
 }>;
 
 const orderColumns = `id, order_number, cart_id, customer_id, status,
-  currency, email, subtotal_cents, shipping_cents, tax_cents, total_cents,
+  currency, email, subtotal_cents, discount_cents, shipping_cents, tax_cents, total_cents,
   shipping_country_code, shipping_address_json, shipping_address_fingerprint,
   shipping_quote_id, terms_version, privacy_version, created_at, paid_at`;
 const EMAIL_PATTERN =
@@ -254,10 +256,20 @@ export class D1ProductionCheckoutStore {
       ).bind(input.cartId).first<OrderRow>(),
     ]);
     const lines = lineResult.results;
-    const subtotalCents = lines.reduce(
-      (total, line) => total + line.unit_price_cents * line.quantity,
-      0,
-    );
+    let pricing;
+    try {
+      pricing = calculateAjPackPricing(lines.map((line) => ({
+        quantity: line.quantity,
+        unitPriceCents: line.unit_price_cents,
+      })));
+    } catch (error) {
+      throw new ProductionCheckoutError(
+        "CHECKOUT_UNAVAILABLE",
+        "The cart pack configuration is invalid.",
+        { cause: error },
+      );
+    }
+    const subtotalCents = pricing.subtotalCents;
     if (
       !quote || !option || lines.length < 1 || quote.cart_status !== "open" ||
       quote.currency !== "EUR" || quote.cart_revision !== quote.fulfillment_revision ||
@@ -279,6 +291,7 @@ export class D1ProductionCheckoutStore {
       addressFingerprint: address.fingerprint,
       email,
       lines,
+      pricing,
       optionId: input.optionId,
       servicePointId: input.servicePointId ?? null,
       privacyVersion: input.privacyVersion,
@@ -295,6 +308,7 @@ export class D1ProductionCheckoutStore {
         existing.id !== orderId || existing.shipping_quote_id !== input.quoteId ||
         existing.shipping_address_fingerprint !== address.fingerprint ||
         existing.email !== email || existing.total_cents !== subtotalCents + quote.amount_cents ||
+        existing.discount_cents !== pricing.discountCents ||
         option.selected_service_point_id !== (input.servicePointId ?? null)
       ) {
         throw new ProductionCheckoutError(
@@ -334,12 +348,12 @@ export class D1ProductionCheckoutStore {
       this.#database.prepare(
         `INSERT INTO orders (
           id, order_number, cart_id, customer_id, email, status, currency,
-          subtotal_cents, shipping_cents, tax_cents, total_cents,
+          subtotal_cents, discount_cents, shipping_cents, tax_cents, total_cents,
           shipping_country_code, shipping_address_json,
           shipping_address_fingerprint, billing_address_json,
           shipping_quote_id, terms_version, privacy_version, paid_at,
           created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, 'pending_payment', 'EUR', ?, ?, 0, ?,
+        ) VALUES (?, ?, ?, ?, ?, 'pending_payment', 'EUR', ?, ?, ?, 0, ?,
           ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)`,
       ).bind(
         orderId,
@@ -348,6 +362,7 @@ export class D1ProductionCheckoutStore {
         input.customerId ?? null,
         email,
         subtotalCents,
+        pricing.discountCents,
         quote.amount_cents,
         subtotalCents + quote.amount_cents,
         address.address.countryCode,
@@ -471,12 +486,18 @@ export class D1ProductionCheckoutStore {
     ) {
       throw new ProductionCheckoutError("ORDER_EXPIRED", "Order reservation expired.");
     }
-    const lines: CheckoutLine[] = linesResult.results.map((line) => Object.freeze({
-      internalReference: line.internal_reference,
-      displayName: `${line.product_name} · ${line.color_name} · ${line.size}`,
-      unitAmountCents: line.unit_price_cents,
-      quantity: line.quantity,
-    }));
+    const itemCount = linesResult.results.reduce(
+      (total, line) => total + line.quantity,
+      0,
+    );
+    const lines: CheckoutLine[] = [Object.freeze({
+      internalReference: `pack:apollon:${itemCount}`,
+      displayName: itemCount === 1
+        ? "Apollon · 1 pièce"
+        : `Pack Apollon · ${itemCount} pièces`,
+      unitAmountCents: order.subtotal_cents,
+      quantity: 1,
+    })];
     if (order.shipping_cents > 0) {
       lines.push(Object.freeze({
         internalReference: `delivery:${order.shipping_quote_id}`,

@@ -501,7 +501,7 @@ test("0011 fails closed for a missing, foreign, expired or unsealed service poin
   assert.doesNotMatch(migration, /provider_reference` text|raw_reference|api[_-]?key|secret[_-]?key/i);
 });
 
-test("0011-0016 remain additive and the journal ends at operations proofs", () => {
+test("0011-0018 remain additive and the journal ends at Resend delivery evidence", () => {
   const previous = JSON.parse(readFileSync(`${drizzle}meta/0010_snapshot.json`, "utf8"));
   const snapshot = JSON.parse(readFileSync(`${drizzle}meta/0011_snapshot.json`, "utf8"));
   const pricingSnapshot = JSON.parse(readFileSync(`${drizzle}meta/0012_snapshot.json`, "utf8"));
@@ -509,6 +509,8 @@ test("0011-0016 remain additive and the journal ends at operations proofs", () =
   const refundSnapshot = JSON.parse(readFileSync(`${drizzle}meta/0014_snapshot.json`, "utf8"));
   const releaseSnapshot = JSON.parse(readFileSync(`${drizzle}meta/0015_snapshot.json`, "utf8"));
   const operationsSnapshot = JSON.parse(readFileSync(`${drizzle}meta/0016_snapshot.json`, "utf8"));
+  const packPricingSnapshot = JSON.parse(readFileSync(`${drizzle}meta/0017_snapshot.json`, "utf8"));
+  const resendSnapshot = JSON.parse(readFileSync(`${drizzle}meta/0018_snapshot.json`, "utf8"));
   const journal = JSON.parse(readFileSync(`${drizzle}meta/_journal.json`, "utf8"));
   assert.equal(snapshot.version, "6");
   assert.equal(snapshot.dialect, "sqlite");
@@ -566,11 +568,28 @@ test("0011-0016 remain additive and the journal ends at operations proofs", () =
     Object.keys(releaseSnapshot.tables).length + 1,
   );
   assert.ok(operationsSnapshot.tables.commerce_operations_schema_installations);
+  assert.equal(packPricingSnapshot.prevId, operationsSnapshot.id);
+  assert.notEqual(packPricingSnapshot.id, operationsSnapshot.id);
+  assert.equal(
+    packPricingSnapshot.tables.orders.columns.discount_cents.notNull,
+    true,
+  );
+  assert.equal(resendSnapshot.prevId, packPricingSnapshot.id);
+  assert.notEqual(resendSnapshot.id, packPricingSnapshot.id);
+  assert.equal(
+    Object.keys(resendSnapshot.tables).length,
+    Object.keys(packPricingSnapshot.tables).length + 1,
+  );
+  assert.ok(resendSnapshot.tables.resend_webhook_events);
+  assert.equal(
+    resendSnapshot.tables.email_outbox.columns.provider_message_id.notNull,
+    false,
+  );
   assert.deepEqual(journal.entries.at(-1), {
-    idx: 16,
+    idx: 18,
     version: "6",
-    when: 1786771200000,
-    tag: "0016_return_operator_state_machine",
+    when: 1787663360734,
+    tag: "0018_volatile_blob",
     breakpoints: true,
   });
 });

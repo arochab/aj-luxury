@@ -144,7 +144,7 @@ function fixture(ports = {}) {
     delivery: {
       async deliver(message) {
         deliveries.push(message);
-        return { idempotencyKey: message.idempotencyKey, acceptedAt: clock };
+        return { idempotencyKey: message.idempotencyKey, providerMessageId: `email_${messages.length}`, acceptedAt: clock };
       },
     },
     rateLimit: { async take() { return true; } },

@@ -14,7 +14,9 @@ import { PaymentProviderError } from "../lib/commerce/payment-provider.ts";
 import { productionReleaseSchemaInstalled } from "../worker/production-commerce-api.ts";
 
 const directory = fileURLToPath(new URL("../drizzle/", import.meta.url));
-const migrations = readdirSync(directory).filter((name) => /^(?:000[0-7]|0009|0010|0011|0012|0013|0014|0015)_.+\.sql$/.test(name)).sort();
+const migrations = readdirSync(directory)
+  .filter((name) => /^(?:000[0-7]|0009|001[0-7])_.+\.sql$/.test(name))
+  .sort();
 class Statement {
   constructor(database, query, values = []) { this.database = database; this.query = query; this.values = values; }
   bind(...values) { return new Statement(this.database, this.query, values); }
@@ -43,7 +45,7 @@ class D1 {
 }
 const iso = (base, offset) => new Date(base + offset).toISOString();
 
-async function fixture(failEffectsAt = null, livemode = true) {
+async function fixture(failEffectsAt = null, livemode = true, quantity = 1) {
   const sqlite = new DatabaseSync(":memory:"); sqlite.exec("PRAGMA foreign_keys=ON");
   for (const name of migrations) for (const sql of readFileSync(`${directory}${name}`, "utf8").split("--> statement-breakpoint")) if (sql.trim()) sqlite.exec(sql);
   const base = Date.now() - 60_000; const d1 = new D1(sqlite); const commerce = new D1CommerceStore(d1);
@@ -55,7 +57,7 @@ async function fixture(failEffectsAt = null, livemode = true) {
     parcel_length_mm=400,parcel_width_mm=320,parcel_height_mm=40,origin_country_code='FR',customs_hs_code='610711',
     activated_at=?,updated_at=? WHERE id='config_prod'`).run(iso(base, 20), iso(base, 20));
   await commerce.createCart({ id: "cart_prod", expiresAt: iso(base, 3_600_000), now: iso(base, 30) });
-  await commerce.setCartLineQuantity({ cartId: "cart_prod", variantId: "variant_boxer_pourpre_m", quantity: 1, now: iso(base, 40) });
+  await commerce.setCartLineQuantity({ cartId: "cart_prod", variantId: "variant_boxer_pourpre_m", quantity, now: iso(base, 40) });
   const address = { recipient: "Ada Test", line1: "1 rue du Test", postalCode: "75001", city: "Paris", countryCode: "FR" };
   const expiry = iso(base, 900_000);
   const delivery = new D1ProductionDeliveryActivationStore(d1, { quotes: { async quote() { return [{ providerCode: "sendcloud", providerQuoteReference: "provider-ref-home", carrierCode: "colissimo", serviceCode: "home", displayName: "Livraison domicile", deliveryMode: "home", amountCents: 900, currency: "EUR", estimatedDaysMin: 2, estimatedDaysMax: 5, dutiesTerms: "EU_INCLUDED", expiresAt: expiry, responseFingerprint: "c".repeat(64) }]; } }, servicePoints: { async servicePoints() { return []; } }, documents: { async document() { throw new Error("closed"); } }, returns: { async validate() { throw new Error("closed"); }, async create() { throw new Error("closed"); } } }, new DeliveryReferenceVault({ encryptionKeyBase64: Buffer.alloc(32, 7).toString("base64"), keyVersion: 1 }));
@@ -64,10 +66,32 @@ async function fixture(failEffectsAt = null, livemode = true) {
   await checkout.createOrder({ cartId: "cart_prod", quoteId: option.quoteId, optionId: option.optionId, address, email: "ada@example.com", idempotencyKey: "order-idem-0001", termsVersion: "2026-07-30", privacyVersion: "2026-07-30", now: iso(base, 60) });
   const request = await checkout.prepareCheckoutSession({ cartId: "cart_prod", idempotencyKey: "payment-idem-0001", origin: "https://ajluxurystore.com", locale: "fr", now: iso(base, 70) });
   const sessionId = livemode ? "cs_live_fixture_001" : "cs_test_fixture_001";
-  await checkout.recordCheckoutSession(request, { provider: "stripe", providerSessionId: sessionId, providerPaymentId: null, checkoutUrl: "https://checkout.stripe.com/c/pay/test", state: "open", amountTotalCents: 3899, currency: "EUR", livemode, providerRequestId: "req_fixture" }, iso(base, 80));
-  const event = Object.freeze({ provider: "stripe", providerEventId: "evt_fixture_paid_001", eventType: "checkout.session.completed", occurredAt: iso(base, 90), livemode, kind: "payment", orderId: request.orderId, providerPaymentId: "pi_fixture_001", providerCheckoutSessionId: sessionId, state: "paid", amountCents: 3899, currency: "EUR", providerFailureCode: null, semanticKey: "stripe:payment:pi_fixture_001:paid" });
-  return { sqlite, d1, event, expiry, effects: new D1StripePaymentEffectsStore(failEffectsAt === null ? d1 : new D1(sqlite, failEffectsAt), livemode) };
+  const totalCents = ({ 1: 2999, 2: 4999, 3: 6999 })[quantity] + 900;
+  await checkout.recordCheckoutSession(request, { provider: "stripe", providerSessionId: sessionId, providerPaymentId: null, checkoutUrl: "https://checkout.stripe.com/c/pay/test", state: "open", amountTotalCents: totalCents, currency: "EUR", livemode, providerRequestId: "req_fixture" }, iso(base, 80));
+  const event = Object.freeze({ provider: "stripe", providerEventId: "evt_fixture_paid_001", eventType: "checkout.session.completed", occurredAt: iso(base, 90), livemode, kind: "payment", orderId: request.orderId, providerPaymentId: "pi_fixture_001", providerCheckoutSessionId: sessionId, state: "paid", amountCents: totalCents, currency: "EUR", providerFailureCode: null, semanticKey: "stripe:payment:pi_fixture_001:paid" });
+  return { sqlite, d1, event, expiry, request, effects: new D1StripePaymentEffectsStore(failEffectsAt === null ? d1 : new D1(sqlite, failEffectsAt), livemode) };
 }
+
+test("same-colour pack two charges 49.99 before delivery without pack stock", async () => {
+  const { sqlite, request, event } = await fixture(null, true, 2);
+  assert.deepEqual(
+    { ...sqlite.prepare("SELECT subtotal_cents, discount_cents, total_cents FROM orders").get() },
+    { subtotal_cents: 4999, discount_cents: 999, total_cents: 5899 },
+  );
+  assert.deepEqual(request.lines.map(({ internalReference, unitAmountCents, quantity }) => ({
+    internalReference,
+    unitAmountCents,
+    quantity,
+  })), [
+    { internalReference: "pack:apollon:2", unitAmountCents: 4999, quantity: 1 },
+    { internalReference: request.lines[1].internalReference, unitAmountCents: 900, quantity: 1 },
+  ]);
+  assert.equal(event.amountCents, 5899);
+  assert.equal(
+    sqlite.prepare("SELECT quantity FROM stock_reservations").get().quantity,
+    2,
+  );
+});
 
 test("paid Checkout event atomically pays, sells stock, closes cart and enqueues bounded copy", async () => {
   const { sqlite, d1, effects, event } = await fixture();

@@ -11,6 +11,7 @@ import {
 } from "./fulfillment-domain.ts";
 import { resolveClientValidatedParcelProfile } from "./parcel-profiles.ts";
 import { ProductionDeliveryError } from "./d1-production-delivery-store.ts";
+import { calculateAjPackPricing } from "./pack-pricing.ts";
 
 type CartRow = Readonly<{
   id: string;
@@ -182,10 +183,18 @@ export class D1ProductionDeliveryActivationStore {
       configuration.currency !== "EUR" || configuration.duties_terms !== expectedDuties) {
       throw new ProductionDeliveryError("CART_UNAVAILABLE", "The cart cannot be quoted.");
     }
-    const subtotalCents = lines.reduce(
-      (total, line) => total + line.quantity * line.unit_price_cents,
-      0,
-    );
+    let subtotalCents: number;
+    try {
+      subtotalCents = calculateAjPackPricing(lines.map((line) => ({
+        quantity: line.quantity,
+        unitPriceCents: line.unit_price_cents,
+      }))).subtotalCents;
+    } catch {
+      throw new ProductionDeliveryError(
+        "CART_UNAVAILABLE",
+        "The cart pack configuration is invalid.",
+      );
+    }
     const requestHash = await sha256Hex(
       `${input.cartId}\0${input.idempotencyKey}\0${address.fingerprint}`,
     );

@@ -209,6 +209,7 @@ export const orders = sqliteTable(
       .default("pending_payment"),
     currency: text("currency", { enum: ["EUR"] }).notNull().default("EUR"),
     subtotalCents: integer("subtotal_cents").notNull(),
+    discountCents: integer("discount_cents").notNull().default(0),
     shippingCents: integer("shipping_cents").notNull(),
     taxCents: integer("tax_cents").notNull(),
     totalCents: integer("total_cents").notNull(),
@@ -244,6 +245,7 @@ export const orders = sqliteTable(
     check(
       "ck_orders_amounts_non_negative",
       sql`${table.subtotalCents} >= 0
+        AND ${table.discountCents} >= 0
         AND ${table.shippingCents} >= 0
         AND ${table.taxCents} >= 0
         AND ${table.totalCents} >= 0`,
@@ -784,6 +786,7 @@ export const emailOutbox = sqliteTable(
     providerIdempotencyKey: text("provider_idempotency_key")
       .notNull()
       .default("compat:pending"),
+    providerMessageId: text("provider_message_id"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull().default(utcNow),
     sentAt: text("sent_at"),
@@ -799,6 +802,9 @@ export const emailOutbox = sqliteTable(
     uniqueIndex("ux_email_outbox_provider_idempotency_key").on(
       table.providerIdempotencyKey,
     ),
+    uniqueIndex("ux_email_outbox_provider_message_id")
+      .on(table.providerMessageId)
+      .where(sql`${table.providerMessageId} IS NOT NULL`),
     uniqueIndex("ux_email_outbox_account_access_challenge")
       .on(table.accessChallengeId)
       .where(
@@ -905,6 +911,47 @@ export const emailOutbox = sqliteTable(
         AND ${table.leaseTokenHash} = lower(${table.leaseTokenHash})
         AND ${table.leaseTokenHash} NOT GLOB '*[^0-9a-f]*'
       )`,
+    ),
+  ],
+);
+
+export const resendWebhookEvents = sqliteTable(
+  "resend_webhook_events",
+  {
+    id: text("id").primaryKey(),
+    providerMessageId: text("provider_message_id").notNull(),
+    eventType: text("event_type", {
+      enum: [
+        "email.sent",
+        "email.delivered",
+        "email.delivery_delayed",
+        "email.bounced",
+        "email.complained",
+        "email.failed",
+        "email.suppressed",
+      ],
+    }).notNull(),
+    occurredAt: text("occurred_at").notNull(),
+    payloadSha256: text("payload_sha256").notNull(),
+    receivedAt: text("received_at").notNull(),
+  },
+  (table) => [
+    index("idx_resend_webhook_message_time").on(
+      table.providerMessageId,
+      table.occurredAt,
+    ),
+    check(
+      "ck_resend_webhook_event_type",
+      sql`${table.eventType} IN (
+        'email.sent', 'email.delivered', 'email.delivery_delayed',
+        'email.bounced', 'email.complained', 'email.failed', 'email.suppressed'
+      )`,
+    ),
+    check(
+      "ck_resend_webhook_hash",
+      sql`length(${table.payloadSha256}) = 64
+        AND ${table.payloadSha256} = lower(${table.payloadSha256})
+        AND ${table.payloadSha256} NOT GLOB '*[^0-9a-f]*'`,
     ),
   ],
 );

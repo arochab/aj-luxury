@@ -175,6 +175,14 @@ export default function CartClient({
           : t("product.cartMaxQuantity")
       : t("cart.unavailableError");
   const itemCount = cart?.itemCount ?? 0;
+  const listSubtotalCents = cart?.lines.reduce(
+    (total, line) => total + line.lineTotalCents,
+    0,
+  ) ?? 0;
+  const packDiscountCents = Math.max(
+    listSubtotalCents - (cart?.subtotalCents ?? 0),
+    0,
+  );
   const cartMutating = busyVariant !== null;
 
   return (
@@ -317,12 +325,18 @@ export default function CartClient({
           <div className={styles.row}>
             <span>{t("cart.subtotal")}</span>
             <span>
-              <LocalizedPrice amountCents={cart.subtotalCents} />{" "}
+              <LocalizedPrice amountCents={listSubtotalCents} />{" "}
               {runtimeMode === "preproduction" && (
                 <small>({t("cart.syntheticQualifier")})</small>
               )}
             </span>
           </div>
+          {packDiscountCents > 0 && (
+            <div className={styles.row}>
+              <span>{interpolate(t("cart.packSaving"), { count: itemCount })}</span>
+              <span>−<LocalizedPrice amountCents={packDiscountCents} /></span>
+            </div>
+          )}
           <div className={`${styles.row} ${styles.total}`}>
             <span>{t("cart.provisionalTotal")}</span>
             <span>

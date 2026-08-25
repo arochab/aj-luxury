@@ -84,7 +84,7 @@ function fixture(options = {}) {
     delivery: {
       async deliver(message) {
         deliveries.push(Object.freeze({ ...message }));
-        return { idempotencyKey: message.idempotencyKey, acceptedAt: utcNow };
+        return { idempotencyKey: message.idempotencyKey, providerMessageId: `email_${messages.length}`, acceptedAt: utcNow };
       },
     },
     rateLimit: { async take() { return true; } },
@@ -345,7 +345,7 @@ test("provider retries use one stable mandatory key after success-before-mark cr
   const outbox = new D1EmailOutbox(context.d1, {
     async deliver(delivery) {
       providerKeys.push(delivery.idempotencyKey);
-      return { idempotencyKey: delivery.idempotencyKey };
+      return { idempotencyKey: delivery.idempotencyKey, providerMessageId: "email_delivery_1" };
     },
   });
   await outbox.enqueue({
@@ -455,7 +455,7 @@ test("forged historical account-access claims are rejected before any provider o
   const outbox = new D1EmailOutbox(context.d1, {
     async deliver(delivery) {
       providerCalls += 1;
-      return { idempotencyKey: delivery.idempotencyKey };
+      return { idempotencyKey: delivery.idempotencyKey, providerMessageId: "email_delivery_2" };
     },
   });
   const forgedClaim = {
@@ -477,7 +477,7 @@ test("forged historical account-access claims are rejected before any provider o
     /historical account access records cannot be delivered/i,
   );
   await assert.rejects(
-    () => outbox.markSent(forgedClaim, "2026-08-11T12:02:31.000Z"),
+    () => outbox.markSent(forgedClaim, "2026-08-11T12:02:31.000Z", "email_forged"),
     /historical account access records cannot be delivered/i,
   );
   await assert.rejects(
@@ -541,7 +541,7 @@ test("terminal content purge is disabled without policy and activates only after
   const claim = await outbox.claimNext({ leaseTokenHash: "b".repeat(64), now,
     leaseExpiresAt: "2026-08-11T12:02:30.000Z" });
   assert.ok(claim);
-  await outbox.markSent(claim, "2026-08-11T12:02:01.000Z");
+  await outbox.markSent(claim, "2026-08-11T12:02:01.000Z", "email_direct_1");
   assert.equal(await outbox.purgeEligibleTerminalContent("2026-08-11T12:03:00.000Z"), 0);
   assert.equal(context.database.prepare(
     "SELECT recipient_email FROM email_outbox WHERE id = 'email_purge'",

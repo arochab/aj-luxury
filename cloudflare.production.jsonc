@@ -23,6 +23,37 @@
   "compatibility_flags": ["nodejs_compat"],
   "no_bundle": true,
 
+  "version_metadata": {
+    "binding": "CF_VERSION_METADATA"
+  },
+
+  "ratelimits": [
+    {
+      "name": "COMMERCE_RATE_LIMITER",
+      "namespace_id": "8262501",
+      "simple": { "limit": 90, "period": 60 }
+    },
+    {
+      "name": "PROVIDER_RATE_LIMITER",
+      "namespace_id": "8262502",
+      "simple": { "limit": 30, "period": 60 }
+    },
+    {
+      "name": "WEBHOOK_RATE_LIMITER",
+      "namespace_id": "8262503",
+      "simple": { "limit": 180, "period": 60 }
+    },
+    {
+      "name": "OPERATOR_RATE_LIMITER",
+      "namespace_id": "8262504",
+      "simple": { "limit": 30, "period": 60 }
+    }
+  ],
+
+  "triggers": {
+    "crons": ["*/2 * * * *"]
+  },
+
   // Pas de workers.dev en production : l'acces se fera par le domaine
   // canonique, une fois qu'il sera decide de l'ouvrir.
   "workers_dev": false,
@@ -44,7 +75,8 @@
     "DELIVERY_PROVIDER": "sendcloud",
     "SENDCLOUD_API_VERSION": "3",
     "EMAIL_PROVIDER": "resend",
-    "TRANSACTIONAL_FROM_EMAIL": "commandes@ajluxurystore.com"
+    "TRANSACTIONAL_FROM_EMAIL": "commandes@ajluxurystore.com",
+    "TRANSACTIONAL_FROM_NAME": "AJ Luxury"
 
     // LES VARIABLES SUIVANTES SONT DELIBEREMENT ABSENTES.
     //

@@ -1,3 +1,5 @@
+SUPERSEDED — retained as history — replaced by `docs/internal/STOCK-LAUNCH-RECONCILIATION-2026-08-25.md` on 2026-08-25
+
 # AJ Luxury — décision de ventilation du stock
 
 Statut : `DECIDED BY ADAM — PRODUCTION IMPORT NOT YET AUTHORIZED`

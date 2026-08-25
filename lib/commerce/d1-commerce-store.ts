@@ -29,6 +29,7 @@ import {
   assertVerifiedPaymentEvent,
   type VerifiedPaymentEvent,
 } from "./verified-payment-event.ts";
+import { calculateAjPackPricing } from "./pack-pricing.ts";
 
 type InventoryRow = {
   variant_id: string;
@@ -573,15 +574,23 @@ export class D1CommerceStore {
       );
     });
 
+    let pricing;
+    try {
+      pricing = calculateAjPackPricing(lines);
+    } catch (error) {
+      throw new CommerceError(
+        "MAX_QUANTITY",
+        "A launch cart is limited to three pieces.",
+        { cause: error },
+      );
+    }
+
     return Object.freeze({
       status: "open",
       currency: cart!.currency,
       expiresAt: cart!.expires_at,
-      itemCount: lines.reduce((total, line) => total + line.quantity, 0),
-      subtotalCents: lines.reduce(
-        (total, line) => total + line.lineTotalCents,
-        0,
-      ),
+      itemCount: pricing.itemCount,
+      subtotalCents: pricing.subtotalCents,
       lines: Object.freeze(lines),
     });
   }
@@ -625,6 +634,11 @@ export class D1CommerceStore {
             AND stock.physical_quantity - stock.gift_reserve_quantity
               - stock.safety_reserve_quantity - stock.active_reserved_quantity
               - stock.sold_quantity >= ?
+            AND COALESCE((
+              SELECT SUM(existing.quantity) FROM cart_lines AS existing
+              WHERE existing.cart_id = cart.id
+                AND existing.variant_id <> variant.id
+            ), 0) + ? <= 3
             AND NOT EXISTS (
               SELECT 1 FROM stock_reservations WHERE cart_id = cart.id
             )
@@ -643,6 +657,7 @@ export class D1CommerceStore {
           input.cartId,
           input.now,
           input.quantity,
+          input.quantity,
         ),
           this.#cartLineSnapshotStatement(input.cartId),
         ]);
@@ -657,6 +672,15 @@ export class D1CommerceStore {
         throw new CommerceError(
           "STOCK_UNAVAILABLE",
           "The requested quantity is unavailable.",
+        );
+      }
+      const persistedQuantity = lineResult.results.find(
+        (row) => row.variant_id === input.variantId,
+      )?.quantity;
+      if (persistedQuantity !== input.quantity) {
+        throw new CommerceError(
+          "MAX_QUANTITY",
+          "A launch cart is limited to three pieces.",
         );
       }
       return this.#toPublicCartSnapshot(cart, lineResult.results, input.now);

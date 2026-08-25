@@ -35,7 +35,7 @@ function provider(fetchImpl) {
   });
 }
 
-test("Resend receives one bounded text-only email with the durable idempotency key", async () => {
+test("Resend receives one bounded branded email with the durable idempotency key", async () => {
   let call;
   const adapter = provider(async (url, init) => {
     call = { url, init };
@@ -43,13 +43,15 @@ test("Resend receives one bounded text-only email with the durable idempotency k
   });
   const receipt = await adapter.deliver(delivery());
   assert.equal(receipt.idempotencyKey, "payment_confirmation:order_12345678");
+  assert.equal(receipt.providerMessageId, "email_123");
   assert.equal(call.url, "https://api.resend.com/emails");
   assert.equal(call.init.headers["Idempotency-Key"], receipt.idempotencyKey);
   assert.match(call.init.headers.Authorization, /^Bearer re_/);
   const body = JSON.parse(call.init.body);
   assert.deepEqual(body.to, ["client@example.com"]);
   assert.equal(body.from, "AJ Luxury <commandes@ajluxurystore.com>");
-  assert.equal(body.html, undefined);
+  assert.match(body.html, /AJ LUXURY/);
+  assert.match(body.html, /Paiement confirmé AJ-1/);
   assert.equal(body.text, "Merci.");
 });
 

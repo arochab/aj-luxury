@@ -4,6 +4,7 @@ import {
   commerceApiPath,
   type ActiveCommerceRuntimeMode,
 } from "./commerce-runtime.ts";
+import { calculateAjPackPricing } from "./pack-pricing.ts";
 
 function cartApiPath(mode: ActiveCommerceRuntimeMode): string {
   return commerceApiPath(mode, "/cart");
@@ -122,17 +123,28 @@ function parseCartLine(value: unknown): PublicCartLine {
   return Object.freeze(line as PublicCartLine);
 }
 
-export function parseCartSnapshot(value: unknown): PublicCartSnapshot {
+export function parseCartSnapshot(
+  value: unknown,
+  mode: ActiveCommerceRuntimeMode = "preproduction",
+): PublicCartSnapshot {
   if (!isRecord(value) || !Array.isArray(value.lines)) {
     throw new CartApiError("MALFORMED_RESPONSE");
   }
 
   const lines = Object.freeze(value.lines.map(parseCartLine));
   const itemCount = lines.reduce((total, line) => total + line.quantity, 0);
-  const subtotalCents = lines.reduce(
+  const listSubtotalCents = lines.reduce(
     (total, line) => total + line.lineTotalCents,
     0,
   );
+  let subtotalCents = listSubtotalCents;
+  if (mode === "production") {
+    try {
+      subtotalCents = calculateAjPackPricing(lines).subtotalCents;
+    } catch {
+      throw new CartApiError("MALFORMED_RESPONSE");
+    }
+  }
   const status = value.status;
   const expiresAt = value.expiresAt;
 
@@ -220,7 +232,10 @@ async function cartRequest(
   if (!isRecord(payload) || !("data" in payload)) {
     throw new CartApiError("MALFORMED_RESPONSE", response.status);
   }
-  return parseCartSnapshot(payload.data);
+  return parseCartSnapshot(
+    payload.data,
+    path.startsWith("/api/commerce/") ? "production" : "preproduction",
+  );
 }
 
 function mutationHeaders(includeJson = false): HeadersInit {

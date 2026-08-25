@@ -37,6 +37,7 @@ export type TransactionalEmailDelivery = Readonly<{
 
 export type TransactionalEmailDeliveryReceipt = Readonly<{
   idempotencyKey: string;
+  providerMessageId: string;
 }>;
 
 /**
@@ -375,18 +376,23 @@ export class D1EmailOutbox {
     return freezeClaim(row);
   }
 
-  async markSent(claim: EmailOutboxClaim, now: string): Promise<void> {
+  async markSent(
+    claim: EmailOutboxClaim,
+    now: string,
+    providerMessageId: string,
+  ): Promise<void> {
     this.rejectHistoricalAccountAccessClaim(claim);
     assertTimestamp(now, "Now");
+    assertId(providerMessageId, "Provider message id");
     const result = await this.database
       .prepare(
         `UPDATE email_outbox SET status = 'sent', lease_token_hash = NULL,
           leased_at = NULL, lease_expires_at = NULL, sent_at = ?, terminal_at = ?,
-          last_error_code = NULL, updated_at = ?
+          last_error_code = NULL, provider_message_id = ?, updated_at = ?
         WHERE id = ? AND status = 'sending' AND kind <> 'account_access'
           AND lease_token_hash = ?`,
       )
-      .bind(now, now, now, claim.id, claim.leaseTokenHash)
+      .bind(now, now, providerMessageId, now, claim.id, claim.leaseTokenHash)
       .run();
     if (changed(result) !== 1) {
       throw new EmailOutboxError("LEASE_LOST", "Email lease is no longer current.");
@@ -500,10 +506,11 @@ export class D1EmailOutbox {
     } catch {
       return this.markDeliveryFailure(verifiedClaim, now, true);
     }
-    if (!receipt || receipt.idempotencyKey !== verifiedClaim.providerIdempotencyKey) {
+    if (!receipt || receipt.idempotencyKey !== verifiedClaim.providerIdempotencyKey ||
+      typeof receipt.providerMessageId !== "string" || !safeId.test(receipt.providerMessageId)) {
       return this.markDeliveryFailure(verifiedClaim, now, true);
     }
-    await this.markSent(verifiedClaim, now);
+    await this.markSent(verifiedClaim, now, receipt.providerMessageId);
     return "sent";
   }
 

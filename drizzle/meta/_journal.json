@@ -120,6 +120,20 @@
       "when": 1786771200000,
       "tag": "0016_return_operator_state_machine",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1787662496352,
+      "tag": "0017_rich_dreadnoughts",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1787663360734,
+      "tag": "0018_volatile_blob",
+      "breakpoints": true
     }
   ]
 }

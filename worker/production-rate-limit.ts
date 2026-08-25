@@ -21,6 +21,7 @@ const exactRoutes = new Map<string, LimitClass>([
   ["/api/commerce/checkout/order", "commerce"],
   ["/api/commerce/checkout/payment-session", "provider"],
   ["/api/commerce/webhooks/stripe", "webhook"],
+  ["/api/commerce/webhooks/resend", "webhook"],
   ["/api/commerce/orders/current", "commerce"],
   ["/api/commerce/account/current", "commerce"],
   ["/api/commerce/returns", "commerce"],
