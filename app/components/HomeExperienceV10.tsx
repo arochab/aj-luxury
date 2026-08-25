@@ -30,22 +30,16 @@ const featuredEditorialImages = [
     src: "/images/client/product-rose-model.webp",
     alt: "AJ Luxury — Alex — Apollon Rose Velours",
     crop: "left",
-    width: 1731,
-    height: 2600,
   },
   {
     src: "/images/client/campaign-duo-pourpre.webp",
     alt: "AJ Luxury — Jérémy et Alex — Apollon Pourpre Impérial",
     crop: "lead",
-    width: 2000,
-    height: 1882,
   },
   {
     src: "/images/client/editorial-lilas-chair.webp",
     alt: "AJ Luxury — Jérémy — Apollon Lilas Céleste",
     crop: "right",
-    width: 1731,
-    height: 2600,
   },
 ] as const;
 
@@ -98,11 +92,19 @@ export default function HomeExperienceV10({ colorways }: Props) {
         const featuredCards = Array.from(
           racine.querySelectorAll<HTMLElement>("[data-motion='featured-card']"),
         );
+        const collectionStage = racine.querySelector<HTMLElement>("[data-motion='collection-stage']");
+        const collectionCards = Array.from(
+          racine.querySelectorAll<HTMLElement>("[data-motion='collection-card']"),
+        );
+        const collectionSteps = Array.from(
+          racine.querySelectorAll<HTMLButtonElement>("[data-motion='collection-step']"),
+        );
         const wordmark = racine.querySelector<HTMLElement>("[data-motion='wordmark']");
         const moodboardMedia = Array.from(
           racine.querySelectorAll<HTMLElement>("[data-motion='moodboard-media']"),
         );
         const storyCopy = racine.querySelector<HTMLElement>("[data-motion='story-copy']");
+        let collectionCleanup: (() => void) | undefined;
 
         if (heroMedia) {
           gsap.to(heroMedia, {
@@ -184,6 +186,76 @@ export default function HomeExperienceV10({ colorways }: Props) {
           );
         }
 
+        if (desktop && collectionStage && collectionCards.length === 3) {
+          let activeIndex = -1;
+          const activate = (index: number) => {
+            if (index === activeIndex) return;
+            activeIndex = index;
+            collectionCards.forEach((card, cardIndex) => {
+              const inactive = cardIndex !== index;
+              card.toggleAttribute("inert", inactive);
+              card.setAttribute("aria-hidden", String(inactive));
+            });
+            collectionSteps.forEach((step, stepIndex) => {
+              const active = stepIndex === index;
+              step.toggleAttribute("data-active", active);
+              step.setAttribute("aria-pressed", String(active));
+            });
+          };
+
+          activate(0);
+          gsap.set(collectionCards.slice(1), {
+            autoAlpha: 1,
+            xPercent: 105,
+          });
+
+          const collectionSequence = gsap.timeline({
+            scrollTrigger: {
+              trigger: collectionStage,
+              start: "top top",
+              end: "bottom bottom",
+              scrub: true,
+              invalidateOnRefresh: true,
+              onUpdate: (self) => {
+                activate(self.progress < 0.36 ? 0 : self.progress < 0.7 ? 1 : 2);
+              },
+            },
+          });
+
+          collectionSequence
+            .to(
+              collectionCards[0],
+              { xPercent: -105, duration: 0.52, ease: "power2.inOut" },
+              0.74,
+            )
+            .fromTo(
+              collectionCards[1],
+              { xPercent: 105 },
+              { xPercent: 0, duration: 0.52, ease: "power2.inOut" },
+              0.74,
+            )
+            .to(
+              collectionCards[1],
+              { xPercent: -105, duration: 0.52, ease: "power2.inOut" },
+              1.74,
+            )
+            .fromTo(
+              collectionCards[2],
+              { xPercent: 105 },
+              { xPercent: 0, duration: 0.52, ease: "power2.inOut" },
+              1.74,
+            )
+            .to(collectionCards[2], { xPercent: 0, duration: 0.74, ease: "none" }, 2.26);
+
+          collectionCleanup = () => {
+            collectionCards.forEach((card) => {
+              card.removeAttribute("inert");
+              card.removeAttribute("aria-hidden");
+            });
+            collectionSteps.forEach((step) => step.removeAttribute("data-active"));
+          };
+        }
+
         if (desktop) {
           moodboardMedia.forEach((media, index) => {
             gsap.fromTo(
@@ -219,6 +291,7 @@ export default function HomeExperienceV10({ colorways }: Props) {
           });
         }
 
+        return collectionCleanup;
       },
     );
   });
@@ -234,9 +307,17 @@ export default function HomeExperienceV10({ colorways }: Props) {
       rootElement.querySelectorAll<HTMLElement>("[data-motion='collection-card']"),
     );
 
-    if (rail && cards[index]) {
+    if (window.innerWidth <= 760 && rail && cards[index]) {
       rail.scrollTo({ left: cards[index].offsetLeft - 16, behavior });
+      return;
     }
+
+    const stage = rootElement.querySelector<HTMLElement>("[data-motion='collection-stage']");
+    if (!stage) return;
+    const stageTop = stage.getBoundingClientRect().top + window.scrollY;
+    const travel = Math.max(0, stage.offsetHeight - window.innerHeight);
+    const progress = [0.08, 0.52, 0.9][index] ?? 0;
+    window.scrollTo({ top: stageTop + (travel * progress), behavior });
   };
 
   const syncMobileProgress = (event: UIEvent<HTMLDivElement>) => {
@@ -267,15 +348,12 @@ export default function HomeExperienceV10({ colorways }: Props) {
         <figure className={styles.heroMedia} data-motion="hero-media">
           <div className={styles.heroPanelLeft}>
             <picture>
-              <source
-                media="(max-width: 760px)"
-                srcSet="/images/client/hero-v7-portrait-plate.webp"
-              />
+              <source media="(max-width: 760px)" srcSet="/images/client/campaign-duo-lilas-seated.webp" />
               <img
-                src="/images/client/hero-v7-paysage-plate.webp"
-                alt="AJ Luxury — Alex et Jérémy portent Apollon dans l'univers métallique de la maison"
-                width={1920}
-                height={1080}
+                src="/images/client/campaign-duo-pourpre.webp"
+                alt="AJ Luxury — Alex et Jérémy portent Apollon"
+                width={2000}
+                height={1882}
                 fetchPriority="high"
                 decoding="async"
               />
@@ -312,8 +390,8 @@ export default function HomeExperienceV10({ colorways }: Props) {
                 <img
                   src={image.src}
                   alt={image.alt}
-                  width={image.width}
-                  height={image.height}
+                  width={1600}
+                  height={2400}
                   loading="lazy"
                   fetchPriority="low"
                   decoding="async"

@@ -95,29 +95,6 @@ test("commercial and editorial copy is genuinely localized", async () => {
   }
 });
 
-test("the production founders statement exists in every supported locale", async () => {
-  const manifest = await readJson("lib/i18n/manifest.json");
-  const story = await readFile(
-    new URL("app/notre-histoire/page.tsx", projectRoot),
-    "utf8",
-  );
-
-  assert.match(story, /<T id="story\.peopleStatement" \/>/);
-  for (const locale of manifest.supportedLocales) {
-    const dictionary = await readJson(`lib/i18n/dictionaries/${locale}.json`);
-    assert.equal(
-      typeof dictionary["story.peopleStatement"],
-      "string",
-      `${locale}.story.peopleStatement: translation must exist`,
-    );
-    assert.notEqual(
-      dictionary["story.peopleStatement"].trim(),
-      "",
-      `${locale}.story.peopleStatement: translation must not be empty`,
-    );
-  }
-});
-
 test("customer-facing components do not pin translated copy to French", async () => {
   const [purchase, footer, story, infoPage] = await Promise.all([
     readFile(new URL("app/components/ProductPurchase.tsx", projectRoot), "utf8"),

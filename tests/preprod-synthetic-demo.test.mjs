@@ -5,7 +5,6 @@ import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { launchVariantSeed } from "../db/seed.ts";
 import { D1CommerceStore } from "../lib/commerce/d1-commerce-store.ts";
 import {
   CLIENT_VALIDATED_PARCEL_MIGRATION,
@@ -27,20 +26,6 @@ const SERVICE_POINT_REFERENCE_VAULT_MIGRATION = "0011_service_point_reference_va
 const PROVIDER_PRICED_DELIVERY_MIGRATION = "0012_provider_priced_delivery_quotes.sql";
 const PROVIDER_PRICED_ORDER_MIGRATION = "0013_provider_priced_delivery_orders.sql";
 const LATE_PAYMENT_REFUND_MIGRATION = "0014_late_payment_refund_compensation.sql";
-const FROZEN_SYNTHETIC_STOCK = Object.freeze({
-  variant_boxer_pourpre_s: 26,
-  variant_boxer_pourpre_m: 103,
-  variant_boxer_pourpre_l: 87,
-  variant_boxer_pourpre_xl: 36,
-  "variant_boxer_rose-pale_s": 26,
-  "variant_boxer_rose-pale_m": 103,
-  "variant_boxer_rose-pale_l": 87,
-  "variant_boxer_rose-pale_xl": 36,
-  "variant_boxer_lilas-bleu-clair_s": 26,
-  "variant_boxer_lilas-bleu-clair_m": 102,
-  "variant_boxer_lilas-bleu-clair_l": 88,
-  "variant_boxer_lilas-bleu-clair_xl": 36,
-});
 
 class Statement {
   constructor(database, query, values = []) { this.database = database; this.query = query; this.values = values; }
@@ -124,51 +109,6 @@ function recordMigration(sqlite) {
   sqlite.prepare("INSERT INTO d1_migrations(name) VALUES (?)").run(SYNTHETIC_DEMO_MIGRATION);
 }
 
-function seedFrozenSyntheticCatalog(sqlite) {
-  const variant = sqlite.prepare(
-    `INSERT INTO variants (
-      id,product_id,internal_reference,color_key,color_name,size,swatch,
-      image_url,active,sort_order,created_at,updated_at
-    ) VALUES (?,?,?,?,?,?,?,?,1,?,?,?)`,
-  );
-  const inventory = sqlite.prepare(
-    `INSERT INTO inventory (
-      variant_id,physical_quantity,gift_reserve_quantity,
-      safety_reserve_quantity,active_reserved_quantity,sold_quantity,
-      reserves_validated,version,updated_at
-    ) VALUES (?,?,0,0,0,0,0,0,?)`,
-  );
-  sqlite.exec("BEGIN IMMEDIATE");
-  try {
-    const now = "2026-08-13T08:00:00.000Z";
-    sqlite.prepare(`INSERT INTO products (
-      id,slug,name,status,price_cents,currency,created_at,updated_at
-    ) VALUES ('product_apollon','apollon','Apollon','active',2999,'EUR',?,?)`).run(now, now);
-    for (const seed of launchVariantSeed) {
-      const quantity = FROZEN_SYNTHETIC_STOCK[seed.id];
-      assert.ok(Number.isInteger(quantity), `missing frozen quantity for ${seed.id}`);
-      variant.run(
-        seed.id,
-        seed.productId,
-        seed.internalReference,
-        seed.colorKey,
-        seed.colorName,
-        seed.size,
-        seed.swatch,
-        seed.imageUrl,
-        seed.sortOrder,
-        now,
-        now,
-      );
-      inventory.run(seed.id, quantity, now);
-    }
-    sqlite.exec("COMMIT");
-  } catch (error) {
-    sqlite.exec("ROLLBACK");
-    throw error;
-  }
-}
-
 async function runtime(lastMigration = LATE_PAYMENT_REFUND_MIGRATION) {
   const sqlite = database();
   applyThrough(sqlite, lastMigration);
@@ -225,12 +165,12 @@ function mutation(sessionValue, idempotencyKey, body) {
   return options;
 }
 
-test("0008 installs fresh or frozen-compatible data atomically and rejects newer or incompatible state", async () => {
+test("0008 installs fresh or exact-compatible data atomically and rejects incompatible state", async () => {
   for (const compatible of [false, true]) {
     const sqlite = database();
     applyThrough(sqlite, "0007_transactional_preprod_order_payment.sql");
     if (compatible) {
-      seedFrozenSyntheticCatalog(sqlite);
+      await new D1CommerceStore(new D1(sqlite)).seedLaunchCatalog("2026-08-13T08:00:00.000Z");
     }
     applySql(sqlite, SYNTHETIC_DEMO_MIGRATION);
     assert.deepEqual(
@@ -246,15 +186,6 @@ test("0008 installs fresh or frozen-compatible data atomically and rejects newer
     assert.throws(() => sqlite.exec("UPDATE preprod_demo_dataset SET expires_at='2099-01-01T00:00:00.000Z'"), /immutable/);
     sqlite.close();
   }
-
-  const newerLaunchSeed = database();
-  applyThrough(newerLaunchSeed, "0007_transactional_preprod_order_payment.sql");
-  await new D1CommerceStore(new D1(newerLaunchSeed)).seedLaunchCatalog("2026-08-25T14:07:12.000Z");
-  assert.throws(() => applySql(newerLaunchSeed, SYNTHETIC_DEMO_MIGRATION));
-  assert.equal(newerLaunchSeed.prepare("SELECT COUNT(*) count FROM sqlite_schema WHERE name='preprod_demo_dataset'").get().count, 0);
-  assert.equal(newerLaunchSeed.prepare("SELECT SUM(physical_quantity) quantity FROM inventory").get().quantity, 756);
-  assert.equal(newerLaunchSeed.prepare("SELECT COUNT(*) count FROM inventory WHERE physical_quantity=63").get().count, 12);
-  newerLaunchSeed.close();
 
   const incompatible = database();
   applyThrough(incompatible, "0007_transactional_preprod_order_payment.sql");

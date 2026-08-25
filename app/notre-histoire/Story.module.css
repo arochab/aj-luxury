@@ -12,10 +12,6 @@
   font-family: var(--font-manrope), Arial, sans-serif;
 }
 
-.scene {
-  display: contents;
-}
-
 .hero {
   min-height: 100svh;
   background: var(--story-ink);

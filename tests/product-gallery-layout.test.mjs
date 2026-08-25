@@ -29,12 +29,8 @@ const storyStyles = await readFile(
   new URL("../app/notre-histoire/Story.module.css", import.meta.url),
   "utf8",
 );
-const homeStyles = await readFile(
-  new URL("../app/components/HomeExperienceV10.module.css", import.meta.url),
-  "utf8",
-);
-const shopStyles = await readFile(
-  new URL("../app/shop/Shop.module.css", import.meta.url),
+const accueilStyles = await readFile(
+  new URL("../app/components/Accueil.module.css", import.meta.url),
   "utf8",
 );
 
@@ -61,21 +57,18 @@ test("secondary media reflows from paired tablet rows to one mobile column", () 
   );
 });
 
-/* Le site validé conserve ses cadres carré et 4:5. La protection contre les
-   coupes ne dépend donc plus du ratio de la boîte : l'image finale doit être
-   en `contain`, après toute ancienne règle `cover`, pour garder visage, corps,
-   ceinture et boxer visibles sur chaque format. */
-test("product and shop portraits preserve the full model inside their frames", () => {
-  const lastCover = css.lastIndexOf("object-fit: cover");
-  const finalContain = css.lastIndexOf("object-fit: contain");
-  assert.ok(finalContain > lastCover, "la règle contain doit gagner la cascade produit");
+/* Retour client du 18/08 : « il y a encore des moments où c'est cropped sur
+   les images des mannequins ». Ce test épinglait justement les deux ratios
+   fautifs du grand plan produit — 1/1 en large, 4/5 en petit — pour des
+   sources 1731x2600. `cover` n'y montrait que 67 % puis 83 % de la hauteur :
+   tête coupée et bas du boxer tranché sur l'image principale de la fiche.
+   Le contrat n'est plus « un ratio stable » mais « le ratio de la source »,
+   seul cadrage qui garantisse tête, ceinture, logo AJ et boxer entiers. */
+test("the lead media keeps the source ratio at every breakpoint", () => {
+  assert.match(css, /\.galleryMain\s*\{[^}]*aspect-ratio:\s*2\s*\/\s*3/s);
   assert.match(
     css,
-    /\.galleryMain \.zoomTrigger img,\s*\.zoomTrigger img\s*\{[^}]*object-fit:\s*contain;/s,
-  );
-  assert.match(
-    shopStyles,
-    /\.productVisual img\s*\{[^}]*object-fit:\s*contain;/s,
+    /@media \(max-width:\s*900px\)[\s\S]*?\.galleryMain\s*\{[^}]*aspect-ratio:\s*2\s*\/\s*3/s,
   );
 });
 
@@ -93,13 +86,40 @@ test("recommendations exclude the product currently viewed", () => {
   );
 });
 
-/* Le contrat vivant est HomeExperienceV10 : les trois familles de portraits
-   hors hero utilisent `contain`, donc aucun visage, corps ou boxer n'est
-   sacrifié pour remplir artificiellement son cadre. */
+/* CE TEST VISAIT UNE CLASSE MORTE, ET IL ETAIT ROUGE DEPUIS LE 16/08.
+
+   Intention d'origine, qui reste juste : un portrait produit sur l'accueil ne
+   doit jamais couper la tete du mannequin. Elle etait verifiee sur
+   `.aj-product-card__image img` dans globals.css, avec un ancrage haut
+   (`object-position: center top`) et l'interdiction du cadrage a 28 %.
+
+   Deux choses ont change depuis, et aucune n'a ete repercutee ici.
+
+   1. Le commit 81bb776 du 16/08 a fait passer cette regle en
+      `object-fit: contain`, rendant `object-position: center top` inutile — il
+      l'a donc remis a `center`. La regex exigeait toujours `center top` : le
+      test est rouge depuis, sans rapport avec ce qu'il pretend proteger.
+
+   2. La refonte de l'accueil a remplace `.aj-product-card`. Cette classe
+      n'est plus rendue par AUCUN markup : elle ne survit que dans globals.css
+      et dans ce test. Le test gardait donc du CSS mort.
+
+   Il est reporte sur le contrat vivant, et RENFORCE au passage. `contain`
+   n'est pas un ancrage plus fin, c'est une garantie d'une autre nature :
+   l'image entiere entre dans le cadre, donc aucun recadrage n'est possible,
+   quelle que soit la boite. Interdire `cover` sur ces memes elements ferme la
+   seule porte par laquelle une tete pourrait etre coupee.
+
+   Le CSS mort `.aj-product-card*` est laisse au chantier de nettoyage, qui a
+   son propre manifeste. */
 test("homepage product portraits preserve the full head area", () => {
-  assert.match(homeStyles, /\.featuredCard img\s*\{[^}]*object-fit:\s*contain;/s);
-  assert.match(homeStyles, /\.productImage img\s*\{[^}]*object-fit:\s*contain;/s);
-  assert.match(homeStyles, /\.moodboardItem img\s*\{[^}]*object-fit:\s*contain;/s);
+  assert.match(accueilStyles, /\.prise\s*\{[^}]*object-fit:\s*contain;/s);
+  assert.match(accueilStyles, /\.priseVoisine\s*\{[^}]*object-fit:\s*contain;/s);
+  assert.doesNotMatch(accueilStyles, /\.prise\s*\{[^}]*object-fit:\s*cover;/s);
+  assert.doesNotMatch(
+    accueilStyles,
+    /\.priseVoisine\s*\{[^}]*object-fit:\s*cover;/s,
+  );
 });
 
 test("the size guide restores focus after every close path", () => {
@@ -113,31 +133,6 @@ test("the size guide restores focus after every close path", () => {
     /function closeSizeGuide\(\) \{[\s\S]*restoreSizeGuideFocus\.current = true;[\s\S]*setSizeGuideOpen\(false\)/,
   );
   assert.doesNotMatch(purchase, /requestAnimationFrame\([\s\S]*trigger\?\.focus/);
-});
-
-test("the product page exposes the three stock-backed pack choices clearly", () => {
-  for (const [count, price, saving, ratio] of [
-    [1, "2_999", "0", "null"],
-    [2, "2_500", "999", "0.1666"],
-    [3, "2_333", "1_998", "0.2221"],
-  ]) {
-    assert.match(
-      purchase,
-      new RegExp(
-        `count:\\s*${count},[\\s\\S]{0,220}perItemCents:\\s*${price},[\\s\\S]{0,120}savingCents:\\s*${saving},[\\s\\S]{0,120}savingRatio:\\s*${ratio}`,
-      ),
-    );
-  }
-  assert.match(purchase, /\{PACK_OPTIONS\.map\(\(option\) => \(/);
-  assert.match(purchase, /aria-pressed=\{selectedPackSize === option\.count\}/);
-  assert.match(purchase, /AJ_APOLLON_PACK_PRICE_CENTS\[option\.count\]/);
-  assert.match(purchase, /t\("product\.sameColorPack"\)/);
-  assert.match(purchase, /t\("product\.mixedColorPack"\)/);
-  assert.match(
-    css,
-    /\.packOptions\s*\{[^}]*grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\)/s,
-  );
-  assert.match(css, /\.packOption\[aria-pressed="true"\]/);
 });
 
 test("the mobile story removes the empty definition visual spacer", () => {

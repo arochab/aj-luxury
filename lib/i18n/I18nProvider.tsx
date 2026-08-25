@@ -29,7 +29,7 @@ async function loadDictionary(
 
   try {
     /*
-      Le jeton de version passe à v9 le 25/08. Il n'est pas décoratif : la
+      Le jeton de version passe à v8 le 25/08. Il n'est pas décoratif : la
       réponse est servie immuable et relue en `force-cache`, et le contrôle
       `complete` juste en dessous exige que TOUTES les clés de fr.json soient
       présentes. Un visiteur revenant avec l'ancien dictionnaire en cache
@@ -43,14 +43,13 @@ async function loadDictionary(
       product.availabilityAtOpening — d'où v6. La présentation de recette
       commerce ajoute ensuite les libellés de stock, packs, paiement et
       livraison — d'où v7. Le sélecteur d'offres pack ajoute ses libellés et
-      porte le jeton à v8. La passe de précision commerciale ajoute le prix
-      par pièce et porte le jeton à v9. Sans cette incrémentation, un
+      porte le jeton à v8. Sans cette incrémentation, un
       visiteur revenu avec le dictionnaire v5 en cache verrait le contrôle
       `complete` échouer et la boutique repasser en français dans les quatre
       autres langues.
       Ce jeton est indépendant de celui des médias héro (lib/hero-video.ts).
     */
-    const response = await fetch(`/media/i18n/${locale}.json?v=v9`, {
+    const response = await fetch(`/media/i18n/${locale}.json?v=v8`, {
       cache: "force-cache",
     });
     if (!response.ok) return null;
