@@ -1,8 +1,12 @@
 import InfoPage, { InfoNotice } from "../components/InfoPage";
-import { LEGAL_CONTACT, LEGAL_VERSION_DISPLAY } from "@/lib/legal";
+import {
+  LEGAL_CONTACT,
+  LEGAL_VERSION_DISPLAY,
+  RETURN_ADDRESS,
+} from "@/lib/legal";
 import { T } from "@/lib/i18n/TranslatedText";
 
-export const metadata = { title: "Livraison internationale et retours | AJ Luxury" };
+export const metadata = { title: "Livraison en France et retours | AJ Luxury" };
 
 export default function ShippingReturnsPage() {
   return (
@@ -24,16 +28,18 @@ export default function ShippingReturnsPage() {
       <section>
         <h2>Livraison</h2>
         <p>
-          Les destinations disponibles, le transporteur, le coût et la date ou
-          le délai estimé seront affichés avant la validation de la commande.
-          Sans délai spécifique convenu, la commande sera livrée au plus tard
-          trente jours après sa confirmation.
+          Au lancement, AJ Luxury livre exclusivement en France métropolitaine,
+          Corse comprise. Les territoires ultramarins et les destinations
+          internationales ne sont pas encore desservis.
         </p>
         <p>
-          Pour une livraison hors Union européenne, des droits de douane, taxes
-          d’importation ou frais de traitement peuvent être exigés à destination.
-          Ils seront présentés lorsque connus ; à défaut, le client sera
-          clairement informé avant paiement qu’ils peuvent rester à sa charge.
+          Selon l’adresse et la disponibilité du transporteur, la livraison est
+          proposée en Point Relais ou Locker Mondial Relay, en point de retrait
+          Colissimo ou à domicile avec Colissimo. Le coût réel et le délai
+          estimé de chaque option disponible sont affichés avant le paiement.
+          La commande est préparée sous un à deux jours ouvrés ; le délai total
+          indicatif est de trois à sept jours ouvrés. Le délai affiché lors de
+          la commande reste celui qui engage AJ Luxury.
         </p>
       </section>
 
@@ -59,6 +65,12 @@ export default function ShippingReturnsPage() {
           <a href="/withdrawal">Accéder au formulaire de rétractation</a>. Les frais directs de
           retour sont à la charge du client, sauf défaut, non-conformité ou erreur
           d’AJ Luxury.
+        </p>
+        <p>
+          Après notification de la rétractation, le retour doit être adressé à :{" "}
+          <strong>{RETURN_ADDRESS.recipient}</strong>, {RETURN_ADDRESS.line1},{" "}
+          {RETURN_ADDRESS.postalCode} {RETURN_ADDRESS.city},{" "}
+          {RETURN_ADDRESS.country}.
         </p>
         <p>
           Les sous-vêtements doivent rester non portés, non lavés, non tachés,

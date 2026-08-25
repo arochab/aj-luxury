@@ -45,7 +45,12 @@ class D1 {
 }
 const iso = (base, offset) => new Date(base + offset).toISOString();
 
-async function fixture(failEffectsAt = null, livemode = true, quantity = 1) {
+async function fixture(
+  failEffectsAt = null,
+  livemode = true,
+  quantity = 1,
+  destination = { postalCode: "75001", city: "Paris", countryCode: "FR" },
+) {
   const sqlite = new DatabaseSync(":memory:"); sqlite.exec("PRAGMA foreign_keys=ON");
   for (const name of migrations) for (const sql of readFileSync(`${directory}${name}`, "utf8").split("--> statement-breakpoint")) if (sql.trim()) sqlite.exec(sql);
   const base = Date.now() - 60_000; const d1 = new D1(sqlite); const commerce = new D1CommerceStore(d1);
@@ -58,7 +63,7 @@ async function fixture(failEffectsAt = null, livemode = true, quantity = 1) {
     activated_at=?,updated_at=? WHERE id='config_prod'`).run(iso(base, 20), iso(base, 20));
   await commerce.createCart({ id: "cart_prod", expiresAt: iso(base, 3_600_000), now: iso(base, 30) });
   await commerce.setCartLineQuantity({ cartId: "cart_prod", variantId: "variant_boxer_pourpre_m", quantity, now: iso(base, 40) });
-  const address = { recipient: "Ada Test", line1: "1 rue du Test", postalCode: "75001", city: "Paris", countryCode: "FR" };
+  const address = { recipient: "Ada Test", line1: "1 rue du Test", ...destination };
   const expiry = iso(base, 900_000);
   const delivery = new D1ProductionDeliveryActivationStore(d1, { quotes: { async quote() { return [{ providerCode: "sendcloud", providerQuoteReference: "provider-ref-home", carrierCode: "colissimo", serviceCode: "home", displayName: "Livraison domicile", deliveryMode: "home", amountCents: 900, currency: "EUR", estimatedDaysMin: 2, estimatedDaysMax: 5, dutiesTerms: "EU_INCLUDED", expiresAt: expiry, responseFingerprint: "c".repeat(64) }]; } }, servicePoints: { async servicePoints() { return []; } }, documents: { async document() { throw new Error("closed"); } }, returns: { async validate() { throw new Error("closed"); }, async create() { throw new Error("closed"); } } }, new DeliveryReferenceVault({ encryptionKeyBase64: Buffer.alloc(32, 7).toString("base64"), keyVersion: 1 }));
   const [option] = await delivery.quoteOptions({ cartId: "cart_prod", address, idempotencyKey: "delivery-idem-0001", now: iso(base, 50) });
@@ -71,6 +76,21 @@ async function fixture(failEffectsAt = null, livemode = true, quantity = 1) {
   const event = Object.freeze({ provider: "stripe", providerEventId: "evt_fixture_paid_001", eventType: "checkout.session.completed", occurredAt: iso(base, 90), livemode, kind: "payment", orderId: request.orderId, providerPaymentId: "pi_fixture_001", providerCheckoutSessionId: sessionId, state: "paid", amountCents: totalCents, currency: "EUR", providerFailureCode: null, semanticKey: "stripe:payment:pi_fixture_001:paid" });
   return { sqlite, d1, event, expiry, request, effects: new D1StripePaymentEffectsStore(failEffectsAt === null ? d1 : new D1(sqlite, failEffectsAt), livemode) };
 }
+
+test("production delivery fails closed outside France and for known overseas postcodes", async () => {
+  await assert.rejects(
+    () => fixture(null, true, 1, {
+      postalCode: "10115", city: "Berlin", countryCode: "DE",
+    }),
+    (error) => error?.name === "ProductionDeliveryError" && error.code === "INVALID_INPUT",
+  );
+  await assert.rejects(
+    () => fixture(null, true, 1, {
+      postalCode: "97100", city: "Basse-Terre", countryCode: "FR",
+    }),
+    (error) => error?.name === "FulfillmentError" && error.code === "DESTINATION_UNAVAILABLE",
+  );
+});
 
 test("same-colour pack two charges 49.99 before delivery without pack stock", async () => {
   const { sqlite, request, event } = await fixture(null, true, 2);

@@ -159,6 +159,17 @@ function normalizeEmail(value: unknown): string {
   return email;
 }
 
+async function normalizeProductionLaunchAddress(input: ShippingAddressInput) {
+  const address = await normalizeShippingAddress(input);
+  if (address.address.countryCode !== "FR") {
+    throw new ProductionCheckoutError(
+      "INVALID_INPUT",
+      "Production checkout is available only in France.",
+    );
+  }
+  return address;
+}
+
 function mapDatabaseError(error: unknown): never {
   const message = error instanceof Error ? error.message : String(error);
   if (/UNIQUE constraint failed|delivery_order_option_required|order_commit/i.test(message)) {
@@ -220,7 +231,7 @@ export class D1ProductionCheckoutStore {
       assertFulfillmentIdentifier(input.customerId, "customerId");
     }
     const [address, email] = await Promise.all([
-      normalizeShippingAddress(input.address),
+      normalizeProductionLaunchAddress(input.address),
       Promise.resolve(normalizeEmail(input.email)),
     ]);
     assertFulfillmentFingerprint(address.fingerprint, "addressFingerprint");
@@ -252,7 +263,8 @@ export class D1ProductionCheckoutStore {
         WHERE line.cart_id = ? ORDER BY variant.sort_order, line.id`,
       ).bind(input.cartId).all<CheckoutLineRow>(),
       this.#database.prepare(
-        `SELECT ${orderColumns} FROM orders WHERE cart_id = ?`,
+        `SELECT ${orderColumns} FROM orders
+        WHERE cart_id = ? AND shipping_country_code = 'FR'`,
       ).bind(input.cartId).first<OrderRow>(),
     ]);
     const lines = lineResult.results;
@@ -463,7 +475,8 @@ export class D1ProductionCheckoutStore {
     }
     const [order, linesResult, reservation] = await Promise.all([
       this.#database.prepare(
-        `SELECT ${orderColumns} FROM orders WHERE cart_id = ?`,
+        `SELECT ${orderColumns} FROM orders
+        WHERE cart_id = ? AND shipping_country_code = 'FR'`,
       ).bind(input.cartId).first<OrderRow>(),
       this.#database.prepare(
         `SELECT internal_reference, product_name, color_name, size, quantity,
@@ -531,7 +544,8 @@ export class D1ProductionCheckoutStore {
   ): Promise<void> {
     assertFulfillmentTimestamp(now, "now");
     const order = await this.#database.prepare(
-      `SELECT ${orderColumns} FROM orders WHERE id = ?`,
+      `SELECT ${orderColumns} FROM orders
+      WHERE id = ? AND shipping_country_code = 'FR'`,
     ).bind(request.orderId).first<OrderRow>();
     if (
       !order || order.status !== "pending_payment" || receipt.provider !== "stripe" ||

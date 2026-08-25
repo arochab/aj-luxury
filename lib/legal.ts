@@ -1,4 +1,4 @@
-export const LEGAL_VERSION = "2026-07-30";
+export const LEGAL_VERSION = "2026-08-25";
 
 /*
   La même date, mais avec des traits d'union INSÉCABLES (U+2011) pour
@@ -94,6 +94,18 @@ export const SELLER_IDENTITY = {
  *  activé auprès de la douane pour l'export hors Union européenne. */
 export const EORI_NUMBER = "FR944996487" as const;
 
+/**
+ * Adresse confirmée par Jérémy le 25/08/2026 pour les retours AJ Luxury.
+ * Elle est identique au siège et à l'adresse expéditeur Sendcloud.
+ */
+export const RETURN_ADDRESS = {
+  recipient: "AJ Luxury — Jérémy Scheppler EI",
+  line1: "3 A rue Principale",
+  postalCode: "67130",
+  city: "Belmont",
+  country: "France",
+} as const;
+
 export const HOSTING_PROVIDER = {
   name: "Cloudflare, Inc.",
   address:
@@ -126,7 +138,6 @@ export const PRELAUNCH_BLOCKERS = [
   "régime de TVA du vendeur et mention associée sur les prix",
   "numéro de téléphone de l’éditeur, exigé par l’article 6 III de la LCEN",
   "activité de vente au détail à déclarer : l’activité enregistrée est la production de films (59.11B)",
-  "adresse de retour",
   "médiateur de la consommation conventionné",
   "zones, transporteurs, tarifs et délais de livraison",
   "prestataire de paiement et moyens de paiement",

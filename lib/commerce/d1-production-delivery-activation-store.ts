@@ -88,6 +88,17 @@ function assertIdempotencyKey(value: string): void {
   }
 }
 
+async function normalizeProductionLaunchAddress(input: ShippingAddressInput) {
+  const address = await normalizeShippingAddress(input);
+  if (address.address.countryCode !== "FR") {
+    throw new ProductionDeliveryError(
+      "INVALID_INPUT",
+      "Production delivery is available only in France.",
+    );
+  }
+  return address;
+}
+
 function routingProof(zone: "EU" | "UK" | "US" | "CA"): string {
   switch (zone) {
     case "EU": return JSON.stringify({ countryCode: "FR", postalCode: "00000", regionCode: null });
@@ -155,7 +166,7 @@ export class D1ProductionDeliveryActivationStore {
     now: string;
   }>): Promise<readonly PublicProductionDeliveryOptionV1[]> {
     assertIdempotencyKey(input.idempotencyKey);
-    const address = await normalizeShippingAddress(input.address);
+    const address = await normalizeProductionLaunchAddress(input.address);
     const replayKey = `delivery-options:${await sha256Hex(`${input.cartId}\0${input.idempotencyKey}`)}`;
     const replay = await this.#database.prepare(
       `SELECT metadata_json FROM audit_log WHERE idempotency_key = ?`,
@@ -333,7 +344,7 @@ export class D1ProductionDeliveryActivationStore {
     now: string;
   }>): Promise<readonly PublicProductionServicePointV1[]> {
     assertIdempotencyKey(input.idempotencyKey);
-    const address = await normalizeShippingAddress(input.address);
+    const address = await normalizeProductionLaunchAddress(input.address);
     const option = await this.#readCurrentOption(
       input.optionId,
       input.cartId,
@@ -453,7 +464,7 @@ export class D1ProductionDeliveryActivationStore {
     address: ShippingAddressInput;
     now: string;
   }>): Promise<PublicProductionDeliveryOptionV1> {
-    const address = await normalizeShippingAddress(input.address);
+    const address = await normalizeProductionLaunchAddress(input.address);
     const option = await new D1DeliveryOptionsStore(this.#database).selectOption({
       optionId: input.optionId,
       cartId: input.cartId,

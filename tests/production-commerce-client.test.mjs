@@ -348,6 +348,17 @@ test("production UI wiring contains no synthetic payment or hostname switch", as
   assert.match(joined, /MAX_POLLS = 5/);
 });
 
+test("production checkout exposes France as its only destination country", async () => {
+  const source = await readFile(
+    new URL("../app/checkout/ProductionCheckoutClient.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    source,
+    /const launchCountries = Object\.freeze\(\[\s*\["FR", "France"\],?\s*\] as const\)/,
+  );
+});
+
 test("mock product availability has no authority over production sizes", async () => {
   const source = await readFile(
     new URL("../app/components/ProductPurchase.tsx", import.meta.url),

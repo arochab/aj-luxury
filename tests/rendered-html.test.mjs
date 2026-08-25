@@ -858,7 +858,7 @@ test("server-renders the complete AJ Luxury story", async () => {
 });
 
 const informationCases = [
-  ["/shipping-returns", /Livraison internationale et retours/],
+  ["/shipping-returns", /Livraison en France et retours/],
   ["/privacy", /Politique de confidentialité/],
   ["/terms", /Conditions générales de vente/],
   ["/contact", /Nous contacter/],

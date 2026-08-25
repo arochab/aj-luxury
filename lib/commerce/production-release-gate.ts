@@ -72,7 +72,7 @@ export type ProductionReleaseGate = Readonly<{
   mode: ProductionCommerceMode;
   releaseSha: string | null;
   origin: string | null;
-  launchZones: readonly ["EU", "UK", "US", "CA"];
+  launchZones: readonly ["FR"];
   blockers: readonly ProductionReleaseBlocker[];
   capabilities: Readonly<{
     sandboxCheckout: boolean;
@@ -89,7 +89,7 @@ const SHA_256_PATTERN = /^[a-f0-9]{64}$/;
 const WORKER_VERSION_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SAFE_REFERENCE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.:-]{7,127}$/;
 const AJ_EMAIL_PATTERN = /^[^@\s]+@ajluxurystore\.com$/i;
-const launchZones = Object.freeze(["EU", "UK", "US", "CA"] as const);
+const launchZones = Object.freeze(["FR"] as const);
 
 function isApproved(value: string | undefined): boolean {
   return value === "true";
