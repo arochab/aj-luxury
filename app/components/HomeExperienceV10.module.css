@@ -23,6 +23,29 @@
   margin: 0;
 }
 
+.skipLink {
+  position: fixed;
+  z-index: 100;
+  top: 12px;
+  left: 12px;
+  min-height: 44px;
+  padding: 0 16px;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.12em;
+  line-height: 44px;
+  text-transform: uppercase;
+  transform: translateY(calc(-100% - 16px));
+}
+
+.skipLink:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+  transform: none;
+}
+
 .hero {
   position: relative;
   min-height: 100svh;
@@ -349,6 +372,34 @@
   display: none;
 }
 
+.collectionStep {
+  position: relative;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.collectionStep::after {
+  position: absolute;
+  right: 0;
+  bottom: 50%;
+  left: 0;
+  height: 2px;
+  background: rgba(17, 17, 18, 0.14);
+  content: "";
+  transform-origin: left;
+  transition: background-color 180ms ease, transform 180ms ease;
+}
+
+.collectionStep[data-active]::after {
+  background: var(--colorway);
+  transform: scaleY(1.5);
+}
+
 .moodboard {
   overflow: hidden;
   padding: clamp(14px, 1.6vw, 24px) 0;
@@ -528,17 +579,6 @@
     gap: 8px;
   }
 
-  .collectionProgress span {
-    height: 2px;
-    background: rgba(17, 17, 18, 0.14);
-    transition: background-color 180ms ease, transform 180ms ease;
-    transform-origin: left;
-  }
-
-  .collectionProgress span[data-active] {
-    background: var(--colorway);
-    transform: scaleY(1.5);
-  }
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -573,7 +613,8 @@
 
 .heroAction:focus-visible,
 .action:focus-visible,
-.productImage:focus-visible {
+.productImage:focus-visible,
+.collectionStep:focus-visible {
   outline: 2px solid currentColor;
   outline-offset: 4px;
 }
@@ -684,6 +725,13 @@
 
   .productRail::-webkit-scrollbar {
     display: none;
+  }
+
+  .collectionProgress {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    padding: 2px 16px 0;
   }
 
   .productCard {

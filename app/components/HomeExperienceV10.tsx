@@ -2,7 +2,7 @@
 "use client";
 
 import Link from "next/link";
-import type { CSSProperties, ReactNode } from "react";
+import type { CSSProperties, ReactNode, UIEvent } from "react";
 import type { TranslationKey } from "../../lib/i18n/dictionaries";
 import { editorialMoodboardImages } from "../../lib/editorial-moodboard";
 import { useI18n } from "../../lib/i18n/I18nProvider";
@@ -97,7 +97,7 @@ export default function HomeExperienceV10({ colorways }: Props) {
           racine.querySelectorAll<HTMLElement>("[data-motion='collection-card']"),
         );
         const collectionSteps = Array.from(
-          racine.querySelectorAll<HTMLElement>("[data-motion='collection-step']"),
+          racine.querySelectorAll<HTMLButtonElement>("[data-motion='collection-step']"),
         );
         const wordmark = racine.querySelector<HTMLElement>("[data-motion='wordmark']");
         const moodboardMedia = Array.from(
@@ -197,7 +197,9 @@ export default function HomeExperienceV10({ colorways }: Props) {
               card.setAttribute("aria-hidden", String(inactive));
             });
             collectionSteps.forEach((step, stepIndex) => {
-              step.toggleAttribute("data-active", stepIndex === index);
+              const active = stepIndex === index;
+              step.toggleAttribute("data-active", active);
+              step.setAttribute("aria-pressed", String(active));
             });
           };
 
@@ -294,8 +296,53 @@ export default function HomeExperienceV10({ colorways }: Props) {
     );
   });
 
+  const selectColorway = (index: number) => {
+    const rootElement = root.current;
+    if (!rootElement) return;
+
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const behavior: ScrollBehavior = reduced ? "auto" : "smooth";
+    const rail = rootElement.querySelector<HTMLElement>("[data-motion='product-rail']");
+    const cards = Array.from(
+      rootElement.querySelectorAll<HTMLElement>("[data-motion='collection-card']"),
+    );
+
+    if (window.innerWidth <= 760 && rail && cards[index]) {
+      rail.scrollTo({ left: cards[index].offsetLeft - 16, behavior });
+      return;
+    }
+
+    const stage = rootElement.querySelector<HTMLElement>("[data-motion='collection-stage']");
+    if (!stage) return;
+    const stageTop = stage.getBoundingClientRect().top + window.scrollY;
+    const travel = Math.max(0, stage.offsetHeight - window.innerHeight);
+    const progress = [0.08, 0.52, 0.9][index] ?? 0;
+    window.scrollTo({ top: stageTop + (travel * progress), behavior });
+  };
+
+  const syncMobileProgress = (event: UIEvent<HTMLDivElement>) => {
+    if (window.innerWidth > 760) return;
+    const rail = event.currentTarget;
+    const cards = Array.from(
+      rail.querySelectorAll<HTMLElement>("[data-motion='collection-card']"),
+    );
+    if (cards.length === 0) return;
+    const activeIndex = cards.reduce((closest, card, index) => (
+      Math.abs(card.offsetLeft - rail.scrollLeft) <
+      Math.abs(cards[closest].offsetLeft - rail.scrollLeft) ? index : closest
+    ), 0);
+
+    root.current?.querySelectorAll<HTMLButtonElement>("[data-motion='collection-step']")
+      .forEach((step, index) => {
+        const active = index === activeIndex;
+        step.toggleAttribute("data-active", active);
+        step.setAttribute("aria-pressed", String(active));
+      });
+  };
+
   return (
     <div className={styles.page} ref={root}>
+      <a className={styles.skipLink} href="#apollon">{t("nav.skipToContent")}</a>
       <section className={styles.hero} id="accueil" aria-labelledby="home10-title" data-motion-root="hero">
         <StoreHeader />
         <figure className={styles.heroMedia} data-motion="hero-media">
@@ -364,7 +411,7 @@ export default function HomeExperienceV10({ colorways }: Props) {
         <div className={styles.collectionStage} data-motion="collection-stage">
           <div className={styles.collectionSticky}>
             <div className={styles.wordmark} data-motion="wordmark" aria-hidden="true">APOLLON</div>
-            <div className={styles.productRail}>
+            <div className={styles.productRail} data-motion="product-rail" onScroll={syncMobileProgress}>
               {colorways.map((colorway) => (
                 <article
                   className={styles.productCard}
@@ -378,7 +425,7 @@ export default function HomeExperienceV10({ colorways }: Props) {
                       alt={t("sequence.bodyAlt").replace("{color}", t(colorway.nameKey))}
                       width={colorway.width}
                       height={colorway.height}
-                      loading="eager"
+                      loading="lazy"
                       fetchPriority="low"
                       decoding="async"
                       style={{ objectPosition: colorway.position }}
@@ -396,13 +443,18 @@ export default function HomeExperienceV10({ colorways }: Props) {
                 </article>
               ))}
             </div>
-            <div className={styles.collectionProgress} aria-hidden="true">
+            <div className={styles.collectionProgress} role="group" aria-label={t("sequence.tablist")}>
               {colorways.map((colorway, index) => (
-                <span
+                <button
+                  aria-label={t(colorway.nameKey)}
+                  aria-pressed={index === 0}
+                  className={styles.collectionStep}
                   data-motion="collection-step"
                   key={colorway.slug}
                   data-active={index === 0 ? "" : undefined}
+                  onClick={() => selectColorway(index)}
                   style={{ "--colorway": colorway.swatch } as CSSProperties}
+                  type="button"
                 />
               ))}
             </div>

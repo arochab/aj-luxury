@@ -1,6 +1,6 @@
 # AJ Luxury — Gauntlet Awwwards Motion
 
-Status: `ROUND 1 BLOCKED AT 8.2 — ROUND 2 BUILT AND VERIFIED`
+Status: `ROUND 2 JURY 9.30 — ROUND 3 BUILT AND VERIFIED`
 
 ## Frozen input
 
@@ -9,7 +9,7 @@ Status: `ROUND 1 BLOCKED AT 8.2 — ROUND 2 BUILT AND VERIFIED`
 - Integration baseline already present on the Codex branch: `a3c2311`
 - Production truth, read-only: `https://ajluxurystore.com/`
 - Production source baseline: `origin/main:app/page.tsx`
-- Inventory truth: `730` units; stock code and data are out of scope.
+- Inventory truth: `730` units; no stock code or data is mutated by this front candidate.
 - Assets: existing AJ Luxury assets only. No image or campaign generation.
 - Production, domains and `cloudflare.production.jsonc`: no mutation without Adam then Jérémy validating the exact candidate.
 
@@ -97,9 +97,12 @@ The live site and `origin/main` were measured before implementation.
   mobile 390×844 and reduced-motion 1440×900. Zero console errors, zero video,
   zero invalid `undefined` class and no horizontal document overflow.
 - Desktop scroll height dropped from 6,957 px in Round 1 to 6,597 px in Round 2.
-- Mobile scroll height is 4,010 px; reduced-motion desktop is a normal static
+- Mobile scroll height is 4,056 px; reduced-motion desktop is a normal static
   4,814 px document with all three products visible.
 - Focused suite: 62/62 tests pass after the preproduction build.
+- Keyboard/touch QA (`scripts/qa-home-v10-keyboard.mjs`): first Tab reaches the
+  skip link; Rose and Lilas are directly selectable with Enter on desktop;
+  click and native swipe keep the mobile progress state synchronized.
 - No current runtime error observed after clean Chrome sessions; earlier Vite
   HMR messages occurred only while the component file was being replaced.
 
@@ -120,8 +123,9 @@ The live site and `origin/main` were measured before implementation.
 | Motion system | 0 | PASS | GSAP storyboard + bounded transform/opacity system | complete |
 | Story/e-commerce | 0 | PASS | Exact production order, copy, routes and assets | complete |
 | Integrated candidate | 1 | BLOCK 8.2 | Blind inspection of exact `23f9d81` | superseded |
-| Integrated candidate | 2 | BUILT | Build + 62/62 + desktop/mobile/reduced screenshots | working tree |
-| Final jury | 2 | PENDING | Fresh blind artifact inspection required | pending |
+| Integrated candidate | 2 | FAIL 9.30 | Blind inspection of exact `2b31abc` | superseded |
+| Integrated candidate | 3 | BUILT | Build + 62/62 + browser + keyboard/touch QA | working tree |
+| Final jury | 3 | PENDING | Fresh blind artifact inspection required | pending |
 
 ## Round log
 
@@ -138,3 +142,15 @@ The live site and `origin/main` were measured before implementation.
   replaced the low-opacity product crossfade with a continuous transform-only
   relay; shortened the collection scene; upgraded the approved hero still to
   full-bleed without generating or recreating an asset.
+- R2 — exact SHA `2b31abc`: FAIL, 9.30/10, no fatal veto. Scores: fidelity
+  9.7, art direction 9.4, motion 9.5, storytelling 9.2, e-commerce 9.3,
+  responsive/accessibility 8.8, engineering/performance 9.2. Remaining P1:
+  desktop keyboard users could not select inactive colorways, and there was no
+  skip link. Remaining P2: no mobile rail status and all product images loaded
+  eagerly.
+- R3 builder response: added a first-focus skip link; turned the three visual
+  progress marks into 44 px keyboard/touch colorway selectors with exact
+  localized names and `aria-pressed`; synchronized mobile state after native
+  swipe; preserved direct links and full visual continuity; returned the three
+  below-fold product images to lazy loading; made browser QA resilient to lazy
+  media without weakening any assertion.

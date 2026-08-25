@@ -653,9 +653,12 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
   /* Les trois produits canoniques et leurs routes PDP existent au premier
      rendu. La motion ne porte jamais la responsabilité du contenu commerce. */
   assert.equal((html.match(/data-motion="collection-card"/g) ?? []).length, 3);
-  assert.match(html, /product-rose-profile\.webp"[^>]*loading="eager"[^>]*fetchPriority="low"/);
-  assert.match(html, /product-lilas-model\.webp"[^>]*loading="eager"[^>]*fetchPriority="low"/);
-  assert.match(html, /product-card-pourpre\.webp"[^>]*loading="eager"[^>]*fetchPriority="low"/);
+  assert.match(html, /product-rose-profile\.webp"[^>]*loading="lazy"[^>]*fetchPriority="low"/);
+  assert.match(html, /product-lilas-model\.webp"[^>]*loading="lazy"[^>]*fetchPriority="low"/);
+  assert.match(html, /product-card-pourpre\.webp"[^>]*loading="lazy"[^>]*fetchPriority="low"/);
+  assert.match(html, /href="#apollon"[^>]*>Aller au contenu principal<\/a>/);
+  assert.equal((html.match(/data-motion="collection-step"/g) ?? []).length, 3);
+  assert.equal((html.match(/aria-pressed="(?:true|false)"/g) ?? []).length, 3);
   assert.match(html, /href="\/products\/rose-pale"/);
   assert.match(html, /href="\/products\/lilas-bleu-clair"/);
   assert.match(html, /href="\/products\/pourpre"/);

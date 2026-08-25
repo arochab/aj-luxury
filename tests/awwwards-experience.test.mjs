@@ -54,6 +54,10 @@ test("the homepage is a native-scroll GSAP editorial document, never a film", as
   assert.match(page, /aj-home-v10/);
   assert.doesNotMatch(`${page}\n${experience}`, /<video|HeroComposition|MetallicField|WebGL/i);
   assert.match(experience, /useAjMotion/);
+  assert.match(experience, /className=\{styles\.skipLink\} href="#apollon"/);
+  assert.match(experience, /data-motion="collection-step"/);
+  assert.match(experience, /aria-pressed=\{index === 0\}/);
+  assert.match(experience, /onClick=\{\(\) => selectColorway\(index\)\}/);
   assert.match(experience, /scrub:\s*true/g);
   assert.doesNotMatch(experience, /scrub:\s*0\.|\bpin:\s*/);
   assert.match(experience, /if \(desktop && featured && featuredCards\.length === 3\)/);

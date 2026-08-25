@@ -14,17 +14,30 @@ const reports = [];
 
 async function capture(name, viewport, reducedMotion = "no-preference") {
   const page = await browser.newPage({ viewport, reducedMotion });
+  page.setDefaultTimeout(15_000);
   const errors = [];
   page.on("console", (message) => {
     if (message.type() === "error") errors.push(message.text());
   });
   page.on("pageerror", (error) => errors.push(error.message));
 
-  await page.goto("http://localhost:3000/", { waitUntil: "networkidle" });
-  await page.evaluate(() => document.fonts.ready);
+  await page.goto("http://localhost:3000/", {
+    waitUntil: "domcontentloaded",
+    timeout: 30_000,
+  });
+  await page.evaluate(() => Promise.race([
+    document.fonts.ready,
+    new Promise((resolve) => window.setTimeout(resolve, 5_000)),
+  ]));
+  await page.locator("#collection").scrollIntoViewIfNeeded();
   await page.locator("[data-motion='collection-card'] img").evaluateAll((images) =>
-    Promise.all(images.map((image) => image.decode().catch(() => undefined))),
+    Promise.race([
+      Promise.all(images.map((image) => image.decode().catch(() => undefined))),
+      new Promise((resolve) => window.setTimeout(resolve, 5_000)),
+    ]),
   );
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.waitForTimeout(120);
 
   const measure = async () => page.evaluate(() => ({
     bodyWidth: document.body.scrollWidth,
