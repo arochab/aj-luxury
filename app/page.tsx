@@ -7,19 +7,32 @@ import { getProducts } from "../lib/products";
 export default function Home() {
   const products = getProducts();
 
-  const keys = {
-    "rose-pale": "sequence.color.rose",
-    "lilas-bleu-clair": "sequence.color.lilac",
-    pourpre: "sequence.color.purple",
-  } as const;
+  const productionOrder = [
+    {
+      slug: "pourpre",
+      nameKey: "sequence.color.purple",
+      image: "/images/client/raw/product-card-pourpre.webp",
+    },
+    {
+      slug: "rose-pale",
+      nameKey: "sequence.color.rose",
+      image: "/images/client/raw/product-rose-profile.webp",
+    },
+    {
+      slug: "lilas-bleu-clair",
+      nameKey: "sequence.color.lilac",
+      image: "/images/client/raw/product-lilas-model.webp",
+    },
+  ] as const;
 
-  const colorways: HomeColorway[] = products.flatMap((product) => {
-    if (!(product.slug in keys)) return [];
-    const slug = product.slug as HomeColorway["slug"];
+  const colorways: HomeColorway[] = productionOrder.flatMap((entry) => {
+    const product = products.find(({ slug }) => slug === entry.slug);
+    if (!product) return [];
+
     return [{
-      slug,
-      nameKey: keys[slug],
-      image: product.image,
+      slug: entry.slug,
+      nameKey: entry.nameKey,
+      image: entry.image,
       width: 1731,
       height: 2600,
       position: "center top",

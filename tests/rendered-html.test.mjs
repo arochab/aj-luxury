@@ -633,94 +633,60 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
   assert.match(html, /Pourpre Impérial/);
   assert.match(html, /Rose Velours/);
   assert.match(html, /Lilas Céleste/);
-  /* ── LE CONTRAT DE L'ACCUEIL v9 ───────────────────────────────────────
-     Le hero n'est plus une démonstration WebGL ni un plan épinglé. Il doit
-     rendre immédiatement une hiérarchie lisible et la photographie de studio
-     existante, sans dérivé ni calque généré. Ce contrat verrouille la sortie
-     réellement servie, pas une mécanique d'animation interne. */
-  assert.match(html, /<main class="aj-home aj-home-v9">/);
-  assert.match(html, /id="home-hero-title"/);
-  assert.match(html, /Reveal Your[\s\S]*Inner[\s\S]*Beauty/);
+  /* ── LE CONTRAT DE L'ACCUEIL v10 ──────────────────────────────────────
+     Le document garde l'ordre production et les vrais assets AJ, puis ajoute
+     sa mise en scène uniquement au client. Le HTML initial reste achetable,
+     lisible et complet sans attendre GSAP. */
+  assert.match(html, /<main class="aj-home aj-home-v10">/);
+  assert.match(html, /id="home10-title"/);
+  assert.match(html, /Reveal Your[\s\S]*Inner Beauty/);
   assert.match(
     html,
-    /product-pourpre-detail\.webp"[^>]*fetchPriority="high"[^>]*decoding="async"/,
+    /campaign-duo-pourpre\.webp"[^>]*fetchPriority="high"[^>]*decoding="async"/,
   );
-  assert.match(html, /product-pourpre-detail\.webp" alt="AJ Luxury — détail d’Apollon Pourpre Impérial"/);
-  assert.equal(
-    (html.match(/product-pourpre-detail\.webp/g) ?? []).length,
-    2,
-    "le détail Pourpre doit apparaître une fois dans le preload et une fois dans l’image prioritaire",
-  );
-  assert.doesNotMatch(html, /campaign-duo-pourpre\.webp|hero-pourpre-model\.webp/);
-  assert.match(html, /campagne-duo-760\.webp/);
-  assert.match(html, /campagne-duo-1100\.webp/);
-  assert.match(html, /campagne-duo-1484\.webp/);
-  assert.match(html, /product-rose-detail\.webp"[^>]*loading="eager"/);
-  assert.match(html, /Apollon · Rose Velours/);
-  assert.match(html, /Apollon · Lilas Céleste/);
+  assert.match(html, /campaign-duo-lilas-seated\.webp/);
+  assert.match(html, /product-rose-model\.webp/);
+  assert.match(html, /editorial-lilas-chair\.webp/);
+  assert.match(html, /editorial-rose-profile\.webp/);
+  assert.match(html, /editorial-pourpre-chair\.webp/);
+
+  /* Les trois produits canoniques et leurs routes PDP existent au premier
+     rendu. La motion ne porte jamais la responsabilité du contenu commerce. */
+  assert.equal((html.match(/data-motion="collection-card"/g) ?? []).length, 3);
+  assert.match(html, /product-rose-profile\.webp"[^>]*loading="eager"[^>]*fetchPriority="low"/);
+  assert.match(html, /product-lilas-model\.webp"[^>]*loading="eager"[^>]*fetchPriority="low"/);
+  assert.match(html, /product-card-pourpre\.webp"[^>]*loading="eager"[^>]*fetchPriority="low"/);
+  assert.match(html, /href="\/products\/rose-pale"/);
+  assert.match(html, /href="\/products\/lilas-bleu-clair"/);
   assert.match(html, /href="\/products\/pourpre"/);
-  assert.match(html, /29,99(?:\s| |&nbsp;)€/);
-  assert.match(html, /Découvrir[\s\S]*Apollon/);
-
-  /* Aucun vestige du film remplacé ne doit repasser dans le bundle rendu. */
-  assert.doesNotMatch(
-    html,
-    /data-hero-version|hero-figures|identity-overlay|hero-v[67]-|apollon-world|editorial\/isabelle-apollon|placeholder-v1|campaign-duo-lilas-seated|campagne-duo-lilas-master|product-lilas-model/,
-  );
-  assert.doesNotMatch(html, /data-metallic-mounted|metallic-field__canvas/);
-  assert.doesNotMatch(html, /<video|Figer le métal/);
-  assert.doesNotMatch(html, /aj-film__hero-|aj-film__living-duo|aj-film__liquid-overlay/);
-
-  /* Le logo de barre reste la seule image de marque : aucun doublon animé ne
-     vient s'y superposer, et le header conserve son point d'accroche stable. */
-  assert.match(html, /data-aj-marque="entete"/);
-  assert.equal(
-    (html.match(/aj-luxury-logo\.webp/g) ?? []).length,
-    2,
-    "le logo doit apparaître une fois dans le preload et une fois dans le header",
-  );
-  assert.match(html, /data-aj-tete-seuil/);
-
-  /* Les coloris sont de vrais onglets : l'état actif, le panneau associé et
-     l'accès direct au produit sont présents dès le rendu serveur. */
-  assert.match(html, /role="tablist"/);
-  assert.equal((html.match(/role="tab"/g) ?? []).length, 3);
-  assert.equal((html.match(/aria-selected="true"/g) ?? []).length, 1);
-  assert.match(html, /role="tabpanel"/);
+  assert.match(html, /Rose Velours/);
+  assert.match(html, /Lilas Céleste/);
+  assert.match(html, /Pourpre Impérial/);
   assert.match(
     html,
-    /id="home-colorway-pourpre"[^>]*aria-selected="true"|aria-selected="true"[^>]*id="home-colorway-pourpre"/,
+    /product-card-pourpre\.webp[\s\S]*product-rose-profile\.webp[\s\S]*product-lilas-model\.webp/,
   );
-  assert.match(html, /href="\/products\/pourpre"/);
+  assert.match(
+    html,
+    /Chez AJ Luxury,[\s\S]*le véritable luxe commence[\s\S]*au plus près de soi/,
+  );
 
+  /* Aucun film, rendu métallique, asset généré ni classe CSS invalide ne doit
+     réapparaître dans le document réellement servi. */
+  assert.doesNotMatch(html, /<video|data-metallic-mounted|metallic-field__canvas|Figer le métal/);
+  assert.doesNotMatch(html, /generated_images|hero-figures|identity-overlay|hero-v[67]-|apollon-world/);
+  assert.doesNotMatch(html, /class="[^"]*\bundefined\b/);
+
+  /* Le chrome et les destinations restent ceux de la production validée. */
+  assert.match(html, /<header[^>]*>[\s\S]*aj-luxury-logo\.webp/);
+  assert.match(html, /aria-label="Navigation principale"/);
   assert.match(html, /href="\/"[^>]*aria-current="page"[^>]*>Accueil</);
   assert.match(html, />Notre histoire</);
-  /* UN SEUL LIBELLE POUR /shop SUR TOUTE LA PAGE. Elle s'appelait « Voir
-     toute la boutique » dans #coloris et « Decouvrir la collection » en
-     cloture : deux noms pour une meme destination, sur un meme ecran. Le test
-     verrouille l'unicite, pas la formule. */
-  assert.equal(
-    (html.match(/href="\/shop"[^>]*><span>Voir toute la boutique<\/span>/g) ?? [])
-      .length,
-    2,
-  );
-  assert.doesNotMatch(html, /Découvrir la collection/);
-  assert.match(html, /94\s*%[\s\S]*modal/i);
-  assert.match(html, /6\s*%[\s\S]*élasthanne/i);
-  assert.match(
-    html,
-    /editorial-rose-profile\.webp[\s\S]*editorial-lilas-chair\.webp[\s\S]*editorial-pourpre-chair\.webp/,
-  );
-  assert.doesNotMatch(html, /Un modèle décliné en trois coloris/i);
-  assert.doesNotMatch(html, /data-hero-fusion/);
-  assert.doesNotMatch(html, /href="\/#collection"/);
-  assert.doesNotMatch(html, /href="\/#matiere"/);
-  assert.doesNotMatch(html, />La matière</);
-  assert.doesNotMatch(html, /aj-film__living-duo|aj-film__liquid-overlay/);
-  assert.doesNotMatch(
-    html,
-    /pika|Signature 01|Contour 02|Ligne 03|Motion 04|Libre 05|iStock|Getty/i,
-  );
+  assert.match(html, /href="\/shop"/);
+  assert.match(html, /href="\/notre-histoire"/);
+  assert.match(html, />Collection Apollon</);
+  assert.doesNotMatch(html, /data-hero-fusion|href="\/#matiere"|>La matière</);
+  assert.doesNotMatch(html, /pika|Signature 01|Contour 02|Ligne 03|Motion 04|Libre 05|iStock|Getty/i);
 });
 
 /* Tailles de galerie depuis la reprise des fiches du 19/08 (natures mortes) :

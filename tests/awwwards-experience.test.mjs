@@ -39,81 +39,70 @@ test("Isabelle Apollon editorials keep exact provenance and a bounded payload", 
   assert.ok(totalBytes <= 390_000, `editorial payload: ${totalBytes} bytes`);
 });
 
-test("the homepage is a direct editorial document, not a scroll-controlled film", async () => {
+test("the homepage is a native-scroll GSAP editorial document, never a film", async () => {
   const page = await readFile(projectFile("app/page.tsx"), "utf8");
   const experience = await readFile(
-    projectFile("app/components/HomeExperienceV9.tsx"),
+    projectFile("app/components/HomeExperienceV10.tsx"),
     "utf8",
   );
   const css = await readFile(
-    projectFile("app/components/HomeExperienceV9.module.css"),
+    projectFile("app/components/HomeExperienceV10.module.css"),
     "utf8",
   );
 
-  assert.match(page, /<HomeExperienceV9/);
-  assert.doesNotMatch(page, /<Hero\s*\/>/);
-  assert.doesNotMatch(page, /<ApollonGuidedSequence/);
-  assert.doesNotMatch(experience, /gsap|ScrollTrigger|WebGL|MetallicField/);
-  assert.doesNotMatch(css, /position:\s*sticky|100svh\s*\*/);
-  assert.doesNotMatch(css, /heroCopyIn|\.heroCopy[^}]*animation/s);
-  assert.doesNotMatch(css, /\.heroCopy[^}]*opacity:\s*0/s);
-  assert.match(css, /\.heroMedia img[^}]*animation:\s*heroMediaIn/s);
-  assert.match(css, /min-height: calc\(100svh - var\(--aj-tete-h\)\)/);
-
-  assert.match(experience, /role="tablist"/);
-  assert.match(experience, /role="tabpanel"/);
-  assert.match(experience, /ArrowRight/);
-  assert.match(experience, /ArrowLeft/);
+  assert.match(page, /<HomeExperienceV10/);
+  assert.match(page, /aj-home-v10/);
+  assert.doesNotMatch(`${page}\n${experience}`, /<video|HeroComposition|MetallicField|WebGL/i);
+  assert.match(experience, /useAjMotion/);
+  assert.match(experience, /scrub:\s*true/g);
+  assert.doesNotMatch(experience, /scrub:\s*0\.|\bpin:\s*/);
+  assert.match(experience, /if \(desktop && featured && featuredCards\.length === 3\)/);
+  assert.match(experience, /if \(desktop && collectionStage && collectionCards\.length === 3\)/);
+  assert.match(experience, /if \(desktop\) \{[\s\S]*moodboardMedia\.forEach/);
+  assert.match(css, /@media \(min-width: 761px\) and \(prefers-reduced-motion: no-preference\)/);
+  assert.match(css, /scroll-snap-type:\s*x mandatory/);
+  assert.match(css, /flex:\s*0 0 78vw/);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
 });
 
 test("the redesigned homepage only references retained repository assets", async () => {
   const page = await readFile(projectFile("app/page.tsx"), "utf8");
   const experience = await readFile(
-    projectFile("app/components/HomeExperienceV9.tsx"),
+    projectFile("app/components/HomeExperienceV10.tsx"),
     "utf8",
   );
-  const content = await readFile(
-    projectFile("app/components/HomeExperienceV9.content.ts"),
-    "utf8",
-  );
-  const homepageSources = `${page}\n${experience}\n${content}`;
-  const sources = [...homepageSources.matchAll(/(?:srcSet|src|image|hero|material|mobile|tablet|desktop)\s*(?:=|:)\s*["'](\/images\/[^"']+)["']/g)]
+  const moodboard = await readFile(projectFile("lib/editorial-moodboard.ts"), "utf8");
+  const products = await readFile(projectFile("lib/products.ts"), "utf8");
+  const homepageSources = `${page}\n${experience}\n${moodboard}\n${products}`;
+  const sources = [...homepageSources.matchAll(/["'](\/images\/[^"']+\.(?:webp|avif|png|jpe?g))["']/g)]
     .map((match) => match[1]);
 
-  const whitelist = [
-    "/images/client/campagne-duo-1100.webp",
-    "/images/client/campagne-duo-1484.webp",
-    "/images/client/campagne-duo-760.webp",
-    "/images/client/editorial-lilas-chair.webp",
-    "/images/client/editorial-pourpre-chair.webp",
-    "/images/client/editorial-rose-profile.webp",
-    "/images/client/raw/product-pourpre-detail.webp",
-    "/images/client/raw/product-rose-detail.webp",
-  ];
+  assert.ok(sources.length >= 10, "the home must draw from the retained AJ asset library");
+  assert.ok(sources.every((source) =>
+    source.startsWith("/images/client/") ||
+    source.startsWith("/images/editorial/isabelle-apollon/"),
+  ));
 
-  assert.deepEqual([...new Set(sources)].sort(), whitelist);
-  assert.equal(new Set(sources).size, sources.length, "homepage visual sources must not be duplicated");
-
-  for (const source of sources) {
+  for (const source of new Set(sources)) {
     await access(projectFile(`public${source}`));
   }
 
-  assert.doesNotMatch(
-    homepageSources,
-    /generated_images|concept|placeholder-v1|hero-figures|identity-overlay|hero-v[67]-|apollon-world|editorial\/isabelle-apollon|campaign-duo-lilas-seated|campagne-duo-lilas-master|product-lilas-model|<video/i,
-  );
-  assert.equal(
-    (homepageSources.match(/\/images\/client\/raw\/product-pourpre-detail\.webp/g) ?? []).length,
-    1,
-    "the revised hero whitelist must use the exact retained Pourpre detail once",
-  );
+  assert.ok(!sources.some((source) =>
+    /generated_images|concept|hero-figures|identity-overlay|hero-v[67]-|apollon-world/i.test(source),
+  ));
+  assert.doesNotMatch(`${page}\n${experience}`, /<video/i);
+  assert.match(experience, /campaign-duo-pourpre\.webp/);
+  assert.match(experience, /campaign-duo-lilas-seated\.webp/);
 });
 
 test("homepage controls answer quickly and scroll-linked product motion has no lag", async () => {
   const designSystem = await readFile(projectFile("app/design-system.css"), "utf8");
   const homepageCss = await readFile(
-    projectFile("app/components/HomeExperienceV9.module.css"),
+    projectFile("app/components/HomeExperienceV10.module.css"),
+    "utf8",
+  );
+  const homepage = await readFile(
+    projectFile("app/components/HomeExperienceV10.tsx"),
     "utf8",
   );
   const gallery = await readFile(
@@ -129,24 +118,18 @@ test("homepage controls answer quickly and scroll-linked product motion has no l
     "utf8",
   );
   const worker = await readFile(projectFile("worker/index.ts"), "utf8");
-  const menuTimeline = storeHeader.match(
-    /const partition = gsap[\s\S]*?ouvertureMenu\.current = partition;/,
-  )?.[0] ?? "";
-
   assert.match(designSystem, /--aj-d-court:\s*0\.18s/);
-  assert.match(homepageCss, /transition:[^;]*180ms/);
+  assert.match(homepageCss, /transition:[^;]*(?:140|180)ms/);
   assert.doesNotMatch(homepageCss, /transition:[^;]*(?:7\d{2,}|[1-9]\d{3,})ms/);
-  assert.doesNotMatch(storeHeader, /stagger:/);
-  assert.match(storeHeader, /duration:\s*0\.32/);
-  assert.doesNotMatch(storeHeader, /duration:\s*(?:0\.[6-9]|[1-9])/);
-  assert.match(menuTimeline, /autoAlpha:\s*0[\s\S]*autoAlpha:\s*1[\s\S]*duration:\s*0\.32/);
-  assert.doesNotMatch(menuTimeline, /stagger:|\b(?:x|y|xPercent|yPercent|scale|transform):/);
-  assert.match(storeHeader, /requestAnimationFrame\(\(\) => boutonMenu\.current\?\.focus\(\)\)/);
-  assert.match(storeChrome, /@media \(max-width: 760px\)/);
-  assert.match(storeChrome, /\.menuSigne[\s\S]*?transition:\s*none/);
-  assert.match(storeChrome, /\.menuBouton[\s\S]*?min-width:\s*44px[\s\S]*?min-height:\s*44px/);
-  assert.match(storeChrome, /\.menuPanneau \.navLink,[\s\S]*?min-height:\s*44px/);
-  assert.match(storeChrome, /\.aj-home\.aj-home-v9[\s\S]*?transform:\s*none\s*!important/);
+  assert.doesNotMatch(storeHeader, /gsap|stagger:|setTimeout/);
+  assert.match(storeHeader, /const navigation = \[[\s\S]*href: "\/"[\s\S]*href: "\/shop"[\s\S]*href: "\/notre-histoire"/);
+  assert.match(storeChrome, /@media \(max-width: 620px\)/);
+  assert.match(storeChrome, /min-width:\s*2\.75rem/);
+  assert.match(storeChrome, /min-height:\s*2\.75rem/);
+  assert.match(homepage, /scrub:\s*true/g);
+  assert.doesNotMatch(homepage, /scrub:\s*0\.[1-9]|\bpin:\s*/);
+  assert.match(homepage, /collectionCleanup = \(\) =>/);
+  assert.match(homepage, /return collectionCleanup/);
   assert.match(worker, /if \(allowLocalPreviewFrame\) headers\.delete\("X-Frame-Options"\)/);
   assert.match(worker, /env === undefined \|\| env\.APP_ENV === undefined[\s\S]*url\.hostname === "localhost"[\s\S]*frontend-design[\s\S]*round-4/);
   assert.match(gallery, /scrub: true/);

@@ -48,6 +48,7 @@ next-env.d.ts
 /inputs_assets/
 /deliverables/
 /docs/internal/evidence/
+/artifacts/gauntlet-*/
 /tsconfig.tsbuildinfo
 /.openai/*.tar.gz
 

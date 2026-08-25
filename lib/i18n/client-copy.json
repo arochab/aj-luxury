@@ -3,12 +3,12 @@
     "sourceLocale": "fr",
     "fallbackLocale": "fr",
     "status": "localized",
-    "source": "Apollon ouvre la collection. Il ne la referme pas.",
+    "source": "Chez AJ Luxury, nous sommes convaincus que le véritable luxe commence par ce que l’on porte au plus près de soi.",
     "translations": {
-      "en": "Apollon opens the collection. It does not close it.",
-      "es": "Apollon abre la colección. No la cierra.",
-      "de": "Apollon eröffnet die Kollektion. Es schließt sie nicht ab.",
-      "it": "Apollon apre la collezione. Non la chiude."
+      "en": "At AJ Luxury, we believe that true luxury begins with what you wear closest to your skin.",
+      "es": "En AJ Luxury creemos que el verdadero lujo empieza por lo que llevamos más cerca de la piel.",
+      "de": "Bei AJ Luxury glauben wir, dass wahrer Luxus mit dem beginnt, was man direkt auf der Haut trägt.",
+      "it": "In AJ Luxury crediamo che il vero lusso cominci da ciò che indossiamo più vicino alla pelle."
     }
   },
   "brandPromise": {

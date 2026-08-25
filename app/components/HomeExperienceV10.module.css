@@ -73,8 +73,8 @@
 }
 
 .heroPanelLeft img {
-  object-fit: contain;
-  object-position: center;
+  object-fit: cover;
+  object-position: center 15%;
 }
 
 .heroGrade {
@@ -451,7 +451,7 @@
   }
 
   .collectionStage {
-    height: 300svh;
+    height: 260svh;
   }
 
   .collectionSticky {

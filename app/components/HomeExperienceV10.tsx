@@ -104,6 +104,7 @@ export default function HomeExperienceV10({ colorways }: Props) {
           racine.querySelectorAll<HTMLElement>("[data-motion='moodboard-media']"),
         );
         const storyCopy = racine.querySelector<HTMLElement>("[data-motion='story-copy']");
+        let collectionCleanup: (() => void) | undefined;
 
         if (heroMedia) {
           gsap.to(heroMedia, {
@@ -135,7 +136,7 @@ export default function HomeExperienceV10({ colorways }: Props) {
           });
         }
 
-        if (featured && featuredCards.length === 3) {
+        if (desktop && featured && featuredCards.length === 3) {
           const featuredSequence = gsap.timeline({
             scrollTrigger: {
               trigger: featured,
@@ -202,9 +203,8 @@ export default function HomeExperienceV10({ colorways }: Props) {
 
           activate(0);
           gsap.set(collectionCards.slice(1), {
-            autoAlpha: 0,
-            xPercent: 5,
-            scale: 0.992,
+            autoAlpha: 1,
+            xPercent: 105,
           });
 
           const collectionSequence = gsap.timeline({
@@ -215,7 +215,7 @@ export default function HomeExperienceV10({ colorways }: Props) {
               scrub: true,
               invalidateOnRefresh: true,
               onUpdate: (self) => {
-                activate(self.progress < 0.34 ? 0 : self.progress < 0.67 ? 1 : 2);
+                activate(self.progress < 0.36 ? 0 : self.progress < 0.7 ? 1 : 2);
               },
             },
           });
@@ -223,26 +223,29 @@ export default function HomeExperienceV10({ colorways }: Props) {
           collectionSequence
             .to(
               collectionCards[0],
-              { autoAlpha: 0, xPercent: -5, scale: 0.992, duration: 0.4, ease: "none" },
-              0.78,
+              { xPercent: -105, duration: 0.52, ease: "power2.inOut" },
+              0.74,
+            )
+            .fromTo(
+              collectionCards[1],
+              { xPercent: 105 },
+              { xPercent: 0, duration: 0.52, ease: "power2.inOut" },
+              0.74,
             )
             .to(
               collectionCards[1],
-              { autoAlpha: 1, xPercent: 0, scale: 1, duration: 0.4, ease: "none" },
-              1.05,
+              { xPercent: -105, duration: 0.52, ease: "power2.inOut" },
+              1.74,
             )
-            .to(
-              collectionCards[1],
-              { autoAlpha: 0, xPercent: -5, scale: 0.992, duration: 0.4, ease: "none" },
-              1.78,
-            )
-            .to(
+            .fromTo(
               collectionCards[2],
-              { autoAlpha: 1, xPercent: 0, scale: 1, duration: 0.4, ease: "none" },
-              2.05,
-            );
+              { xPercent: 105 },
+              { xPercent: 0, duration: 0.52, ease: "power2.inOut" },
+              1.74,
+            )
+            .to(collectionCards[2], { xPercent: 0, duration: 0.74, ease: "none" }, 2.26);
 
-          return () => {
+          collectionCleanup = () => {
             collectionCards.forEach((card) => {
               card.removeAttribute("inert");
               card.removeAttribute("aria-hidden");
@@ -251,23 +254,25 @@ export default function HomeExperienceV10({ colorways }: Props) {
           };
         }
 
-        moodboardMedia.forEach((media, index) => {
-          gsap.fromTo(
-            media,
-            { yPercent: index % 2 === 0 ? -3 : 3 },
-            {
-              yPercent: index % 2 === 0 ? 3 : -3,
-              ease: "none",
-              scrollTrigger: {
-                trigger: media.parentElement,
-                start: "top bottom",
-                end: "bottom top",
-                scrub: true,
-                invalidateOnRefresh: true,
+        if (desktop) {
+          moodboardMedia.forEach((media, index) => {
+            gsap.fromTo(
+              media,
+              { yPercent: index % 2 === 0 ? -3 : 3 },
+              {
+                yPercent: index % 2 === 0 ? 3 : -3,
+                ease: "none",
+                scrollTrigger: {
+                  trigger: media.parentElement,
+                  start: "top bottom",
+                  end: "bottom top",
+                  scrub: true,
+                  invalidateOnRefresh: true,
+                },
               },
-            },
-          );
-        });
+            );
+          });
+        }
 
         if (storyCopy) {
           gsap.from(storyCopy, {
@@ -283,6 +288,8 @@ export default function HomeExperienceV10({ colorways }: Props) {
             },
           });
         }
+
+        return collectionCleanup;
       },
     );
   });
@@ -326,7 +333,10 @@ export default function HomeExperienceV10({ colorways }: Props) {
           <div className={styles.featuredEditorial}>
             {featuredEditorialImages.map((image) => (
               <figure
-                className={styles.featuredCard + " " + styles["featured" + image.crop]}
+                className={
+                  styles.featuredCard +
+                  (image.crop === "lead" ? " " + styles.featuredlead : "")
+                }
                 data-motion="featured-card"
                 key={image.src}
               >
@@ -336,6 +346,7 @@ export default function HomeExperienceV10({ colorways }: Props) {
                   width={1600}
                   height={2400}
                   loading="lazy"
+                  fetchPriority="low"
                   decoding="async"
                 />
               </figure>
@@ -412,6 +423,7 @@ export default function HomeExperienceV10({ colorways }: Props) {
                 width={image.width}
                 height={image.height}
                 loading="lazy"
+                fetchPriority="low"
                 decoding="async"
                 data-motion="moodboard-media"
               />

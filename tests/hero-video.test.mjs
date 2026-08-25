@@ -380,6 +380,7 @@ test("review proofs never enter the Sites artifact", async () => {
 test("noncritical visual media stays outside the initial render path", async () => {
   const [
     homepage,
+    homeExperience,
     productPage,
     gallery,
     header,
@@ -387,6 +388,7 @@ test("noncritical visual media stays outside the initial render path", async () 
     deferredMetal,
   ] = await Promise.all([
     readFile(projectFile("app/page.tsx"), "utf8"),
+    readFile(projectFile("app/components/HomeExperienceV10.tsx"), "utf8"),
     readFile(projectFile("app/products/[slug]/page.tsx"), "utf8"),
     readFile(projectFile("app/components/ProductGalleryZoom.tsx"), "utf8"),
     readFile(projectFile("app/components/StoreHeader.tsx"), "utf8"),
@@ -394,13 +396,13 @@ test("noncritical visual media stays outside the initial render path", async () 
     readFile(projectFile("app/components/DeferredMetallicField.tsx"), "utf8"),
   ]);
 
-  for (const source of [homepage, productPage, gallery, header, footer]) {
+  for (const source of [homepage, homeExperience, productPage, gallery, header, footer]) {
     assert.doesNotMatch(source, /next\/image/);
   }
 
   // Both noncritical homepage media maps are explicitly low priority; each
   // source occurrence fans out to all products or editorial images at render.
-  assert.ok((homepage.match(/fetchPriority="low"/g) ?? []).length >= 2);
+  assert.ok((homeExperience.match(/fetchPriority="low"/g) ?? []).length >= 2);
   assert.match(productPage, /fetchPriority="low"/);
   assert.match(gallery, /const ready = eager \|\| \(visible && criticalPathComplete\)/);
   assert.match(gallery, /IntersectionObserver/);

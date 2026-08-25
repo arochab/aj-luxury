@@ -1,6 +1,6 @@
 # AJ Luxury — Gauntlet Awwwards Motion
 
-Status: `CANDIDATE BUILT — BLIND JURY PENDING`
+Status: `ROUND 1 BLOCKED AT 8.2 — ROUND 2 BUILT AND VERIFIED`
 
 ## Frozen input
 
@@ -75,9 +75,9 @@ The live site and `origin/main` were measured before implementation.
 - Hero: CSS first-paint line reveal plus GSAP media/copy scroll depth.
 - Editorial triptych: one native sticky scene on desktop, scroll-linked
   transform/opacity composition; native horizontal scroll-snap on mobile.
-- Apollon: one native sticky three-chapter scene on desktop, with product image,
-  exact name and direct PDP link for Rose, Lilas and Pourpre; native rail on
-  mobile.
+- Apollon: one native sticky three-chapter scene on desktop, with the exact
+  production order Pourpre, Rose, Lilas; exact production image, name and
+  direct PDP link for every colorway; native rail on mobile.
 - Moodboard: exact production assets with bounded image-only parallax.
 - Manifesto: exact `brandStory` copy and exact two production routes.
 - No scroll hijack, smooth-scroll runtime, WebGL, canvas, custom cursor,
@@ -93,12 +93,15 @@ The live site and `origin/main` were measured before implementation.
   final-artifact checks.
 - TypeScript: only the pre-existing `cloudflare:workers` ambient-module error
   in `db/index.ts`.
-- Live local browser: desktop 1440×900 inspected at hero, triptych, all three
-  Apollon states, moodboard, manifesto and footer; mobile 390×844 inspected
-  through the governed local preview-frame path at hero, Apollon rail,
-  moodboard, manifesto and footer.
-- No current runtime error observed after a clean reload; earlier Vite HMR
-  messages occurred only while the component file was being replaced.
+- Automated real-browser QA (`scripts/qa-home-v10.mjs`): desktop 1440×900,
+  mobile 390×844 and reduced-motion 1440×900. Zero console errors, zero video,
+  zero invalid `undefined` class and no horizontal document overflow.
+- Desktop scroll height dropped from 6,957 px in Round 1 to 6,597 px in Round 2.
+- Mobile scroll height is 4,010 px; reduced-motion desktop is a normal static
+  4,814 px document with all three products visible.
+- Focused suite: 62/62 tests pass after the preproduction build.
+- No current runtime error observed after clean Chrome sessions; earlier Vite
+  HMR messages occurred only while the component file was being replaced.
 
 ## Budget and orchestration
 
@@ -116,10 +119,22 @@ The live site and `origin/main` were measured before implementation.
 | Production truth | 0 | PASS | Live desktop + `origin/main` computed-token ledger | complete |
 | Motion system | 0 | PASS | GSAP storyboard + bounded transform/opacity system | complete |
 | Story/e-commerce | 0 | PASS | Exact production order, copy, routes and assets | complete |
-| Integrated candidate | 0 | BUILT | Browser render + successful preproduction build | working tree |
-| Final jury | 0 | NOT STARTED | Blind artifact inspection | pending |
+| Integrated candidate | 1 | BLOCK 8.2 | Blind inspection of exact `23f9d81` | superseded |
+| Integrated candidate | 2 | BUILT | Build + 62/62 + desktop/mobile/reduced screenshots | working tree |
+| Final jury | 2 | PENDING | Fresh blind artifact inspection required | pending |
 
 ## Round log
 
 - R0: previous photo-only candidate rejected by Adam. New direction resets the
   form around production truth and an intentional full-motion system.
+- R1 — exact SHA `23f9d81`: BLOCK, 8.2/10. Scores: fidelity 7.8, art direction
+  8.7, motion 7.6, storytelling 8.3, e-commerce 8.8, responsive/accessibility
+  8.1, engineering/performance 7.9. The critic confirmed the triptych,
+  commerce visibility and video removal, but found production-copy/asset/order
+  drift plus three real lifecycle/DOM defects.
+- R2 builder response: restored the exact production story copy, footer label,
+  product order and product images; removed the premature desktop cleanup;
+  excluded triptych/moodboard GSAP from mobile; removed invalid CSS classes;
+  replaced the low-opacity product crossfade with a continuous transform-only
+  relay; shortened the collection scene; upgraded the approved hero still to
+  full-bleed without generating or recreating an asset.
