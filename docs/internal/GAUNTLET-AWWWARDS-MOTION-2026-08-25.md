@@ -1,6 +1,6 @@
 # AJ Luxury — Gauntlet Awwwards Motion
 
-Status: `ROUND 2 JURY 9.30 — ROUND 3 BUILT AND VERIFIED`
+Status: `ROUND 3 PASS — 9.50/10 — NO FATAL VETO`
 
 ## Frozen input
 
@@ -124,8 +124,8 @@ The live site and `origin/main` were measured before implementation.
 | Story/e-commerce | 0 | PASS | Exact production order, copy, routes and assets | complete |
 | Integrated candidate | 1 | BLOCK 8.2 | Blind inspection of exact `23f9d81` | superseded |
 | Integrated candidate | 2 | FAIL 9.30 | Blind inspection of exact `2b31abc` | superseded |
-| Integrated candidate | 3 | BUILT | Build + 62/62 + browser + keyboard/touch QA | working tree |
-| Final jury | 3 | PENDING | Fresh blind artifact inspection required | pending |
+| Integrated candidate | 3 | BUILT | Build + 62/62 + browser + keyboard/touch QA | `14ebe14` |
+| Final jury | 3 | PASS 9.50 | Fresh blind inspection of exact `14ebe14` | complete |
 
 ## Round log
 
@@ -154,3 +154,31 @@ The live site and `origin/main` were measured before implementation.
   swipe; preserved direct links and full visual continuity; returned the three
   below-fold product images to lazy loading; made browser QA resilient to lazy
   media without weakening any assertion.
+- R3 — exact SHA `14ebe14e5b797311c93f8a6b096b5e72cba41c0b`: PASS,
+  9.50/10, no fatal veto and no remaining P1. Scores: fidelity 9.7, art
+  direction 9.4, motion 9.5, storytelling 9.2, e-commerce 9.5,
+  responsive/accessibility 9.6, engineering/performance 9.6. Residual
+  non-blockers: storytelling remains intentionally restrained; no instrumented
+  FPS trace was available, so performance proof is build/code/browser QA rather
+  than a frame-time recording.
+
+## Commerce activation gate — separate from the visual PASS
+
+The visual candidate is deployable to the isolated preview. Real-card commerce
+is not yet safe to activate on either the preview or `ajluxurystore.com`:
+
+- production D1 exists but contains zero products, variants, inventory, orders
+  and payments;
+- historical contracts still hard-code 756 physical units, while Adam confirms
+  730; the exact 12-SKU split and reserves are not present;
+- the production Worker is not deployed and no Stripe, Sendcloud or Resend
+  secrets are installed on it;
+- controlled checkout requires a server-side HMAC boundary not supplied by the
+  browser client; live payment sessions remain explicitly closed;
+- required version metadata, rate limiters, cron, post-purchase identity,
+  return/refund activation and legal attestations are incomplete.
+
+Therefore no real payment, domain mutation or stock import is part of Round 3.
+The next safe commerce gate is one owner-only controlled order after the exact
+730-unit manifest, provider credentials and operational/legal controls are all
+proved against one immutable release SHA.
