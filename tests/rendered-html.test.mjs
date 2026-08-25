@@ -180,7 +180,7 @@ test("preproduction APIs are invisible without the exact isolated environment", 
   });
 });
 
-test("production pages remain indexable while preproduction is explicitly noindex", async () => {
+test("production stays indexable while preproduction and branch previews are noindex", async () => {
   const production = await render("/");
   assert.equal(production.headers.get("x-robots-tag"), null);
 
@@ -189,6 +189,12 @@ test("production pages remain indexable while preproduction is explicitly noinde
     environment: "preproduction",
   });
   assert.equal(preproduction.headers.get("x-robots-tag"), "noindex, nofollow");
+
+  const preview = await invokeWorker("/", {
+    headers: { accept: "text/html" },
+    environment: "preview",
+  });
+  assert.equal(preview.headers.get("x-robots-tag"), "noindex, nofollow");
 });
 
 test("synthetic candidate stays unavailable on migration 0007 without its sentinel", async () => {
