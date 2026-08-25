@@ -1,0 +1,106 @@
+.home {
+  min-width: 0;
+}
+
+/* Three equal solo frames: no visual hierarchy between Jérémy and Alex. */
+.home .parityEditorial {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: center;
+}
+
+.home .parityEditorial :global(.aj-featured__image) {
+  aspect-ratio: 2 / 3;
+}
+
+.home .parityEditorial :global(.aj-featured__image img) {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center top;
+}
+
+/* Keep all three commerce cards at the exact same visual weight on desktop. */
+.home .parityProductRail {
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  transition: none !important;
+}
+
+.home .productDetailTrack {
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  align-items: center;
+}
+
+.home .productDetail {
+  aspect-ratio: 2 / 3;
+}
+
+.home .productDetail img {
+  object-fit: contain;
+  object-position: center;
+}
+
+@media (max-width: 760px) {
+  .home .parityEditorial,
+  .home .parityProductRail,
+  .home .productDetailTrack {
+    grid-template-columns: none !important;
+  }
+
+  .home .productDetail {
+    flex: 0 0 78vw;
+    width: 78vw;
+    min-width: 78vw;
+  }
+
+  .home .productDetailTrack {
+    display: flex !important;
+    width: max-content;
+    min-width: 100%;
+    gap: 16px;
+    padding-inline: 16px;
+  }
+}
+
+/* On compact screens the header stays in normal flow. The poster stage stops
+   above the signature and uses contain, reproducing production's full-subject
+   framing: both faces and both boxers stay visible, with the CTA still inside
+   the first viewport. */
+@media (max-width: 900px) {
+  .home :global(.aj-film) {
+    min-height: calc(100svh - var(--aj-tete-h));
+    margin-top: 0;
+  }
+
+  .home :global(.aj-film__hero-stage) {
+    right: 0;
+    bottom: 70px;
+    left: 0;
+    height: auto;
+  }
+
+  .home :global(.aj-film__hero-poster img) {
+    object-fit: contain;
+    object-position: center;
+  }
+}
+
+/* StoreHeader still occupies two rows at phone width. Its measured height is
+   138.6 px; the shared global token predates the current two-row chrome. */
+@media (max-width: 560px) {
+  .home {
+    --aj-tete-h: 8.7rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home :global(.aj-featured__image),
+  .home :global(.aj-featured__image img),
+  .home :global(.aj-product-card),
+  .home :global(.aj-product-card img),
+  .home :global(.aj-moodboard__item img) {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+  }
+}
