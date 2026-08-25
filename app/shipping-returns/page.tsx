@@ -1,13 +1,17 @@
 import InfoPage, { InfoNotice } from "../components/InfoPage";
-import { LEGAL_CONTACT, LEGAL_VERSION } from "@/lib/legal";
+import {
+  LEGAL_CONTACT,
+  LEGAL_VERSION_DISPLAY,
+  RETURN_ADDRESS,
+} from "@/lib/legal";
 import { T } from "@/lib/i18n/TranslatedText";
 
-export const metadata = { title: "Livraison internationale et retours | AJ Luxury" };
+export const metadata = { title: "Livraison en Union européenne et retours | AJ Luxury" };
 
 export default function ShippingReturnsPage() {
   return (
     <InfoPage
-      eyebrow={<T id="info.shipping.eyebrow" values={{ version: LEGAL_VERSION }} />}
+      eyebrow={<T id="info.shipping.eyebrow" values={{ version: LEGAL_VERSION_DISPLAY }} />}
       title={<T id="info.shipping.title" />}
       status={<T id="info.shipping.status" />}
       officialFrenchOnly
@@ -24,16 +28,24 @@ export default function ShippingReturnsPage() {
       <section>
         <h2>Livraison</h2>
         <p>
-          Les destinations disponibles, le transporteur, le coût et la date ou
-          le délai estimé seront affichés avant la validation de la commande.
-          Sans délai spécifique convenu, la commande sera livrée au plus tard
-          trente jours après sa confirmation.
+          Au lancement, AJ Luxury livre en France métropolitaine, Corse comprise,
+          et dans les autres pays de l’Union européenne. Les territoires
+          ultramarins et les destinations hors Union européenne ne sont pas
+          encore desservis.
         </p>
         <p>
-          Pour une livraison hors Union européenne, des droits de douane, taxes
-          d’importation ou frais de traitement peuvent être exigés à destination.
-          Ils seront présentés lorsque connus ; à défaut, le client sera
-          clairement informé avant paiement qu’ils peuvent rester à sa charge.
+          Selon le pays, l’adresse et la disponibilité du transporteur, une
+          livraison en point de retrait ou à domicile est proposée. Le coût
+          réel, le transporteur et le délai estimé de chaque option disponible
+          sont affichés avant le paiement. La commande est préparée sous un à
+          deux jours ouvrés. Le délai affiché lors de la commande reste celui
+          qui engage AJ Luxury.
+        </p>
+        <p>
+          Le numéro EORI du vendeur est valide. L’ouverture hors Union
+          européenne reste néanmoins séparée jusqu’à validation des
+          transporteurs, déclarations douanières, droits, taxes et retours pour
+          chaque destination.
         </p>
       </section>
 
@@ -61,12 +73,18 @@ export default function ShippingReturnsPage() {
           d’AJ Luxury.
         </p>
         <p>
-          Les sous-vêtements doivent rester non portés, non lavés, non tachés,
-          avec leurs étiquettes et leur dispositif d’hygiène intact. Si un
-          produit scellé ne peut être renvoyé pour des raisons de santé ou
-          d’hygiène après descellement, l’exception légale au droit de
-          rétractation peut s’appliquer. Elle ne s’applique jamais au détriment
-          de la garantie légale de conformité.
+          Après notification de la rétractation, le retour doit être adressé à :{" "}
+          <strong>{RETURN_ADDRESS.recipient}</strong>, {RETURN_ADDRESS.line1},{" "}
+          {RETURN_ADDRESS.postalCode} {RETURN_ADDRESS.city},{" "}
+          {RETURN_ADDRESS.country}.
+        </p>
+        <p>
+          AJ Luxury n’applique pas d’exclusion générale du droit de
+          rétractation aux sous-vêtements. Le client peut examiner le produit
+          comme il le ferait en magasin, sans le porter au-delà de ce qui est
+          nécessaire pour vérifier sa nature, ses caractéristiques et sa
+          taille. Les droits liés à un défaut ou à une non-conformité restent
+          intégralement applicables.
         </p>
       </section>
 

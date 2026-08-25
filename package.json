@@ -7,15 +7,37 @@
   },
   "scripts": {
     "dev": "vinext dev",
+    "check:preprod-demo-boundary": "node --experimental-strip-types scripts/check-preprod-demo-boundary.mjs",
+    "check:production-migration-boundary": "node scripts/check-production-migration-boundary.mjs",
+    "prepare:production-migrations": "node scripts/production-d1-migrations.mjs",
+    "apply:production-migrations": "node scripts/production-d1-migrations.mjs --apply",
+    "check:analytics-boundary": "node --experimental-strip-types scripts/check-analytics-client-boundary.mjs",
+    "check:analytics-artifacts": "node --experimental-strip-types scripts/check-analytics-client-boundary.mjs --artifacts",
+    "test:analytics-build-canaries": "node scripts/check-analytics-build-canaries.mjs",
+    "prebuild": "npm run check:analytics-boundary && npm run check:preprod-demo-boundary && npm run check:production-migration-boundary",
     "build": "vinext build",
+    "postbuild": "npm run check:analytics-artifacts",
     "start": "vinext start",
-    "deploy:preview": "npm run build && wrangler deploy --config dist/server/wrangler.json --name aj-luxury-preview",
-    "test": "npm run build && node --experimental-strip-types --test tests/hero-video.test.mjs tests/motion-lifecycle.test.mjs tests/commerce-pricing.test.mjs tests/stock-privacy.test.mjs && node --test tests/i18n-dictionaries.test.mjs tests/i18n-provider.test.mjs tests/model-identity.test.mjs tests/product-gallery-layout.test.mjs tests/rendered-html.test.mjs",
-    "lint": "eslint app lib tests --ignore-pattern dist --ignore-pattern .next",
+    "test": "npm run build && npm run test:analytics-build-canaries && npm run test:analytics-types && node --experimental-strip-types --test tests/hero-video.test.mjs tests/motion-lifecycle.test.mjs tests/commerce-pricing.test.mjs tests/stock-privacy.test.mjs tests/backend-core.test.mjs tests/analytics-foundation.test.mjs tests/preprod-cart-api.test.mjs tests/cart-client.test.mjs tests/parcel-profiles.test.mjs tests/preprod-shipping-quote-api.test.mjs tests/preprod-shipping-client.test.mjs tests/root-typecheck-delta.test.mjs && npm run test:identity-access && npm run test:email-data && node --test tests/d1-migrations.test.mjs && npm run test:email-data-d1 && npm run test:fulfillment && npm run test:gate-c && npm run test:preprod-demo && npm run test:last-mile && node --test tests/i18n-dictionaries.test.mjs tests/i18n-provider.test.mjs tests/model-identity.test.mjs tests/product-gallery-layout.test.mjs tests/rendered-html.test.mjs && npm run test:lot2-policies",
+    "test:analytics-types": "tsc --project tsconfig.analytics.json",
+    "test:backend": "node --experimental-strip-types --test tests/backend-core.test.mjs",
+    "test:d1-migrations": "npm run build && node --test tests/d1-migrations.test.mjs",
+    "test:email-data": "node --experimental-strip-types --test tests/email-data-migration.test.mjs tests/email-data-rights.test.mjs",
+    "test:email-data-d1": "node --test tests/email-data-d1.test.mjs",
+    "test:fulfillment": "node --experimental-strip-types --test tests/fulfillment-domain.test.mjs tests/fulfillment-d1.test.mjs tests/fulfillment-migration.test.mjs tests/multicarrier-provider.test.mjs tests/multicarrier-migration.test.mjs tests/sendcloud-return-provider.test.mjs tests/sendcloud-shipping-label-provider.test.mjs tests/service-point-reference-vault.test.mjs",
+    "test:gate-c": "node --experimental-strip-types --test tests/parcel-profiles.test.mjs tests/preprod-demo-boundary.test.mjs tests/preprod-order-payment-d1.test.mjs tests/preprod-owner-account-tracking-api.test.mjs tests/preprod-shipping-quote-api.test.mjs tests/preprod-shipping-client.test.mjs tests/preprod-synthetic-demo.test.mjs",
+    "test:identity-access": "node --experimental-strip-types --test tests/identity-access-migration.test.mjs tests/identity-access-security.test.mjs",
+    "test:lot2-policies": "node --experimental-strip-types --test tests/lot2-policies.test.mjs tests/lot2-security.test.mjs",
+    "test:last-mile": "node --experimental-strip-types --test tests/cloudflare-access-owner.test.mjs tests/commerce-backend-bridge.test.mjs tests/production-release-gate.test.mjs tests/production-commerce-api.test.mjs tests/production-commerce-client.test.mjs tests/production-migration-boundary.test.mjs tests/production-payment-effects-d1.test.mjs tests/production-operations-api.test.mjs tests/production-rate-limit.test.mjs tests/production-stock-import-d1.test.mjs tests/resend-email-provider.test.mjs tests/resend-webhook.test.mjs tests/sendcloud-shipping-label-provider.test.mjs tests/last-mile-ops.test.mjs tests/stripe-payment-provider.test.mjs",
+    "test:preprod-demo": "node --experimental-strip-types --test tests/preprod-commerce-checkout.test.mjs tests/preprod-identity-demo.test.mjs",
+    "prelint": "npm run check:analytics-boundary",
+    "lint": "eslint app lib worker tests --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
+    "@gsap/react": "^2.1.2",
     "drizzle-orm": "0.45.2",
+    "gsap": "^3.15.0",
     "next": "16.2.12",
     "react": "19.2.8",
     "react-dom": "19.2.8"
@@ -37,14 +59,34 @@
     "@vitejs/plugin-react": "6.0.4",
     "@vitejs/plugin-rsc": "0.5.30",
     "drizzle-kit": "0.31.10",
+    "esbuild": "0.28.1",
     "eslint": "9.39.4",
     "eslint-config-next": "16.2.12",
+    "playwright-core": "1.62.1",
     "react-server-dom-webpack": "19.2.8",
     "tailwindcss": "4.2.1",
     "typescript": "5.9.3",
     "vinext": "0.0.50",
     "vite": "8.1.5",
     "wrangler": "4.114.0"
+  },
+  "imports": {
+    "#analytics-server-only": {
+      "react-server": "./lib/analytics/server-runtime-guard.ts",
+      "workerd": "./lib/analytics/server-runtime-guard.ts",
+      "worker": "./lib/analytics/server-runtime-guard.ts",
+      "node": "./lib/analytics/server-runtime-guard.ts",
+      "browser": "./lib/analytics/server-browser-forbidden.ts",
+      "default": "./lib/analytics/server-runtime-guard.ts"
+    },
+    "#analytics-server-runtime": {
+      "react-server": "./lib/analytics/runtime-allowed.ts",
+      "workerd": "./lib/analytics/runtime-allowed.ts",
+      "worker": "./lib/analytics/runtime-allowed.ts",
+      "node": "./lib/analytics/runtime-allowed.ts",
+      "browser": "./lib/analytics/server-browser-forbidden.ts",
+      "default": "./lib/analytics/runtime-allowed.ts"
+    }
   },
   "type": "module"
 }

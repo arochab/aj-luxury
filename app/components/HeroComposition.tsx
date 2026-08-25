@@ -6,6 +6,7 @@ import { useI18n } from "@/lib/i18n/I18nProvider";
 import HeroBackgroundVideo, {
   type HeroBackgroundVideoHandle,
 } from "./HeroBackgroundVideo";
+import styles from "./Accueil.module.css";
 
 export default function HeroComposition() {
   const { t } = useI18n();
@@ -25,7 +26,7 @@ export default function HeroComposition() {
   return (
     <>
       <div
-        className="aj-film__hero-scene"
+        className={`aj-film__hero-scene ${styles.surCadrage}`}
         data-hero-version={`video-${HERO_VIDEO_VERSION}`}
       >
         <HeroBackgroundVideo
@@ -40,6 +41,13 @@ export default function HeroComposition() {
             AJ Luxury — Jérémy, Alex — Apollon Lilas Céleste
           </figcaption>
         </figure>
+
+        {/* Le volet d'ouverture. Enfant de la scène, donc il ne recouvre que
+            le média : l'en-tête reste lisible pendant qu'il remonte. Il est en
+            @keyframes, pas en GSAP — il doit être là au premier paint, et un
+            import dynamique arrive toujours après. Sans lui : rien ne masque
+            la vidéo, la page reste correcte. */}
+        <span className={styles.volet} aria-hidden="true" />
       </div>
 
       {motionAvailable ? (

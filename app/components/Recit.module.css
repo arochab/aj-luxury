@@ -1,0 +1,1207 @@
+/* ==========================================================================
+   Recit.module.css — le langage du RÉCIT (/notre-histoire) et du COMPTE
+   --------------------------------------------------------------------------
+   Module possédé par l'agent « Récit ». Il ne redéfinit AUCUN token du socle
+   (app/design-system.css) : il les consomme. Les rares variables ajoutées ici
+   sont locales, préfixées --recit-, et n'existent que sous .recit / .compte.
+
+   Deux écrans, deux registres, un seul alphabet :
+     • /notre-histoire — le mur noir de la maquette, plein cadre, cinématique.
+       C'est le seul endroit où la marque parle, donc le seul endroit où elle
+       prend toute la place.
+     • /account — le papier des pages utilitaires. Sobre, tenu, mais à la même
+       échelle typographique.
+
+   Plancher dur : aucun corps de texte visible sous var(--t0) = 15px.
+
+   Règle de mouvement : rien de ce que GSAP révèle n'est masqué ici. Les états
+   de départ se posent en JS. Sans JS, la page est déjà lisible. Les seules
+   animations écrites en CSS sont les gestes d'ouverture, qui doivent partir
+   au premier paint — GSAP arrive par import dynamique, donc trop tard.
+   ========================================================================== */
+
+/* ==========================================================================
+   1. RÉCIT — enveloppe
+   ========================================================================== */
+
+.recit {
+  /* Hauteur du StoreHeader, qui est dans le flux (position: relative).
+     L'ouverture s'en déduit pour tenir exactement un écran. */
+  --recit-tete: 5.75rem;
+  --recit-air: clamp(88px, 12vh, 172px);
+  --recit-filet: var(--aj-filet);
+
+  min-height: 100svh;
+  background: var(--aj-noir);
+  color: var(--aj-encre);
+  font-family: var(--disp);
+  font-size: var(--t1);
+  line-height: 1.5;
+  /* Surtout PAS d'overflow ici : les scènes du récit sont collantes, et un
+     overflow sur un ancêtre transformerait ce conteneur en zone de
+     défilement, ce qui décrocherait le sticky et fausserait ScrollTrigger. */
+}
+
+@media (max-width: 900px) {
+  .recit {
+    /* Sous 900px le header passe sur deux rangées : marque + actions, puis nav. */
+    --recit-tete: 6.9rem;
+  }
+}
+
+@media (max-width: 560px) {
+  .recit {
+    /* Sous 560px il revient à une rangée de 56px derrière un bouton menu
+       unique. Le récit suit la barre réelle, sinon son ouverture réserverait
+       54px de vide sous elle. */
+    --recit-tete: 3.5rem;
+  }
+}
+
+/* Enveloppe du récit lui-même, hors chrome. Elle ne produit aucune boîte :
+   elle n'existe que pour porter une clé de rendu liée à la langue. Au
+   changement de langue, React remonte le bloc entier au lieu de réécrire des
+   nœuds de texte que SplitText a remplacés — sans quoi la page garderait le
+   texte de la langue précédente. */
+.recitCorps {
+  display: contents;
+}
+
+/* --- Plan média : le calque qui se déplace en parallaxe -------------------
+   Il déborde volontairement de son cadre (inset négatif) pour qu'aucune
+   translation ne découvre du vide. Le cadre parent porte l'overflow. */
+.plan {
+  position: absolute;
+  inset: -9% 0;
+  height: 118%;
+  will-change: transform;
+}
+
+.planImage {
+  object-fit: cover;
+}
+
+/* Le plan d'ouverture est à ras de son cadre, à TOUTES les largeurs.
+   Une parallaxe est un recadrage qui se déplace, et cette source n'a pas de
+   mou : le sommet des deux crânes est à 8,15 % de la hauteur du poster bureau
+   (hero-v4-desktop-1920x1080), or le débord de 9 % du plan plus la course
+   faisaient démarrer la bande visible à 13,63 % — 59 px pris dans les visages
+   à 1080, jusqu'à ne laisser à Alex que les yeux et la barbe en 1920.
+   Le correctif existait déjà, mais borné à `max-width: 780px` : au-dessus, le
+   même défaut vivait toujours. Il est désormais inconditionnel, comme sur
+   `.portrait .plan` et `.duoPleine .plan`, pour la même raison.
+   Le tween `profondeur()` correspondant est retiré de
+   app/notre-histoire/page.tsx : les deux vont ensemble, sinon la course
+   découvrirait le fond. La profondeur reste sur le volet d'ouverture et sur le
+   plan matière, dont la source a du mou. */
+.ouvertureMedia .plan {
+  inset: 0;
+  height: 100%;
+}
+
+/* L'équivalent de `fill` de next/image pour l'<img> nu du <picture>
+   d'ouverture. next/image ne sait pas faire d'art direction par media query :
+   il sert une seule source et laisse `cover` décider du recadrage. Ici c'est
+   la source qui doit changer avec le cadre, donc <picture>. */
+.planMedia {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Voile de lecture posé sur les médias plein cadre. */
+.grade {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background: linear-gradient(
+    0deg,
+    rgba(6, 6, 8, 0.82) 0%,
+    rgba(6, 6, 8, 0.24) 42%,
+    rgba(6, 6, 8, 0) 62%,
+    rgba(6, 6, 8, 0.38) 100%
+  );
+}
+
+/* --- Les lignes de SplitText ----------------------------------------------
+   SplitText nomme le masque d'après la ligne : linesClass « recit-ligne »
+   produit « recit-ligne-mask ». Ces deux noms sont donc écrits en :global —
+   c'est GSAP qui les pose, sur des nœuds qu'il crée lui-même, hors de React,
+   et un nom haché de module ne lui servirait à rien. Le préfixe recit-
+   garantit qu'aucun autre écran ne peut les rencontrer. */
+:global(.recit-ligne) {
+  display: block;
+  will-change: transform;
+}
+
+/* GSAP pose overflow:clip en ligne sur le masque. Un interlignage serré y
+   couperait les descendantes (p, g, j) et les accents de capitale (É, À).
+   clip s'arrête à la boîte de PADDING : on rend donc la place par du padding,
+   et on la reprend par une marge négative. Le rythme vertical est inchangé,
+   la lettre entière est visible. C'est un rapport (em), jamais des pixels —
+   sinon le réglage serait faux à chaque corps de la palette. */
+:global(.recit-ligne-mask) {
+  display: block;
+  padding-block: 0.14em 0.2em;
+  margin-block: -0.14em -0.2em;
+}
+
+/* ==========================================================================
+   2. RÉCIT — 00 · Ouverture
+   ========================================================================== */
+
+.ouverture {
+  position: relative;
+  display: flex;
+  min-height: calc(100svh - var(--recit-tete));
+  overflow: hidden; /* sans danger : aucune scène collante à l'intérieur */
+  background: var(--aj-noir-media);
+  isolation: isolate;
+}
+
+/* Le cadre du média. Il porte l'overflow et sert de repère au plan, qui
+   déborde de part et d'autre. */
+.ouvertureMedia {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  overflow: hidden;
+}
+
+/* Volet d'ouverture : un bloc noir qui se rétracte vers le haut, plutôt qu'un
+   fondu — le fondu montre une image grise, le volet montre une image nette
+   d'emblée. Au repos il est INVISIBLE : si l'animation ne joue pas, il ne
+   cache rien. */
+.volet {
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  /* Même raison que sur l'accueil : un rideau doit rester le plus profond. */
+  background: var(--aj-noir-abysse);
+  transform: scaleY(0);
+  transform-origin: 50% 0;
+  pointer-events: none;
+  animation: voletOuverture var(--aj-d-long) var(--aj-e-volet) both;
+}
+
+.ouvertureTexte {
+  position: absolute;
+  z-index: 4;
+  right: var(--gut);
+  bottom: clamp(28px, 5vh, 54px);
+  left: var(--gut);
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: clamp(24px, 4vw, 60px);
+  flex-wrap: wrap;
+}
+
+/* ── LE VOILE DE LECTURE DU BLOC D'OUVERTURE ──────────────────────────
+   Défaut mesuré au navigateur le 20/08 à 1920x1080, texte masqué, sur les
+   pixels rendus de la boîte du titre : luminance MAXIMALE Y = 0,2041 sous
+   « Notre histoire ». C'est l'architecture de marbre argenté du plan, en
+   pleine lumière. Le titre y était en `.aj-metal` : 1,01:1. En encre pleine
+   il ne remonte qu'à 2,44:1. Le plancher du projet est 5,0:1.
+
+   Le `.grade` général ne suffit pas ICI, et le calcul dit pourquoi : il court
+   de 0,82 en bas du plan à 0 à 62 % de sa hauteur, et le titre occupe la
+   bande 14,7 %–38,8 % à partir du bas, où l'opacité est déjà retombée entre
+   0,617 et 0,284. Renforcer `.grade` corrigerait le titre en assombrissant la
+   photographie entière — or c'est elle, le premier écran de cette page.
+
+   Le voile est donc LOCAL, et il reprend au caractère près le dispositif déjà
+   éprouvé sur les panneaux de l'accueil (`.panneauCopie::before`) : course
+   horizontale portée par le fond, course verticale portée par le masque,
+   opacité pleine sous la colonne de texte puis extinction dans l'image. Un
+   dégradé qui meurt dans le plan se lit comme une lumière, pas comme une
+   boîte de dialogue.
+
+   LE DÉBORD DROIT VAUT UNE GOUTTIÈRE, PAS 136 px. L'accueil se permet 136 px
+   parce que son voile ne vit que dans `@media (min-width: 901px)`, où la
+   colonne de copie est étroite. Ici le bloc occupe toute la colonne dès que
+   l'écran se resserre : un débord fixe de 136 px sortait du document et
+   produisait un défilement horizontal — mesuré à 390 px de large,
+   `scrollWidth` 491 pour un `innerWidth` de 390. Une gouttière de débord est
+   sûre à toute largeur : le conteneur `.ouvertureTexte` est déjà encastré
+   d'une gouttière de chaque côté, donc bord du bloc + une gouttière tombe au
+   plus loin sur le bord de la page, jamais au-delà.
+
+   Le masque tient la course verticale en PIXELS pour que la zone pleine reste
+   sous le bloc quelle que soit la longueur de la traduction. */
+.ouvertureBloc {
+  position: relative;
+  display: flex;
+  min-width: min(100%, 20ch);
+  max-width: 46ch;
+  flex-direction: column;
+  gap: clamp(14px, 1.6vw, 24px);
+}
+
+.ouvertureBloc::before {
+  content: "";
+  position: absolute;
+  inset: -88px calc(var(--gut) * -1) -72px calc(var(--gut) * -1);
+  z-index: -1;
+  background: linear-gradient(
+    90deg,
+    rgba(6, 6, 8, 0.74) 0%,
+    rgba(6, 6, 8, 0.74) 72%,
+    transparent 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 84px,
+    #000 calc(100% - 68px),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 84px,
+    #000 calc(100% - 68px),
+    transparent 100%
+  );
+  pointer-events: none;
+}
+
+.surtitre {
+  margin: 0;
+  color: var(--aj-encre-84);
+}
+
+.titreOuverture {
+  --aj-display-w: var(--aj-w-fin);
+  --aj-display-lh: 0.9;
+  --aj-display-ls: var(--aj-ls-titre);
+  margin: 0;
+  font-size: var(--t7);
+}
+
+.lead {
+  max-width: 26ch;
+  margin: 0;
+  color: var(--aj-encre-90);
+  font-size: var(--t2);
+  font-weight: var(--aj-w-fin);
+  letter-spacing: var(--aj-ls-sous);
+  line-height: 1.34;
+}
+
+.ouvertureBord {
+  display: flex;
+  align-items: flex-end;
+  gap: clamp(18px, 3vw, 44px);
+  flex-wrap: wrap;
+}
+
+.credit {
+  margin: 0;
+  color: var(--aj-encre-84);
+}
+
+/* --- Les gestes d'ouverture, en CSS et non en GSAP ------------------------
+   Ce sont des entrées de CHARGEMENT, pas des scènes de scroll. GSAP arrive
+   par import dynamique, donc après le premier paint : les piloter depuis le
+   JS donnerait « visible → recouvert → révélé ». En @keyframes elles partent
+   au premier paint, et elles ne touchent que transform et opacity. */
+@keyframes voletOuverture {
+  from {
+    transform: scaleY(1);
+  }
+  to {
+    transform: scaleY(0);
+  }
+}
+
+@keyframes monteeOuverture {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 26px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.surtitre,
+.titreOuverture,
+.lead,
+.ouvertureBord {
+  animation: monteeOuverture var(--aj-d-long) var(--e1) both;
+}
+
+.surtitre {
+  animation-delay: 0.46s;
+}
+
+.titreOuverture {
+  animation-delay: 0.58s;
+}
+
+.lead {
+  animation-delay: 0.7s;
+}
+
+.ouvertureBord {
+  animation-delay: 0.82s;
+}
+
+/* Sous 780px le plan quitte l'absolu et devient une bande de ratio fixe. Le
+   poster est en 16/9 : un plein écran de téléphone n'en montrerait qu'une
+   colonne centrale, et le décor d'Apollon — marbre, lyre, arc, laurier —
+   sortirait du cadre. Ce n'est pas une version amputée : c'est le même plan,
+   cadré pour l'écran qui le reçoit, et le texte reprend toute la largeur au
+   lieu de se serrer dans un coin. */
+@media (max-width: 780px) {
+  .ouverture {
+    display: block;
+    min-height: 0;
+    overflow: visible;
+  }
+
+  .ouvertureMedia {
+    position: relative;
+    inset: auto;
+    /* Ratio de la source servie ici, et d'elle seule : le poster PORTRAIT de
+       l'échelle hero v4 (720x934), choisi par le <picture> de page.tsx.
+       Avant, un cadre 3/2 recevait la source 16/9 du bureau : `cover` en
+       supprimait 28,4 % de la largeur et 12 % de la hauteur, et tout le décor
+       de colonnes, de lyre et d'arc qui donne son sens au plan disparaissait
+       des deux côtés. Ce n'était pas un défaut de centrage — c'était une
+       différence de ratio, qu'aucun object-position ne rattrape. */
+    aspect-ratio: 720 / 934;
+  }
+
+  .ouvertureTexte {
+    position: static;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: clamp(26px, 6vw, 40px);
+    padding: clamp(30px, 7vw, 48px) var(--gut) clamp(44px, 10vw, 68px);
+  }
+
+  .ouvertureBloc {
+    max-width: none;
+  }
+}
+
+/* ==========================================================================
+   3. RÉCIT — lien d'action, repris du filet de nav de la maquette
+   --------------------------------------------------------------------------
+   Le filet sort par la droite et rentre par la gauche. Deux origines, une
+   seule transition : au moment du basculement scaleX vaut 1, donc le
+   changement d'origine ne produit aucun saut. Pas besoin de JS pour ça.
+   ========================================================================== */
+
+.action {
+  position: relative;
+  display: inline-flex;
+  min-height: 48px;
+  align-items: center;
+  gap: clamp(12px, 1.6vw, 26px);
+  color: var(--aj-encre);
+  font-size: var(--t0);
+  font-weight: var(--aj-w-gras);
+  letter-spacing: var(--aj-ls-action);
+  text-transform: uppercase;
+}
+
+.actionTexte {
+  position: relative;
+  padding-bottom: 7px;
+}
+
+.actionFilet {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 1px;
+  background: currentColor;
+  transform: scaleX(1);
+  transform-origin: right;
+  transition: transform 380ms var(--aj-e-nav);
+}
+
+.actionDiscrete .actionFilet {
+  transform: scaleX(0);
+}
+
+.action:hover .actionFilet,
+.action:focus-visible .actionFilet {
+  transform: scaleX(1);
+  transform-origin: left;
+}
+
+.fleche {
+  font-size: var(--t2);
+  font-weight: var(--aj-w-livre);
+  line-height: 1;
+}
+
+/* ==========================================================================
+   4. RÉCIT — chapitres
+   ========================================================================== */
+
+.chapitre {
+  position: relative;
+  padding-block: var(--recit-air);
+  border-top: 1px solid var(--recit-filet);
+  /* LA RESPIRATION (2 sur 2), pendant de .matiereTexte sur l'accueil.
+     Le récit alternait onze surfaces à L* 2,2 : un chapitre entièrement
+     typographique, coincé entre l'ouverture et le duo qui sont deux plans
+     photographiques, ne se distinguait d'eux par rien d'autre que l'absence
+     d'image. Il porte maintenant sa propre valeur, L* 21,8, et devient la
+     seule page de texte du récit — c'est le rôle qu'il joue déjà dans la
+     lecture, il est simplement rendu visible.
+     Aucune photographie ici, et aucun titre en métal : le titre de chapitre
+     est en blanc pur (12,6:1 sur ce fond) et l'index à 0,80 d'opacité
+     (7,7:1). Le filet de séparation du haut devient superflu — on le garde,
+     il ne coûte rien et sert de repère si le fond est désactivé. */
+  background: var(--aj-gris-recit);
+}
+
+.chapitreGrille {
+  display: grid;
+  gap: clamp(34px, 4vw, 92px);
+  padding-inline: var(--gut);
+}
+
+@media (min-width: 900px) {
+  .chapitreGrille {
+    grid-template-columns: minmax(0, 0.4fr) minmax(0, 0.6fr);
+  }
+}
+
+/* La tête de chapitre reste accrochée pendant qu'on lit son corps : le lecteur
+   ne perd jamais de vue à quel acte du récit il se trouve. */
+.chapitreAncre {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: clamp(16px, 2vw, 30px);
+}
+
+@media (min-width: 900px) {
+  .chapitreAncre {
+    position: sticky;
+    top: clamp(96px, 15vh, 172px);
+    align-self: start;
+  }
+}
+
+/* Le nom du mouvement. Il remplace les index 01 / 02 / 03, supprimés le 19/08
+   sur retour d'Adam. Ce n'est pas une suppression sèche : les numéros ne
+   tenaient déjà aucun rythme (trois abscisses différentes, intervalles
+   verticaux du simple au quadruple), et le corpus mode primé en 2026 nomme
+   ses sections au lieu de les numéroter. Le repère devient donc un nom tiré
+   du monde d'Apollon — marbre, lyre, laurier — posé au MÊME endroit dans les
+   trois têtes de chapitre, au-dessus du filet et du titre. C'est la
+   répétition de cette grammaire qui tient le rythme.
+   Même corps, même graisse et même opacité que l'index qu'il remplace : le
+   contraste mesuré reste celui qui avait été validé (7,7:1 sur .chapitre). */
+.mouvement {
+  margin: 0;
+  color: var(--aj-encre-72);
+}
+
+/* Le filet de chapitre : tracé plein par défaut, donc visible sans JS. GSAP le
+   redessine de gauche à droite à mesure que le chapitre se lit. */
+.filet {
+  width: min(100%, 220px);
+  height: 1px;
+  background: var(--aj-encre);
+  transform-origin: 0 50%;
+  will-change: transform;
+}
+
+.titreChapitre {
+  --aj-display-w: var(--aj-w-fin);
+  --aj-display-lh: 0.98;
+  --aj-display-ls: -0.05em;
+  max-width: 16ch;
+  margin: 0;
+  color: var(--aj-encre);
+  font-size: var(--t4);
+}
+
+.corps {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: clamp(24px, 3vh, 44px);
+}
+
+.corps p {
+  max-width: 48ch;
+  margin: 0;
+  color: var(--aj-encre-90);
+  font-size: var(--t1);
+  font-weight: var(--aj-w-livre);
+  line-height: 1.64;
+}
+
+/* La ligne de bascule d'un chapitre : elle ne raconte plus, elle conclut.
+   C'est un <p>, donc « .corps p » la viserait aussi, à spécificité égale. On
+   reprend d'un cran pour que l'ordre de déclaration ne décide pas du corps. */
+.corps .punch {
+  --aj-display-w: var(--aj-w-fin);
+  --aj-display-lh: 1.04;
+  --aj-display-ls: -0.045em;
+  max-width: 20ch;
+  margin: 0;
+  padding-top: clamp(18px, 3vh, 40px);
+  border-top: 1px solid var(--recit-filet);
+  color: var(--aj-encre);
+  font-size: var(--t4);
+  font-weight: var(--aj-w-fin);
+  line-height: 1.04;
+}
+
+/* ==========================================================================
+   5. RÉCIT — 02 · la scène de parité
+   --------------------------------------------------------------------------
+   PARITÉ STRICTE, contrainte dure du client. Elle est inscrite dans le CSS,
+   pas seulement dans le JS :
+     • une grille 1fr 1fr, jamais 1.2fr / 0.8fr ;
+     • une seule règle .portrait pour les deux cellules — aucune ne peut
+       diverger sans que l'autre bouge ;
+     • aucune classe « principal » / « secondaire » ;
+     • même légende, même graisse, même position.
+   Le décalage (stagger) entre les deux portraits est interdit côté JS : un
+   ordre d'arrivée est déjà une hiérarchie.
+   ========================================================================== */
+
+.duoScene {
+  position: relative;
+  border-top: 1px solid var(--recit-filet);
+}
+
+@media (min-width: 900px) {
+  .duoScene {
+    /* Course de défilement de la scène collante. La hauteur EST la durée.
+
+       Ramenée de 250svh à 130svh le 19/08. Le retrait de la parallaxe interne
+       — justifié, les deux portraits n'ont pas la marge nécessaire pour être
+       recadrés — a supprimé tout mouvement de cette scène, mais la course était
+       restée. Mesuré à 1440x900 : le portrait d'Alex gardait exactement
+       top=195 px et 348x522 px de scrollY 1400 à 2728, soit 1 349 px de
+       défilement strictement immobile (1,5 écran) ; deux captures prises à
+       scrollY 1700 et 2600 ne diffèrent d'aucun pixel sur la zone de la scène.
+       Un geste de défilement sans retour se lit comme une page bloquée. La
+       durée doit correspondre à ce qu'il y a à animer : ici, le temps de lire
+       un diptyque, pas une course morte. */
+    height: 130svh;
+  }
+}
+
+.duoCadre {
+  /* Budget de hauteur du diptyque, remonté ici le 19/08 depuis .duoGrille :
+     la colonne de la citation s'accroche à la même valeur, donc les deux
+     doivent la partager. La largeur du diptyque en découle par le ratio natif
+     des sources (voir .duoGrille). */
+  --duo-h: clamp(320px, 64svh, 660px);
+
+  display: grid;
+  align-content: center;
+  gap: clamp(22px, 3.4vh, 46px);
+  padding: var(--recit-air) var(--gut);
+}
+
+@media (min-width: 900px) {
+  .duoCadre {
+    position: sticky;
+    top: 0;
+    height: 100svh;
+    padding-block: clamp(72px, 10vh, 116px) clamp(48px, 7vh, 84px);
+  }
+}
+
+/* Entre 900 et 1023 px la citation reste sous le diptyque : la scène est
+   collante et haute de 100svh, donc le budget du diptyque doit lui laisser sa
+   place. Mesuré à 1024x768 : 637 px utiles, 110 pour la tête, 47 de gouttières
+   et 124 pour la citation signée, soit 356 px disponibles. Sans cette borne,
+   la scène débordait de son écran et les portraits passaient PAR-DESSUS la
+   citation (défaut présent avant le 19/08, aggravé par la citation). */
+@media (min-width: 900px) and (max-width: 1023px) {
+  .duoCadre {
+    --duo-h: clamp(280px, 44svh, 460px);
+  }
+}
+
+/* À partir de 1024 px la citation quitte la pile et va occuper la colonne qui
+   restait vide à droite du diptyque — mesurée à 950 px de noir à 1920, soit la
+   moitié de l'écran. Le mouvement se lit alors comme il doit se lire : les
+   deux fondateurs à gauche, leur seule prise de parole à droite, alignée sur
+   le bas de leurs portraits. Le diptyque n'a plus à payer la place de la
+   citation et retrouve un budget de hauteur plein. */
+@media (min-width: 1024px) {
+  .duoCadre {
+    --duo-h: clamp(320px, 60svh, 620px);
+
+    grid-template-columns:
+      min(100%, calc(var(--duo-h) * 4 / 3 + 2px)) minmax(0, 1fr);
+    column-gap: clamp(40px, 5vw, 96px);
+  }
+}
+
+/* La tête du mouvement de la lyre. Elle était la seule des trois à suivre une
+   règle différente : une ligne en space-between, titre à gauche et index à
+   droite. Elle partage maintenant exactement la colonne de .chapitreAncre et
+   de .matiereTete — nom du mouvement, filet, titre — car c'est cette
+   répétition, et non la numérotation retirée, qui donne son rythme au récit. */
+.duoTete {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: clamp(16px, 2vw, 30px);
+}
+
+.titreDuo {
+  --aj-display-w: var(--aj-w-fin);
+  --aj-display-lh: 0.96;
+  --aj-display-ls: var(--aj-ls-titre);
+  margin: 0;
+  font-size: var(--t4);
+}
+
+.duoGrille {
+  /* Le cadre suit la photo, jamais l'inverse.
+     ------------------------------------------------------------------
+     Retour client du 18/08 : les deux fondateurs étaient décapités ici.
+     La cause n'était pas un object-position mal réglé, c'était le cadre :
+     `height: 50svh` + `aspect-ratio: auto` donnait une cellule de 654x450,
+     soit un cadre PAYSAGE (1.45) rempli par une source PORTRAIT (0.666).
+     `cover` n'y montrait plus que 54 % de la hauteur de la photo, pris au
+     centre — c'est-à-dire le torse : tête coupée en haut, boxer coupé en
+     bas. Le produit disparaissait autant que les visages.
+
+     On repart donc de la hauteur, et la largeur des deux cellules en
+     découle par le ratio natif des sources (1731/2600 ~ 2/3).
+     --duo-h est déclarée sur .duoCadre depuis le 19/08 : la citation signée
+     s'accroche au même budget. */
+
+  display: grid;
+  min-height: 0;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+}
+
+/* Sous 420 px les deux cellules tombaient à 139 px de large : le boxer restait
+   identifiable mais le logo de ceinture ne faisait plus que 11 px et devenait
+   illisible, au seul endroit du site où les deux fondateurs sont présentés
+   ensemble. La règle d'appariement reste tenue : deux cellules successives,
+   même cadre, même hauteur — elles sont simplement empilées.
+   L'interstice devient une couture d'images (règle des coutures du 21/08,
+   Accueil.module.css) : blanc dérivé des hautes lumières des deux portraits,
+   relevé au navigateur — rgb(246,231,231). */
+@media (max-width: 419px) {
+  .duoGrille {
+    grid-template-columns: 1fr;
+    gap: clamp(18px, 2.6svh, 28px);
+    background: rgb(246, 231, 231);
+  }
+}
+
+@media (min-width: 900px) {
+  .duoGrille {
+    /* Deux cellules en 2/3 plus le filet de 2 px, bornées par un budget de
+       hauteur (--duo-h) pour que le diptyque ne dépasse jamais l'écran.
+       `margin-inline: 0` (et non `auto`) le 19/08 : centré, il ne partageait
+       d'arête ni avec le titre ni avec la légende, tous deux au fer sur la
+       gouttière de page. Il flottait 305 px plus à droite qu'eux. Il part
+       maintenant de la même gouttière, portée par le padding de .duoCadre.
+
+       `height` explicite le 19/08. La largeur suivait déjà le budget, mais la
+       hauteur, elle, était laissée à la rangée de grille : mesurée à 1440x900,
+       la rangée valait 463 px pendant que les portraits, dimensionnés par leur
+       largeur (384 x 3/2), en faisaient 576. Les 113 px d'écart passaient
+       par-dessus ce qui suivait. Hauteur et largeur descendent maintenant
+       toutes deux de --duo-h : cellules de 2/3 exactes, aucun débordement. */
+    height: var(--duo-h);
+    max-width: min(100%, calc(var(--duo-h) * 4 / 3 + 2px));
+    margin-inline: 0;
+  }
+}
+
+.portrait {
+  position: relative;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  aspect-ratio: 2 / 3;
+  background: var(--aj-noir-media);
+}
+
+@media (min-width: 900px) {
+  .portrait {
+    /* Surtout PAS `aspect-ratio: auto` : c'est lui qui laissait le cadre
+       devenir paysage.
+       La hauteur fixe a été retirée le 19/08 : dès que .duoGrille est bornée
+       par `100%` plutôt que par le budget de hauteur, une hauteur imposée
+       rendait le cadre plus étroit que 2/3 et `cover` se mettait à rogner les
+       côtés du boxer. Le ratio 2/3 de la règle de base reprend la main : la
+       hauteur se déduit de la largeur, à toute taille, sans exception. */
+    height: auto;
+  }
+}
+
+/* Les deux cellules de la parité ne portent AUCUNE parallaxe interne.
+   Une parallaxe est un recadrage qui se déplace : elle ampute la source de
+   son amplitude, en haut comme en bas. Or `story-jeremy-retouched` a une
+   bande utile qui va de 2 % (haut du crâne) à 100 % (bas du boxer, déjà
+   rogné par la source elle-même). Il n'y a rien à donner à la course.
+   Le plan est donc à ras du cadre, et le tween yPercent correspondant a été
+   retiré de app/notre-histoire/page.tsx — les deux vont ensemble, sinon la
+   course découvrirait le fond. La profondeur reste sur l'ouverture et la
+   matière, dont les sources ont du mou. */
+.portrait .plan {
+  inset: 0;
+  height: 100%;
+}
+
+.legende {
+  position: absolute;
+  z-index: 3;
+  bottom: clamp(14px, 2vh, 24px);
+  left: clamp(14px, 1.6vw, 22px);
+  color: var(--aj-encre);
+  text-shadow: 0 1px 18px rgba(0, 0, 0, 0.55);
+}
+
+/* La citation signée. Le corpus mode 2026 place une seule prise de parole
+   attribuée, à un seul endroit du récit ; c'est ce qui sépare une maison d'une
+   page « à propos de nous ». Elle est donc traitée comme une citation et non
+   comme un paragraphe : un filet vertical au fer à gauche, la phrase, puis la
+   signature en dessous. */
+.duoCitation {
+  margin: 0;
+  border-left: 1px solid var(--aj-encre-72);
+  padding-left: clamp(18px, 2.4vw, 34px);
+}
+
+/* Colonne de droite : la citation s'aligne sur le BAS des portraits, jamais
+   sur leur milieu. C'est la ligne de base que le regard suit après avoir lu
+   les deux visages. */
+@media (min-width: 1024px) {
+  .duoTete {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .duoGrille {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .duoCitation {
+    grid-column: 2;
+    grid-row: 2;
+    align-self: end;
+  }
+}
+
+.duoDeclaration {
+  max-width: 40ch;
+  margin: 0;
+  color: var(--aj-encre);
+  font-size: var(--t2);
+  font-weight: var(--aj-w-livre);
+  letter-spacing: var(--aj-ls-sous);
+  line-height: 1.34;
+}
+
+/* La signature n'est pas un label : c'est une phrase. Elle reste donc en bas
+   de casse, au plancher typographique du site (--t0 = 15px), et non en
+   capitales espacées comme les légendes de portrait juste au-dessus. */
+.duoSignature {
+  display: block;
+  max-width: 52ch;
+  margin-top: clamp(14px, 1.8vw, 22px);
+  color: var(--aj-encre-72);
+  font-size: var(--t0);
+  font-weight: var(--aj-w-moyen);
+  line-height: 1.5;
+}
+
+/* Le plan large : les deux dans le même cadre, aucune découpe. */
+.duoPleine {
+  position: relative;
+  /* Même faute que la grille du duo, en plus large encore : une bande de
+     1425x792 (1.80) pour une source de 2000x1882 (1.06). Elle coupait les
+     deux têtes ET le bas des deux boxers. La bande utile de cette photo va
+     de 1 % à 93 % : aucun format plus large ne peut la contenir. Ratio
+     natif = zéro recadrage, à toute largeur, sans object-position à régler. */
+  aspect-ratio: 2000 / 1882;
+  margin: 0;
+  overflow: hidden;
+  background: var(--aj-noir-media);
+}
+
+/* Le ratio natif est juste — zéro recadrage, têtes et boxers entiers — mais
+   étendu à toute la page il transformait la photo en un bloc de 1355 px à
+   1440x900, soit 1,51 hauteur d'écran (1806 px à 1920). On borne donc la
+   LARGEUR par un budget de hauteur, au lieu d'étirer le cadre : le ratio
+   reste natif, la photo cesse d'occuper une screen et demie. */
+@media (min-width: 900px) {
+  .duoPleine {
+    max-width: calc(78svh * 2000 / 1882);
+    margin-inline: auto;
+  }
+}
+
+/* Même raison que .portrait .plan : pas de course sur une photo sans marge. */
+.duoPleine .plan {
+  inset: 0;
+  height: 100%;
+}
+
+/* ==========================================================================
+   6. RÉCIT — 03 · La matière
+   Reprise directe de l'écran « 04 La matière » de la maquette.
+   ========================================================================== */
+
+.matiere {
+  display: grid;
+  border-top: 1px solid var(--recit-filet);
+  /* Deuxième étage (L* 11,6), comme le panneau matière de l'accueil : les deux
+     racontent la même chose et doivent porter la même valeur. Le puits
+     d'image de la moitié gauche (--aj-noir-media, L* 8,0) reste plus sombre
+     que ce fond, donc la photo garde son cadre. */
+  background: var(--aj-noir-2);
+}
+
+@media (min-width: 860px) {
+  .matiere {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+
+.matiereMedia {
+  position: relative;
+  /* Ici le plan déborde de 118 % (.plan), donc le ratio du cadre vaut celui
+     de la source x 1.18 = 0.6657 x 1.18. En dessous de 860 px le bloc passe
+     sur une seule colonne : `min-height` y donnait un cadre PAYSAGE de 1.19
+     qui coupait le bas des jambes du boxer, et au-delà un cadre trop étroit
+     qui en coupait les côtés. */
+  aspect-ratio: 0.785;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--aj-noir-media);
+}
+
+.matiereTexte {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: clamp(28px, 5vh, 56px);
+  padding: var(--recit-air) var(--gut);
+}
+
+.matiereTete {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(16px, 2vw, 30px);
+}
+
+.chiffres {
+  display: flex;
+  align-items: baseline;
+  gap: clamp(14px, 2.2vw, 38px);
+  flex-wrap: wrap;
+  margin: 0;
+}
+
+.chiffre {
+  font-family: var(--disp);
+  font-optical-sizing: auto;
+  font-variation-settings: "opsz" 72;
+  font-size: var(--t6);
+  font-weight: var(--aj-w-normal);
+  letter-spacing: var(--aj-ls-grand);
+  line-height: 0.86;
+}
+
+.mesure {
+  color: var(--aj-encre-84);
+}
+
+.finitions {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(10px, 1.4vw, 20px);
+  margin: 0;
+  padding: clamp(16px, 2.4vh, 30px) 0 0;
+  border-top: 1px solid var(--recit-filet);
+  color: var(--aj-encre-84);
+  list-style: none;
+}
+
+/* ==========================================================================
+   7. RÉCIT — 04 · Clôture
+   ========================================================================== */
+
+.cloture {
+  display: grid;
+  min-height: 82svh;
+  place-items: center;
+  padding: clamp(88px, 14vh, 190px) var(--gut);
+  border-top: 1px solid var(--recit-filet);
+  /* Titre en métal ici aussi : fond au noir de marque exact, sans un point de
+     L* en plus. Le récit se referme donc sur le plus profond, juste après le
+     panneau matière à L* 11,6 — la descente est franche et voulue. */
+  background: var(--aj-noir-abysse);
+}
+
+.clotureBloc {
+  display: flex;
+  width: 100%;
+  max-width: 1100px;
+  flex-direction: column;
+  gap: clamp(40px, 7vh, 88px);
+}
+
+/* Le titre de clôture porte le métal. Il n'est donc JAMAIS découpé par
+   SplitText : background-clip:text peint le dégradé sur la boîte du titre et
+   le découpe à la forme des glyphes. Si les lignes étaient translatées dans
+   des masques, la forme bougerait et le dégradé resterait — les lettres
+   traverseraient le métal, puis le peindraient hors du masque. Ce titre se
+   révèle donc en bloc, opacité et translation. */
+.clotureTitre {
+  --aj-display-w: var(--aj-w-normal);
+  --aj-display-lh: 0.94;
+  --aj-display-ls: -0.028em;
+  max-width: 22ch;
+  margin: 0;
+  font-size: var(--t6);
+}
+
+/* Le lien de clôture. Il ne prend que la largeur de son texte : sans cela, un
+   conteneur en colonne l'étirerait sur 1100px et sa zone cliquable irait
+   jusqu'au bord droit de l'écran, loin du mot. */
+.clotureAction {
+  align-self: flex-start;
+}
+
+/* ==========================================================================
+   8. COMPTE — /account
+   --------------------------------------------------------------------------
+   Registre papier, comme les pages d'information. La page reste claire pour
+   une raison structurelle : son intérieur (AccountClient, ProductionAccount-
+   Client) est stylé par CommerceShell.module.css, que cet agent ne possède
+   pas. Basculer le fond en noir rendrait ces composants illisibles.
+
+   Deux contraintes portées par cette section :
+
+   1. .shell RESTE sur le <main>. CommerceShell contient une feuille
+      d'impression bâtie sur « .shell > :not(.accountMain) » : elle masque
+      tout sauf la fiche de préparation d'une commande. Retirer .shell, ou
+      glisser un conteneur entre le <main> et .accountMain, casserait cette
+      impression. On AJOUTE .compte à côté, on ne remplace rien, et les
+      composants commerce restent enfants directs du <main>.
+
+   2. Le plancher de 15px. CommerceShell descend à 9, 10 et 11px. Ses
+      sélecteurs les plus spécifiques atteignent (0,3,0), et ses classes sont
+      hachées à la compilation : impossible de les nommer depuis l'extérieur.
+      La répétition de .compte est donc le seul levier de spécificité
+      disponible, et il reste strictement borné à cette page.
+      Sont exclus : l'en-tête et le pied de site, qui doivent garder
+      exactement la même échelle que sur les autres pages, et le bloc
+      « commerce fermé » ci-dessous, entièrement possédé ici.
+   ========================================================================== */
+
+.compte.compte {
+  min-height: 100svh;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--disp);
+}
+
+.compte.compte.compte
+  :is(
+    p,
+    li,
+    span,
+    a,
+    button,
+    label,
+    strong,
+    em,
+    small,
+    dt,
+    dd,
+    th,
+    td,
+    input,
+    select,
+    textarea,
+    legend,
+    figcaption,
+    time
+  ):not(header *):not(footer *):not(.compteFerme *) {
+  font-size: var(--t0);
+  line-height: 1.6;
+}
+
+.compte.compte.compte
+  :is(h1, h2, h3):not(header *):not(footer *):not(.compteFerme *) {
+  font-family: var(--disp);
+}
+
+.compte.compte.compte h1:not(header *):not(footer *):not(.compteFerme *) {
+  font-size: var(--t6);
+  font-weight: var(--aj-w-fin);
+  letter-spacing: var(--aj-ls-grand);
+  line-height: 0.94;
+}
+
+.compte.compte.compte h2:not(header *):not(footer *):not(.compteFerme *) {
+  font-size: var(--t2);
+  font-weight: var(--aj-w-normal);
+  letter-spacing: var(--aj-ls-sous);
+}
+
+.compte.compte.compte h3:not(header *):not(footer *):not(.compteFerme *) {
+  font-size: var(--t1);
+  font-weight: var(--aj-w-gras);
+  letter-spacing: var(--aj-ls-sous);
+}
+
+.compteAvis {
+  margin: 0;
+  padding: 14px var(--gut);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+  background: var(--aj-noir);
+  color: var(--aj-encre-84);
+  text-align: center;
+}
+
+/* --- État « commerce fermé » : la seule vue entièrement possédée ici ------ */
+.compteFerme {
+  width: min(1180px, 92vw);
+  margin: 0 auto;
+  padding: clamp(96px, 12vw, 190px) 0 clamp(80px, 10vw, 150px);
+}
+
+.compteSurtitre {
+  margin: 0 0 clamp(20px, 2.6vw, 34px);
+  color: #6b6b70;
+}
+
+.compteTitre {
+  --aj-display-w: var(--aj-w-fin);
+  --aj-display-lh: 0.92;
+  --aj-display-ls: var(--aj-ls-grand);
+  max-width: 14ch;
+  margin: 0;
+  font-size: var(--t6);
+}
+
+.compteLead {
+  max-width: 34ch;
+  margin: clamp(26px, 3.4vw, 44px) 0 0;
+  color: #3b3b41;
+  font-size: var(--t2);
+  font-weight: var(--aj-w-livre);
+  letter-spacing: var(--aj-ls-sous);
+  line-height: 1.4;
+}
+
+/* Grille à filets : le fond de la grille traverse les gouttières d'1px et
+   dessine les séparations. Aucune bordure sur les cartes, donc aucun filet
+   doublé aux jonctions. */
+.compteCartes {
+  display: grid;
+  gap: 1px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  margin-top: clamp(56px, 7vw, 104px);
+  border: 1px solid rgba(17, 17, 18, 0.16);
+  background: rgba(17, 17, 18, 0.16);
+}
+
+.compteCarte {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: clamp(26px, 2.8vw, 42px);
+  background: var(--paper);
+}
+
+.compteCarteLabel {
+  color: #6b6b70;
+  font-size: var(--t0);
+  font-weight: var(--aj-w-gras);
+  letter-spacing: var(--aj-ls-label);
+  text-transform: uppercase;
+}
+
+.compteCarte h2 {
+  margin: 0;
+  font-size: var(--t2);
+  font-weight: var(--aj-w-normal);
+  letter-spacing: var(--aj-ls-sous);
+  line-height: 1.16;
+}
+
+.compteCarte p {
+  margin: 0;
+  color: #3b3b41;
+  font-size: var(--t0);
+  font-weight: var(--aj-w-livre);
+  line-height: 1.62;
+}
+
+.compteLiens {
+  display: flex;
+  gap: clamp(20px, 3vw, 46px);
+  flex-wrap: wrap;
+  margin-top: clamp(44px, 5vw, 78px);
+  padding-top: clamp(22px, 2.6vw, 34px);
+  border-top: 1px solid rgba(17, 17, 18, 0.16);
+}
+
+.compteLiens .action {
+  color: var(--ink);
+}
+
+.compteNote {
+  margin: clamp(24px, 3vw, 38px) 0 0;
+  color: #6b6b70;
+  font-size: var(--t0);
+  letter-spacing: var(--aj-ls-sous);
+}
+
+/* ==========================================================================
+   9. Mouvement réduit
+   --------------------------------------------------------------------------
+   Doctrine : une variante statique LISIBLE, jamais une page vide.
+   Le JS ne pose alors aucun état de départ. Ne restent que les gestes
+   d'ouverture écrits en CSS : on les neutralise ici, ce qui laisse le volet
+   à scaleY(0) — invisible — et les blocs de texte à leur opacité pleine.
+   ========================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  .volet,
+  .surtitre,
+  .titreOuverture,
+  .lead,
+  .ouvertureBord {
+    animation: none;
+  }
+
+  .actionFilet {
+    transition: none;
+  }
+
+  .plan,
+  .filet,
+  :global(.recit-ligne) {
+    will-change: auto;
+  }
+}

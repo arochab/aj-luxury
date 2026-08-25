@@ -1,0 +1,484 @@
+"use client";
+
+import {
+  parseCartSnapshot,
+  readCartCsrfToken,
+  type PublicCartSnapshot,
+} from "./preprod-cart-client.ts";
+
+const SHIPPING_QUOTE_API_PATH = "/api/preprod/checkout/shipping-quote";
+const DELIVERY_OPTIONS_API_PATH = "/api/preprod/checkout/delivery-options";
+const DELIVERY_SERVICE_POINTS_API_PATH = "/api/preprod/checkout/service-points";
+const DELIVERY_SELECT_API_PATH = "/api/preprod/checkout/delivery-options/select";
+const QUOTE_ID_PATTERN = /^quote_[0-9a-f]{64}$/;
+const OPTION_ID_PATTERN = /^option_[0-9a-f]{64}$/;
+const UTC_TIMESTAMP_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+
+export type ShippingAddress = Readonly<{
+  recipient: string;
+  company?: string;
+  line1: string;
+  line2?: string;
+  postalCode: string;
+  city: string;
+  regionCode?: string;
+  countryCode: string;
+}>;
+
+export type PublicShippingQuote = Readonly<{
+  quoteId: string;
+  simulation: true;
+  carrierConnected: false;
+  zone: "EU" | "UK" | "US" | "CA";
+  amountCents: number;
+  currency: "EUR";
+  estimatedDaysMin: number;
+  estimatedDaysMax: number;
+  dutiesTerms: "EU_INCLUDED" | "DAP" | "DDP";
+  expiresAt: string;
+  parcel: PublicShippingParcel;
+  cart: ShippingCartSnapshot;
+}>;
+
+export type PublicDeliveryOption = Readonly<{
+  optionId: string;
+  quoteId: string;
+  simulation: boolean;
+  providerConnected: boolean;
+  provider: string;
+  carrierCode: string;
+  serviceCode: string;
+  displayName: string;
+  deliveryMode: "home" | "service_point";
+  zone: "EU" | "UK" | "US" | "CA";
+  amountCents: number;
+  currency: "EUR";
+  estimatedDaysMin: number;
+  estimatedDaysMax: number;
+  dutiesTerms: "EU_INCLUDED" | "DAP" | "DDP";
+  expiresAt: string;
+  selected: boolean;
+}>;
+
+export type PublicDeliveryOptions = Readonly<{
+  simulation: true;
+  connectorReady: false;
+  providerConnected: false;
+  options: readonly PublicDeliveryOption[];
+  parcel: PublicShippingParcel;
+  cart: ShippingCartSnapshot;
+}>;
+
+export type PublicShippingParcel = Readonly<{
+  profileCode:
+    | "AJL_ENVELOPE_1_ITEM_V1"
+    | "AJL_ENVELOPE_2_ITEMS_V1"
+    | "AJL_ENVELOPE_3_ITEMS_V1";
+  itemCount: 1 | 2 | 3;
+  weightGrams: 150 | 250 | 350;
+  lengthCm: 40;
+  widthCm: 32;
+  heightCm: 4;
+}>;
+
+export type ShippingCartSnapshot = Readonly<{
+  status: PublicCartSnapshot["status"];
+  currency: PublicCartSnapshot["currency"];
+  expiresAt: string;
+  itemCount: number;
+  subtotalCents: number;
+  lines: readonly Readonly<Omit<PublicCartSnapshot["lines"][number], "stockState">>[];
+}>;
+
+export class ShippingQuoteApiError extends Error {
+  readonly code: string;
+  readonly status: number;
+
+  constructor(code: string, status = 0) {
+    super(code);
+    this.name = "ShippingQuoteApiError";
+    this.code = code;
+    this.status = status;
+  }
+}
+
+const CART_ATTEMPT_INVALIDATING_ERRORS = new Set([
+  "CART_CHANGED",
+  "CART_EMPTY",
+  "CART_EXPIRED",
+  "CART_NOT_FOUND",
+  "PARCEL_CONFIGURATION_UNAVAILABLE",
+]);
+
+export function shippingQuoteAttemptCanReplay(errorCode: string): boolean {
+  return !CART_ATTEMPT_INVALIDATING_ERRORS.has(errorCode);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function hasExactKeys(value: Record<string, unknown>, expected: string[]): boolean {
+  const actual = Object.keys(value).sort();
+  return actual.length === expected.length &&
+    actual.every((key, index) => key === [...expected].sort()[index]);
+}
+
+function isNonNegativeInteger(value: unknown): value is number {
+  return Number.isSafeInteger(value) && (value as number) >= 0;
+}
+
+function parseShippingParcel(value: unknown): PublicShippingParcel {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, [
+      "heightCm", "itemCount", "lengthCm", "profileCode", "weightGrams",
+      "widthCm",
+    ]) ||
+    value.lengthCm !== 40 ||
+    value.widthCm !== 32 ||
+    value.heightCm !== 4
+  ) {
+    throw new ShippingQuoteApiError("MALFORMED_RESPONSE");
+  }
+  const tuple = `${String(value.profileCode)}:${String(value.itemCount)}:${String(value.weightGrams)}`;
+  if (![
+    "AJL_ENVELOPE_1_ITEM_V1:1:150",
+    "AJL_ENVELOPE_2_ITEMS_V1:2:250",
+    "AJL_ENVELOPE_3_ITEMS_V1:3:350",
+  ].includes(tuple)) {
+    throw new ShippingQuoteApiError("MALFORMED_RESPONSE");
+  }
+  return Object.freeze({
+    profileCode: value.profileCode as PublicShippingParcel["profileCode"],
+    itemCount: value.itemCount as PublicShippingParcel["itemCount"],
+    weightGrams: value.weightGrams as PublicShippingParcel["weightGrams"],
+    lengthCm: 40,
+    widthCm: 32,
+    heightCm: 4,
+  });
+}
+
+function parseShippingCartSnapshot(value: unknown): ShippingCartSnapshot {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, [
+      "currency", "expiresAt", "itemCount", "lines", "status", "subtotalCents",
+    ]) ||
+    !Array.isArray(value.lines)
+  ) {
+    throw new ShippingQuoteApiError("MALFORMED_RESPONSE");
+  }
+  const lineKeys = [
+    "colorKey", "colorName", "imageUrl", "lineTotalCents", "productId",
+    "productSlug", "quantity", "size", "unitPriceCents", "variantId",
+  ];
+  if (value.lines.some((line) => !isRecord(line) || !hasExactKeys(line, lineKeys))) {
+    throw new ShippingQuoteApiError("MALFORMED_RESPONSE");
+  }
+  const parsed = parseCartSnapshot({
+    ...value,
+    lines: value.lines.map((line) => ({ ...line, stockState: "available" })),
+  });
+  if (parsed.status !== "open" || parsed.expiresAt === null) {
+    throw new ShippingQuoteApiError("MALFORMED_RESPONSE");
+  }
+  return Object.freeze({
+    status: parsed.status,
+    currency: parsed.currency,
+    expiresAt: parsed.expiresAt,
+    itemCount: parsed.itemCount,
+    subtotalCents: parsed.subtotalCents,
+    lines: Object.freeze(parsed.lines.map((line) => Object.freeze({
+      variantId: line.variantId,
+      productId: line.productId,
+      productSlug: line.productSlug,
+      colorKey: line.colorKey,
+      colorName: line.colorName,
+      size: line.size,
+      imageUrl: line.imageUrl,
+      quantity: line.quantity,
+      unitPriceCents: line.unitPriceCents,
+      lineTotalCents: line.lineTotalCents,
+    }))),
+  });
+}
+
+export function parseShippingQuote(value: unknown): PublicShippingQuote {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, [
+      "amountCents",
+      "carrierConnected",
+      "cart",
+      "currency",
+      "dutiesTerms",
+      "estimatedDaysMax",
+      "estimatedDaysMin",
+      "expiresAt",
+      "parcel",
+      "quoteId",
+      "simulation",
+      "zone",
+    ])
+  ) {
+    throw new ShippingQuoteApiError("MALFORMED_RESPONSE");
+  }
+  const expiresAt = value.expiresAt;
+  if (
+    typeof value.quoteId !== "string" ||
+    !QUOTE_ID_PATTERN.test(value.quoteId) ||
+    value.simulation !== true ||
+    value.carrierConnected !== false ||
+    !["EU", "UK", "US", "CA"].includes(String(value.zone)) ||
+    !isNonNegativeInteger(value.amountCents) ||
+    value.currency !== "EUR" ||
+    !Number.isSafeInteger(value.estimatedDaysMin) ||
+    (value.estimatedDaysMin as number) < 1 ||
+    !Number.isSafeInteger(value.estimatedDaysMax) ||
+    (value.estimatedDaysMax as number) < (value.estimatedDaysMin as number) ||
+    !["EU_INCLUDED", "DAP", "DDP"].includes(String(value.dutiesTerms)) ||
+    typeof expiresAt !== "string" ||
+    !UTC_TIMESTAMP_PATTERN.test(expiresAt) ||
+    Number.isNaN(Date.parse(expiresAt)) ||
+    new Date(expiresAt).toISOString() !== expiresAt
+  ) {
+    throw new ShippingQuoteApiError("MALFORMED_RESPONSE");
+  }
+  const parcel = parseShippingParcel(value.parcel);
+  const cart = parseShippingCartSnapshot(value.cart);
+  if (parcel.itemCount !== cart.itemCount) {
+    throw new ShippingQuoteApiError("MALFORMED_RESPONSE");
+  }
+  return Object.freeze({
+    quoteId: value.quoteId,
+    simulation: true,
+    carrierConnected: false,
+    zone: value.zone as PublicShippingQuote["zone"],
+    amountCents: value.amountCents,
+    currency: "EUR",
+    estimatedDaysMin: value.estimatedDaysMin as number,
+    estimatedDaysMax: value.estimatedDaysMax as number,
+    dutiesTerms: value.dutiesTerms as PublicShippingQuote["dutiesTerms"],
+    expiresAt,
+    parcel,
+    cart,
+  });
+}
+
+function parseDeliveryOption(value: unknown): PublicDeliveryOption {
+  const keys = [
+    "amountCents", "carrierCode", "currency", "deliveryMode", "displayName",
+    "dutiesTerms", "estimatedDaysMax", "estimatedDaysMin", "expiresAt",
+    "optionId", "provider", "providerConnected", "quoteId", "selected",
+    "serviceCode", "simulation", "zone",
+  ];
+  if (!isRecord(value) || !hasExactKeys(value, keys)) {
+    throw new ShippingQuoteApiError("MALFORMED_RESPONSE");
+  }
+  if (
+    typeof value.optionId !== "string" || !OPTION_ID_PATTERN.test(value.optionId) ||
+    typeof value.quoteId !== "string" || !QUOTE_ID_PATTERN.test(value.quoteId) ||
+    typeof value.simulation !== "boolean" || typeof value.providerConnected !== "boolean" ||
+    value.simulation === value.providerConnected ||
+    typeof value.provider !== "string" || value.provider.length < 1 || value.provider.length > 80 ||
+    typeof value.carrierCode !== "string" || value.carrierCode.length < 1 || value.carrierCode.length > 80 ||
+    typeof value.serviceCode !== "string" || value.serviceCode.length < 1 || value.serviceCode.length > 80 ||
+    typeof value.displayName !== "string" || value.displayName.length < 1 || value.displayName.length > 160 ||
+    !["home", "service_point"].includes(String(value.deliveryMode)) ||
+    !["EU", "UK", "US", "CA"].includes(String(value.zone)) ||
+    !isNonNegativeInteger(value.amountCents) || value.currency !== "EUR" ||
+    !Number.isSafeInteger(value.estimatedDaysMin) || (value.estimatedDaysMin as number) < 1 ||
+    !Number.isSafeInteger(value.estimatedDaysMax) ||
+    (value.estimatedDaysMax as number) < (value.estimatedDaysMin as number) ||
+    !["EU_INCLUDED", "DAP", "DDP"].includes(String(value.dutiesTerms)) ||
+    typeof value.expiresAt !== "string" || !UTC_TIMESTAMP_PATTERN.test(value.expiresAt) ||
+    new Date(value.expiresAt).toISOString() !== value.expiresAt ||
+    typeof value.selected !== "boolean"
+  ) {
+    throw new ShippingQuoteApiError("MALFORMED_RESPONSE");
+  }
+  return Object.freeze(value as PublicDeliveryOption);
+}
+
+export function parseDeliveryOptions(value: unknown): PublicDeliveryOptions {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, [
+      "cart", "connectorReady", "options", "parcel", "providerConnected",
+      "simulation",
+    ]) ||
+    value.simulation !== true || value.connectorReady !== false ||
+    value.providerConnected !== false || !Array.isArray(value.options) ||
+    value.options.length < 1 || value.options.length > 20
+  ) {
+    throw new ShippingQuoteApiError("MALFORMED_RESPONSE");
+  }
+  const parcel = parseShippingParcel(value.parcel);
+  const cart = parseShippingCartSnapshot(value.cart);
+  const options = Object.freeze(value.options.map(parseDeliveryOption));
+  if (
+    parcel.itemCount !== cart.itemCount ||
+    options.some((option) => option.expiresAt > cart.expiresAt) ||
+    new Set(options.map((option) => option.optionId)).size !== options.length
+  ) {
+    throw new ShippingQuoteApiError("MALFORMED_RESPONSE");
+  }
+  return Object.freeze({
+    simulation: true,
+    connectorReady: false,
+    providerConnected: false,
+    options,
+    parcel,
+    cart,
+  });
+}
+
+async function postProtectedJson(
+  path: string,
+  body: unknown,
+  idempotencyKey: string,
+): Promise<unknown> {
+  const csrfToken = readCartCsrfToken();
+  if (!csrfToken) throw new ShippingQuoteApiError("CSRF_UNAVAILABLE");
+  let response: Response;
+  try {
+    response = await fetch(path, {
+      method: "POST",
+      cache: "no-store",
+      credentials: "same-origin",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        "Idempotency-Key": idempotencyKey,
+        "X-CSRF-Token": csrfToken,
+      },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    throw new ShippingQuoteApiError("NETWORK_UNAVAILABLE");
+  }
+  let payload: unknown;
+  try {
+    payload = await response.json();
+  } catch {
+    throw new ShippingQuoteApiError("MALFORMED_RESPONSE", response.status);
+  }
+  if (!response.ok) {
+    const code = isRecord(payload) && isRecord(payload.error)
+      ? payload.error.code
+      : null;
+    throw new ShippingQuoteApiError(
+      typeof code === "string" ? code : "SHIPPING_QUOTE_UNAVAILABLE",
+      response.status,
+    );
+  }
+  if (!isRecord(payload) || !hasExactKeys(payload, ["data"])) {
+    throw new ShippingQuoteApiError("MALFORMED_RESPONSE", response.status);
+  }
+  return payload.data;
+}
+
+export async function requestDeliveryOptions(
+  address: ShippingAddress,
+  idempotencyKey: string,
+): Promise<PublicDeliveryOptions> {
+  return parseDeliveryOptions(await postProtectedJson(
+    DELIVERY_OPTIONS_API_PATH,
+    { address },
+    idempotencyKey,
+  ));
+}
+
+export async function selectDeliveryOption(
+  optionId: string,
+  address: ShippingAddress,
+  idempotencyKey: string,
+): Promise<Readonly<{
+  optionId: string;
+  quoteId: string;
+  validated: true;
+  expiresAt: string;
+}>> {
+  const data = await postProtectedJson(
+    DELIVERY_SELECT_API_PATH,
+    { address, optionId },
+    idempotencyKey,
+  );
+  if (
+    !isRecord(data) ||
+    !hasExactKeys(data, ["expiresAt", "optionId", "quoteId", "validated"]) ||
+    data.optionId !== optionId || typeof data.quoteId !== "string" ||
+    !QUOTE_ID_PATTERN.test(data.quoteId) || data.validated !== true ||
+    typeof data.expiresAt !== "string" || !UTC_TIMESTAMP_PATTERN.test(data.expiresAt)
+  ) throw new ShippingQuoteApiError("MALFORMED_RESPONSE");
+  return Object.freeze(data as {
+    optionId: string;
+    quoteId: string;
+    validated: true;
+    expiresAt: string;
+  });
+}
+
+export async function requestDeliveryServicePoints(
+  optionId: string,
+  idempotencyKey: string,
+): Promise<readonly never[]> {
+  const data = await postProtectedJson(
+    DELIVERY_SERVICE_POINTS_API_PATH,
+    { optionId },
+    idempotencyKey,
+  );
+  if (
+    !isRecord(data) || !hasExactKeys(data, ["optionId", "servicePoints"]) ||
+    data.optionId !== optionId || !Array.isArray(data.servicePoints) ||
+    data.servicePoints.length !== 0
+  ) throw new ShippingQuoteApiError("MALFORMED_RESPONSE");
+  return Object.freeze([]);
+}
+
+export async function requestShippingQuote(
+  address: ShippingAddress,
+  idempotencyKey: string,
+): Promise<PublicShippingQuote> {
+  const csrfToken = readCartCsrfToken();
+  if (!csrfToken) throw new ShippingQuoteApiError("CSRF_UNAVAILABLE");
+
+  let response: Response;
+  try {
+    response = await fetch(SHIPPING_QUOTE_API_PATH, {
+      method: "POST",
+      cache: "no-store",
+      credentials: "same-origin",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        "Idempotency-Key": idempotencyKey,
+        "X-CSRF-Token": csrfToken,
+      },
+      body: JSON.stringify({ address }),
+    });
+  } catch {
+    throw new ShippingQuoteApiError("NETWORK_UNAVAILABLE");
+  }
+
+  let payload: unknown;
+  try {
+    payload = await response.json();
+  } catch {
+    throw new ShippingQuoteApiError("MALFORMED_RESPONSE", response.status);
+  }
+  if (!response.ok) {
+    const code = isRecord(payload) && isRecord(payload.error)
+      ? payload.error.code
+      : null;
+    throw new ShippingQuoteApiError(
+      typeof code === "string" ? code : "SHIPPING_QUOTE_UNAVAILABLE",
+      response.status,
+    );
+  }
+  if (!isRecord(payload) || !hasExactKeys(payload, ["data"])) {
+    throw new ShippingQuoteApiError("MALFORMED_RESPONSE", response.status);
+  }
+  return parseShippingQuote(payload.data);
+}

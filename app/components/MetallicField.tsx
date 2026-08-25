@@ -106,6 +106,57 @@ function MetallicCanvas({
         return value;
       }
 
+      /* ── LE STUDIO QUE LE MÉTAL RÉFLÉCHIT ───────────────────────────────
+         Adam, 22/08 : « il faut absolument du liquide métallique ». Regardé
+         au navigateur : la surface précédente était OMBRÉE, pas
+         RÉFLÉCHISSANTE. C'est la différence entre du marbre et du chrome, et
+         aucun réglage de contraste ne la franchit.
+
+         Un métal poli ne possède presque pas de couleur propre : ce qu'on
+         voit sur lui est l'image du lieu où il se trouve. Tant qu'il n'y a
+         rien à réfléchir, il ne peut pas ressembler à du métal.
+
+         Cette fonction est donc le décor. Un studio noir, un plafond clair,
+         deux rampes de lampes, et surtout UNE LIGNE D'HORIZON DURE — c'est
+         elle qui trace sur chaque pli la coupure nette clair/sombre par
+         laquelle l'œil reconnaît une surface miroir.
+
+         Elle ne dépend que de la direction du reflet. Aucun terme temporel,
+         donc la périodicité de la boucle reste intacte. */
+      /* ── LE CYCLORAMA BLANC ─────────────────────────────────────────────
+         La reference du 22/08 est une eclaboussure de chrome sur FOND BLANC.
+         Ce n'est pas un detail de gout : un chrome ne montre que ce qu'il
+         reflete, donc changer le decor change entierement la matiere. Sur
+         fond noir il etait sombre avec des aretes claires ; sur cyclorama
+         blanc il devient clair avec des CREUX sombres, ce qui est exactement
+         la lecture de la reference.
+
+         Aucun terme temporel : la periodicite de la boucle reste intacte. */
+      float studio(vec3 direction) {
+        float hauteur = direction.y;
+        float azimut = atan(direction.z, direction.x);
+
+        // Le fond est lumineux partout, un peu plus dense vers le bas.
+        float valeur = mix(0.78, 1.34, smoothstep(-0.55, 0.55, hauteur));
+        valeur = mix(valeur, 0.30, (1.0 - smoothstep(-0.80, -0.22, hauteur)) * 0.78);
+
+        /* Quelques sources franches reparties en azimut. Elles ne servent
+           plus a eclairer — le decor est deja clair — mais a poser des
+           ECLATS, ces points presque purs qui disent que la surface est
+           polie et non peinte. */
+        float sources = sin(azimut * 3.0) * 0.5 + 0.5;
+        valeur += smoothstep(0.88, 0.985, sources) * 0.62;
+
+        /* Et deux barres sombres. Contre-intuitif mais indispensable : sur
+           fond blanc, ce sont les REFLETS SOMBRES qui dessinent la forme.
+           Sans eux la matiere se confond avec le fond et disparait. */
+        float barres = sin(azimut * 2.0 + hauteur * 3.0) * 0.5 + 0.5;
+        valeur -= smoothstep(0.72, 0.94, barres) * 0.74;
+        valeur -= smoothstep(0.20, -0.30, hauteur) * 0.30;
+
+        return clamp(valeur, 0.0, 1.8);
+      }
+
       vec2 chromeOrb(vec2 p, vec2 center, float radius, float offset) {
         vec2 local = (p - center) / radius;
         float radiusSquared = dot(local, local);
@@ -114,7 +165,7 @@ function MetallicCanvas({
         vec3 normal = normalize(vec3(local, z));
 
         float horizon = smoothstep(-0.56, 0.72, normal.y);
-        float sweep = sin(normal.y * 5.2 + offset + u_phase * 0.24) * 0.5 + 0.5;
+        float sweep = sin(normal.y * 5.2 + offset + u_phase) * 0.5 + 0.5;
         float highlight = pow(
           max(0.0, dot(normal, normalize(vec3(-0.48, 0.58, 0.78)))),
           10.0
@@ -159,7 +210,7 @@ function MetallicCanvas({
 
       float referenceHeight(vec2 p) {
         float phase = u_phase;
-        vec2 drift = vec2(cos(phase * 0.72), sin(phase * 0.72)) * 0.18;
+        vec2 drift = vec2(cos(phase), sin(phase)) * 0.18;
         float fieldA = lowFrequencyNoise(p * 1.34 + drift + vec2(2.1, 7.4));
         float fieldB = lowFrequencyNoise(
           vec2(-p.y, p.x) * 1.12 -
@@ -172,17 +223,188 @@ function MetallicCanvas({
           warped.x * 2.15 +
           warped.y * 0.84 +
           fieldB * 3.4 +
-          phase * 0.14
+          phase
         );
         float foldB = sin(
           warped.y * 2.52 -
           warped.x * 0.58 +
           fieldA * 2.8 -
-          phase * 0.11
+          phase
         );
 
         return fieldA * 0.50 + fieldB * 0.32 + foldA * 0.24 + foldB * 0.16;
       }
+
+      /* ══ LE FLUIDE EN LANCER DE RAYONS ══════════════════════════════════
+         Choix d'Adam du 22/08, apres deux tentatives ratees en champ de
+         hauteur. Le diagnostic qui a conduit ici : un champ de hauteur
+         ECLAIRE plafonne avant le niveau de la reference, quels que soient
+         ses coefficients. Il ne sait produire ni une silhouette fermee, ni
+         une goutte separee, ni le reflet du fluide sur lui-meme — trois
+         choses qu'un rendu 3D donne d'office.
+
+         Ce qui change vraiment : la matiere n'est plus dessinee, elle est
+         RENCONTREE. Un rayon par pixel avance jusqu'a toucher la surface, on
+         prend sa normale exacte, et on regarde ce que son reflet va chercher
+         dans le studio. Une goutte detachee devient alors une vraie goutte,
+         pas une tache claire.
+
+         BUDGET. Le canevas est deja plafonne a 1,25 pixel physique et 30
+         images par seconde. La marche primaire est bornee a 48 pas, le rebond
+         a 18 : c'est ce qui tient ce budget. Le facteur 0,92 sur le pas evite
+         de traverser la surface aux silhouettes rasantes sans multiplier les
+         iterations.
+
+         BOUCLAGE. Aucun nouveau coefficient fractionnaire sur la phase : les
+         trajectoires n'emploient que des multiples ENTIERS de u_phase, donc
+         exactement periodiques sur un tour, desynchronises par des decalages
+         constants. */
+      float unionDouce(float a, float b, float k) {
+        float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
+        return mix(b, a, h) - k * h * (1.0 - h);
+      }
+
+      /* ══ L'ECLABOUSSURE ═════════════════════════════════════════════════
+         Troisieme construction, et la premiere qui vise la BONNE topologie.
+
+         Ce que les deux precedentes rataient. Des spheres reunies donnent des
+         renflements ; une ellipsoide coquee donne une bulle froissee. Or une
+         eclaboussure n'est ni l'un ni l'autre : c'est une nappe qui part d'un
+         point d'impact, se creuse en cuvette, se releve en COURONNE, et dont
+         le bord se dechire en dents d'ou partent les gouttes. Sa geometrie est
+         RADIALE et se decrit en coordonnees polaires, pas en sommes de
+         volumes. C'est pour cela qu'aucun reglage des versions precedentes ne
+         pouvait y mener.
+
+         La nappe est donc definie par son PROFIL, une altitude en fonction du
+         rayon et de l'azimut, puis transformee en peau d'epaisseur finie.
+
+         Bouclage : uniquement des multiples entiers de u_phase. */
+      float profilNappe(vec2 sol) {
+        float t = u_phase;
+        float rayon = length(sol);
+        float azimut = atan(sol.y, sol.x);
+
+        // LA CUVETTE. Au point d'impact la matiere s'enfonce.
+        float cuvette = -0.86 * exp(-rayon * rayon * 1.55);
+
+        /* LA COURONNE. Un bourrelet circulaire qui se releve a distance fixe
+           de l'impact. Son rayon respire avec la phase : l'onde s'ecarte. */
+        float rayonCouronne = 0.94 + sin(t) * 0.10;
+        float bourrelet = exp(-(rayon - rayonCouronne) * (rayon - rayonCouronne) * 5.6);
+
+        /* LES DENTS. Le bord d'une couronne ne monte pas d'un bloc : il se
+           divise en lames inegales, et c'est de leur pointe que partent les
+           gouttes. Deux harmoniques desynchronisees suffisent a rompre toute
+           regularite mecanique. */
+        float dents =
+          (sin(azimut * 7.0 + t) * 0.5 + 0.5) * 0.86 +
+          (sin(azimut * 13.0 - t) * 0.5 + 0.5) * 0.44 +
+          (sin(azimut * 3.0 + t * 2.0) * 0.5 + 0.5) * 0.22;
+        /* 2,35 et non 0,95. A la distance de camera retenue, une couronne
+           d'un demi rayon de haut ne se lit plus : sa silhouette se confond
+           avec la nappe et l'ensemble revient a une dune lisse, constate a
+           l'ecran. C'est la SILHOUETTE qui porte cette image, donc elle doit
+           depasser franchement. */
+        float couronne = bourrelet * (0.30 + dents) * 2.35;
+
+        /* LES ONDES. La nappe garde la memoire de l'impact : des rides
+           concentriques qui s'amortissent en s'eloignant. */
+        float ondes = sin(rayon * 6.4 - t * 2.0) * 0.075 * exp(-rayon * 0.85);
+
+        // Un voile exterieur qui retombe, pour que la nappe ne s'arrete pas net.
+        float voile = -0.20 * smoothstep(1.05, 1.70, rayon);
+
+        return cuvette + couronne + ondes + voile;
+      }
+
+      /* La peau. La valeur absolue transforme le contour de la nappe en paroi de part et
+         d'autre d'elle-meme ; le facteur 0,62 corrige le fait qu'une altitude
+         n'est pas une distance, sans quoi la marche depasse la surface. */
+      float carteFluide(vec3 pos) {
+        float ecart = pos.y - profilNappe(pos.xz);
+        float peau = abs(ecart) * 0.62 - 0.052;
+
+        /* LA NAPPE EST BORNEE, ET C'EST INDISPENSABLE. Un profil defini pour
+           tout le plan produit une nappe INFINIE : elle remplit le cadre, on
+           ne voit jamais une sculpture posee dans du vide, et la reference
+           devient inatteignable — constate a l'ecran le 22/08.
+
+           L'intersection avec une sphere donne a l'eclaboussure un bord franc
+           et du blanc autour. Elle divise aussi le cout par un facteur net :
+           les rayons qui passent a cote sortent des les premiers pas au lieu
+           de longer une nappe sans fin. */
+        float borne = length(pos * vec3(0.80, 0.72, 0.80)) - 1.66;
+        return max(peau, borne);
+      }
+
+      /* Les gouttes projetees, au-dessus des dents. Union franche : une goutte
+         qui fusionne cesse d'etre une goutte. */
+      float carteGouttes(vec3 pos) {
+        float t = u_phase;
+        float d = length(pos - vec3(0.92 + cos(t) * 0.08, 0.86 + sin(t * 2.0) * 0.14, 0.30)) - 0.048;
+        d = min(d, length(pos - vec3(-0.78 + sin(t * 2.0) * 0.07, 1.02 + cos(t) * 0.16, -0.42)) - 0.038);
+        d = min(d, length(pos - vec3(0.32 + cos(t * 2.0 + 2.0) * 0.06, 1.24 + sin(t) * 0.12, 0.62)) - 0.030);
+        d = min(d, length(pos - vec3(-1.14 + sin(t * 3.0) * 0.06, 0.74 + cos(t * 2.0) * 0.13, 0.18)) - 0.026);
+        d = min(d, length(pos - vec3(1.28 + cos(t * 3.0 + 1.0) * 0.05, 0.62 + sin(t * 2.0 + 1.0) * 0.11, -0.54)) - 0.022);
+        d = min(d, length(pos - vec3(-0.24 + sin(t * 2.0 + 4.0) * 0.05, 1.42 + cos(t * 3.0) * 0.10, -0.16)) - 0.018);
+        return d;
+      }
+
+      float carteScene(vec3 pos) {
+        return min(carteFluide(pos), carteGouttes(pos));
+      }
+
+      vec3 normaleScene(vec3 pos) {
+        vec2 e = vec2(0.0018, 0.0);
+        return normalize(vec3(
+          carteScene(pos + e.xyy) - carteScene(pos - e.xyy),
+          carteScene(pos + e.yxy) - carteScene(pos - e.yxy),
+          carteScene(pos + e.yyx) - carteScene(pos - e.yyx)
+        ));
+      }
+
+      // Distance parcourue, et temoin de contact.
+      vec2 marcher(vec3 origine, vec3 direction) {
+        float distance = 0.0;
+        float touche = 0.0;
+        /* LA TOLERANCE S'OUVRE AVEC LA DISTANCE, ET C'EST LA CORRECTION DU
+           PIQUETE. Constate a l'ecran le 22/08 : un mouchetage noir entourait
+           les silhouettes, que j'ai d'abord pris pour un lisere de detourage
+           avant de zoomer et de voir qu'il vient du METAL.
+
+           Cause : un seuil de contact CONSTANT. Loin de la camera, un pixel
+           couvre une portion de scene bien plus large ; exiger la meme
+           precision qu'au premier plan fait manquer la surface un rayon sur
+           deux aux incidences rasantes, et un rayon manque devient un point
+           noir. Le voisin, lui, touche. D'ou le grain.
+
+           On fait donc croitre le seuil avec la distance parcourue : chaque
+           rayon exige une precision proportionnee a ce qu'il represente
+           reellement a l'ecran. C'est le principe du cone de rayon, et il ne
+           coute aucun pas supplementaire. */
+        for (int i = 0; i < 56; i++) {
+          float pas = carteScene(origine + direction * distance);
+          if (pas < 0.0016 + distance * 0.0022) { touche = 1.0; break; }
+          if (distance > 6.4) break;
+          distance += pas * 0.55;
+        }
+        return vec2(distance, touche);
+      }
+
+      // Le rebond : le fluide se voit lui-meme. Moins de pas, c'est un detail.
+      vec2 marcherRebond(vec3 origine, vec3 direction) {
+        float distance = 0.03;
+        float touche = 0.0;
+        for (int i = 0; i < 14; i++) {
+          float pas = carteScene(origine + direction * distance);
+          if (pas < 0.0045) { touche = 1.0; break; }
+          if (distance > 4.5) break;
+          distance += pas * 0.58;
+        }
+        return vec2(distance, touche);
+      }
+
 
       void main() {
         vec2 uv = gl_FragCoord.xy / u_resolution.xy;
@@ -265,6 +487,7 @@ function MetallicCanvas({
         material *= 1.0 - duskVariant * 0.08;
 
         float referenceVariant = step(2.5, u_variant);
+        float finalDepth = smoothstep(0.12, 0.90, height);
         if (referenceVariant > 0.5) {
           /*
            * The homepage treatment translates the four motion references chosen
@@ -275,67 +498,83 @@ function MetallicCanvas({
           vec2 scene = (uv - 0.5) * vec2(aspect, 1.0);
           float edgePresence = smoothstep(0.08, 0.48, abs(uv.x - 0.5));
 
-          float referenceSurface = referenceHeight(p);
-          float referenceSurfaceX = referenceHeight(p + vec2(epsilon, 0.0));
-          float referenceSurfaceY = referenceHeight(p + vec2(0.0, epsilon));
-          vec2 referenceGradient = vec2(
-            referenceSurfaceX - referenceSurface,
-            referenceSurfaceY - referenceSurface
-          ) / epsilon;
-          vec3 referenceNormal = normalize(vec3(-referenceGradient * 0.78, 1.0));
-          vec3 referenceReflection = reflect(
-            -viewDirection,
-            referenceNormal
+          /* ── LA SCENE EST RENCONTREE, PAS DESSINEE ────────────────────
+             Un rayon par pixel. La camera est en retrait sur l'axe Z et
+             regarde la nappe de fluide ; l'ouverture est large pour que les
+             masses des bords entrent dans le champ. */
+          /* La camera se place LEGEREMENT AU-DESSUS du plan d'impact et vise
+             la cuvette : vue strictement de face, une couronne se lit comme un
+             anneau plat et l'eclaboussure disparait. */
+          vec3 origineRayon = vec3(0.0, 0.72, 4.35);
+          vec3 vise = vec3(0.0, 0.18, 0.0);
+          vec3 axeAvant = normalize(vise - origineRayon);
+          vec3 axeDroite = normalize(cross(vec3(0.0, 1.0, 0.0), axeAvant));
+          vec3 axeHaut = cross(axeAvant, axeDroite);
+          vec3 directionRayon = normalize(
+            axeAvant * 2.05 +
+            axeDroite * scene.x * 2.32 +
+            axeHaut * scene.y * 2.32
           );
-          float referenceEnvironment = clamp(
-            referenceReflection.y * 0.52 +
-            referenceReflection.x * 0.18 +
-            0.5,
-            0.0,
-            1.0
+
+          vec2 contact = marcher(origineRayon, directionRayon);
+          vec3 pointContact = origineRayon + directionRayon * contact.x;
+          vec3 normale = normaleScene(pointContact);
+          vec3 refletPrincipal = reflect(directionRayon, normale);
+
+          // Ce que le reflet va chercher dans le studio.
+          float valeurStudio = studio(refletPrincipal);
+
+          /* LE REBOND. Sans lui, deux masses voisines s'ignorent et la scene
+             perd sa cohesion : c'est le fluide qui se voit lui-meme qui
+             produit les entrelacs sombres de la reference. */
+          vec2 rebond = marcherRebond(pointContact + normale * 0.012, refletPrincipal);
+          vec3 pointRebond =
+            pointContact + normale * 0.012 + refletPrincipal * rebond.x;
+          vec3 normaleRebond = normaleScene(pointRebond);
+          float valeurRebond = studio(reflect(refletPrincipal, normaleRebond));
+          float valeur = mix(
+            valeurStudio,
+            mix(valeurStudio, valeurRebond, 0.70),
+            rebond.y
           );
-          float membrane = sin(
-            referenceSurface * 8.4 +
-            referenceReflection.x * 2.6 +
-            u_phase * 0.12
-          ) * 0.5 + 0.5;
-          float membraneLight = smoothstep(0.48, 0.78, membrane);
-          float membraneShadow = 1.0 - smoothstep(0.20, 0.48, membrane);
-          vec3 referenceBase = mix(
-            vec3(0.02, 0.021, 0.025),
-            vec3(0.82, 0.825, 0.84),
-            referenceEnvironment * 0.62 + membraneLight * 0.32
+
+          /* FRESNEL. Sur un metal, les incidences rasantes s'eclaircissent
+             franchement : c'est ce qui dessine le liseré lumineux tout autour
+             de chaque masse, et sans lui les silhouettes restent molles. */
+          float fresnel = pow(1.0 - max(0.0, dot(-directionRayon, normale)), 3.2);
+          valeur += fresnel * 0.62;
+
+          /* Une dispersion minuscule entre les trois canaux. Un chrome reel
+             n'est jamais parfaitement neutre sur ses aretes. */
+          vec3 couleurMatiere = vec3(
+            studio(refletPrincipal + vec3(0.005, 0.004, 0.0)),
+            valeur,
+            studio(refletPrincipal - vec3(0.004, 0.003, 0.0))
           );
-          referenceBase = mix(
-            referenceBase,
-            vec3(0.04, 0.041, 0.047),
-            membraneShadow * 0.42
+          /* 0.16 et non 0.42. A 0.42 l'ecart entre les trois echantillons
+             tombait de part et d'autre d'une rampe du studio, et la difference
+             devenait une FRANGE VERTE visible a l'ecran, releve le 22/08. Une
+             dispersion de chrome doit rester a la limite du perceptible. */
+          couleurMatiere = mix(vec3(valeur), couleurMatiere, 0.16);
+          couleurMatiere += fresnel * 0.62;
+
+          // Hors matiere : le studio vu directement, assombri, qui sert de fond.
+          float fond = studio(directionRayon);
+
+          vec3 referenceBase = mix(vec3(fond), couleurMatiere, contact.y);
+
+          float referenceDepth = mix(
+            0.16,
+            clamp(1.0 - (contact.x - 2.0) * 0.42, 0.0, 1.0),
+            contact.y
           );
-          float liquidHighlight = smoothstep(0.74, 0.86, membrane);
-          referenceBase = mix(
-            referenceBase,
-            vec3(0.985, 0.987, 0.99),
-            liquidHighlight * 0.48
-          );
-          referenceBase = mix(
-            referenceBase,
-            vec3(0.96, 0.965, 0.97),
-            pow(
-              max(
-                0.0,
-                dot(
-                  referenceNormal,
-                  normalize(vec3(-0.52, 0.58, 0.76))
-                )
-              ),
-              2.2
-            ) * 0.34
-          );
-          float referenceDepth = smoothstep(0.08, 0.88, referenceSurface);
-          referenceBase *= 0.68 + referenceDepth * 0.40;
+          finalDepth = referenceDepth;
+
+          /* Le contraste final. La reference oppose du blanc franc a du noir
+             franc, sans plage grise intermediaire : la plage est donc etroite. */
           referenceBase = smoothstep(
-            vec3(0.045),
-            vec3(0.91),
+            vec3(0.03),
+            vec3(1.24),
             referenceBase
           );
 
@@ -392,7 +631,7 @@ function MetallicCanvas({
             sculpture * 2.4 +
             scene.y * 6.0 -
             scene.x * 2.4 +
-            u_phase * 0.18
+            u_phase
           ) * 0.5 + 0.5;
           vec3 sculptureColor = mix(
             vec3(0.035, 0.036, 0.041),
@@ -407,6 +646,28 @@ function MetallicCanvas({
 
           float calmCenter = 1.0 - smoothstep(0.08, 0.34, abs(uv.x - 0.5));
           referenceBase *= 1.0 - calmCenter * 0.19;
+
+          /* ── LA ZONE DES TETES ───────────────────────────────────────────
+             C'est le seul endroit ou le bord de la decoupe rencontre le metal
+             sur une matiere FINE : les cheveux. Partout ailleurs la silhouette
+             est franche, epaule ou cuisse, et l'escalier de l'alpha ne se voit
+             pas. Sur une meche, il se voit des que le fond est clair.
+
+             Quatre tentatives de correction du detourage lui-meme ont echoue,
+             toutes chiffrees le 22/08 : deux erosions, le modele portrait a
+             resolution reduite, puis le meme par bandes a pleine resolution et
+             sans couture. Le meilleur masque disponible est deja servi.
+
+             Le defaut ne vient donc pas de la decoupe, il vient du CONTRASTE
+             qui la revele. On assombrit le metal derriere les tetes, et le
+             bord cesse d'etre lisible sans qu'un seul pixel du sujet change.
+
+             La zone est large et sa transition longue : un assombrissement
+             net creerait une tache, ce qui serait pire que le defaut. */
+          float zoneTetes =
+            smoothstep(0.60, 0.93, uv.y) *
+            (1.0 - smoothstep(0.09, 0.44, abs(uv.x - 0.52)));
+          referenceBase *= 1.0 - zoneTetes * 0.52;
           material = referenceBase;
         }
 
@@ -415,8 +676,7 @@ function MetallicCanvas({
           sin(gl_FragCoord.y * 0.72) * 0.0035;
         material += textileGrain;
 
-        float depth = smoothstep(0.12, 0.90, height);
-        vec3 color = material * (0.80 + depth * 0.28);
+        vec3 color = material * (0.80 + finalDepth * 0.28);
         color *= mix(0.76 + flowingLight * 0.34, 1.0, referenceVariant);
         float vignette = smoothstep(1.24, 0.16, length((uv - 0.5) * vec2(0.78, 1.0)));
         color *= 0.88 + vignette * 0.13;

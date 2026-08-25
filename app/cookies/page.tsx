@@ -1,5 +1,5 @@
 import InfoPage, { InfoNotice, InfoTable } from "../components/InfoPage";
-import { LEGAL_CONTACT, LEGAL_VERSION } from "@/lib/legal";
+import { LEGAL_CONTACT, LEGAL_VERSION_DISPLAY } from "@/lib/legal";
 import { T } from "@/lib/i18n/TranslatedText";
 
 export const metadata = { title: "Cookies et traceurs | AJ Luxury" };
@@ -7,7 +7,7 @@ export const metadata = { title: "Cookies et traceurs | AJ Luxury" };
 export default function CookiesPage() {
   return (
     <InfoPage
-      eyebrow={<T id="info.cookies.eyebrow" values={{ version: LEGAL_VERSION }} />}
+      eyebrow={<T id="info.cookies.eyebrow" values={{ version: LEGAL_VERSION_DISPLAY }} />}
       title={<T id="info.cookies.title" />}
       status={<T id="info.cookies.status" />}
       officialFrenchOnly
@@ -22,7 +22,7 @@ export default function CookiesPage() {
 
       <section>
         <h2>1. Technologies actuellement utilisées</h2>
-        <InfoTable>
+        <InfoTable label="Technologies actuellement utilisées">
           <table>
             <thead>
               <tr>

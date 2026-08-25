@@ -21,6 +21,7 @@ import {
   shouldAttachHeroVideoSource,
   shouldPlayHeroVideo,
 } from "../../lib/motion-policy";
+import DeferredMetallicField from "./DeferredMetallicField";
 
 type HeroBackgroundVideoProps = {
   playing: boolean;
@@ -47,8 +48,15 @@ const HERO_POSTER_MEDIA = {
 } as const;
 
 const PORTRAIT_POSTER_SRC_SET = `${HERO_VIDEO_ASSETS.portrait.posterCompact} 480w, ${HERO_VIDEO_ASSETS.portrait.poster} 720w`;
+/* Le poster portrait est passe en `object-fit: cover` plein cadre
+   (globals.css, branche « Portrait — le média EST le premier écran »). Sa
+   largeur rendue n'est donc plus la largeur de la boîte mais celle du média
+   mis à l'échelle pour la couvrir : max(largeur de boîte, hauteur x 720/934).
+   Avec l'ancien `min(...)`, 390x844 demandait 390px et recevait la variante
+   480w, étirée ensuite à ~651px sur le premier écran — un flou net à l'oeil.
+   Le `max(...)` demande 651px et fait choisir la 720w. */
 const PORTRAIT_POSTER_SIZES =
-  "min(100vw, calc(70svh * 720 / 934))";
+  "max(100vw, calc(100svh * 720 / 934))";
 
 type HeroPosterProps = {
   className: string;
@@ -144,7 +152,6 @@ const HeroBackgroundVideo = forwardRef<
     reducedMotion,
     saveData,
   });
-
   const rejectPlaybackIntent = useCallback(
     (error: unknown, attempt: number, readyState: number) => {
       if (attempt !== playbackAttemptRef.current) return;
@@ -369,6 +376,11 @@ const HeroBackgroundVideo = forwardRef<
           width={asset?.width ?? HERO_VIDEO_ASSETS.desktop.width}
           height={asset?.height ?? HERO_VIDEO_ASSETS.desktop.height}
           autoPlay={playing}
+          /* v5 : le master est un aller-retour, sa derniere image et sa
+             premiere sont consecutives. Le raccord structurel mesure descend
+             de 3,83 a 0,50 niveau de gris moyen, et de 231 a 5,5 au pire
+             pixel. La boucle est donc admissible, ce qu'interdisait la v4. */
+          loop
           muted
           playsInline
           preload="none"
@@ -378,12 +390,20 @@ const HeroBackgroundVideo = forwardRef<
           controlsList="nodownload noplaybackrate noremoteplayback"
           onCanPlay={() => void syncPlayback()}
           onPlaying={() => setStartedAssetSrc(asset?.src ?? null)}
-          onEnded={() => onPlaybackIntentChange(false)}
           onError={() => {
             setStartedAssetSrc(null);
             onPlaybackIntentChange(false);
           }}
         />
+        <DeferredMetallicField
+          className="aj-film__hero-reflection"
+          motion={playing ? "slow" : "still"}
+          variant="reference"
+        />
+        {/* Le calque HeroIdentityOverlay est retiré avec la v6 : ses visages
+            découpés à la géométrie v4 dessinaient deux têtes fantômes sur le
+            master v6 validé par Adam, constaté au navigateur à 390x844 le
+            21/08. Voir le commentaire de globals.css, section identité. */}
       </div>
     </div>
   );

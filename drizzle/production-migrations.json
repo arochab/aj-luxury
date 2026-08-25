@@ -1,0 +1,27 @@
+{
+  "protocol": "ajl-production-migrations-v1",
+  "excluded": [
+    "0008_preprod_synthetic_demo_dataset.sql"
+  ],
+  "ordered": [
+    "0000_flimsy_rhino.sql",
+    "0001_lock_cart_line_price_provenance.sql",
+    "0002_lock_order_line_snapshots.sql",
+    "0003_identity_access.sql",
+    "0004_email_outbox_data_rights.sql",
+    "0005_fulfillment_returns_refunds.sql",
+    "0006_allow_bounded_expired_cart_purge.sql",
+    "0007_transactional_preprod_order_payment.sql",
+    "0009_shipping_quote_parcel_snapshots.sql",
+    "0010_multicarrier_delivery_foundation.sql",
+    "0011_service_point_reference_vault.sql",
+    "0012_provider_priced_delivery_quotes.sql",
+    "0013_provider_priced_delivery_orders.sql",
+    "0014_late_payment_refund_compensation.sql",
+    "0015_production_release_attestation.sql",
+    "0016_return_operator_state_machine.sql",
+    "0017_rich_dreadnoughts.sql",
+    "0018_volatile_blob.sql",
+    "0019_provider_configuration_attestation.sql"
+  ]
+}

@@ -1,7 +1,7 @@
 import InfoPage, { InfoNotice } from "../components/InfoPage";
 import {
   LEGAL_CONTACT,
-  LEGAL_VERSION,
+  LEGAL_VERSION_DISPLAY,
   MEDIATOR,
   SELLER_IDENTITY,
 } from "@/lib/legal";
@@ -14,7 +14,7 @@ export const metadata = {
 export default function TermsPage() {
   return (
     <InfoPage
-      eyebrow={<T id="info.terms.eyebrow" values={{ version: LEGAL_VERSION }} />}
+      eyebrow={<T id="info.terms.eyebrow" values={{ version: LEGAL_VERSION_DISPLAY }} />}
       title={<T id="info.terms.title" />}
       status={<T id="info.terms.status" />}
       officialFrenchOnly
@@ -64,16 +64,16 @@ export default function TermsPage() {
       <section>
         <h2>3. Prix</h2>
         <p>
-          Les prix sont indiqués en euros, toutes taxes comprises. Les frais de
-          livraison et, le cas échéant, les frais liés à une destination hors
-          Union européenne sont indiqués séparément avant la validation de la
-          commande. Le prix total exigible est celui affiché dans le récapitulatif
-          final.
+          Les prix sont indiqués en euros. La mention fiscale exacte sera
+          publiée après confirmation du régime de TVA du vendeur et, pour les
+          ventes dans l’Union européenne, des règles applicables aux ventes à
+          distance. Les frais de livraison sont indiqués séparément avant la
+          validation de la commande. Le prix total exigible est celui affiché
+          dans le récapitulatif final.
         </p>
         <p>
-          Pour un affichage dans une autre devise, la conversion est indicative
-          jusqu’au récapitulatif de paiement. Les frais de change éventuellement
-          appliqués par la banque du client restent à sa charge.
+          Aucun paiement public n’est activé tant que cette qualification
+          fiscale et son traitement dans la commande ne sont pas validés.
         </p>
       </section>
 
@@ -108,9 +108,13 @@ export default function TermsPage() {
       <section>
         <h2>6. Livraison</h2>
         <p>
-          Les pays desservis, transporteurs, tarifs et délais estimés sont
-          présentés avant paiement. À défaut de date ou de délai convenu, la
-          livraison intervient au plus tard trente jours après la commande.
+          Le lancement couvre la France métropolitaine, Corse comprise, et les
+          autres pays de l’Union européenne pour lesquels un tarif réel est
+          retourné avant paiement. Les destinations hors Union européenne et
+          les territoires spéciaux restent fermés. Le transporteur, le tarif et
+          le délai estimé sont présentés avant paiement. À défaut de date ou de
+          délai convenu, la livraison intervient au plus tard trente jours après
+          la commande.
         </p>
         <p>
           Le risque de perte ou d’endommagement est transféré au client lorsqu’il
@@ -126,10 +130,10 @@ export default function TermsPage() {
         <p>
           Le client dispose de <strong>quatorze jours calendaires</strong> à
           compter de la réception du produit pour notifier sa décision, sans
-          justification. Il peut utiliser la fonctionnalité{" "}
-          <a href="/withdrawal">accéder au formulaire de rétractation</a>, le modèle ci-dessous
-          ou toute déclaration dénuée d’ambiguïté. Un accusé de réception lui est
-          adressé sur un support durable.
+          justification. Il peut utiliser le modèle ci-dessous ou adresser toute
+          déclaration dénuée d’ambiguïté à{" "}
+          <a href={`mailto:${LEGAL_CONTACT.email}`}>{LEGAL_CONTACT.email}</a>.
+          Un accusé de réception lui est adressé sur un support durable.
         </p>
         <p>
           Le produit doit être renvoyé au plus tard quatorze jours après la
@@ -147,20 +151,17 @@ export default function TermsPage() {
       </section>
 
       <section>
-        <h2>8. Sous-vêtements, essayage et hygiène</h2>
+        <h2>8. Sous-vêtements et essayage</h2>
         <p>
-          Le droit de rétractation n’est pas exclu du seul fait que le produit
-          est un sous-vêtement. Lorsque le produit est livré dans un emballage
-          ou avec un dispositif d’hygiène scellé, et qu’il ne peut être renvoyé
-          pour des raisons de protection de la santé ou d’hygiène après
-          descellement, l’exception légale peut s’appliquer.
+          AJ Luxury n’exclut pas le droit de rétractation au seul motif que le
+          produit est un sous-vêtement. Le client peut l’examiner comme il le
+          ferait en magasin, sans le porter au-delà de ce qui est nécessaire
+          pour vérifier sa nature, ses caractéristiques et sa taille.
         </p>
         <p>
-          Pour préserver son droit, le client doit vérifier la taille sans
-          porter le produit directement sur la peau, sans le laver, le tacher,
-          l’endommager ni retirer les étiquettes ou le dispositif d’hygiène.
-          Cette règle ne prive jamais le client de la garantie légale en cas de
-          défaut ou de non-conformité.
+          Une manipulation allant au-delà de cet examen peut uniquement donner
+          lieu à une dépréciation justifiée. Cette règle ne prive jamais le
+          client de la garantie légale en cas de défaut ou de non-conformité.
         </p>
       </section>
 
@@ -249,9 +250,23 @@ export default function TermsPage() {
           Toute réclamation doit d’abord être adressée à{" "}
           <a href={`mailto:${LEGAL_CONTACT.email}`}>{LEGAL_CONTACT.email}</a>.
           Après une démarche écrite préalable restée sans solution, le
-          consommateur peut saisir gratuitement le médiateur conventionné par AJ
-          Luxury : <strong>{MEDIATOR.name}</strong>, {MEDIATOR.address},{" "}
-          {MEDIATOR.website}.
+          consommateur peut saisir gratuitement un médiateur de la
+          consommation.{" "}
+          {/* Voir MEDIATOR dans lib/legal.ts : tant qu'aucun médiateur n'est
+              conventionné, la page dit l'échéance plutôt que d'afficher des
+              « À compléter » sur des conditions générales de vente. */}
+          {MEDIATOR ? (
+            <>
+              Le médiateur conventionné par AJ Luxury est{" "}
+              <strong>{MEDIATOR.name}</strong>, {MEDIATOR.address},{" "}
+              {MEDIATOR.website}.
+            </>
+          ) : (
+            <>
+              Le médiateur conventionné par AJ Luxury sera désigné avant
+              l’ouverture des ventes et ses coordonnées seront publiées ici.
+            </>
+          )}
         </p>
         <p>
           Les CGV sont soumises au droit français, sans priver le consommateur

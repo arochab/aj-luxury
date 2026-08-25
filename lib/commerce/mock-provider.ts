@@ -1,4 +1,4 @@
-import { getLaunchVariant, launchVariants } from "./catalog";
+import { getLaunchVariant, listLaunchVariants } from "./catalog.ts";
 import type {
   Cart,
   CartLine,
@@ -39,14 +39,14 @@ function withTotals(cart: Cart, lines: CartLine[]): Cart {
 
 /**
  * Provider sans I/O et sans persistance. Il documente le contrat attendu
- * d'un futur connecteur Shopify/Stripe sans prétendre encaisser ni stocker.
+ * d'un futur connecteur de paiement sans prétendre encaisser ni stocker.
  */
 export const mockCommerceProvider: CommerceProvider = {
   name: "AJ Luxury local commerce simulator",
   mode: "simulation",
 
   async listLaunchVariants(): Promise<ProductVariant[]> {
-    return launchVariants;
+    return listLaunchVariants();
   },
 
   async getVariant(variantId: string): Promise<ProductVariant | null> {

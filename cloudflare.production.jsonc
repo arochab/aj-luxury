@@ -1,0 +1,154 @@
+{
+  // ============================================================
+  //  AJ LUXURY — PRODUCTION
+  //
+  //  CE FICHIER NE DOIT PAS ETRE DEPLOYE SANS DEUX ACCORDS.
+  //  AGENTS.md : validation explicite de la version candidate exacte, par
+  //  Adam CHABBI d'abord, puis directement par Jeremy SCHEPPLER. Les accords
+  //  anterieurs au SHA courant ne valent pas approbation de cette release.
+  //
+  //  Aucune route ni domaine personnalise n'est declare ici, VOLONTAIREMENT.
+  //  Brancher ajluxurystore.com est l'acte d'ouverture au public : il se
+  //  decide, il ne se configure pas par avance.
+  //
+  //  COMMERCE_MODE commence a "sandbox" et non "live". En sandbox la porte
+  //  de production exige une cle Stripe sk_test_ : aucun argent reel ne peut
+  //  circuler. La sequence est sandbox -> controlled -> live, chaque etape
+  //  demandant sa propre preuve.
+  // ============================================================
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "aj-luxury-production",
+  "main": "./dist/server/index.js",
+  "compatibility_date": "2026-08-16",
+  "compatibility_flags": ["nodejs_compat"],
+  "no_bundle": true,
+
+  "version_metadata": {
+    "binding": "CF_VERSION_METADATA"
+  },
+
+  "ratelimits": [
+    {
+      "name": "COMMERCE_RATE_LIMITER",
+      "namespace_id": "8262501",
+      "simple": { "limit": 90, "period": 60 }
+    },
+    {
+      "name": "PROVIDER_RATE_LIMITER",
+      "namespace_id": "8262502",
+      "simple": { "limit": 30, "period": 60 }
+    },
+    {
+      "name": "WEBHOOK_RATE_LIMITER",
+      "namespace_id": "8262503",
+      "simple": { "limit": 180, "period": 60 }
+    },
+    {
+      "name": "OPERATOR_RATE_LIMITER",
+      "namespace_id": "8262504",
+      "simple": { "limit": 30, "period": 60 }
+    }
+  ],
+
+  "triggers": {
+    "crons": ["*/2 * * * *"]
+  },
+
+  // Backend API uniquement. Le client reste sur ajluxurystore.com ; le Site
+  // relaie strictement /api/commerce/* vers cette origine technique.
+  "workers_dev": true,
+  "preview_urls": false,
+
+  "d1_databases": [
+    {
+      // Le worker lit env.DB : le nom du binding n'est pas negociable.
+      "binding": "DB",
+      "database_name": "aj-luxury-production",
+      "database_id": "b02e8fc8-7309-43f7-a596-78fa51dc110d"
+    }
+  ],
+
+  "vars": {
+    "APP_ENV": "production",
+    "COMMERCE_MODE": "sandbox",
+    "COMMERCE_ORIGIN": "https://ajluxurystore.com",
+    "COMMERCE_BACKEND_ONLY": "true",
+    "COMMERCE_CONTROLLED_STOREFRONT_ORIGIN": "https://aj-luxury-awwwards-private.arochab.chatgpt.site",
+    "COMMERCE_PUBLIC_STOREFRONT_ORIGINS_JSON": "[\"https://ajluxurystore.com\",\"https://www.ajluxurystore.com\"]",
+    "PAYMENT_PROVIDER": "stripe",
+    "DELIVERY_PROVIDER": "sendcloud",
+    "SENDCLOUD_API_VERSION": "3",
+    "EMAIL_PROVIDER": "resend",
+    "TRANSACTIONAL_FROM_EMAIL": "commandes@ajluxurystore.com",
+    "TRANSACTIONAL_FROM_NAME": "AJ Luxury"
+
+    // LES VARIABLES SUIVANTES SONT DELIBEREMENT ABSENTES.
+    //
+    // Elles attestent d'approbations humaines et de comptages reels. Les
+    // ecrire ici reviendrait a pre-signer une release qui n'existe pas
+    // encore, et le fichier serait versionne avec une signature perimee.
+    // Elles se posent au moment du deploiement, liees a un SHA precis :
+    //
+    //   COMMERCE_RELEASE_SHA           le SHA exact publie
+    //   COMMERCE_PROMOTED_FROM_VERSION_ID
+    //                                  en live, l'ID immutable de la version
+    //                                  controlled ayant passe la commande preuve
+    //   COMMERCE_CONTROLLED_OWNER_EMAIL
+    //                                  compte Adam seul autorise sur le Site prive
+    //   PRODUCTION_STOCK_IMPORT_ENABLED
+    //                                  true uniquement pendant l'import one-shot
+    //   COMMERCE_ADAM_APPROVAL_SHA     le meme SHA, approuve par Adam
+    //   COMMERCE_JEREMY_APPROVAL_SHA   le meme SHA, approuve par Jeremy
+    //   STOCK_MANIFEST_ID              identifiant du comptage retenu
+    //   STOCK_MANIFEST_SHA256          empreinte de ce comptage
+    //   STOCK_MANIFEST_APPROVED_BY     doit valoir exactement "jeremy"
+    //   STRIPE_ACCOUNT_ID              identite publique acct_... du compte live
+    //   SENDCLOUD_INTEGRATION_ID       identite publique de l'integration
+    //   SENDCLOUD_SENDER_ADDRESS_ID    identite publique de l'adresse expediteur
+    //   RESEND_DOMAIN                  domaine d'envoi verifie, ajluxurystore.com
+    //   SELLER_LEGAL_IDENTITY_APPROVED
+    //   TAX_DUTY_POLICY_APPROVED
+    //   RETURNS_POLICY_APPROVED
+    //   RETURNS_LABEL_AND_REFUND_PROCESS_APPROVED
+    //   BACKUP_RESTORE_DRILL_APPROVED
+    //   MONITORING_ALERTS_APPROVED
+  },
+
+  // LES SECRETS NE SONT JAMAIS DANS CE FICHIER, ni dans aucun fichier.
+  // Ils s'installent par `wrangler secret put`, qui les lit directement
+  // depuis le terminal de leur proprietaire :
+  //
+  //   STRIPE_SECRET_KEY        sk_test_... en sandbox, sk_live_... en live
+  //   STRIPE_WEBHOOK_SECRET
+  //   SENDCLOUD_PUBLIC_KEY
+  //   SENDCLOUD_SECRET_KEY
+  //   RESEND_API_KEY
+  //   RESEND_WEBHOOK_SECRET
+  //   COMMERCE_PROXY_SECRET
+  //   COMMERCE_CART_HMAC_SECRET
+  //   COMMERCE_CONTROLLED_AUTH_HMAC_SECRET
+  //   DELIVERY_REFERENCE_ENCRYPTION_KEY_BASE64
+
+  "assets": {
+    "binding": "ASSETS",
+    "directory": "./dist/client",
+    "run_worker_first": [
+      "/api/*",
+      "/assets/*",
+      "/fonts/*",
+      "/media/*",
+      "/i18n/*",
+      "/images/*",
+      "/videos/*"
+    ]
+  },
+  "rules": [
+    {
+      "type": "ESModule",
+      "globs": ["**/*.js", "**/*.mjs"]
+    }
+  ],
+  "observability": {
+    "enabled": true
+  }
+}

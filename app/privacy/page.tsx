@@ -2,7 +2,7 @@ import InfoPage, { InfoNotice, InfoTable } from "../components/InfoPage";
 import {
   HOSTING_PROVIDER,
   LEGAL_CONTACT,
-  LEGAL_VERSION,
+  LEGAL_VERSION_DISPLAY,
   SELLER_IDENTITY,
 } from "@/lib/legal";
 import { T } from "@/lib/i18n/TranslatedText";
@@ -14,7 +14,7 @@ export const metadata = {
 export default function PrivacyPage() {
   return (
     <InfoPage
-      eyebrow={<T id="info.privacy.eyebrow" values={{ version: LEGAL_VERSION }} />}
+      eyebrow={<T id="info.privacy.eyebrow" values={{ version: LEGAL_VERSION_DISPLAY }} />}
       title={<T id="info.privacy.title" />}
       status={<T id="info.privacy.status" />}
       officialFrenchOnly
@@ -22,9 +22,11 @@ export default function PrivacyPage() {
       <InfoNotice>
         <p>
           <strong>État actuel.</strong> La prévisualisation ne permet pas encore
-          de créer un compte, payer, passer une commande ou s’inscrire à une
-          newsletter. Elle mémorise uniquement la langue choisie et l’affichage
-          de l’introduction sur l’appareil.
+          de payer ni de passer une commande réelle. Cette politique couvre
+          aussi les fonctions transactionnelles lorsqu’elles seront activées ;
+          une capacité fermée ne collecte pas les données correspondantes. Le
+          site mémorise la langue choisie et l’affichage de l’introduction sur
+          l’appareil.
         </p>
       </InfoNotice>
 
@@ -41,7 +43,7 @@ export default function PrivacyPage() {
 
       <section>
         <h2>2. Données, finalités et durées</h2>
-        <InfoTable>
+        <InfoTable label="Données, finalités et durées de conservation">
           <table>
             <thead>
               <tr>
@@ -89,10 +91,10 @@ export default function PrivacyPage() {
                 <td>Jusqu’au retrait, puis au plus 3 ans après le dernier contact actif</td>
               </tr>
               <tr>
-                <td>Mesure d’audience non exemptée et publicité</td>
-                <td>Identifiants, navigation, conversion</td>
-                <td>Consentement</td>
-                <td>Selon l’outil retenu et la durée annoncée dans le bandeau</td>
+                <td>Pilotage agrégé de la boutique</td>
+                <td>Volumes de commandes, paiements, stock, livraison, retours et e-mails, sans profil publicitaire</td>
+                <td>Intérêt légitime à exploiter et sécuriser la boutique</td>
+                <td>Données opérationnelles selon les obligations applicables ; vues de pilotage agrégées</td>
               </tr>
             </tbody>
           </table>
@@ -108,12 +110,11 @@ export default function PrivacyPage() {
       <section>
         <h2>3. Paiement</h2>
         <p>
-          Le paiement sera traité par un prestataire spécialisé dont l’identité
-          sera affichée avant activation. AJ Luxury ne conserve pas le
-          cryptogramme de la carte. Les éventuelles données de
-          carte conservées pour un achat ultérieur le seront uniquement par le
-          prestataire, avec le consentement requis et selon ses propres garanties
-          de sécurité.
+          Le paiement en ligne retenu est <strong>Stripe Checkout</strong> : la
+          saisie de la carte s’effectue sur l’interface sécurisée de Stripe. AJ
+          Luxury ne reçoit ni ne conserve le numéro complet de carte ou son
+          cryptogramme. Seuls les références techniques, états et montants
+          nécessaires au rapprochement de la commande sont conservés.
         </p>
       </section>
 
@@ -122,13 +123,17 @@ export default function PrivacyPage() {
         <p>
           L’accès est limité aux personnes habilitées d’AJ Luxury et aux
           prestataires strictement nécessaires : hébergement, paiement,
-          authentification, livraison, e-mails transactionnels, support et, si
-          accepté, analyse d’audience ou marketing.
+          authentification, livraison, e-mails transactionnels et support.
         </p>
         <p>
           La prévisualisation est hébergée par {HOSTING_PROVIDER.name},{" "}
-          {HOSTING_PROVIDER.address}. La liste nominative des prestataires sera
-          mise à jour avant leur activation. Aucune donnée client n’est vendue.
+          {HOSTING_PROVIDER.address}. Les prestataires techniques retenus pour
+          l’ouverture sont <strong>Cloudflare</strong> (exécution et base de
+          données), <strong>Stripe</strong> (paiement), <strong>Sendcloud</strong>
+          (tarifs, points relais, expédition et retours) et <strong>Resend</strong>
+          (e-mails transactionnels). Leur activation reste conditionnée aux
+          contrôles de lancement. Aucune donnée client n’est vendue et aucun SDK
+          publicitaire tiers n’est activé.
         </p>
       </section>
 
@@ -178,8 +183,8 @@ export default function PrivacyPage() {
       <section>
         <h2>8. Évolution de la politique</h2>
         <p>
-          La politique sera mise à jour lorsque les outils de production seront
-          choisis ou lorsque les traitements évolueront. En cas de modification
+          La politique sera mise à jour lorsque les traitements ou prestataires
+          évolueront. En cas de modification
           substantielle, l’information sera portée à la connaissance des
           utilisateurs par un moyen adapté.
         </p>

@@ -29,22 +29,22 @@ type InternalStockLedger = Record<
  */
 const launchStockLedger: InternalStockLedger = {
   pourpre: {
-    S: { physical: 26, reserved: 0 },
-    M: { physical: 103, reserved: 0 },
-    L: { physical: 87, reserved: 0 },
-    XL: { physical: 36, reserved: 0 },
+    S: { physical: 63, reserved: 3 },
+    M: { physical: 63, reserved: 2 },
+    L: { physical: 63, reserved: 2 },
+    XL: { physical: 63, reserved: 2 },
   },
   "rose-pale": {
-    S: { physical: 26, reserved: 0 },
-    M: { physical: 103, reserved: 0 },
-    L: { physical: 87, reserved: 0 },
-    XL: { physical: 36, reserved: 0 },
+    S: { physical: 63, reserved: 2 },
+    M: { physical: 63, reserved: 2 },
+    L: { physical: 63, reserved: 2 },
+    XL: { physical: 63, reserved: 2 },
   },
   "lilas-bleu-clair": {
-    S: { physical: 26, reserved: 0 },
-    M: { physical: 102, reserved: 0 },
-    L: { physical: 88, reserved: 0 },
-    XL: { physical: 36, reserved: 0 },
+    S: { physical: 63, reserved: 2 },
+    M: { physical: 63, reserved: 2 },
+    L: { physical: 63, reserved: 2 },
+    XL: { physical: 63, reserved: 3 },
   },
 };
 

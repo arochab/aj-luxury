@@ -74,6 +74,7 @@
 
 .lineImage {
   position: relative;
+  display: block;
   aspect-ratio: 4 / 5;
   overflow: hidden;
   background: #deded9;
@@ -87,6 +88,10 @@
   margin: 0 0 8px;
   font-size: 17px;
   font-weight: 500;
+}
+
+.lineDetails {
+  min-width: 0;
 }
 
 .line p,
@@ -108,6 +113,32 @@
   margin: 0 0 26px;
   font-size: 24px;
   font-weight: 500;
+}
+
+.accountMain > *,
+.accountMain .cards,
+.accountMain .card,
+.accountOrderSummary,
+.accountOrderSummary .deliveryStatus {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.orderNumber,
+.accountMain .card p,
+.accountOrderSummary .deliveryStatus p,
+.accountOrderSummary .row > :first-child {
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+.accountOrderSummary .row > :first-child {
+  min-width: 0;
+}
+
+.accountOrderSummary .row > :last-child {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .row {
@@ -143,8 +174,22 @@
   text-transform: uppercase;
 }
 
+button.button {
+  width: 100%;
+  cursor: pointer;
+  font: inherit;
+}
+
+.button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
 .secondary {
-  display: block;
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
   margin-top: 18px;
   padding-bottom: 4px;
   border-bottom: 1px solid;
@@ -169,12 +214,27 @@
   text-transform: uppercase;
 }
 
-.form input {
+.form input,
+.form select {
   min-height: 48px;
   padding: 0 14px;
   border: 1px solid rgba(9, 9, 9, 0.18);
   background: white;
   font: inherit;
+}
+
+.form select {
+  width: 100%;
+}
+
+.addressFixture {
+  padding: 18px;
+  border: 1px solid rgba(9, 9, 9, 0.18);
+  background: #fff;
+  color: #555;
+  font-size: 11px;
+  font-style: normal;
+  line-height: 1.7;
 }
 
 .formGrid {
@@ -184,7 +244,9 @@
 }
 
 .lockedButton {
+  width: 100%;
   min-height: 56px;
+  margin-top: 28px;
   border: 1px solid #c5c5c0;
   background: #d7d7d2;
   color: #59595c;
@@ -193,6 +255,246 @@
   font-weight: 600;
   letter-spacing: 0.13em;
   text-transform: uppercase;
+}
+
+.quote {
+  margin: 20px 0;
+  padding: 18px;
+  border: 1px solid rgba(9, 9, 9, 0.18);
+  background: #fff;
+}
+
+.quote strong {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.quote p {
+  margin: 10px 0 0;
+  color: #555;
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.deliveryOptions {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  margin: 20px 0;
+  padding: 0;
+  border: 0;
+}
+
+.deliveryOptions legend {
+  margin-bottom: 8px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.deliveryOptions > p {
+  margin: 0 0 4px;
+  color: #626262;
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.deliveryOption {
+  display: flex;
+  min-height: 64px;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px;
+  border: 1px solid rgba(9, 9, 9, 0.22);
+  background: #fff;
+  color: #090909;
+  cursor: pointer;
+  text-align: left;
+}
+
+.deliveryOption > span {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.deliveryOption strong,
+.deliveryOption small {
+  overflow-wrap: anywhere;
+}
+
+.deliveryOption strong {
+  font-size: 11px;
+}
+
+.deliveryOption small {
+  color: #626262;
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.deliveryOption:focus-visible {
+  outline: 2px solid #62646a;
+  outline-offset: 3px;
+}
+
+.deliveryOption:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.testCheckout {
+  display: grid;
+  gap: 14px;
+  margin-top: 20px;
+}
+
+.testCheckout > label:not(.checkbox) {
+  display: grid;
+  gap: 8px;
+  color: #555;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.testCheckout input[type="email"] {
+  min-height: 48px;
+  padding: 0 14px;
+  border: 1px solid rgba(9, 9, 9, 0.18);
+  background: #fff;
+  font: inherit;
+}
+
+.checkbox {
+  display: grid;
+  grid-template-columns: 44px 1fr;
+  align-items: start;
+  color: #555;
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.checkbox input {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+}
+
+.cartStatus {
+  min-height: 1.5rem;
+  color: #686868;
+  font-size: 11px;
+}
+
+.empty {
+  max-width: 36rem;
+  padding: 2rem 0;
+  border-top: 1px solid rgba(9, 9, 9, 0.14);
+}
+
+.empty h2 {
+  margin: 0 0 0.75rem;
+  font-size: clamp(1.75rem, 4vw, 2.6rem);
+  font-weight: 450;
+  letter-spacing: -0.04em;
+}
+
+.empty p,
+.error p {
+  margin: 0;
+  color: #626262;
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+.empty .button {
+  width: min(100%, 21rem);
+}
+
+.error {
+  display: grid;
+  max-width: 36rem;
+  gap: 1rem;
+  padding: 1.25rem;
+  border: 1px solid #8b3f43;
+  background: #f5e9e8;
+}
+
+.error button {
+  justify-self: start;
+  min-height: 44px;
+  padding: 0 1rem;
+  border: 1px solid #090909;
+  background: #090909;
+  color: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.quantityControl {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.75rem;
+}
+
+.quantityControl button,
+.quantityControl output {
+  display: grid;
+  min-width: 44px;
+  min-height: 44px;
+  place-items: center;
+}
+
+.quantityControl button {
+  border: 1px solid rgba(9, 9, 9, 0.22);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+
+.quantityControl button:disabled {
+  color: #999;
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.quantityControl .removeButton {
+  min-width: 44px;
+  padding: 0 0.75rem;
+  border-color: transparent;
+  text-decoration: underline;
+  text-underline-offset: 0.25rem;
+}
+
+.button:focus-visible,
+.secondary:focus-visible,
+.lineImage:focus-visible,
+.error:focus-visible,
+.error button:focus-visible,
+.quantityControl button:focus-visible {
+  outline: 2px solid #62646a;
+  outline-offset: 3px;
+}
+
+.form input:focus-visible,
+.form select:focus-visible,
+.button:focus-visible,
+.lockedButton:focus-visible {
+  outline: 2px solid #62646a;
+  outline-offset: 3px;
 }
 
 .cards {
@@ -226,10 +528,155 @@
   line-height: 1.7;
 }
 
+.deliveryStatus {
+  margin-top: 28px;
+  padding: 20px;
+  border: 1px solid rgba(9, 9, 9, 0.18);
+  background: #fff;
+}
+
+.demoReady {
+  color: #365f45;
+  font-weight: 600;
+}
+
+.deliveryStatus > strong {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.deliveryStatus p {
+  margin: 12px 0 0;
+  color: #626262;
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.timeline {
+  display: grid;
+  gap: 12px;
+  margin: 20px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.timeline li {
+  position: relative;
+  min-height: 20px;
+  padding-left: 28px;
+  color: #8a8a86;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.timeline li::before {
+  position: absolute;
+  top: 2px;
+  left: 0;
+  width: 12px;
+  height: 12px;
+  border: 1px solid #aaa;
+  border-radius: 50%;
+  content: "";
+}
+
+.timeline .stageComplete {
+  color: #090909;
+  font-weight: 600;
+}
+
+.timeline .stageComplete::before {
+  border-color: #090909;
+  background: #090909;
+}
+
+.deliveryStatus:focus-visible {
+  outline: 2px solid #62646a;
+  outline-offset: 3px;
+}
+
+.preparationSheet {
+  margin-top: 20px;
+  padding: 20px;
+  border: 1px solid rgba(9, 9, 9, 0.18);
+  background: #fff;
+}
+
+.preparationSheet h3 {
+  margin: 0 0 10px;
+  font-size: 16px;
+}
+
+.preparationSheet p,
+.preparationSheet li {
+  color: #555;
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.preparationSheet ol {
+  display: grid;
+  gap: 8px;
+  padding-left: 20px;
+}
+
+.preparationLines {
+  display: grid;
+  gap: 4px;
+  margin: 12px 0;
+  padding-left: 20px;
+}
+
+.secondaryButton {
+  min-height: 44px;
+  width: 100%;
+  padding: 0 14px;
+  border: 1px solid #090909;
+  background: #fff;
+  color: #090909;
+  cursor: pointer;
+  font: inherit;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.secondaryButton:focus-visible {
+  outline: 2px solid #62646a;
+  outline-offset: 3px;
+}
+
+@media print {
+  .shell > :not(.accountMain),
+  .accountMain > section,
+  .deliveryStatus,
+  .accountOrderSummary > :not(.preparationSheet) {
+    display: none !important;
+  }
+
+  .main,
+  .summary {
+    display: block;
+    padding: 0;
+    border: 0;
+    background: #fff;
+  }
+
+  .secondaryButton {
+    display: none;
+  }
+}
+
 @media (max-width: 800px) {
   .main {
     grid-template-columns: 1fr;
     padding: 70px 20px 90px;
+  }
+
+  .accountMain {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .header {
@@ -254,5 +701,27 @@
 
   .formGrid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 360px) {
+  .main {
+    padding-inline: 16px;
+  }
+
+  .line {
+    grid-template-columns: 88px minmax(0, 1fr);
+    gap: 14px;
+  }
+
+  .quantityControl .removeButton {
+    flex-basis: 100%;
+    justify-content: start;
+    padding-inline: 0;
+  }
+
+  .deliveryOption {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }

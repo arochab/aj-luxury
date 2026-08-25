@@ -1,0 +1,547 @@
+/* ==========================================================================
+   Hero — le premier écran
+   --------------------------------------------------------------------------
+   Trois calques, une seule idée : les corps réels se tiennent dans un monde
+   de métal, et le nom de la maison passe entre les deux.
+
+       .camera             le défilement (scale + yPercent)
+         .scene            la dérive au repos (scale)
+           .metal          le métal liquide, plein cadre, calculé
+           .marque         AJ LUXURY
+           .figures        les deux corps découpés
+
+   Ce que le CSS livre SANS JavaScript : la composition finale, complète et
+   lisible — métal en dégradé de repli, corps posés, mot en place, copie
+   visible. GSAP n'ajoute qu'une arrivée et une caméra. Si le bundle
+   d'animation n'arrive jamais, le premier écran reste juste.
+   ========================================================================== */
+
+.hero {
+  position: relative;
+  /* ── LE RECOUVREMENT DE L'EN-TÊTE ────────────────────────────────────
+     La barre est un frère AVANT le hero dans le flux et occupe --aj-tete-h.
+     Rogner le hero d'autant a été refusé par le client : on voyait le fond de
+     page sous la barre et le premier écran ne remplissait plus la fenêtre. On
+     remonte donc le hero de la hauteur exacte de la barre — il repart du TOUT
+     premier pixel — et la barre, restée collante donc vivante, passe
+     par-dessus. Les 2 px de rab absorbent la dérive entre le jeton et la
+     hauteur réelle de la barre, qui est du contenu. */
+  margin-top: calc(-1 * var(--aj-tete-h) - 2px);
+  height: calc(100svh + 2px);
+  min-height: 560px;
+  /* clip et non hidden : `overflow: hidden` sur un ancêtre annule le
+     `position: sticky` de la barre. `clip` coupe sans créer de conteneur de
+     défilement. */
+  overflow: clip;
+  background: var(--aj-noir-abysse);
+  isolation: isolate;
+
+  /* Le mot se dimensionne sur cqi et non sur vw : `100vw` INCLUT la barre de
+     défilement, ce qui décentrait le mot de 11 px — visible sur un signe de
+     290 px de corps. */
+  container-type: inline-size;
+
+  /* Le bas de la copie, cité par la copie ET par le calage du mot. Un seul
+     chiffre, donc un seul endroit où l'écart entre les deux se décide. */
+  --aj-hero-copie-bas: clamp(24px, 4.4svh, 54px);
+
+  /* Hauteur des corps. C'est LE réglage de composition du premier écran :
+     tout le reste se cale dessus. */
+  --aj-hero-figures-h: 92svh;
+
+  /* De combien le logo est remonté par rapport au centre de la fenêtre, pour
+     dégager la copie posée en bas. */
+  --aj-hero-mot-bas: 14svh;
+}
+
+/* --- Les plans et les chambres --------------------------------------------
+   DEUX NIVEAUX DE TRANSFORMATION, ET C'EST UN CORRECTIF. La dérive au repos et
+   la poussée au défilement visaient au départ le même élément : GSAP n'écrase
+   pas par défaut, les deux tweens se disputaient `scale` et le dernier rendu
+   gagnait — mesuré, la scène affichait `transform: none` en plein défilement.
+   `.plan` porte le défilement, `.scene` la dérive ; les deux se composent par
+   produit de matrices au lieu de se disputer une propriété.
+
+   DEUX PLANS FRÈRES, ET C'EST LA CONDITION DU VOL. Le mot-marque doit rester
+   ENTRE le métal et les corps — c'est tout son geste — mais il doit aussi
+   pouvoir quitter la scène pour aller se poser dans la barre. Or un ancêtre
+   transformé crée un contexte d'empilement : tant que le mot vivait DANS le
+   plan, il héritait de la caméra et son vol se composait avec elle.
+
+   Le métal et les corps sont donc deux plans SÉPARÉS, pilotés par le même
+   tween, et le mot est leur frère intercalé. L'ordre de peinture vient de
+   l'ordre du DOM : métal, mot, corps. Le mot est libre, et il est toujours
+   occulté par les corps. */
+.plan,
+.scene {
+  position: absolute;
+  inset: 0;
+  transform: scale(1);
+  /* LE SUJET RESTE PLANTÉ. Avec une origine au centre, l'agrandissement de la
+     dérive pousse le bas de la scène SOUS la fenêtre : mesuré à 390x844, les
+     pieds du modèle de droite étaient rognés de 10 px — un défaut interdit par
+     AGENTS.md. Origine en bas de cadre : la ligne de sol ne bouge jamais, la
+     caméra ne fait que monter. */
+  transform-origin: 50% 100%;
+  will-change: transform;
+}
+
+/* --- Le métal -------------------------------------------------------------
+   Plein cadre : c'est le monde, pas un décor posé derrière. Il n'y a plus de
+   photographie de fond, donc plus d'horizon à respecter ni de jonction à
+   masquer — le champ occupe tout, et les corps se tiennent dedans. */
+.metal {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  /* ── LE MÉTAL EST UNE CONTRAINTE CLIENT : IL DOIT ÊTRE PRÉSENT ─────────
+     Premier essai : champ rendu à 42 % pour qu'il cesse de disputer le premier
+     plan aux corps. Verdict d'Adam le 21/08 — trop discret, à renforcer.
+
+     Le baisser était le mauvais levier. Le défaut n'était pas l'intensité,
+     c'était le CONTRASTE : à plat, le champ n'est qu'un empilement de masses
+     claires et floues, et à l'œil ça lit « fumée », pas « chrome poli ».
+
+     SECONDE PASSE, MÊME JOUR : encore trop discret. Contraste porté de 2,6 à
+     3,4, opacité rendue à 1, et le champ passe en cadence normale au lieu de
+     « lente » — parce que « liquide » est autant une question de MOUVEMENT que
+     de matière. Un métal qui ne coule pas n'est pas liquide.
+
+     Le contraste creuse les noirs et durcit les hautes lumières :
+     les masses deviennent des reflets, avec des bords nets et des creux
+     profonds — la matière lit enfin comme du métal en fusion. La luminosité
+     rendue à 0,58 garde l'ouverture sombre que la référence demande et rend
+     au mot-marque un fond régulier.
+
+     Le filtre est STATIQUE sur un canvas animé : le compositeur l'applique,
+     rien n'est recalculé en mise en page. Coût mesuré au navigateur, avec et
+     sans, dans la même session. */
+  opacity: 1;
+  /* LE FILTRE NE NOIRCIT PLUS. Il divisait la luminosite par deux, ce qui
+     rendait tout cyclorama clair en gris moyen : la reference du 22/08, une
+     eclaboussure de chrome sur BLANC, etait donc impossible a atteindre tant
+     qu'il etait la. Il ne reste qu'un leger appui de contraste. */
+  filter: contrast(1.12) saturate(0.92);
+}
+
+.metal > * {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* --- Le mot-marque --------------------------------------------------------
+   C'EST LE LOGO LUI-MÊME, PAS UNE IMITATION. Le premier essai reconstruisait
+   le lettrage en Manrope à l'interlettrage relevé sur le fichier (0,63 em,
+   mesuré : hauteur de capitale 69 px, écart moyen 43 px). C'était fidèle à la
+   TYPOGRAPHIE mais ça restait un pastiche — le monogramme AJ n'est pas de la
+   type, c'est un dessin, et aucune fonte ne le rend.
+
+   Le premier écran affiche donc l'actif de marque, en grand. Bénéfice qui ne
+   se voyait pas d'avance : l'atterrissage dans la barre devient un vrai FLIP
+   — même image, même dessin, seule l'échelle change. Il n'y a plus de fondu
+   entre deux objets différents, il y a un objet qui rentre chez lui.
+
+   Le mot est le h1 : le texte alternatif de l'image porte le nom de la
+   maison, une seule fois, à sa place logique dans la hiérarchie. */
+.marque {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  display: flex;
+  justify-content: center;
+  /* Centré, pas posé sur une ligne de base : le verrou du premier essai. Le
+     logo est un LOCKUP presque carré (720x520), là où le lettrage sur une
+     ligne était très large. Calé en bas et large de 46cqi, il tenait tout
+     entier derrière les deux corps — relevé à l'écran : on ne lisait plus que
+     des fragments du monogramme, et LUXURY était tranché par le modèle de
+     gauche. La marque devenait une forme accidentelle.
+
+     Centré et large, il déborde franchement les corps des deux côtés : le
+     monogramme respire au-dessus des torses et LUXURY court sous les hanches,
+     bien au-delà de leur silhouette. */
+  align-items: center;
+  /* Remonté du bas de la fenêtre pour laisser la copie respirer : à ce
+     réglage, le mot LUXURY du lockup cesse de passer sous « Apollon, premier
+     modèle » — relevé à l'écran, les deux se chevauchaient sur 50 px. */
+  padding-bottom: var(--aj-hero-mot-bas);
+  pointer-events: none;
+}
+
+.marqueBoite {
+  position: relative;
+  display: block;
+  /* TROIS BORNES, ET CHACUNE RÉPOND À UN DÉFAUT CONSTATÉ.
+       71cqi   — le logo doit être NETTEMENT plus large que les deux corps,
+                 sinon il disparaît derrière eux : à 46cqi on n'en lisait plus
+                 que des fragments et LUXURY était tranché par le modèle de
+                 gauche ;
+       1400px  — la largeur du dérivé @2x (Lanczos, aucun pixel inventé), donc
+                 jamais d'agrandissement au-delà du natif ;
+       hauteur — le lockup fait 1,385:1, presque carré. Sur un écran large il
+                 devenait plus haut que la fenêtre. Les 210 px réservés sont
+                 la copie (64), son air (60), la marge haute (40) et le jeu.
+     La plus petite gagne. */
+  width: min(71cqi, 1400px, calc((100svh - 210px) * 1.385));
+}
+
+.marqueLogo {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* La brillance qui traverse le métal. Elle est MASQUÉE PAR LE LOGO lui-même :
+   la lumière ne court donc que sur le dessin, jamais sur le fond. `screen`
+   n'éclaircit que ce qui est déjà clair — les creux du chrome restent noirs,
+   ce qui est exactement le comportement d'un reflet sur du métal poli. */
+.marqueEclat {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  mix-blend-mode: screen;
+  background-image: linear-gradient(
+    104deg,
+    transparent 38%,
+    rgba(255, 255, 255, 0.9) 50%,
+    transparent 62%
+  );
+  background-size: 280% 100%;
+  background-position: 0% 50%;
+  background-repeat: no-repeat;
+  -webkit-mask-image: url("/images/aj-luxury-logo.webp");
+  mask-image: url("/images/aj-luxury-logo.webp");
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+
+/* --- Les corps ------------------------------------------------------------
+   Un SUJET, pas une scène : on ne les recadre jamais, on les place. Le même
+   actif sert toutes les tailles d'écran — seule sa hauteur change. */
+.figures {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  height: var(--aj-hero-figures-h);
+  /* Le rapport réserve la place exacte avant décodage : aucun saut. */
+  aspect-ratio: var(--aj-hero-figures-ratio);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.figures img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* contain et non cover : un corps ne se rogne pas. Le rapport du conteneur
+     est déjà celui de l'actif, donc `contain` ne produit aucune bande. */
+  object-fit: contain;
+  object-position: 50% 100%;
+}
+
+/* --- Le voile -------------------------------------------------------------
+   Assombrit le haut pour la barre et le bas pour la copie, sans toucher au
+   centre où vivent les corps. Deux dégradés, aucun aplat. */
+.voile {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(
+      to bottom,
+      rgba(8, 8, 10, 0.74) 0%,
+      rgba(8, 8, 10, 0.3) 13%,
+      rgba(8, 8, 10, 0) 28%
+    ),
+    linear-gradient(
+      to top,
+      rgba(8, 8, 10, 0.8) 0%,
+      rgba(8, 8, 10, 0.34) 14%,
+      rgba(8, 8, 10, 0) 34%
+    );
+}
+
+/* --- La copie -------------------------------------------------------------
+   Trois signes, pas un de plus : la signature de maison, une ligne, un lien.
+   Tout le reste du discours appartient aux écrans suivants. */
+.copie {
+  position: absolute;
+  left: var(--gut);
+  right: var(--gut);
+  bottom: var(--aj-hero-copie-bas);
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--gut);
+  pointer-events: none;
+}
+
+.copieBloc {
+  max-width: 34ch;
+  pointer-events: auto;
+}
+
+.surtitre {
+  margin: 0 0 0.9em;
+  font-size: var(--t0);
+  font-weight: var(--aj-w-gras);
+  letter-spacing: var(--aj-ls-signature);
+  text-transform: uppercase;
+  color: var(--aj-encre-84);
+}
+
+.enonce {
+  margin: 0;
+  font-size: var(--t2);
+  font-weight: var(--aj-w-livre);
+  letter-spacing: var(--aj-ls-sous);
+  line-height: 1.3;
+  color: var(--aj-encre-94);
+  text-wrap: balance;
+}
+
+/* Chaque ligne monte derrière son propre masque. Le masque déborde d'un
+   dixième de cadratin en bas : sans cette marge, les jambages se font raser
+   par l'overflow au repos. */
+.ligneMasque {
+  display: block;
+  overflow: hidden;
+  padding-bottom: 0.12em;
+  margin-bottom: -0.12em;
+}
+
+.ligne {
+  display: block;
+}
+
+.lien {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.9em;
+  /* 44 px minimum, exigence AGENTS.md sur les cibles principales. */
+  min-height: 44px;
+  padding: 0.4em 0;
+  pointer-events: auto;
+  font-size: var(--t0);
+  font-weight: var(--aj-w-gras);
+  letter-spacing: var(--aj-ls-action);
+  text-transform: uppercase;
+  color: var(--aj-encre);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.lienMot {
+  position: relative;
+}
+
+/* Le filet se dessine depuis le bord d'attaque : le geste a un sens de
+   lecture. */
+.lienMot::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -0.35em;
+  height: 1px;
+  background: currentColor;
+  transform: scaleX(1);
+  transform-origin: left center;
+  transition: transform var(--aj-d-court) var(--aj-e-nav);
+}
+
+.lien:hover .lienMot::after,
+.lien:focus-visible .lienMot::after {
+  transform: scaleX(0.35);
+}
+
+.lienFleche {
+  display: block;
+  font-size: 1.15em;
+  line-height: 1;
+}
+
+/* --- Le volet d'ouverture -------------------------------------------------
+   En @keyframes et non en GSAP : il doit exister au PREMIER paint. Un import
+   dynamique arrive toujours après, et l'écran serait déjà découvert quand le
+   volet voudrait le couvrir. Sans JavaScript, la page est simplement déjà
+   ouverte. */
+/* ── LE VOLET COUVRE LA PRISE EN MAIN, ET C'EST UN CORRECTIF ─────────────
+   Relevé image par image le 21/08. GSAP est chargé en import dynamique : il
+   n'arrive qu'aux alentours de 430 ms. Avant lui, le CSS a déjà peint la
+   composition FINALE. Quand le module arrive, il pose les valeurs de départ
+   de l'arrivée — et la scène SAUTE, en pleine vue, parce que le volet en
+   était déjà à 83 % de son ouverture. Mesuré : les corps passaient de y=72 à
+   y=3 puis revenaient. Un à-coup franc, sur le tout premier écran.
+
+   Le volet ne s'ouvre donc plus tout seul quand le JavaScript est là : il
+   attend que GSAP ait pris la main, pose ses valeurs de départ derrière lui,
+   puis s'ouvre DANS la même timeline que l'arrivée. Le saut existe toujours,
+   mais il se produit hors de vue.
+
+   L'animation CSS reste, en filet de sécurité, avec un délai : si le module
+   n'arrive jamais, le volet s'ouvre seul et la page reste juste. */
+.volet {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  background: var(--aj-noir-abysse);
+  transform-origin: 50% 100%;
+  animation: voletLeve var(--aj-d-long) var(--aj-e-volet) 1.7s forwards;
+  pointer-events: none;
+}
+
+/* GSAP a pris la main : on coupe le filet, sinon les deux se disputeraient
+   le volet. */
+.hero[data-anime="pret"] .volet {
+  animation: none;
+}
+
+@keyframes voletLeve {
+  from {
+    transform: scaleY(1);
+  }
+  to {
+    transform: scaleY(0);
+  }
+}
+
+/* ==========================================================================
+   Écran vertical — une chorégraphie propre, pas une réduction du bureau
+   --------------------------------------------------------------------------
+   Sur un écran étroit, la hauteur des corps n'est plus décidée par la hauteur
+   de la fenêtre mais par sa LARGEUR : au-delà d'une certaine taille ils
+   déborderaient et un corps ne se rogne pas. `--aj-hero-figures-h` passe donc
+   d'une mesure en svh à une mesure dérivée de la largeur.
+
+   Conséquence de composition : les corps occupent tout le bas de l'écran, la
+   copie ne peut plus s'y poser. Elle monte donc sous la barre, et l'écran se
+   lit de haut en bas — la phrase, le nom, les corps. C'est l'ordre d'un
+   éditorial de mode, pas un pis-aller.
+   ========================================================================== */
+@media (max-aspect-ratio: 4 / 5) {
+  /* ── LE MOT DEVIENT UN CARTOUCHE, ET C'EST UNE MESURE ───────────────────
+     Sur un écran étroit, les corps occupent toute la largeur utile : il ne
+     reste que ~20 px de chaque côté. Le mot-marque glissé derrière eux n'y
+     montrerait donc que ses extrémités — relevé à l'écran, on ne lisait plus
+     que « A », « L » et « RY », en métal clair sur des torses éclairés. Le
+     geste du bureau n'est pas transposable ici : il ne serait pas réduit, il
+     serait illisible.
+
+     Le mot passe donc AU-DESSUS des corps, sur le métal sombre, où il a le
+     contraste et la place d'être monumental. L'écran se lit de haut en bas —
+     la phrase, le nom, les corps — c'est l'ordre d'un éditorial de mode.
+
+     Budget vertical relevé à 390x844 : barre 76, copie 121, mot 70, corps
+     523, et deux respirations de ~25. Les corps sont calés à 62svh, valeur
+     sous la limite de largeur (390 / 0,671 = 581 px) : rien n'est rogné. */
+  .hero {
+    /* ── LA HAUTEUR DES CORPS EST UN RESTE, PAS UN SOUHAIT ──────────────
+       Un plafond fixe en svh ne tient pas sur un écran vertical : à
+       768x1024 il donnait 635 px de corps et laissait EXACTEMENT 135 px
+       au-dessus pour un mot qui en fait 135 — la copie et le mot se
+       touchaient. Le budget vertical se calcule donc au lieu d'être deviné :
+
+         hauteur d'écran
+         − la barre                     var(--aj-tete-h)
+         − le mot, qui suit la largeur  17,9cqi  (corps/4,8 × interligne 0,86)
+         − la copie et ses respirations 190px    (121 mesurés + 69 d'air)
+
+       La seconde borne reste la largeur : un corps ne se rogne jamais. La
+       plus petite des deux gagne, donc le premier écran reste juste sur un
+       téléphone étroit comme sur une tablette haute. */
+    /* Le logo commande, les corps prennent le reste. Le terme qui le
+       représentait était calibré sur un LETTRAGE (17,9cqi) ; le lockup, lui,
+       est presque carré et beaucoup plus haut. Relevé à l'écran avec l'ancien
+       terme : le logo mordait la copie de 72 px à 390 et de 255 px à 768.
+       Sa hauteur se déduit désormais de sa largeur réelle et du rapport du
+       fichier, 1,385:1. */
+    --aj-hero-marque-l: min(78cqi, 460px);
+    --aj-hero-figures-h: min(
+      calc(
+        100svh - var(--aj-tete-h) - (var(--aj-hero-marque-l) / 1.385) - 190px
+      ),
+      calc((100cqi - 2 * var(--gut)) / var(--aj-hero-figures-ratio))
+    );
+  }
+
+  .marque {
+    align-items: flex-end;
+    padding-bottom: calc(var(--aj-hero-figures-h) + 14px);
+  }
+
+  .marqueBoite {
+    width: var(--aj-hero-marque-l);
+  }
+
+  .copie {
+    top: calc(var(--aj-tete-h) + 2.4svh);
+    bottom: auto;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: clamp(12px, 2svh, 20px);
+  }
+
+  .copieBloc {
+    max-width: none;
+  }
+
+  .enonce {
+    font-size: var(--t1);
+  }
+
+  /* Le dégradé bas disparaît : la copie n'est plus en bas, et l'assombrir
+     ferait perdre les pieds et le socle.
+
+     Le voile haut, lui, DESCEND BEAUCOUP PLUS BAS qu'en paysage, et c'est une
+     correction. Sur un écran vertical le champ de métal pose une grande masse
+     claire au milieu de l'écran — là où le bureau la cache derrière les corps.
+     Relevé à l'écran : la copie et le lockup argenté s'y délavaient, et le
+     premier écran perdait son ouverture sombre. Le voile couvre donc les deux
+     premiers tiers, exactement la bande où vivent la copie et le logo, et rend
+     le métal à pleine puissance là où il travaille : autour des corps. */
+  .voile {
+    background: linear-gradient(
+      to bottom,
+      rgba(8, 8, 10, 0.88) 0%,
+      rgba(8, 8, 10, 0.42) 20%,
+      rgba(8, 8, 10, 0.16) 44%,
+      rgba(8, 8, 10, 0) 68%
+    );
+  }
+
+  /* SUR ÉCRAN VERTICAL, LE MÉTAL DESCEND D'UN CRAN. Le champ pose une grande
+     masse claire au milieu de la fenêtre, là où le bureau la cache derrière
+     les corps. La voiler la transformait en aplat gris : on perdait la matière
+     au lieu de la calmer. On baisse donc le NIVEAU sans toucher au contraste —
+     les creux restent noirs, les reflets restent nets, mais l'ensemble revient
+     dans l'ouverture sombre, et le lockup argenté retrouve son fond. */
+  .metal {
+    filter: contrast(1.12) brightness(0.92) saturate(0.92);
+  }
+}
+
+/* ==========================================================================
+   Mouvement réduit
+   --------------------------------------------------------------------------
+   Aucune information ne manque : le volet ne descend jamais, la caméra ne
+   dérive pas, la brillance ne circule pas, le métal est un dégradé fixe. La
+   composition est là, entière, dès le premier paint.
+   ========================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  .volet {
+    display: none;
+  }
+
+  .plan,
+  .scene {
+    transform: scale(1);
+  }
+
+  .lienMot::after {
+    transition: none;
+  }
+}

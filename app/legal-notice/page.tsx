@@ -2,7 +2,7 @@ import InfoPage, { InfoNotice } from "../components/InfoPage";
 import {
   HOSTING_PROVIDER,
   LEGAL_CONTACT,
-  LEGAL_VERSION,
+  LEGAL_VERSION_DISPLAY,
   SELLER_IDENTITY,
 } from "@/lib/legal";
 import { T } from "@/lib/i18n/TranslatedText";
@@ -12,18 +12,18 @@ export const metadata = { title: "Mentions légales | AJ Luxury" };
 export default function LegalNoticePage() {
   return (
     <InfoPage
-      eyebrow={<T id="info.legal.eyebrow" values={{ version: LEGAL_VERSION }} />}
+      eyebrow={<T id="info.legal.eyebrow" values={{ version: LEGAL_VERSION_DISPLAY }} />}
       title={<T id="info.legal.title" />}
       status={<T id="info.legal.status" />}
       officialFrenchOnly
     >
       <InfoNotice warning>
         <p>
-          <strong>Identité à finaliser.</strong> La marque et le contact sont
-          connus ; la dénomination légale, l’immatriculation, le siège, le
-          téléphone et le directeur de publication doivent encore être fournis
-          par AJ Luxury. La boutique ne doit pas accepter de paiement avant leur
-          publication.
+          <strong>Ouverture à finaliser.</strong> L’identité du vendeur, son
+          immatriculation, son siège et le directeur de publication sont
+          publiés. Le téléphone professionnel et le régime de TVA doivent encore
+          être confirmés. La boutique ne doit pas accepter de paiement public
+          avant leur publication exacte.
         </p>
       </InfoNotice>
 
@@ -50,20 +50,27 @@ export default function LegalNoticePage() {
             <dt>Immatriculation</dt>
             <dd>{SELLER_IDENTITY.registration}</dd>
           </div>
-          <div>
-            <dt>TVA intracommunautaire</dt>
-            <dd>{SELLER_IDENTITY.vatNumber}</dd>
-          </div>
+          {SELLER_IDENTITY.vatNumber ? (
+            <div>
+              <dt>TVA intracommunautaire</dt>
+              <dd>{SELLER_IDENTITY.vatNumber}</dd>
+            </div>
+          ) : null}
           <div>
             <dt>E-mail</dt>
             <dd>
               <a href={`mailto:${LEGAL_CONTACT.email}`}>{LEGAL_CONTACT.email}</a>
             </dd>
           </div>
-          <div>
-            <dt>Téléphone</dt>
-            <dd>{LEGAL_CONTACT.phone}</dd>
-          </div>
+          {/* La ligne n'existe que si le numéro existe. Voir LEGAL_CONTACT
+              dans lib/legal.ts : afficher un texte d'attente ne satisferait
+              pas davantage la LCEN et signalerait une marque non prête. */}
+          {LEGAL_CONTACT.phone ? (
+            <div>
+              <dt>Téléphone</dt>
+              <dd>{LEGAL_CONTACT.phone}</dd>
+            </div>
+          ) : null}
         </dl>
       </section>
 

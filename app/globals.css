@@ -1,3 +1,4 @@
+@import "./design-system.css";
 @import "tailwindcss";
 
 @font-face {
@@ -35,7 +36,7 @@
 }
 
 html {
-  scroll-behavior: smooth;
+  /* scroll-behavior: smooth retire : GSAP le documente comme incompatible avec ScrollTrigger — il casse le scrub, le refresh et toute mesure au scroll. */
 }
 
 body {
@@ -1374,6 +1375,210 @@ footer:not([class]) > p {
   }
 }
 
+/* Private Apollon candidate: one compact vertical-to-horizontal chapter. */
+@media (min-width: 761px) {
+  .aj-apollon-myth {
+    min-height: 180svh;
+    padding: 0;
+  }
+
+  .aj-apollon-myth__sticky {
+    position: sticky;
+    top: 0;
+    height: 100svh;
+    overflow: hidden;
+  }
+
+  .aj-apollon-myth__rail {
+    display: flex;
+    width: max-content;
+    height: 100%;
+    align-items: center;
+    gap: clamp(36px, 5vw, 84px);
+    padding: 7svh 8vw;
+    transform: translate3d(0, 0, 0);
+    will-change: transform;
+  }
+
+  .aj-apollon-myth__intro {
+    width: 58vw;
+    flex: 0 0 58vw;
+    grid-template-columns: minmax(120px, 0.35fr) minmax(360px, 1fr);
+    gap: clamp(30px, 5vw, 80px);
+    margin: 0;
+  }
+
+  .aj-apollon-myth__intro h2 {
+    font-size: clamp(52px, 6vw, 96px);
+  }
+
+  .aj-apollon-myth__gallery {
+    display: flex;
+    width: auto;
+    flex: none;
+    gap: clamp(18px, 2.4vw, 38px);
+    margin: 0;
+    padding: 0;
+  }
+
+  .aj-apollon-myth__card,
+  .aj-apollon-myth__card--rose,
+  .aj-apollon-myth__card--pourpre {
+    width: min(34vw, 470px);
+    flex: none;
+    margin: 0;
+  }
+
+  .aj-apollon-myth__frame {
+    height: min(70svh, 705px);
+  }
+
+  .aj-apollon-myth__footer {
+    width: 38vw;
+    flex: 0 0 38vw;
+    align-items: flex-start;
+    flex-direction: column;
+    margin: 0;
+  }
+}
+
+@media (max-width: 760px) {
+  .aj-apollon-myth__sticky {
+    position: relative;
+  }
+
+  .aj-apollon-myth__rail {
+    display: block;
+  }
+}
+
+@media (min-width: 761px) and (prefers-reduced-motion: reduce) {
+  .aj-apollon-myth {
+    min-height: auto;
+  }
+
+  .aj-apollon-myth__sticky {
+    position: relative;
+    height: auto;
+  }
+
+  .aj-apollon-myth__rail {
+    overflow-x: auto;
+    animation: none;
+    scroll-snap-type: x mandatory;
+    transform: none;
+  }
+
+  .aj-apollon-myth__intro,
+  .aj-apollon-myth__card,
+  .aj-apollon-myth__footer {
+    scroll-snap-align: start;
+  }
+}
+
+/* Distinct chapters: cinematic film, embodiment, then tactile commerce. */
+.aj-film::after {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  background:
+    linear-gradient(90deg, rgba(0, 0, 0, 0.12), transparent 24%, transparent 76%, rgba(0, 0, 0, 0.12)),
+    linear-gradient(0deg, rgba(0, 0, 0, 0.3), transparent 24%);
+  content: "";
+  pointer-events: none;
+}
+
+.aj-featured {
+  min-height: 100svh;
+}
+
+.aj-featured__bridge {
+  position: absolute;
+  z-index: 3;
+  top: clamp(34px, 5svh, 62px);
+  right: var(--aj-gutter);
+  left: var(--aj-gutter);
+  display: grid;
+  grid-template-columns: minmax(130px, 0.35fr) minmax(320px, 1.65fr);
+  align-items: end;
+  gap: clamp(24px, 4vw, 70px);
+  color: #f5f3ef;
+}
+
+.aj-featured__bridge p,
+.aj-featured__bridge h2 {
+  margin: 0;
+}
+
+.aj-featured__bridge > p:first-child {
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.aj-featured__bridge h2 {
+  font-size: clamp(42px, 5.5vw, 84px);
+  font-weight: 300;
+  letter-spacing: -0.07em;
+  line-height: 0.88;
+}
+
+.aj-featured__bridge > p:last-child {
+  max-width: 440px;
+  color: rgba(255, 255, 255, 0.68);
+  font-size: clamp(11px, 1vw, 14px);
+  line-height: 1.6;
+}
+
+.aj-featured__editorial {
+  padding-top: clamp(142px, 18svh, 190px);
+  padding-bottom: clamp(34px, 5svh, 62px);
+}
+
+.aj-product-card__image::after {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(110deg, transparent 20%, rgba(255, 255, 255, 0.22) 48%, transparent 76%);
+  content: "";
+  pointer-events: none;
+  transform: translateX(-120%);
+  transition: transform 900ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.aj-product-card:hover .aj-product-card__image::after,
+.aj-product-card:focus-within .aj-product-card__image::after {
+  transform: translateX(120%);
+}
+
+@media (max-width: 760px) {
+  .aj-featured {
+    display: block;
+    min-height: auto;
+    padding-top: 56px;
+  }
+
+  .aj-featured__bridge {
+    position: relative;
+    top: auto;
+    right: auto;
+    left: auto;
+    width: calc(100% - 32px);
+    grid-template-columns: 1fr;
+    gap: 18px;
+    margin: 0 auto;
+  }
+
+  .aj-featured__bridge h2 {
+    font-size: clamp(46px, 14vw, 66px);
+  }
+
+  .aj-featured__editorial {
+    padding-top: 42px;
+  }
+}
+
 /* AJ Luxury one-page experience */
 
 .home-shell {
@@ -1384,7 +1589,7 @@ footer:not([class]) > p {
   overflow-y: auto;
   background: #0a0a0b;
   color: #fff;
-  scroll-behavior: smooth;
+  /* scroll-behavior: smooth retire : GSAP le documente comme incompatible avec ScrollTrigger — il casse le scrub, le refresh et toute mesure au scroll. */
   scroll-snap-type: y mandatory;
   scrollbar-color: rgba(255, 255, 255, 0.35) transparent;
   scrollbar-width: thin;
@@ -2876,9 +3081,99 @@ footer:not([class]) > p {
 .aj-home {
   --aj-border: rgba(255, 255, 255, 0.32);
   --aj-gutter: clamp(18px, 2.8vw, 44px);
-  overflow: hidden;
-  background: #0a0a0b;
+  /* Hauteur réelle du StoreHeader, qui est DANS le flux (position: sticky).
+     Le film s'en déduit pour que en-tête + film tiennent exactement un écran,
+     comme dans la maquette où l'en-tête est fixe et #ajFilm inset de 76px.
+     Mesuré : 76px au-dessus de 900px, 110,4px en dessous (l'en-tête passe sur
+     deux rangées, StoreChrome.module.css:415). Recit.module.css:48 a relevé la
+     même valeur pour la même raison. */
+  --aj-tete-h: var(--aj-header-h);
+  /* `overflow: hidden` crée un conteneur de défilement : tout descendant épinglé
+     par ScrollTrigger est alors clippé et le pin ne tient plus. `overflow-x: clip`
+     coupe le débordement horizontal sans créer ce conteneur. C'est aussi ce qui
+     laisse vivre le `position: sticky` du StoreHeader, désormais premier enfant
+     direct de ce bloc : `clip` n'est pas dans la liste que
+     estDansUnConteneurDeDefilement() (StoreHeader.tsx:62) considère bloquante. */
+  overflow-x: clip;
+  /* Le fond de page passe du plancher des sections (jeton, L* 6,5) au lieu du
+     #0a0a0b littéral (L* 2,8) : il n'est visible que dans les rares filets
+     entre deux blocs, et une valeur plus sombre que les sections qu'il porte y
+     dessinait une ligne noire parasite. */
+  background: var(--aj-noir);
   color: #fff;
+}
+
+/* Sous 900px l'en-tête passe sur deux rangées : marque + actions, puis la nav.
+   4rem + 2,8rem + 1px ≈ 6,9rem — hauteur mesurée 110,4px. */
+@media (max-width: 900px) {
+  .aj-home {
+    --aj-tete-h: 6.9rem;
+  }
+}
+
+/* Sous 560px la barre revient à UNE rangée et les six liens passent derrière
+   un bouton unique (StoreChrome.module.css, « TÉLÉPHONE — UNE SEULE RANGÉE »).
+   Le jeton suit la barre réelle, sinon la rangée 1 du film continuerait de
+   réserver 110,4px sous une barre qui n'en fait plus que 56 : le film
+   repartirait 54px trop bas et l'écart se lirait comme une bande. */
+@media (max-width: 560px) {
+  .aj-home {
+    --aj-tete-h: 3.5rem;
+  }
+}
+
+/* Corollaire du correctif B1 : la barre colle enfin, donc elle surplombe ce
+   qui défile sous elle. Sans cette marge, « Découvrir ↓ » amènerait le haut de
+   #plaque exactement sous l'en-tête. Les ancres de l'accueil sont nommées une
+   à une plutôt que par `[id]` : la règle ne peut pas déborder sur un nœud que
+   du code ferait défiler pour une autre raison. */
+/* #apollon et #plaque sont exclus : leur contenu entier est un volet sticky
+   top:0 de 100svh. Décaler leur ancre de --aj-tete-h pousse la scène de 76 à
+   976px dans un viewport de 900 et sort .plaqueBarre — onglets, état,
+   progression — du cadre à l'instant même de l'arrivée par « Découvrir ↓ ». */
+.aj-home :is(#accueil, #haut, #collection, #coloris, #matiere, #histoire) {
+  scroll-margin-top: var(--aj-tete-h);
+}
+
+/* Le prix de l'accueil, sous la grille des coloris. Il reprend au caractère
+   près le traitement de /shop (Boutique.module.css:104-112) : un chiffre
+   d'affichage en --t4, graisse fine, interlettrage resserré — pas la mention à
+   --t0 des vignettes. Les deux écrans sont à un clic l'un de l'autre, ils
+   doivent dire le prix de la même voix. */
+.aj-home__prix {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.aj-home__prix-mention {
+  color: var(--aj-encre-72);
+  font-size: var(--t0);
+  font-weight: var(--aj-w-gras);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.aj-home__prix-chiffre {
+  font-family: var(--disp);
+  font-optical-sizing: auto;
+  font-size: var(--t4);
+  font-weight: var(--aj-w-fin);
+  letter-spacing: var(--aj-ls-grand);
+  line-height: 1;
+}
+
+/* L'etat de vente, sous le chiffre. Meme rang typographique que la mention du
+   dessus — c'est une precision, pas un avertissement : elle informe sans
+   crier, et elle ne peut pas etre lue comme une promotion. */
+.aj-home__prix-etat {
+  display: block;
+  margin-top: 0.5em;
+  font-size: var(--t0);
+  font-weight: var(--aj-w-moyen);
+  letter-spacing: var(--aj-ls-label);
+  text-transform: uppercase;
+  color: var(--aj-encre-72);
 }
 
 .aj-section-break {
@@ -2890,13 +3185,50 @@ footer:not([class]) > p {
 
 .aj-film {
   position: relative;
-  min-height: 100svh;
+  /* L'en-tête n'est plus DANS cette section (c'était le bloquant B1 : son
+     `overflow: hidden` annulait le `position: sticky` de la barre et la
+     navigation mourait sur onze hauteurs d'écran). Il la PRÉCÈDE donc dans le
+     flux et y occupe --aj-tete-h.
+
+     Tour 2 payait ce décalage en rognant le film (`100svh - --aj-tete-h`).
+     Résultat vu par le client : la barre poussait le film vers le bas, on
+     voyait le fond de scène sous elle, et le premier écran ne remplissait plus
+     la fenêtre. Tour 3 remonte le film de la hauteur exacte de la barre : il
+     repart du tout PREMIER PIXEL et reprend une hauteur d'écran pleine.
+     L'en-tête, resté collant donc toujours vivant, passe PAR-DESSUS l'image —
+     c'est le motif de la maquette (_design-reference/claude-design-accueil.html,
+     barre `fixed` hors flux), obtenu sans repasser en `fixed` ni replonger la
+     barre dans le `overflow: hidden` ci-dessous.
+     La transparence de la barre au repos et son fond opaque après défilement
+     sont posés dans StoreChrome.module.css (bloc « Accueil »).
+
+     Les 2px de rab : --aj-tete-h est un jeton, la barre est du CONTENU, sa
+     hauteur réelle dérive (mesuré 110,8px sous 900px pour un jeton à 6,9rem =
+     110,4px). Sans marge de sécurité, ce delta laissait une ligne de fond de
+     page crème au tout premier pixel. On mord 2px de plus — ils passent
+     derrière la barre, jamais à l'écran — et on les rend au `min-height` pour
+     que le bas du film tombe pile sur la ligne de flottaison. */
+  margin-top: calc(-1 * var(--aj-tete-h) - 2px);
+  min-height: calc(100svh + 2px);
   overflow: hidden;
   border-bottom: 1px solid var(--aj-border);
-  background: #070709;
+  /* #070709 (L* 1,96) était le point le plus sombre du site et n'était même
+     pas le noir de marque : trois dixièmes de L* en dessous, pour un fond
+     entièrement recouvert par la vidéo. Il rejoint --aj-noir-abysse (#08080a,
+     L* 2,23), donc exactement la valeur du volet qui le recouvre à
+     l'ouverture — la transition du volet ne montre plus de saut de fond. */
+  background: var(--aj-noir-abysse);
   isolation: isolate;
 }
 
+/* NE PAS insérer le film de --aj-header-h ici. Le cadrage `inset: 76px 0 0 0`
+   de la maquette (_design-reference/claude-design-accueil.html:62) suppose une
+   barre FIXE, hors flux, qui surplombe la section. La nôtre est COLLANTE, donc
+   dans le flux : le décalage est déjà payé par le `min-height` ci-dessus.
+   Mesuré en le posant quand même, à 1440×900 : bande morte de 76px de #070709
+   entre le bas de la barre (y=76) et le haut de la vidéo (y=152), et la
+   signature reste à 39px sous la ligne de flottaison. Le décalage serait
+   compté deux fois. */
 .aj-film__hero-scene,
 .aj-film__grade {
   position: absolute;
@@ -2952,7 +3284,7 @@ footer:not([class]) > p {
 
 .aj-film__hero-poster img,
 .aj-film__hero-video {
-  object-fit: cover;
+  object-fit: contain;
   object-position: center;
 }
 
@@ -2968,6 +3300,39 @@ footer:not([class]) > p {
   opacity: 1;
 }
 
+.aj-film__hero-reflection {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0.12;
+  pointer-events: none;
+  mix-blend-mode: soft-light;
+  -webkit-mask-image: radial-gradient(
+    ellipse 31% 61% at 52% 43%,
+    transparent 0%,
+    transparent 66%,
+    rgba(0, 0, 0, 0.44) 78%,
+    #000 100%
+  );
+  mask-image: radial-gradient(
+    ellipse 31% 61% at 52% 43%,
+    transparent 0%,
+    transparent 66%,
+    rgba(0, 0, 0, 0.44) 78%,
+    #000 100%
+  );
+}
+
+/* LE CALQUE D'IDENTITÉ EST RETIRÉ AVEC LA v6, PAS MASQUÉ. Il plaquait les
+   visages découpés de la campagne (géométrie v4) par-dessus le film. Sur le
+   master v6 — les deux images validées par Adam le 21/08, composées
+   différemment — ce calque dessinait deux têtes fantômes à côté des vraies,
+   constaté au navigateur à 390x844. Les PNG dérivés de la photo approuvée
+   restent dans le dépôt comme référence d'identité, mais plus rien ne les
+   monte. */
+
 @media (min-aspect-ratio: 801 / 1000) {
   .aj-film__hero-backdrop {
     opacity: 1;
@@ -2978,47 +3343,108 @@ footer:not([class]) > p {
     transform: scale(1.08);
   }
 
+  /* `top: 96px` dégageait les visages de la barre quand celle-ci poussait le
+     film vers le bas. La barre surplombe désormais l'image : ce décalage ne
+     protégeait plus rien et laissait 67,6px de flou de fond visibles sous elle
+     à 1440×900 — la « bande grise » du retour client. Le média part du haut. */
   .aj-film__hero-stage {
-    top: 96px;
+    top: 0;
     bottom: 0;
     height: auto;
   }
+
+  /* `contain` laissait le média se poser en boîte à lettres dans une scène plus
+     large que lui : 66,8px de flou de fond restaient nus au bas de l'écran une
+     fois le décalage du haut supprimé. `cover` remplit la scène entière — le
+     cadrage reste centré horizontalement et ancré en haut, donc les visages ne
+     bougent pas ; seules les marges de décor sont rognées (≈4,5% par côté à
+     1440×900). Le fond flou survit comme filet de sécurité pendant les échelles
+     intermédiaires de GSAP. */
+  .aj-film__hero-poster img,
+  .aj-film__hero-video {
+    object-fit: cover;
+    object-position: center top;
+  }
 }
 
+/* Portrait — le média EST le premier écran.
+   --------------------------------------------------------------------------
+   Ce qu'il y avait avant : le média se posait dans un cadre de 70svh au ratio
+   720/934, centré, avec une ombre portée, et le reste de l'écran était rempli
+   par le même visuel flouté à 18px. Mesuré : la boîte rendue faisait 50,4 % de
+   l'aire du premier écran à 768x1024 et 57,7 % à 390x844, et la couture entre
+   la photo nette et le remplissage flou traversait le h1. Le premier écran
+   n'était pas une image, il en CONTENAIT une.
+
+   L'etalon (oryzo.ai) tient un seul canvas a 100 % de l'aire aux quatre
+   tailles et pose toute la copie dessus. La regle qui s'en transpose n'est pas
+   « mettre du plein cadre » mais « l'objet reste entier, et c'est la MISE EN
+   PAGE qui plie ». Chez eux la camera 3D recule ; chez nous la photo est fixe,
+   donc le recul se joue sur la fenetre de recadrage — d'ou un `object-position`
+   CALCULE, et non centre par defaut.
+
+   DEPUIS LA v6 (21/08), LE MASTER PORTRAIT N'EST PLUS UN RECADRAGE DU
+   PAYSAGE : c'est la composition verticale validée par Adam (941x1672,
+   fenêtre 941x1221 -> 720x934 dans scripts/build_hero_v6_motion.py). Les
+   deux hommes y sont CENTRÉS, silhouettes entières, têtes à ~11 % du haut
+   et reflets en pied de cadre. Toute la mesure v4 de « boîte de sûreté »
+   (silhouette 71,66 % de large, coude d'Alex à 82,22 %, décalage à 57 %)
+   est donc caduque : le 57 % rachetait un cadrage large dans une fenêtre
+   étroite qui n'existe plus. `object-position` revient à 50 %.
+
+   Le 0 % vertical reste : entre 0,771 et 0,800 de rapport de fenêtre,
+   `cover` rogne en hauteur, et ce rognage doit se payer en bas — sur le
+   reflet, qui s'éteint dans le marbre — jamais en haut sur les têtes. */
 @media (max-aspect-ratio: 4 / 5) {
   .aj-film__hero-media {
     background: #09090b;
   }
 
-  .aj-film__hero-backdrop {
-    opacity: 1;
-  }
+  /* Le fond flou est retiré, pas masqué. C'était LUI la couture : la scène est
+     désormais couverte à 100 % par le média, donc ce calque ne peut plus
+     apparaître nulle part — et une passe de `blur(18px)` sur une image de
+     720x934 disparaît du budget mobile. Il reste à `opacity: 0` par la règle
+     de base ; le filet de sécurité pendant les échelles GSAP n'est utile que
+     dans la branche paysage, où la scène et le média n'ont pas le même ratio. */
 
-  .aj-film__hero-backdrop img {
-    filter: blur(18px) brightness(0.44) saturate(0.72);
-    object-position: center;
-    transform: scale(1.08);
-  }
-
-  .aj-film__hero-stage {
-    top: calc(50% + 34px);
-    left: 50%;
-    width: min(100%, calc(70svh * 720 / 934));
-    height: auto;
-    aspect-ratio: 720 / 934;
-    box-shadow:
-      inset 0 1px rgba(255, 255, 255, 0.18),
-      inset 0 -1px rgba(255, 255, 255, 0.18),
-      0 22px 70px rgba(0, 0, 0, 0.42);
-    transform: translate(-50%, -50%);
-  }
+  /* Aucune règle `.aj-film__hero-stage` ici : la scène reprend la règle de
+     base, `inset: 0` sur 100 % de la boîte. Le cadre, l'ombre portée et le
+     `translate` sont supprimés, pas neutralisés — c'est la suppression qui
+     garantit qu'aucune arête ne subsiste. */
 
   .aj-film__hero-poster img,
   .aj-film__hero-video {
-    object-position: center;
+    object-fit: cover;
+    object-position: 50% 0%;
   }
 }
 
+/* ==========================================================================
+   TÉLÉPHONE — LE PREMIER ÉCRAN EST L'IMAGE VERTICALE, PLEIN CADRE — 21/08
+   --------------------------------------------------------------------------
+   LA GRILLE À SEPT RANGÉES EST SUPPRIMÉE, PAS AMENDÉE. Elle existait parce
+   que l'ancien master portrait était un recadrage du paysage : plein cadre,
+   il jetait 42,4 % de sa largeur et sectionnait un avant-bras. Le master v6
+   est la composition VERTICALE validée par Adam, hommes centrés, silhouettes
+   compactes. Mesuré sur les masques de scripts/build_hero_v6_motion.py : à
+   390x844 en `cover`, la fenêtre montre 60 % de la largeur du rendu, et les
+   deux hommes plus le tabouret (x 215..705 de la source) tiennent ENTIERS
+   dedans, avec 27 px de marge à gauche et 48 à droite. L'exigence qui
+   justifiait la grille — ne jamais remplir l'écran — est tombée avec l'actif.
+
+   Le téléphone parle donc la même langue que le bureau : UN calque, le film
+   plein cadre, la copie posée sur le sol réfléchissant en bas — la grammaire
+   de l'étalon, un objet par écran. C'est aussi ce qui tue les rangées
+   clonées : l'ancien écran en comptait 81 % (aplat + mur étiré à 2000 %),
+   l'étalon 3 %. Plus aucun aplat, plus aucun étirement : chaque rangée du
+   premier écran est de la photographie animée.
+
+   Le mur étiré, le mot-signe et le filet — les trois pièces qui n'existaient
+   qu'au téléphone — sont retirés du DOM avec la grille. Le voile mobile
+   (@media 900px, plus bas) reprend le contraste : 0,34 en tête pour la
+   barre, 0,54-0,63 au pied pour la phrase. `object-position: 50% 0%` de la
+   branche portrait ci-dessus ancre les crânes ; le rognage `cover` se paie
+   en bas, sur le reflet qui s'éteint dans le marbre. */
 .aj-film__portrait--sr {
   position: absolute;
   width: 1px;
@@ -3031,20 +3457,40 @@ footer:not([class]) > p {
   border: 0;
 }
 
+/* Le bouton de pause du film. Son libellé est lu en toutes lettres au-dessus
+   de 760px : il tient donc le plancher typographique dur du socle, --t0 = 15px
+   (design-system.css:27-31), et pas un corps de mention légale.
+   Sa gouttière est celle de la signature qu'il surplombe — --gut, pas
+   --aj-gutter : à 1440 les deux valeurs divergent de 17px et l'œil lit un
+   défaut d'alignement entre le bouton et « Découvrir ↓ ».
+   Sa hauteur d'accroche reprend celle du bloc signature (Accueil.module.css:74)
+   plus 88px, soit la hauteur du bloc (44px) et autant d'air. */
 .aj-film__motion-toggle {
   position: absolute;
   z-index: 4;
-  right: var(--aj-gutter);
-  bottom: 82px;
+  right: var(--gut);
+  bottom: calc(clamp(26px, 4vh, 44px) + 88px);
   min-width: 6.5rem;
   min-height: 44px;
-  padding: 12px 0 5px;
+  /* Le padding latéral tient le fond ci-dessous : sans lui, le voile
+     s'arrêterait au ras des lettres. */
+  padding: 12px 14px 5px;
   border: 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.62);
-  background: transparent;
+  /* Une ombre portée ne garantit rien : elle dépend de ce qu'il y a dessous.
+     Mesuré par le jury du 19/08 sur les pixels réellement rendus, 20,9 % de la
+     surface de ce libellé tombait sous 5,0:1 quand il passait sur un reflet
+     métallique clair, pire pixel 2,12:1. Un voile sombre propre à l'étiquette
+     rend le rapport indépendant de l'image : il est calculé, plus subi.
+     Le flou d'arrière-plan garde la lecture du métal derrière, donc le voile
+     peut rester léger. */
+  background: rgba(6, 6, 8, 0.46);
+  backdrop-filter: blur(7px) saturate(112%);
+  -webkit-backdrop-filter: blur(7px) saturate(112%);
+  border-radius: 2px;
   color: rgba(255, 255, 255, 0.98);
   cursor: pointer;
-  font-size: 8px;
+  font-size: var(--t0);
   font-weight: 650;
   letter-spacing: 0.14em;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.72);
@@ -3055,17 +3501,120 @@ footer:not([class]) > p {
   display: none;
 }
 
+/* L'étalonnage du film. C'est le SOL sur lequel la phrase du premier écran est
+   posée, et rien d'autre : ni bandeau, ni carte, ni encadré. Le premier écran
+   de l'étalon est image à 100 %, toute la copie posée dessus ; un aplat opaque
+   sous le texte rendrait cette règle fausse.
+
+   L'ENVELOPPE DU PRODUIT, mesurée sur la trame réellement rendue (960x540,
+   détection des pixels lilas) : les boxers occupent 41,3 % à 66,3 % de la
+   hauteur et 41,8 % à 61,4 % de la largeur. La rampe verticale reste donc
+   rigoureusement transparente jusqu'à 67 %, et le dégradé latéral s'éteint à
+   28 % de la largeur, avant le bord du corps de Jérémy (x ≈ 32 %). Aucun
+   centième de voile ne touche le vêtement, ni les visages, qui sont plus haut.
+
+   POURQUOI IL A ÉTÉ DIVISÉ PAR PRÈS DE DEUX. La version précédente montait à
+   0,92 au pied de l'écran. Mesure au banc sur les pixels composités : le pire
+   pixel sous la phrase donnait 9,41:1 et la médiane 19,14:1, pour un seuil de
+   5,0:1. Le voile était donc 3,8 fois plus fort que nécessaire au pire point,
+   et ce surplus se payait en image — le sol, la flaque de métal et les pieds
+   des deux hommes disparaissaient sous un aplat noir large de 1920px, c'est-
+   à-dire exactement le bandeau que l'étalon n'a jamais.
+
+   La rampe est recalculée à partir de la boîte de texte, ligne par ligne, pour
+   viser 5,0:1 au 95e centile et non 19:1 à la médiane :
+     67 %  0     — sous l'ourlet du boxer (66,3 %), rien ;
+     70 %  0,40  — la première ligne de la phrase commence à 69,9 % ;
+     74 %  0,50  — elle traverse le tabouret de métal poli, le point le plus
+                   clair de toute la moitié basse ;
+     80 %  0,54  — deuxième ligne, sur le sol et la flaque ;
+     90 %  0,57  — troisième ligne, sur le sol déjà sombre ;
+    100 %  0,58.
+
+   Le segment 70-74 % a été relevé deux fois, chaque fois sur une mesure et non
+   sur une impression : 0,30 puis 0,34 donnaient 4,64:1 et 5,45:1 au 95e centile
+   sur la première ligne à 1920, et le surtitre tombait à 4,85:1 à 1024x768 —
+   format court où le champ de texte, ancré au bas, descend à 71,5 % au lieu de
+   65,8 %. Le voile est bâti pour le plus défavorable des huit formats vérifiés,
+   pas pour le plus large.
+
+   Le dégradé latéral (0,42 au bord) donne une direction à la scène et couvre
+   le surtitre, qui est le plus petit texte du champ et le plus haut placé. */
 .aj-film__grade {
   z-index: -2;
   background:
     linear-gradient(
+      90deg,
+      rgba(3, 3, 6, 0.42) 0,
+      rgba(3, 3, 6, 0.24) 12%,
+      rgba(3, 3, 6, 0.07) 21%,
+      transparent 28%
+    ),
+    linear-gradient(
       180deg,
       rgba(2, 2, 4, 0.34) 0,
       transparent 18%,
-      transparent 72%,
-      rgba(2, 2, 4, 0.4) 100%
+      transparent 67%,
+      rgba(3, 3, 6, 0.4) 70%,
+      rgba(3, 3, 6, 0.5) 74%,
+      rgba(3, 3, 6, 0.54) 80%,
+      rgba(3, 3, 6, 0.57) 90%,
+      rgba(3, 3, 6, 0.58) 100%
     );
   pointer-events: none;
+}
+
+/* Sous 900px le média passe en `contain` : l'objet recule au lieu d'être rogné,
+   exactement comme la caméra de l'étalon recule à 768 au lieu de réorganiser la
+   page. Le cadre est alors prolongé par une reprise floutée et sombre du même
+   plan — le champ de texte est donc posé sur une image continue, jamais sur une
+   bande ajoutée sous la photo.
+
+   Deux mesures fixent cette rampe, prises sur la trame telle qu'elle est
+   RÉELLEMENT affichée à chaque taille :
+     • 768x1024 — surtitre à 80,7 %, phrase à 85 % ;
+     • 390x844  — surtitre à 70,5 %, phrase à 74,6 %.
+
+   CORRECTION DU 20/08, PREMIER ARRÊT SEUL. Ces deux lignes portaient aussi un
+   « bas des boxers à 64,7 % / 63,4 % » et un premier arrêt à 66 %, tous deux
+   relevés quand le média se posait en `contain` dans un cadre de 70svh. Le
+   média est passé en `cover` plein cadre : la source couvre exactement la
+   hauteur de l'écran, donc l'ourlet du boxer n'est plus à deux valeurs mais à
+   UNE SEULE, celle de la source — 66,81 %. Mesuré après bascule : 66,67 % de
+   l'écran à 390x844 comme à 768x1024. Le premier arrêt à 66 % passait donc
+   sous l'ourlet et reposait du voile sur le vêtement, exactement le défaut que
+   la version précédente avait corrigé. Il est remonté à 67 %, la valeur que la
+   branche large utilise déjà et qui est désormais juste à toutes les tailles.
+   AUCUN arrêt de contraste n'est touché : 70 %, 80 % et 100 % gardent 0,54,
+   0,60 et 0,63, mesurés et inchangés.
+
+   POURQUOI ELLE MONTE VITE, ET PLUS HAUT QU'À 1920. C'est le format qui
+   l'impose, pas le goût. En `contain` le média est réduit et le texte remonte
+   dans l'écran : à 390 le surtitre est à 70,5 %, soit à peine sous l'ourlet,
+   et il tombe sur la flaque de métal poli — le point le plus clair de la moitié
+   basse. Trois essais mesurés au même point : 0,34 donnait 3,11:1 au 95e
+   centile, 0,46 donnait 5,11:1 et 0,50 donnait 5,31:1 avec encore 3,7 % de
+   pixels sous le seuil. 0,54 dès 70 % laisse enfin de la marge.
+
+   Elle reste plus légère que l'ancienne (0,63 au lieu de 0,95 au pied), dont la
+   mesure sous le bloc de texte à 768 donnait 20,36:1 à la médiane et 16,43:1 au
+   pire pixel, pour un seuil de 5,0:1 : on payait en image un contraste dont on
+   avait quatre fois le compte.
+
+   Pas de dégradé latéral ici : à 390 la colonne de texte fait toute la largeur,
+   une direction gauche-droite n'y servirait à rien. */
+@media (max-width: 900px) {
+  .aj-film__grade {
+    background: linear-gradient(
+      180deg,
+      rgba(2, 2, 4, 0.34) 0,
+      transparent 18%,
+      transparent 67%,
+      rgba(3, 3, 6, 0.54) 70%,
+      rgba(3, 3, 6, 0.6) 80%,
+      rgba(3, 3, 6, 0.63) 100%
+    );
+  }
 }
 
 .aj-film__header {
@@ -3217,7 +3766,7 @@ footer:not([class]) > p {
 .aj-featured__glow {
   z-index: -2;
   background:
-    radial-gradient(circle at 52% 44%, rgba(255, 255, 255, 0.2), transparent 28%),
+    radial-gradient(circle at var(--aj-spot-x, 52%) var(--aj-spot-y, 44%), rgba(255, 255, 255, 0.24), transparent 30%),
     linear-gradient(0deg, rgba(5, 5, 7, 0.72), transparent 48%, rgba(5, 5, 7, 0.3));
 }
 
@@ -3413,7 +3962,7 @@ footer:not([class]) > p {
 }
 
 .aj-moodboard__item--duo {
-  aspect-ratio: 2000 / 1882;
+  aspect-ratio: 1484 / 2229;
 }
 
 .aj-moodboard__item--portrait-right {
@@ -3425,13 +3974,13 @@ footer:not([class]) > p {
   inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   object-position: center;
   transition: transform 900ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .aj-moodboard__item:hover img {
-  transform: scale(1.012);
+  filter: saturate(1.035) contrast(1.015);
 }
 
 .aj-shop {
@@ -3485,7 +4034,7 @@ footer:not([class]) > p {
 .aj-product-card__image {
   position: relative;
   display: block;
-  aspect-ratio: 4 / 5;
+  aspect-ratio: 1731 / 2600;
   overflow: hidden;
   background: #d3d2d0;
 }
@@ -3495,14 +4044,14 @@ footer:not([class]) > p {
   inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover;
-  object-position: center top;
+  object-fit: contain;
+  object-position: center;
   transform-origin: 50% 0%;
   transition: transform 900ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .aj-product-card:hover img {
-  transform: scale(1.015);
+  filter: saturate(1.035) contrast(1.015);
 }
 
 .aj-product-card__caption {
@@ -3723,14 +4272,30 @@ footer:not([class]) > p {
     --aj-gutter: 16px;
   }
 
-  .aj-film {
-    min-height: 100svh;
-  }
+  /* Pas de `min-height` ici : la règle de base vaut déjà 100svh moins la barre,
+     et --aj-tete-h a basculé à 6,9rem sous 900px. La réécrire en 100svh
+     rendrait la signature illisible sur téléphone. */
 
+  /* Sur téléphone le bouton n'est plus qu'un carré de 44px : le libellé passe
+     en lecture d'écran et seul le glyphe reste. Il remonte en haut du film —
+     le bord que le correctif B1 vient de dégager — parce qu'en bas il recouvre
+     le titre : le bloc signature y mesure 89px à 375px de large et 110px à
+     320px, selon que « Reveal Your Inner Beauty » tient sur une ou deux
+     lignes. Aucune constante `bottom` ne dégage les deux sans pousser la
+     commande au milieu de l'image ; mesuré, le carré chevauchait le titre de
+     16px à 375px. La gouttière reste celle de la signature. */
+  /* Le bouton vivait en HAUT À DROITE sous 900 px, exactement là où la barre
+     pose PANIER. Recouvrement mesuré par le jury du 20/08 : 44 x 37,4 px, soit
+     la totalité de la cible. Sur un téléphone, toucher le panier mettait la
+     vidéo en pause — le glyphe de pause était visible À L'INTÉRIEUR du mot
+     PANIER. Défaut présent sur HEAD, donc antérieur, et invisible pour trois
+     boucles parce qu'aucune n'avait touché le panier au doigt.
+     Il redescend donc au bas du film, comme sur bureau, au-dessus du bloc
+     signature et jamais dans la zone de l'en-tête. */
   .aj-film__motion-toggle {
     top: auto;
-    right: 16px;
-    bottom: 82px;
+    right: var(--gut);
+    bottom: calc(clamp(26px, 4vh, 44px) + 96px);
     width: 44px;
     min-width: 44px;
     min-height: 44px;
@@ -3738,7 +4303,7 @@ footer:not([class]) > p {
     border: 1px solid rgba(255, 255, 255, 0.28);
     background: rgba(5, 5, 7, 0.48);
     backdrop-filter: blur(10px);
-    font-size: 11px;
+    font-size: var(--t0);
   }
 
   .aj-film__motion-toggle-icon {
@@ -3754,6 +4319,16 @@ footer:not([class]) > p {
     position: absolute;
     white-space: nowrap;
     width: 1px;
+  }
+
+  /* Au téléphone plein cadre (21/08), les +96px posaient le bouton DANS la
+     boîte du h1 — constaté au navigateur à 390x844, glyphe « Ⅱ » au milieu
+     des mots. Il descend sur la rangée du pied, à droite de « Découvrir » :
+     44x44 contre ~160px de lien à gauche, aucune boîte ne se touche. */
+  @media (max-aspect-ratio: 4 / 5) and (max-width: 560px) {
+    .aj-film__motion-toggle {
+      bottom: clamp(26px, 4vh, 44px);
+    }
   }
 
   .aj-film__header {
@@ -4219,4 +4794,1430 @@ footer:not([class]) > p {
   .product-zoom__image {
     inset: 62px 12px 72px;
   }
+}
+
+/* AJ Luxury private Awwwards candidate — cinematic message and Apollon mythology */
+
+.aj-film__message {
+  position: absolute;
+  z-index: 3;
+  top: 50%;
+  left: var(--aj-gutter);
+  width: min(470px, 38vw);
+  padding: clamp(22px, 2.2vw, 34px);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: linear-gradient(135deg, rgba(7, 7, 10, 0.68), rgba(7, 7, 10, 0.18));
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.18);
+  backdrop-filter: blur(14px) saturate(0.82);
+  transform: translateY(-48%);
+}
+
+.aj-film__eyebrow,
+.aj-film__promise {
+  margin: 0;
+}
+
+.aj-film__eyebrow {
+  color: rgba(255, 255, 255, 0.66);
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.aj-film__message h1 {
+  max-width: 440px;
+  margin: clamp(22px, 2.6vw, 36px) 0 20px;
+  font-size: clamp(38px, 4.15vw, 68px);
+  font-weight: 310;
+  letter-spacing: -0.07em;
+  line-height: 0.94;
+  text-wrap: balance;
+}
+
+.aj-film__promise {
+  max-width: 330px;
+  color: rgba(255, 255, 255, 0.74);
+  font-size: clamp(12px, 1vw, 15px);
+  line-height: 1.6;
+}
+
+.aj-film__message-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px clamp(22px, 2.4vw, 36px);
+  margin-top: clamp(24px, 3vw, 42px);
+}
+
+.aj-film__message-actions a {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.72);
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.aj-proof {
+  position: relative;
+  display: grid;
+  min-height: clamp(460px, 46vw, 680px);
+  grid-template-columns: minmax(180px, 0.24fr) minmax(0, 1fr);
+  align-items: stretch;
+  overflow: hidden;
+  border-bottom: 1px solid rgba(17, 17, 18, 0.18);
+  background:
+    radial-gradient(circle at 62% 48%, rgba(200, 178, 190, 0.3), transparent 34%),
+    #efede9;
+  color: #111112;
+}
+
+.aj-proof::after {
+  position: absolute;
+  right: -8vw;
+  bottom: -24vw;
+  width: 54vw;
+  height: 54vw;
+  border: 1px solid rgba(17, 17, 18, 0.11);
+  border-radius: 50%;
+  content: "";
+  pointer-events: none;
+}
+
+.aj-proof > p {
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  padding: clamp(34px, 4vw, 64px) var(--aj-gutter);
+  border-right: 1px solid rgba(17, 17, 18, 0.18);
+  color: #55565a;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.aj-proof__composition {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1.18fr) minmax(260px, 0.82fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 0 clamp(30px, 5vw, 88px);
+  margin: 0;
+  padding: clamp(34px, 4.8vw, 76px) var(--aj-gutter);
+}
+
+.aj-proof__material {
+  display: grid;
+  min-width: 0;
+  align-content: end;
+  align-items: end;
+}
+
+.aj-proof__material--modal {
+  grid-row: 1 / 3;
+  padding-right: clamp(20px, 3vw, 48px);
+  border-right: 1px solid rgba(17, 17, 18, 0.15);
+}
+
+.aj-proof__material dt {
+  display: flex;
+  align-items: flex-start;
+  margin: 0;
+  font-size: clamp(126px, 17vw, 292px);
+  font-weight: 260;
+  letter-spacing: -0.11em;
+  line-height: 0.72;
+}
+
+.aj-proof__material--elastic dt {
+  font-size: clamp(84px, 10vw, 172px);
+}
+
+.aj-proof__material dt span {
+  padding-top: 0.08em;
+  font-size: 0.25em;
+  letter-spacing: -0.05em;
+}
+
+.aj-proof__material dd,
+.aj-proof__meta dd {
+  margin: 0;
+  color: #55565a;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.aj-proof__material dd {
+  margin-top: clamp(22px, 2vw, 32px);
+}
+
+.aj-proof__meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 28px;
+  padding-top: clamp(28px, 4vw, 54px);
+  border-top: 1px solid rgba(17, 17, 18, 0.17);
+}
+
+.aj-proof__meta > div {
+  display: grid;
+  gap: 7px;
+}
+
+.aj-proof__meta dt {
+  font-size: clamp(28px, 3.4vw, 52px);
+  font-weight: 320;
+  letter-spacing: -0.065em;
+}
+
+.aj-apollon-myth {
+  position: relative;
+  overflow: hidden;
+  padding: clamp(76px, 9vw, 142px) 0 clamp(64px, 8vw, 120px);
+  border-bottom: 1px solid rgba(17, 17, 18, 0.18);
+  background:
+    radial-gradient(circle at 50% 16%, rgba(255, 255, 255, 0.9), transparent 34%),
+    #e7e2dc;
+  color: #151416;
+}
+
+.aj-apollon-myth::before {
+  position: absolute;
+  top: -12vw;
+  left: 50%;
+  color: rgba(121, 105, 95, 0.07);
+  content: "APOLLON";
+  font-size: clamp(110px, 23vw, 410px);
+  font-weight: 280;
+  letter-spacing: -0.095em;
+  line-height: 1;
+  pointer-events: none;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.aj-apollon-myth__intro {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: min(1320px, calc(100% - (2 * var(--aj-gutter))));
+  grid-template-columns: minmax(200px, 0.7fr) minmax(420px, 1.3fr);
+  gap: clamp(42px, 9vw, 160px);
+  margin: 0 auto clamp(58px, 7vw, 104px);
+  padding-top: 20px;
+  border-top: 1px solid rgba(17, 17, 18, 0.24);
+}
+
+.aj-apollon-myth__intro > div:first-child {
+  display: flex;
+  min-height: 150px;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.aj-apollon-myth__intro > div:first-child p,
+.aj-apollon-myth__intro > div:last-child > p {
+  margin: 0;
+}
+
+.aj-apollon-myth__intro > div:first-child p {
+  color: #6f6c69;
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.aj-apollon-myth__intro > div:first-child span {
+  color: #8b7770;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(56px, 7vw, 104px);
+  font-style: italic;
+  line-height: 0.7;
+}
+
+.aj-apollon-myth__intro h2 {
+  max-width: 800px;
+  margin: 0;
+  font-size: clamp(46px, 6.7vw, 104px);
+  font-weight: 310;
+  letter-spacing: -0.075em;
+  line-height: 0.9;
+  text-wrap: balance;
+}
+
+.aj-apollon-myth__intro > div:last-child > p {
+  max-width: 610px;
+  margin-top: clamp(28px, 4vw, 54px);
+  color: #62605e;
+  font-size: clamp(13px, 1.15vw, 16px);
+  line-height: 1.7;
+}
+
+.aj-apollon-myth__gallery {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: min(1440px, 100%);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
+  gap: clamp(14px, 2vw, 30px);
+  margin: 0 auto;
+  padding: 0 var(--aj-gutter);
+}
+
+.aj-apollon-myth__card {
+  min-width: 0;
+  margin: 0;
+}
+
+.aj-apollon-myth__card--rose {
+  margin-top: clamp(38px, 6vw, 92px);
+}
+
+.aj-apollon-myth__card--pourpre {
+  margin-top: clamp(24px, 3.2vw, 52px);
+}
+
+.aj-apollon-myth__frame {
+  position: relative;
+  aspect-ratio: 2 / 3;
+  overflow: hidden;
+  background: #bbb2ac;
+  box-shadow: 0 30px 90px rgba(47, 36, 34, 0.14);
+}
+
+.aj-apollon-myth__frame::after {
+  position: absolute;
+  inset: 0;
+  border: 1px solid rgba(255, 255, 255, 0.38);
+  box-shadow: inset 0 0 0 1px rgba(24, 20, 18, 0.08);
+  content: "";
+  pointer-events: none;
+}
+
+.aj-apollon-myth__frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition:
+    filter 800ms ease,
+    transform 1100ms cubic-bezier(0.2, 0.75, 0.2, 1);
+}
+
+.aj-apollon-myth__card:hover .aj-apollon-myth__frame img {
+  filter: saturate(1.035) contrast(1.015);
+  transform: scale(1.018);
+}
+
+.aj-apollon-myth__card figcaption {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 16px;
+  padding-top: 16px;
+  font-size: 9px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.aj-apollon-myth__card figcaption span {
+  color: #8a8580;
+}
+
+.aj-apollon-myth__card figcaption strong {
+  font-weight: 650;
+}
+
+.aj-apollon-myth__footer {
+  display: flex;
+  width: min(1320px, calc(100% - (2 * var(--aj-gutter))));
+  align-items: center;
+  justify-content: space-between;
+  gap: 30px;
+  margin: clamp(54px, 7vw, 102px) auto 0;
+  padding-top: 20px;
+  border-top: 1px solid rgba(17, 17, 18, 0.24);
+}
+
+.aj-apollon-myth__footer p {
+  margin: 0;
+  color: #696661;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+
+.aj-apollon-myth__footer a,
+.aj-manifesto__statement a {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 14px;
+  border-bottom: 1px solid currentColor;
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.aj-manifesto {
+  display: grid;
+  min-height: min(920px, 95svh);
+  align-content: space-between;
+  padding: clamp(72px, 8vw, 126px) var(--aj-gutter);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.18);
+  background:
+    radial-gradient(circle at 78% 72%, rgba(109, 91, 131, 0.22), transparent 32%),
+    #09090b;
+  color: #f4f3f0;
+}
+
+.aj-manifesto__index {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.aj-manifesto__statement {
+  display: grid;
+  grid-template-columns: minmax(0, 1.48fr) minmax(280px, 0.52fr);
+  align-items: end;
+  gap: clamp(54px, 8vw, 140px);
+  padding-top: 44px;
+  border-top: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.aj-manifesto__statement h2 {
+  max-width: 980px;
+  margin: 0;
+  font-size: clamp(64px, 10vw, 168px);
+  font-weight: 280;
+  letter-spacing: -0.09em;
+  line-height: 0.8;
+  text-wrap: balance;
+}
+
+.aj-manifesto__statement > div {
+  display: grid;
+  gap: 34px;
+}
+
+.aj-manifesto__statement p {
+  max-width: 440px;
+  margin: 0;
+  color: rgba(255, 255, 255, 0.68);
+  font-size: clamp(13px, 1.1vw, 16px);
+  line-height: 1.72;
+}
+
+@keyframes aj-hero-message-in {
+  from {
+    opacity: 0;
+    transform: translateY(calc(-48% + 20px));
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(-48%);
+  }
+}
+
+@keyframes aj-editorial-unveil {
+  from {
+    clip-path: inset(0 0 100% 0);
+    filter: saturate(0.72);
+    transform: scale(1.035);
+  }
+
+  to {
+    clip-path: inset(0);
+    filter: saturate(1);
+    transform: scale(1);
+  }
+}
+
+@keyframes aj-hero-message-in-compact {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .aj-film__message {
+    animation: aj-hero-message-in 1100ms 360ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  @supports (animation-timeline: view()) {
+    .aj-apollon-myth__frame img {
+      animation: aj-editorial-unveil linear both;
+      animation-range: entry 0 entry 44%;
+      animation-timeline: view();
+    }
+
+    .aj-manifesto__statement h2 {
+      animation: aj-section-arrival linear both;
+      animation-range: entry 2% entry 34%;
+      animation-timeline: view();
+    }
+  }
+}
+
+@media (max-width: 999px) {
+  .aj-film__message {
+    animation-name: aj-hero-message-in-compact;
+    top: auto;
+    right: auto;
+    bottom: 126px;
+    width: min(440px, calc(100% - (2 * var(--aj-gutter))));
+    padding: 22px;
+    transform: none;
+  }
+
+  .aj-film__message h1 {
+    margin: 18px 0 14px;
+    font-size: clamp(34px, 6.8vw, 54px);
+  }
+
+  .aj-film__promise {
+    max-width: 300px;
+  }
+
+  .aj-film__message-actions {
+    margin-top: 20px;
+  }
+
+  .aj-apollon-myth__intro,
+  .aj-manifesto__statement {
+    grid-template-columns: 1fr;
+  }
+
+  .aj-apollon-myth__intro {
+    gap: 42px;
+  }
+
+  .aj-apollon-myth__intro > div:first-child {
+    min-height: 100px;
+  }
+
+  .aj-manifesto__statement {
+    gap: 54px;
+  }
+
+  .aj-manifesto__statement h2 {
+    max-width: 760px;
+  }
+}
+
+@media (min-width: 761px) and (max-width: 999px) and (max-height: 620px) {
+  .aj-film__message {
+    top: 148px;
+    bottom: auto;
+    width: min(430px, 55vw);
+    padding: 18px 22px;
+  }
+
+  .aj-film__message h1 {
+    margin: 10px 0 10px;
+    font-size: clamp(38px, 5.2vw, 44px);
+  }
+
+  .aj-film__promise {
+    font-size: 11px;
+    line-height: 1.45;
+  }
+
+  .aj-film__message-actions {
+    margin-top: 12px;
+  }
+
+  .aj-film__message-actions a {
+    min-height: 36px;
+  }
+}
+
+@media (max-width: 760px) {
+  .aj-film__message {
+    right: 64px;
+    bottom: 128px;
+    left: 16px;
+    width: auto;
+    padding: 16px;
+    background: linear-gradient(135deg, rgba(7, 7, 10, 0.74), rgba(7, 7, 10, 0.35));
+    backdrop-filter: blur(10px) saturate(0.78);
+  }
+
+  .aj-film__message h1 {
+    max-width: 300px;
+    margin: 13px 0 0;
+    font-size: clamp(27px, 8vw, 38px);
+    line-height: 0.96;
+  }
+
+  .aj-film__promise,
+  .aj-film__message-actions {
+    display: none;
+  }
+
+  .aj-proof {
+    grid-template-columns: 1fr;
+    min-height: 0;
+  }
+
+  .aj-proof > p {
+    min-height: 62px;
+    padding: 22px 16px;
+    border-right: 0;
+    border-bottom: 1px solid rgba(17, 17, 18, 0.14);
+  }
+
+  .aj-proof__composition {
+    min-height: 410px;
+    grid-template-columns: 1.08fr 0.92fr;
+    grid-template-rows: 1fr auto;
+    gap: 0 20px;
+    padding: 36px 16px 30px;
+  }
+
+  .aj-proof__material--modal {
+    padding-right: 20px;
+  }
+
+  .aj-proof__material dt {
+    font-size: clamp(92px, 31vw, 132px);
+  }
+
+  .aj-proof__material--elastic dt {
+    font-size: clamp(60px, 19vw, 84px);
+  }
+
+  .aj-proof__material dd,
+  .aj-proof__meta dd {
+    font-size: 8px;
+  }
+
+  .aj-proof__meta {
+    gap: 16px;
+    padding-top: 24px;
+  }
+
+  .aj-apollon-myth {
+    padding: 72px 0 62px;
+  }
+
+  .aj-apollon-myth::before {
+    top: 4px;
+    font-size: 31vw;
+  }
+
+  .aj-apollon-myth__intro {
+    width: calc(100% - 32px);
+    grid-template-columns: 1fr;
+    gap: 34px;
+    margin-bottom: 44px;
+  }
+
+  .aj-apollon-myth__intro > div:first-child {
+    min-height: 78px;
+  }
+
+  .aj-apollon-myth__intro h2 {
+    font-size: clamp(44px, 14vw, 64px);
+  }
+
+  .aj-apollon-myth__gallery {
+    grid-auto-columns: 82vw;
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    gap: 14px;
+    overflow-x: auto;
+    padding: 0 16px 12px;
+    scroll-padding-inline: 16px;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+  }
+
+  .aj-apollon-myth__gallery::-webkit-scrollbar {
+    display: none;
+  }
+
+  .aj-apollon-myth__card,
+  .aj-apollon-myth__card--rose,
+  .aj-apollon-myth__card--pourpre {
+    margin-top: 0;
+    scroll-snap-align: start;
+  }
+
+  .aj-apollon-myth__footer {
+    width: calc(100% - 32px);
+    align-items: flex-start;
+    flex-direction: column;
+    margin-top: 42px;
+  }
+
+  .aj-manifesto {
+    min-height: 760px;
+    padding: 64px 16px;
+  }
+
+  .aj-manifesto__statement {
+    grid-template-columns: 1fr;
+    gap: 42px;
+    padding-top: 28px;
+  }
+
+  .aj-manifesto__statement h2 {
+    font-size: clamp(58px, 19vw, 86px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aj-film__message,
+  .aj-apollon-myth__frame img,
+  .aj-manifesto__statement h2 {
+    animation: none !important;
+    clip-path: none !important;
+    transform: none !important;
+  }
+}
+
+@media (min-width: 761px) {
+  .aj-moodboard {
+    overflow-x: auto;
+    cursor: grab;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+
+  .aj-moodboard::-webkit-scrollbar {
+    display: none;
+  }
+
+  .aj-moodboard.is-dragging {
+    cursor: grabbing;
+    user-select: none;
+  }
+
+  .aj-moodboard__track {
+    width: max-content;
+    grid-template-columns: 31vw 46vw 29vw;
+  }
+
+  .aj-moodboard__item img {
+    pointer-events: none;
+  }
+}
+
+/* Guided Apollon sequence: symbol, body, choice. */
+/* ------------------------------------------------------------------
+   SÉQUENCE APOLLON — une seule plaque, une seule échelle, une seule lumière.
+   Le vêtement seul et le vêtement porté sont deux prises du MÊME plateau.
+   Le CSS n'a plus le droit de fabriquer deux fonds pour les séparer.
+   ------------------------------------------------------------------ */
+
+@property --aj-wipe {
+  syntax: "<percentage>";
+  inherits: true;
+  initial-value: 100%;
+}
+
+@property --aj-plate-scale {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 1;
+}
+
+.aj-sequence {
+  position: relative;
+  /* clip, pas hidden : hidden crée un conteneur de défilement qui casse le pin. */
+  overflow-x: clip;
+  padding: 0 0 clamp(24px, 3vw, 44px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+  background: #0a0a0c;
+  color: #f5f4f1;
+}
+
+.aj-sequence__pin {
+  display: flex;
+  min-height: 100svh;
+  flex-direction: column;
+  justify-content: center;
+  padding: clamp(20px, 2.4vw, 36px) var(--aj-gutter);
+  gap: clamp(14px, 1.6vw, 22px);
+}
+
+.aj-sequence__heading {
+  display: grid;
+  width: min(1440px, 100%);
+  grid-template-columns: minmax(320px, 1fr) minmax(260px, 0.5fr);
+  align-items: end;
+  gap: clamp(24px, 4vw, 64px);
+  margin: 0 auto;
+}
+
+.aj-sequence__heading > p:first-child {
+  grid-column: 1 / -1;
+  margin: 0 0 4px;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.aj-sequence__heading h2 {
+  margin: 0;
+  max-width: 900px;
+  font-size: clamp(42px, 5.4vw, 96px);
+  font-weight: 300;
+  letter-spacing: -0.035em;
+  line-height: 0.94;
+  text-wrap: balance;
+}
+
+.aj-sequence__heading > p:last-child {
+  max-width: 420px;
+  margin: 0 0 6px;
+  color: rgba(255, 255, 255, 0.66);
+  font-size: clamp(16px, 1.1vw, 18px);
+  line-height: 1.6;
+}
+
+.aj-sequence__stage {
+  --aj-wipe: 100%;
+  --aj-plate-scale: 1;
+  position: relative;
+  width: min(1440px, 100%);
+  /* La barre de contrôle reste dans le viewport, y compris à 1280x640. */
+  height: min(74svh, calc(100svh - 260px));
+  min-height: 420px;
+  margin: 0 auto;
+  overflow: hidden;
+  /* Un seul fond, échantillonné sur la plaque, injecté par frame. */
+  background: var(--aj-ground, #1a191d);
+  isolation: isolate;
+}
+
+.aj-plate {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.aj-plate__still,
+.aj-plate__worn {
+  position: absolute;
+  margin: 0;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 620ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.aj-plate__still.is-active,
+.aj-plate__worn.is-active {
+  opacity: 1;
+}
+
+/* Une seule échelle pour les deux prises. Deux `cover` indépendants feraient
+   apparaître la lyre partagée ~2,2x plus grande à droite et détruiraient
+   exactement la continuité qu'on construit. */
+.aj-plate__still img,
+.aj-plate__worn img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scale(var(--aj-plate-scale));
+  transform-origin: 50% 50%;
+}
+
+/* Le volet. Deux transforms contra-rotatifs : la fenêtre glisse, le contenu
+   reste en place. Coût compositeur pur — ni layout, ni paint.
+   Chromium ne composite que transform / opacity / filter / backdrop-filter :
+   animer `left` ou `clip-path` ici relayouterait une couche 1731x2600 par frame. */
+.aj-plate__wipe {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  transform: translate3d(var(--aj-wipe), 0, 0);
+  will-change: transform;
+}
+
+.aj-plate__wipe-inner {
+  position: absolute;
+  inset: 0;
+  transform: translate3d(calc(-1 * var(--aj-wipe)), 0, 0);
+  will-change: transform;
+}
+
+/* La couture. Un filet vertical net, jamais incliné : un rotate(3deg) sur un
+   stage de 700 px rate le raccord de ±18 px à chaque extrémité. */
+.aj-plate__wipe::before {
+  position: absolute;
+  z-index: 3;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 1px;
+  background: linear-gradient(
+    transparent,
+    rgba(255, 255, 255, 0.5) 16%,
+    rgba(255, 255, 255, 0.22) 84%,
+    transparent
+  );
+  content: "";
+}
+
+/* Un seul étalonnage, appliqué identiquement aux deux panneaux.
+   L'ancien voile directionnel ne chargeait que le packshot et trahissait
+   que les deux moitiés venaient de deux traitements différents. */
+.aj-plate__grade {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  background: linear-gradient(0deg, rgba(7, 7, 9, 0.52), rgba(7, 7, 9, 0.06) 34%, transparent 58%);
+  content: "";
+  pointer-events: none;
+}
+
+.aj-sequence__copy {
+  position: absolute;
+  z-index: 4;
+  bottom: clamp(22px, 3vw, 40px);
+  left: clamp(22px, 3vw, 42px);
+  width: min(30%, 380px);
+}
+
+.aj-sequence__copy > span {
+  display: block;
+  margin: 0 0 8px;
+  color: var(--aj-accent);
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: 0.16em;
+}
+
+.aj-sequence__copy h3 {
+  margin: 0 0 12px;
+  font-size: clamp(40px, 4.6vw, 78px);
+  font-weight: 300;
+  letter-spacing: -0.035em;
+  line-height: 0.92;
+  text-shadow: 0 2px 28px rgba(0, 0, 0, 0.42);
+}
+
+.aj-sequence__copy > p {
+  max-width: 320px;
+  margin: 0;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 16px;
+  line-height: 1.55;
+  text-shadow: 0 1px 16px rgba(0, 0, 0, 0.5);
+}
+
+.aj-sequence__controls {
+  display: flex;
+  width: min(1440px, 100%);
+  align-items: center;
+  justify-content: space-between;
+  gap: clamp(18px, 3vw, 44px);
+  margin: 0 auto;
+}
+
+.aj-sequence__choices {
+  display: flex;
+  gap: clamp(10px, 1.4vw, 22px);
+}
+
+.aj-sequence__choices button {
+  position: relative;
+  display: flex;
+  min-height: 44px;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 6px 2px 10px;
+  border: 0;
+  background: none;
+  color: rgba(255, 255, 255, 0.62);
+  cursor: pointer;
+  gap: 3px;
+  transition: color 320ms ease;
+}
+
+.aj-sequence__choices button > span {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: 0.1em;
+}
+
+.aj-sequence__choices button > strong {
+  font-size: 16px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.aj-sequence__choices button.is-active,
+.aj-sequence__choices button:hover,
+.aj-sequence__choices button:focus-visible {
+  color: #fff;
+}
+
+.aj-sequence__choices button.is-active > span {
+  color: var(--aj-accent);
+}
+
+.aj-sequence__choices button::after {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  background: var(--aj-accent);
+  content: "";
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 450ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.aj-sequence__choices button.is-active::after {
+  transform: scaleX(1);
+}
+
+.aj-sequence__cta {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 clamp(22px, 2.4vw, 34px);
+  background: #f3f1ed;
+  color: #101012;
+  font-size: 15px;
+  font-weight: 650;
+  gap: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  transition: background 320ms ease, color 320ms ease;
+}
+
+.aj-sequence__cta:hover,
+.aj-sequence__cta:focus-visible {
+  background: var(--aj-accent);
+  color: #0a0a0c;
+}
+
+/* Mobile : même récit, pin vertical, volet vertical.
+   Pas une amputation — les trois coloris, la copie et le CTA restent. */
+@media (max-width: 980px) {
+  .aj-sequence__heading {
+    grid-template-columns: 1fr;
+  }
+
+  .aj-sequence__stage {
+    height: min(66svh, calc(100svh - 300px));
+  }
+
+  .aj-plate__wipe {
+    transform: translate3d(0, var(--aj-wipe), 0);
+  }
+
+  .aj-plate__wipe-inner {
+    transform: translate3d(0, calc(-1 * var(--aj-wipe)), 0);
+  }
+
+  .aj-plate__wipe::before {
+    top: 0;
+    right: 0;
+    bottom: auto;
+    left: 0;
+    width: auto;
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.5) 16%,
+      rgba(255, 255, 255, 0.22) 84%,
+      transparent
+    );
+  }
+
+  .aj-sequence__copy {
+    width: min(72%, 420px);
+  }
+
+  .aj-sequence__controls {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+  }
+
+  .aj-sequence__choices {
+    justify-content: space-between;
+  }
+
+  .aj-sequence__cta {
+    width: 100%;
+  }
+}
+
+/* Motion réduit : une variante réduite, pas une page vide.
+   Les deux prises restent lisibles côte à côte, sans volet animé. */
+@media (prefers-reduced-motion: reduce) {
+  .aj-sequence__pin {
+    min-height: 0;
+  }
+
+  .aj-sequence__stage {
+    --aj-wipe: 38%;
+    height: min(70svh, 620px);
+  }
+
+  .aj-plate__wipe,
+  .aj-plate__wipe-inner {
+    will-change: auto;
+  }
+
+  .aj-plate__still,
+  .aj-plate__worn {
+    transition: none;
+  }
+}
+
+.aj-shop__close {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin: clamp(28px, 3vw, 44px) var(--aj-gutter) 0;
+  padding-top: 18px;
+  border-top: 1px solid rgba(17, 17, 18, 0.18);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.aj-shop__close a {
+  padding-bottom: 4px;
+  border-bottom: 1px solid currentColor;
+  font-weight: 650;
+}
+
+.aj-moodboard__progress {
+  position: sticky;
+  left: var(--aj-gutter);
+  width: min(120px, calc(100vw - 2 * var(--aj-gutter)));
+  height: 1px;
+  margin: clamp(12px, 1.4vw, 20px) var(--aj-gutter) 0;
+  overflow: hidden;
+  background: rgba(17, 17, 18, 0.2);
+}
+
+.aj-moodboard__progress span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: #111112;
+  transform: scaleX(calc(0.32 + var(--aj-gallery-progress, 0) * 0.68));
+  transform-origin: left;
+  transition: transform 120ms linear;
+}
+
+.aj-product-card__price {
+  display: block;
+  margin-top: 9px;
+  color: #55565a;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (min-width: 761px) {
+  .aj-moodboard__track {
+    grid-template-columns: minmax(0, 0.717fr) minmax(0, 0.666fr) minmax(0, 0.666fr);
+    align-items: end;
+  }
+}
+
+@media (min-width: 761px) and (hover: hover) {
+  .aj-shop__rail {
+    transition: grid-template-columns 800ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .aj-shop__rail:has(.aj-product-card:nth-child(1):hover),
+  .aj-shop__rail:has(.aj-product-card:nth-child(1):focus-within) {
+    grid-template-columns: 1.14fr 0.93fr 0.93fr;
+  }
+
+  .aj-shop__rail:has(.aj-product-card:nth-child(2):hover),
+  .aj-shop__rail:has(.aj-product-card:nth-child(2):focus-within) {
+    grid-template-columns: 0.93fr 1.14fr 0.93fr;
+  }
+
+  .aj-shop__rail:has(.aj-product-card:nth-child(3):hover),
+  .aj-shop__rail:has(.aj-product-card:nth-child(3):focus-within) {
+    grid-template-columns: 0.93fr 0.93fr 1.14fr;
+  }
+}
+
+@media (max-width: 980px) {
+  .aj-sequence__heading {
+    grid-template-columns: 0.35fr 1.2fr;
+  }
+
+  .aj-sequence__heading > p:last-child {
+    display: none;
+  }
+
+  .aj-sequence__controls {
+    grid-template-columns: 58px minmax(0, 1fr) 120px;
+  }
+
+  
+
+  .aj-sequence__controls > a {
+    min-width: 0;
+    padding: 0 18px;
+  }
+
+  .aj-sequence__controls > a > span {
+    display: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .aj-shop__close {
+    align-items: flex-start;
+    margin-top: 24px;
+    font-size: 9px;
+  }
+
+  .aj-moodboard__progress {
+    display: none;
+  }
+
+  .aj-sequence {
+    padding: 38px 12px 16px;
+  }
+
+  .aj-sequence__heading {
+    grid-template-columns: 1fr;
+    gap: 14px;
+    margin-bottom: 20px;
+  }
+
+  .aj-sequence__heading > p:first-child {
+    margin: 0;
+  }
+
+  .aj-sequence__heading h2 {
+    max-width: 520px;
+    font-size: clamp(40px, 11vw, 56px);
+  }
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  .aj-sequence__copy {
+    top: 28px;
+    bottom: auto;
+    left: 14px;
+    width: min(46%, 176px);
+  }
+
+  .aj-sequence__copy h3 {
+    margin: 8px 0 10px;
+    font-size: clamp(25px, 7.5vw, 34px);
+  }
+
+  .aj-sequence__copy > p {
+    max-width: 150px;
+    font-size: 8px;
+  }
+
+  .aj-sequence__controls {
+    min-height: 104px;
+    grid-template-columns: 48px 1fr;
+    grid-template-rows: 58px 46px;
+  }
+
+  
+
+  .aj-sequence__choices {
+    grid-row: 1;
+    gap: 0;
+    justify-content: space-around;
+    padding: 0 8px;
+  }
+
+  .aj-sequence__choices button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 4px;
+  }
+
+  .aj-sequence__choices button > strong {
+    display: none;
+  }
+
+  .aj-sequence__choices button > span {
+    font-size: 9px;
+  }
+
+  .aj-sequence__controls > a {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    border-top: 1px solid rgba(255, 255, 255, 0.16);
+  }
+
+  .aj-sequence__controls > a > span {
+    display: inline;
+  }
+
+  .aj-moodboard__item,
+  .aj-moodboard__item--wide,
+  .aj-moodboard__item--portrait {
+    width: auto;
+    min-width: 0;
+    height: auto;
+    flex: none;
+  }
+
+  .aj-moodboard {
+    overflow: hidden;
+    padding: 8px 0;
+    scroll-snap-type: none;
+  }
+
+  .aj-moodboard__track {
+    display: grid;
+    width: 100%;
+    min-width: 0;
+    grid-template-columns: 0.82fr 0.66fr 0.82fr;
+    gap: 6px;
+    padding: 0 8px;
+  }
+}
+
+
+/* ==========================================================================
+   404
+   --------------------------------------------------------------------------
+   La page d'erreur emprunte la grammaire de la clôture de l'accueil : fond de
+   marque, énoncé en grand, deux actions de rang inégal. Elle n'a ni champ
+   métallique ni animation — une page d'erreur doit ARRIVER, pas se jouer, et
+   elle ne doit surtout pas charger un contexte WebGL pour dire qu'une adresse
+   n'existe pas.
+   ========================================================================== */
+.aj-erreur {
+  display: flex;
+  flex-direction: column;
+  min-height: 100svh;
+  background: var(--aj-noir-abysse);
+  color: var(--aj-encre);
+  overflow-x: clip;
+}
+
+.aj-erreur__bloc {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: clamp(18px, 2.6vh, 30px);
+  padding: clamp(64px, 12vh, 140px) var(--gut);
+}
+
+.aj-erreur__surtitre {
+  margin: 0;
+  font-size: var(--t0);
+  font-weight: var(--aj-w-gras);
+  letter-spacing: var(--aj-ls-signature);
+  text-transform: uppercase;
+  color: var(--aj-encre-72);
+}
+
+.aj-erreur__titre {
+  --aj-display-w: var(--aj-w-normal);
+  --aj-display-ls: -0.028em;
+  --aj-display-lh: 0.96;
+  max-width: 18ch;
+  margin: 0;
+  font-size: var(--t6);
+}
+
+.aj-erreur__texte {
+  max-width: 46ch;
+  margin: 0;
+  font-size: var(--t2);
+  font-weight: var(--aj-w-livre);
+  line-height: 1.45;
+  color: var(--aj-encre-90);
+}
+
+.aj-erreur__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: clamp(18px, 3vw, 40px);
+  margin-top: clamp(8px, 1.6vh, 20px);
+}
+
+.aj-erreur__actions a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 48px;
+  font-size: var(--t0);
+  font-weight: var(--aj-w-gras);
+  letter-spacing: var(--aj-ls-action);
+  text-transform: uppercase;
+  text-decoration: none;
+  transition:
+    background-color var(--aj-d-court) var(--e1),
+    border-color var(--aj-d-court) var(--e1);
+}
+
+/* Un rang plein, un rang en lien de texte — la règle posée en clôture. */
+.aj-erreur__actions a:first-child {
+  padding: 0 clamp(22px, 2.2vw, 34px);
+  background: var(--aj-encre);
+  color: var(--aj-noir-abysse);
+}
+
+.aj-erreur__actions a:first-child:hover,
+.aj-erreur__actions a:first-child:focus-visible {
+  background: var(--aj-accent-lilas);
+}
+
+.aj-erreur__actions a:last-child {
+  padding-bottom: 5px;
+  border-bottom: 1px solid var(--aj-filet-fort);
+  color: var(--aj-encre);
+}
+
+.aj-erreur__actions a:last-child:hover,
+.aj-erreur__actions a:last-child:focus-visible {
+  border-color: var(--aj-encre);
 }
