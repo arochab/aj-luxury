@@ -25,6 +25,7 @@ import {
 import {
   productionEmailDispatchRuntimeConfigured,
   productionOperationsRuntimeInstalled,
+  productionResendRuntimeInstalled,
 } from "./production-operations-runtime.ts";
 import { productionOutboundShippingRuntimeConfigured } from "./production-shipping-runtime.ts";
 
@@ -632,6 +633,9 @@ export async function productionCommerceApiResponse(
       url.origin !== env.COMMERCE_ORIGIN) {
       return fail("EMAIL_WEBHOOK_UNAVAILABLE", 503);
     }
+    if (!await productionResendRuntimeInstalled(env.DB)) {
+      return fail("EMAIL_WEBHOOK_UNAVAILABLE", 503);
+    }
     const raw = await bytes(request, 64 * 1024);
     if (!raw) return fail("INVALID_WEBHOOK", 400);
     try {
@@ -699,6 +703,10 @@ export async function productionCommerceApiResponse(
       blockers.push("production-operations-schema-0016-not-installed");
     }
     if (["controlled", "live"].includes(gate.mode) &&
+      !await productionResendRuntimeInstalled(env.DB)) {
+      blockers.push("resend-email-schema-0018-not-installed");
+    }
+    if (["controlled", "live"].includes(gate.mode) &&
       !await productionStockManifestRuntimeAttested(env)) {
       blockers.push("stock-manifest-runtime-not-attested");
     }
@@ -727,6 +735,10 @@ export async function productionCommerceApiResponse(
   if (["controlled", "live"].includes(gate.mode) &&
     !await productionOperationsRuntimeInstalled(env.DB)) {
     blockers.push("production-operations-schema-0016-not-installed");
+  }
+  if (["controlled", "live"].includes(gate.mode) &&
+    !await productionResendRuntimeInstalled(env.DB)) {
+    blockers.push("resend-email-schema-0018-not-installed");
   }
   if (["controlled", "live"].includes(gate.mode) &&
     !await productionStockManifestRuntimeAttested(env)) {

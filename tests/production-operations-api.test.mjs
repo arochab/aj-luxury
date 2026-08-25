@@ -14,6 +14,7 @@ import {
 import {
   productionEmailDispatchRuntimeConfigured,
   productionOperationsRuntimeInstalled,
+  productionResendRuntimeInstalled,
 } from "../worker/production-operations-runtime.ts";
 import {
   controlledRequestAuthorization,
@@ -35,11 +36,39 @@ const sentinel = Object.freeze({
   contract: "received-approved-goods_received-inspected-v1",
   installed_at: "2026-08-15T00:00:00.000Z",
 });
+const resendSchemaObjects = Object.freeze([
+  { type: "index", name: "idx_resend_webhook_message_time", table_name: "resend_webhook_events" },
+  { type: "index", name: "ux_email_outbox_provider_message_id", table_name: "email_outbox" },
+  { type: "table", name: "resend_webhook_events", table_name: "resend_webhook_events" },
+  { type: "trigger", name: "trg_email_outbox_provider_message_transition", table_name: "email_outbox" },
+  { type: "trigger", name: "trg_resend_webhook_events_immutable_update", table_name: "resend_webhook_events" },
+  { type: "trigger", name: "trg_resend_webhook_events_retain_delete", table_name: "resend_webhook_events" },
+  { type: "trigger", name: "trg_resend_webhook_events_validate_insert", table_name: "resend_webhook_events" },
+]);
+const resendSchemaColumns = Object.freeze([
+  "email_outbox:provider_message_id",
+  "resend_webhook_events:event_type",
+  "resend_webhook_events:id",
+  "resend_webhook_events:occurred_at",
+  "resend_webhook_events:payload_sha256",
+  "resend_webhook_events:provider_message_id",
+  "resend_webhook_events:received_at",
+]);
 
 function statement(database, query, values = []) {
   return {
     bind(...next) { return statement(database, query, next); },
     async all() {
+      if (/idx_resend_webhook_message_time/.test(query)) {
+        return { success: true, results: resendSchemaObjects, meta: { changes: 0 } };
+      }
+      if (/pragma_table_info\('resend_webhook_events'\)/.test(query)) {
+        return {
+          success: true,
+          results: resendSchemaColumns.map((signature) => ({ signature })),
+          meta: { changes: 0 },
+        };
+      }
       if (/sqlite_master/.test(query)) return { success: true, results: schemaObjects, meta: { changes: 0 } };
       if (/status = 'sending'/.test(query)) return { success: true, results: [], meta: { changes: 0 } };
       throw new Error(`Unexpected all query: ${query}`);
@@ -232,6 +261,29 @@ test("operations schema proof rejects missing, altered and prefix-colliding sent
     return { async first() { return { ...sentinel, contract: "weaker-contract" }; } };
   };
   assert.equal(await productionOperationsRuntimeInstalled(wrongSentinel), false);
+});
+
+test("Resend runtime proof requires the exact 0018 objects and columns", async () => {
+  assert.equal(await productionResendRuntimeInstalled(database()), true);
+  const missingTrigger = database();
+  missingTrigger.prepare = function prepare(query) {
+    if (/idx_resend_webhook_message_time/.test(query)) {
+      return {
+        async all() {
+          return { results: resendSchemaObjects.filter((row) => row.type !== "trigger") };
+        },
+      };
+    }
+    if (/pragma_table_info\('resend_webhook_events'\)/.test(query)) {
+      return {
+        async all() {
+          return { results: resendSchemaColumns.map((signature) => ({ signature })) };
+        },
+      };
+    }
+    throw new Error(`Unexpected query: ${query}`);
+  };
+  assert.equal(await productionResendRuntimeInstalled(missingTrigger), false);
 });
 
 test("email readiness matches the scheduled dispatcher configuration exactly", () => {

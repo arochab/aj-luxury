@@ -32,6 +32,7 @@ import {
 import {
   productionEmailDispatchRuntimeConfigured,
   productionOperationsRuntimeInstalled,
+  productionResendRuntimeInstalled,
 } from "./production-operations-runtime.ts";
 import {
   productionScheduledRateLimit,
@@ -806,6 +807,18 @@ export async function dispatchProductionTransactionalEmails(
     return Object.freeze({
       closed: true,
       reason: "transactional-email-dispatch-not-activated",
+      staleLeasesRecovered: 0,
+      claimed: 0,
+      sent: 0,
+      retryScheduled: 0,
+      failed: 0,
+      queueDrained: false,
+    });
+  }
+  if (!await productionResendRuntimeInstalled(env.DB)) {
+    return Object.freeze({
+      closed: true,
+      reason: "transactional-email-schema-0018-not-installed",
       staleLeasesRecovered: 0,
       claimed: 0,
       sent: 0,

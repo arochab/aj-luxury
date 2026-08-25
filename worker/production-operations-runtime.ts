@@ -13,6 +13,26 @@ const expectedOperationsSchema = Object.freeze([
   "trigger:trg_return_requests_transition:return_requests",
 ] as const);
 
+const expectedResendSchemaObjects = Object.freeze([
+  "index:idx_resend_webhook_message_time:resend_webhook_events",
+  "index:ux_email_outbox_provider_message_id:email_outbox",
+  "table:resend_webhook_events:resend_webhook_events",
+  "trigger:trg_email_outbox_provider_message_transition:email_outbox",
+  "trigger:trg_resend_webhook_events_immutable_update:resend_webhook_events",
+  "trigger:trg_resend_webhook_events_retain_delete:resend_webhook_events",
+  "trigger:trg_resend_webhook_events_validate_insert:resend_webhook_events",
+] as const);
+
+const expectedResendSchemaColumns = Object.freeze([
+  "email_outbox:provider_message_id",
+  "resend_webhook_events:event_type",
+  "resend_webhook_events:id",
+  "resend_webhook_events:occurred_at",
+  "resend_webhook_events:payload_sha256",
+  "resend_webhook_events:provider_message_id",
+  "resend_webhook_events:received_at",
+] as const);
+
 const AJ_TRANSACTIONAL_MAILBOX = /^[^@\s]+@ajluxurystore\.com$/i;
 const SAFE_TRANSACTIONAL_REPLY_TO = /^[\x21-\x7e]+@[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$/;
 const SAFE_TRANSACTIONAL_FROM_NAME = /^[^\r\n<>]{1,80}$/;
@@ -87,6 +107,50 @@ export async function productionOperationsRuntimeInstalled(
       sentinel?.version === "0016_return_operator_state_machine" &&
       sentinel.contract === "received-approved-goods_received-inspected-v1" &&
       sentinel.installed_at === "2026-08-15T00:00:00.000Z";
+  } catch {
+    return false;
+  }
+}
+
+/** Exact hosted D1 proof for durable Resend receipts and signed event audit. */
+export async function productionResendRuntimeInstalled(
+  database: CommerceD1Database | undefined,
+): Promise<boolean> {
+  if (!database) return false;
+  try {
+    const [objects, columns] = await Promise.all([
+      database.prepare(
+        `SELECT lower(type) AS type, lower(name) AS name,
+          lower(tbl_name) AS table_name FROM sqlite_master
+        WHERE lower(name) IN (
+          'idx_resend_webhook_message_time',
+          'ux_email_outbox_provider_message_id',
+          'resend_webhook_events',
+          'trg_email_outbox_provider_message_transition',
+          'trg_resend_webhook_events_immutable_update',
+          'trg_resend_webhook_events_retain_delete',
+          'trg_resend_webhook_events_validate_insert'
+        )
+        ORDER BY type, name`,
+      ).all<InstalledOperationsSchemaObject>(),
+      database.prepare(
+        `SELECT 'email_outbox:' || lower(name) AS signature
+        FROM pragma_table_info('email_outbox')
+        WHERE lower(name) = 'provider_message_id'
+        UNION ALL
+        SELECT 'resend_webhook_events:' || lower(name) AS signature
+        FROM pragma_table_info('resend_webhook_events')
+        ORDER BY signature`,
+      ).all<{ signature: string }>(),
+    ]);
+    const actualObjects = objects.results
+      .map((row) => `${row.type}:${row.name}:${row.table_name}`)
+      .sort();
+    const actualColumns = columns.results.map((row) => row.signature).sort();
+    return actualObjects.length === expectedResendSchemaObjects.length &&
+      actualObjects.every((value, index) => value === expectedResendSchemaObjects[index]) &&
+      actualColumns.length === expectedResendSchemaColumns.length &&
+      actualColumns.every((value, index) => value === expectedResendSchemaColumns[index]);
   } catch {
     return false;
   }
