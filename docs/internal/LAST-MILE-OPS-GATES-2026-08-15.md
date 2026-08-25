@@ -1,6 +1,6 @@
 # AJ Luxury - gates opérations, stock et reporting
 
-Statut au 15/08/2026 : **code prêt à intégrer, aucune capacité réelle activée**.
+Statut mis à jour au 25/08/2026 : **import one-shot câblé et testé, aucune capacité réelle activée**.
 
 ## Stock
 
@@ -18,7 +18,7 @@ Gate d'import :
 5. `validateLaunchStockImport` doit passer avant toute écriture. Une variante absente, ajoutée, renommée, réordonnée, surallouée, non approuvée ou modifiée après approbation ferme l'import.
 6. Après import, contrôler D1 et le ledger : 12 variantes, physique 756, réserves et vendable identiques au manifeste, aucune réservation active inattendue.
 
-La D1 actuelle conserve la réserve cadeaux séparément et combine sécurité + SAV dans `safety_reserve_quantity`. Le manifeste approuvé conserve la ventilation métier. Aucun importeur D1 n'est câblé dans cette branche afin d'éviter une mutation accidentelle.
+La D1 actuelle conserve la réserve cadeaux séparément et combine sécurité + SAV dans `safety_reserve_quantity`. Le manifeste approuvé conserve la ventilation métier. L'importeur D1 production est désormais câblé sur `POST /api/commerce/admin/launch-stock-import` et reste fermé par défaut. Il exige simultanément Cloudflare Access propriétaire, le SHA de release, l'ID de version Worker, les deux approbations du même payload, l'idempotency key exacte et la confirmation littérale `IMPORT_756_PHYSICAL_26_GIFTS_730_SELLABLE`. L'activation réserve + manifeste est atomique et une preuve post-écriture recalcule 756/26/730.
 
 Les approbations sont des attestations métier liées à une empreinte, pas des signatures électroniques qualifiées.
 

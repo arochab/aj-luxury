@@ -47,5 +47,7 @@ remplacée si le comptage physique réel diffère.
   responsable stock.
 - `BLOCKED — Adam` : approuver le même manifeste et le même SHA de release en
   tant que responsable de mise en ligne.
-- `NEXT ACTION` : importer seulement après ces deux attestations distinctes ;
-  aucun seed, template ou calcul provisoire ne vaut autorisation d’import.
+- `NEXT ACTION` : compléter `LAUNCH-STOCK-IMPORT.template.json`, calculer son
+  SHA-256 canonique puis recueillir les deux attestations distinctes. La route
+  one-shot owner-only importe ensuite ce payload exact ; aucun seed, template
+  ou calcul provisoire ne vaut autorisation d’import.
