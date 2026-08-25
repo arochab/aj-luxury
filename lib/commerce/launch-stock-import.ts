@@ -351,6 +351,10 @@ export async function validateLaunchStockImport(
   const calculatedTotals = calculateTotals(variants);
   if (
     calculatedTotals.physicalQuantity !== 756 ||
+    calculatedTotals.giftingReserveQuantity !== 26 ||
+    calculatedTotals.safetyReserveQuantity !== 0 ||
+    calculatedTotals.savReserveQuantity !== 0 ||
+    calculatedTotals.sellableQuantity !== 730 ||
     Object.keys(calculatedTotals).some(
       (key) =>
         calculatedTotals[key as keyof LaunchStockImportTotals] !==
@@ -359,7 +363,7 @@ export async function validateLaunchStockImport(
   ) {
     throw new LaunchStockImportError(
       "TOTAL_MISMATCH",
-      "Manifest totals do not reconcile to 756 physical units and all reserves.",
+      "Manifest totals must reconcile to 756 physical, 26 gifting and 730 sellable units with no additional launch reserve.",
     );
   }
 

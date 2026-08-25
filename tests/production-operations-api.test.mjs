@@ -286,6 +286,22 @@ test("Resend runtime proof requires the exact 0018 objects and columns", async (
   assert.equal(await productionResendRuntimeInstalled(missingTrigger), false);
 });
 
+test("Resend runtime proof accepts the real 0018 migration objects", async () => {
+  const sqlite = new DatabaseSync(":memory:");
+  sqlite.exec("PRAGMA foreign_keys = ON");
+  for (const name of ["0000_flimsy_rhino.sql", "0018_volatile_blob.sql"]) {
+    const migration = readFileSync(`${drizzleDirectory}${name}`, "utf8");
+    for (const statement of migration.split("--> statement-breakpoint")) {
+      if (statement.trim()) sqlite.exec(statement.trim());
+    }
+  }
+  assert.equal(
+    await productionResendRuntimeInstalled(new SQLiteD1Database(sqlite)),
+    true,
+  );
+  sqlite.close();
+});
+
 test("email readiness matches the scheduled dispatcher configuration exactly", () => {
   const active = {
     ...controlledEnv(),

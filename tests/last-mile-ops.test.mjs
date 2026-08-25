@@ -116,12 +116,32 @@ test("stock import fails closed on unsigned, reordered, overallocated or tampere
   await t.test("payload changed after approval", async () => {
     const manifest = await approvedStockManifest();
     manifest.variants[0].giftingReserveQuantity = 4;
-    manifest.totals.giftingReserveQuantity = 27;
-    manifest.totals.sellableQuantity = 729;
+    manifest.variants[1].giftingReserveQuantity = 1;
     await assert.rejects(
       () => validateLaunchStockImport(manifest),
       (error) =>
         error instanceof LaunchStockImportError && error.code === "DIGEST_MISMATCH",
+    );
+  });
+  await t.test("fully re-signed zero-gift allocation", async () => {
+    const manifest = await approvedStockManifest();
+    for (const variant of manifest.variants) {
+      variant.giftingReserveQuantity = 0;
+    }
+    manifest.totals.giftingReserveQuantity = 0;
+    manifest.totals.sellableQuantity = 756;
+    const digest = await createLaunchStockPayloadSha256({
+      protocol: manifest.protocol,
+      manifestId: manifest.manifestId,
+      countedAt: manifest.countedAt,
+      variants: manifest.variants,
+      totals: manifest.totals,
+    });
+    for (const approval of manifest.approvals) approval.payloadSha256 = digest;
+    await assert.rejects(
+      () => validateLaunchStockImport(manifest),
+      (error) =>
+        error instanceof LaunchStockImportError && error.code === "TOTAL_MISMATCH",
     );
   });
   await t.test("one person cannot approve both roles", async () => {

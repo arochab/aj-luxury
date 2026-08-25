@@ -222,11 +222,11 @@ function stockProofDatabase(proof, lines, releaseProof) {
 
 test("live stock attestation recomputes the exact 12-line manifest and controlled-order proof", async () => {
   const countedAt = "2026-08-15T01:00:00.000Z";
-  const variants = launchVariantSeed.map((variant) => ({
+  const variants = launchVariantSeed.map((variant, index) => ({
     variantId: variant.id,
     internalReference: variant.internalReference,
     physicalQuantity: variant.physicalQuantity,
-    giftingReserveQuantity: 0,
+    giftingReserveQuantity: index === 0 || index === 11 ? 3 : 2,
     safetyReserveQuantity: 0,
     savReserveQuantity: 0,
   }));
@@ -235,15 +235,15 @@ test("live stock attestation recomputes the exact 12-line manifest and controlle
     manifestId: "stock-launch-20260815",
     countedAt,
     variants,
-    totals: { physicalQuantity: 756, giftingReserveQuantity: 0, safetyReserveQuantity: 0, savReserveQuantity: 0, sellableQuantity: 756 },
+    totals: { physicalQuantity: 756, giftingReserveQuantity: 26, safetyReserveQuantity: 0, savReserveQuantity: 0, sellableQuantity: 730 },
   };
   const payload = await createLaunchStockPayloadSha256(unsigned);
   const proof = {
     manifest_id: unsigned.manifestId, protocol: unsigned.protocol, payload_sha256: payload,
     counted_at: countedAt, release_sha: releaseSha,
     worker_version_id: controlled.CF_VERSION_METADATA.id,
-    physical_total: 756, variant_count: 12, gifting_reserve_total: 0,
-    safety_reserve_total: 0, sav_reserve_total: 0, sellable_total: 756,
+    physical_total: 756, variant_count: 12, gifting_reserve_total: 26,
+    safety_reserve_total: 0, sav_reserve_total: 0, sellable_total: 730,
     stock_owner_id: "jeremy", release_owner_id: "adam",
     stock_owner_signed_at: "2026-08-15T01:01:00.000Z",
     release_owner_signed_at: "2026-08-15T01:02:00.000Z",
@@ -251,11 +251,13 @@ test("live stock attestation recomputes the exact 12-line manifest and controlle
   };
   const lines = variants.map((variant, position) => ({
     position, variant_id: variant.variantId, internal_reference: variant.internalReference,
-    physical_quantity: variant.physicalQuantity, gifting_reserve_quantity: 0,
+    physical_quantity: variant.physicalQuantity,
+    gifting_reserve_quantity: variant.giftingReserveQuantity,
     safety_reserve_quantity: 0, sav_reserve_quantity: 0,
-    sellable_quantity: variant.physicalQuantity,
+    sellable_quantity: variant.physicalQuantity - variant.giftingReserveQuantity,
     live_physical_quantity: variant.physicalQuantity,
-    live_gifting_reserve_quantity: 0, live_safety_reserve_quantity: 0,
+    live_gifting_reserve_quantity: variant.giftingReserveQuantity,
+    live_safety_reserve_quantity: 0,
     live_reserves_validated: 1,
   }));
   const releaseProof = {

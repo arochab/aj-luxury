@@ -34,7 +34,7 @@ BEGIN
   SELECT RAISE(ABORT, 'email_outbox_provider_message_transition_invalid');
 END;--> statement-breakpoint
 
-CREATE TRIGGER `trg_resend_webhook_validate_insert`
+CREATE TRIGGER `trg_resend_webhook_events_validate_insert`
 BEFORE INSERT ON `resend_webhook_events`
 FOR EACH ROW
 WHEN length(NEW.`id`) NOT BETWEEN 8 AND 192
@@ -47,13 +47,13 @@ BEGIN
   SELECT RAISE(ABORT, 'resend_webhook_event_invalid');
 END;--> statement-breakpoint
 
-CREATE TRIGGER `trg_resend_webhook_immutable`
+CREATE TRIGGER `trg_resend_webhook_events_immutable_update`
 BEFORE UPDATE ON `resend_webhook_events`
 BEGIN
   SELECT RAISE(ABORT, 'resend_webhook_event_is_immutable');
 END;--> statement-breakpoint
 
-CREATE TRIGGER `trg_resend_webhook_retain`
+CREATE TRIGGER `trg_resend_webhook_events_retain_delete`
 BEFORE DELETE ON `resend_webhook_events`
 BEGIN
   SELECT RAISE(ABORT, 'resend_webhook_event_is_immutable');
