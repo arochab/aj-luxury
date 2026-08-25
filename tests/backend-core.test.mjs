@@ -2175,7 +2175,7 @@ test("D1 cart lines persist an idempotent server-priced public snapshot without 
     currency: "EUR",
     expiresAt: "2099-08-17T12:00:00.000Z",
     itemCount: 2,
-    subtotalCents: 5_998,
+    subtotalCents: 4_999,
     lines: [
       {
         variantId,
@@ -2192,6 +2192,7 @@ test("D1 cart lines persist an idempotent server-priced public snapshot without 
       },
     ],
   });
+  assert.equal(first.lines[0].lineTotalCents - first.subtotalCents, 999);
   assert.equal(
     database.prepare("SELECT COUNT(*) AS count FROM cart_lines").get().count,
     1,
@@ -2219,7 +2220,8 @@ test("D1 cart lines persist an idempotent server-priced public snapshot without 
     now: "2099-08-10T12:03:00.000Z",
   });
   assert.equal(changed.itemCount, 3);
-  assert.equal(changed.subtotalCents, 8_997);
+  assert.equal(changed.subtotalCents, 6_999);
+  assert.equal(changed.lines[0].lineTotalCents - changed.subtotalCents, 1_998);
   const removed = await store.removeCartLine({
     cartId,
     variantId,

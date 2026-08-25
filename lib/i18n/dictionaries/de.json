@@ -106,6 +106,7 @@
   "cart.summary": "Zusammenfassung",
   "cart.estimatedTotal": "Geschätzte Summe",
   "cart.subtotal": "Zwischensumme",
+  "cart.packSaving": "Ersparnis für Pack {count}",
   "cart.shipping": "Versand",
   "cart.toDefine": "Noch offen",
   "cart.provisionalTotal": "Vorläufige Summe",

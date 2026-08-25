@@ -98,9 +98,14 @@
     //   STOCK_MANIFEST_ID              identifiant du comptage retenu
     //   STOCK_MANIFEST_SHA256          empreinte de ce comptage
     //   STOCK_MANIFEST_APPROVED_BY     doit valoir exactement "jeremy"
+    //   STRIPE_ACCOUNT_ID              identite publique acct_... du compte live
+    //   SENDCLOUD_INTEGRATION_ID       identite publique de l'integration
+    //   SENDCLOUD_SENDER_ADDRESS_ID    identite publique de l'adresse expediteur
+    //   RESEND_DOMAIN                  domaine d'envoi verifie, ajluxurystore.com
     //   SELLER_LEGAL_IDENTITY_APPROVED
     //   TAX_DUTY_POLICY_APPROVED
     //   RETURNS_POLICY_APPROVED
+    //   RETURNS_LABEL_AND_REFUND_PROCESS_APPROVED
     //   BACKUP_RESTORE_DRILL_APPROVED
     //   MONITORING_ALERTS_APPROVED
   },

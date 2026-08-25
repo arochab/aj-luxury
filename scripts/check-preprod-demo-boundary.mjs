@@ -59,10 +59,10 @@ const syntheticMigration = journal.entries.find(
 assert.ok(syntheticMigration);
 assert.equal(syntheticMigration.when, releaseBuildEpoch);
 const terminalMigration = journal.entries.at(-1);
-assert.equal(terminalMigration.tag, "0018_volatile_blob");
+assert.equal(terminalMigration.tag, "0019_provider_configuration_attestation");
 assert.ok(
   terminalMigration.when > releaseBuildEpoch,
-  "the additive service-point vault migration must follow the frozen synthetic release",
+  "the additive production provider attestation migration must follow the frozen synthetic release",
 );
 
 if (

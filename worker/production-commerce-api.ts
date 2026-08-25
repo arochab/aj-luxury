@@ -17,6 +17,11 @@ import { DeliveryReferenceVault } from "../lib/commerce/delivery-reference-vault
 import { authorizeBrowserMutation, buildCsrfCookie, buildSessionCookie, clearCsrfCookie, clearSessionCookie, isTrustedMutationOrigin } from "../lib/commerce/identity-access-policy.ts";
 import { PaymentProviderError, verifyAndDeliverPaymentWebhook, type PaymentProviderPorts, type PaymentWebhookEffectsPort } from "../lib/commerce/payment-provider.ts";
 import { validateLaunchStockImport } from "../lib/commerce/launch-stock-import.ts";
+import {
+  createProductionProviderConfigurationAttestation,
+  productionProviderConfigurationSchemaContractSha256,
+  type ProductionProviderIdentities,
+} from "../lib/commerce/production-provider-configuration.ts";
 import { productionReleaseSchemaContractSha256 } from "../lib/commerce/production-schema-contract.ts";
 import { evaluateWiredProductionReleaseGate, productionEvidenceVersionId, type ProductionCommerceEnvironment } from "../lib/commerce/production-release-gate.ts";
 import { recordVerifiedResendWebhook, ResendWebhookError } from "../lib/commerce/resend-webhook.ts";
@@ -65,17 +70,21 @@ export type ProductionCommerceRuntimeEnvironment = ProductionCommerceEnvironment
   CLOUDFLARE_ACCESS_TEAM_DOMAIN?: string;
   CLOUDFLARE_ACCESS_AUD?: string;
   PRODUCTION_STOCK_IMPORT_ENABLED?: string;
+  STRIPE_ACCOUNT_ID?: string;
   STRIPE_SETTLEMENT_MODE?: string;
   LATE_PAYMENT_REFUND_DISPATCH_ENABLED?: string;
   CONTROLLED_PAYMENT_SESSION_ENABLED?: string;
   OUTBOUND_SHIPMENT_CREATION_ENABLED?: string;
+  SENDCLOUD_INTEGRATION_ID?: string;
   SENDCLOUD_SENDER_ADDRESS_ID?: string;
   SENDCLOUD_SENDER_ADDRESS_ATTESTATION?: string;
   OPERATOR_ADMIN_MFA_ENABLED?: string;
   TRANSACTIONAL_EMAIL_DISPATCH_ENABLED?: string;
   TRANSACTIONAL_EMAIL_DISPATCH_MODE?: string;
   TRANSACTIONAL_FROM_NAME?: string;
+  RESEND_DOMAIN?: string;
   RETURNS_WORKFLOW_ENABLED?: string;
+  RETURNS_LABEL_AND_REFUND_PROCESS_APPROVED?: string;
   RESERVATION_EXPIRY_ENABLED?: string;
   DELIVERY_REFERENCE_ENCRYPTION_KEY_BASE64?: string;
   DELIVERY_REFERENCE_KEY_VERSION?: string;
@@ -92,8 +101,13 @@ export type ProductionCommerceRouterDependencies = Readonly<{
       releaseSha: string;
       workerVersionId: string;
       activatedAt: string;
+      providerIdentities: ProductionProviderIdentities;
     }>,
   ) => Promise<ProductionStockImportReceipt>;
+  stockImportOwnerAuthenticator?: (
+    request: Request,
+    env: ProductionCommerceRuntimeEnvironment,
+  ) => Promise<boolean>;
 }>;
 type CartSession = Readonly<{ cartId: string; csrf: string }>;
 
@@ -277,7 +291,10 @@ function deliveryVault(env: ProductionCommerceRuntimeEnvironment): DeliveryRefer
     return null;
   }
 }
-function runtimeBlockers(env: ProductionCommerceRuntimeEnvironment, mode: string): string[] {
+export function productionCommerceRuntimeBlockers(
+  env: ProductionCommerceRuntimeEnvironment,
+  mode: string,
+): string[] {
   const expectedSettlement = mode === "sandbox" ? "test" : "live";
   const accessConfigured = cloudflareAccessOwnerConfigurationValid(env);
   return [
@@ -313,7 +330,8 @@ function runtimeBlockers(env: ProductionCommerceRuntimeEnvironment, mode: string
         ...(env.RETURNS_WORKFLOW_ENABLED === "true"
           ? []
           : ["returns-workflow-not-activated"]),
-        ...(mode === "live" ? ["returns-label-and-refund-not-activated"] : []),
+        ...(mode === "live" && env.RETURNS_LABEL_AND_REFUND_PROCESS_APPROVED !== "true"
+          ? ["returns-label-and-refund-process-unapproved"] : []),
         ...(env.RESERVATION_EXPIRY_ENABLED === "true"
           ? []
           : ["reservation-expiry-not-activated"]),
@@ -413,6 +431,8 @@ const latePaymentRefundSchemaInventory = Object.freeze([
 ]);
 
 const productionReleaseSchemaInventory = Object.freeze([
+  "index:ux_production_provider_configuration_digest:production_provider_configuration_attestations",
+  "index:ux_production_provider_configuration_manifest:production_provider_configuration_attestations",
   "index:ux_production_release_controlled_order:production_release_attestations",
   "index:ux_production_release_stock_manifest:production_release_attestations",
   "index:ux_production_stock_manifest_payload:production_launch_stock_manifests",
@@ -420,8 +440,12 @@ const productionReleaseSchemaInventory = Object.freeze([
   "index:ux_production_stock_manifest_variant:production_launch_stock_manifest_lines",
   "table:production_launch_stock_manifest_lines:production_launch_stock_manifest_lines",
   "table:production_launch_stock_manifests:production_launch_stock_manifests",
+  "table:production_provider_configuration_attestations:production_provider_configuration_attestations",
   "table:production_release_attestations:production_release_attestations",
   "table:production_runtime_schema_proofs:production_runtime_schema_proofs",
+  "trigger:trg_production_provider_configuration_immutable:production_provider_configuration_attestations",
+  "trigger:trg_production_provider_configuration_retain:production_provider_configuration_attestations",
+  "trigger:trg_production_provider_configuration_validate:production_provider_configuration_attestations",
   "trigger:trg_production_release_attestation_immutable:production_release_attestations",
   "trigger:trg_production_release_attestation_retain:production_release_attestations",
   "trigger:trg_production_release_attestation_validate:production_release_attestations",
@@ -439,13 +463,14 @@ export async function productionReleaseSchemaInstalled(
 ): Promise<boolean> {
   if (!database) return false;
   try {
-    const [installed, sentinel] = await Promise.all([
+    const [installed, releaseSentinel, providerSentinel] = await Promise.all([
       database.prepare(
         `SELECT lower(type) AS type, lower(name) AS name,
           lower(tbl_name) AS table_name FROM sqlite_master
         WHERE lower(tbl_name) IN (
           'production_launch_stock_manifest_lines',
           'production_launch_stock_manifests',
+          'production_provider_configuration_attestations',
           'production_release_attestations',
           'production_runtime_schema_proofs'
         ) AND lower(name) NOT GLOB 'sqlite_autoindex_*'
@@ -455,13 +480,18 @@ export async function productionReleaseSchemaInstalled(
         `SELECT contract_sha256 FROM production_runtime_schema_proofs
         WHERE migration_id='0015_production_release_attestation'`,
       ).first<{ contract_sha256: string }>(),
+      database.prepare(
+        `SELECT contract_sha256 FROM production_runtime_schema_proofs
+        WHERE migration_id='0019_provider_configuration_attestation'`,
+      ).first<{ contract_sha256: string }>(),
     ]);
     const actual = installed.results
       .map((row) => `${row.type}:${row.name}:${row.table_name}`)
       .sort();
     return actual.length === productionReleaseSchemaInventory.length &&
       actual.every((value, index) => value === productionReleaseSchemaInventory[index]) &&
-      sentinel?.contract_sha256 === productionReleaseSchemaContractSha256;
+      releaseSentinel?.contract_sha256 === productionReleaseSchemaContractSha256 &&
+      providerSentinel?.contract_sha256 === productionProviderConfigurationSchemaContractSha256;
   } catch {
     return false;
   }
@@ -508,9 +538,68 @@ export async function productionLatePaymentRefundRuntimeReady(
   }
 }
 
+function productionProviderIdentities(
+  env: ProductionCommerceRuntimeEnvironment,
+): ProductionProviderIdentities {
+  return {
+    stripeAccountId: env.STRIPE_ACCOUNT_ID ?? "",
+    sendcloudIntegrationId: env.SENDCLOUD_INTEGRATION_ID ?? "",
+    sendcloudSenderAddressId: env.SENDCLOUD_SENDER_ADDRESS_ID ?? "",
+    resendDomain: env.RESEND_DOMAIN ?? "",
+    commerceOrigin: env.COMMERCE_ORIGIN ?? "",
+    transactionalFromEmail: env.TRANSACTIONAL_FROM_EMAIL ?? "",
+  };
+}
+
+export async function productionProviderConfigurationRuntimeAttested(
+  env: ProductionCommerceRuntimeEnvironment,
+): Promise<boolean> {
+  const evidenceVersionId = productionEvidenceVersionId(env);
+  if (!env.DB || !env.COMMERCE_RELEASE_SHA || !env.STOCK_MANIFEST_ID ||
+    !evidenceVersionId) return false;
+  try {
+    const expected = await createProductionProviderConfigurationAttestation({
+      releaseSha: env.COMMERCE_RELEASE_SHA,
+      workerVersionId: evidenceVersionId,
+      stockManifestId: env.STOCK_MANIFEST_ID,
+      ...productionProviderIdentities(env),
+    });
+    const proof = await env.DB.prepare(
+      `SELECT attestation.release_sha, attestation.worker_version_id,
+        attestation.stock_manifest_id, attestation.protocol,
+        attestation.configuration_sha256, attestation.stripe_account_id,
+        attestation.sendcloud_integration_id,
+        attestation.sendcloud_sender_address_id, attestation.resend_domain,
+        attestation.commerce_origin, attestation.transactional_from_email,
+        CASE WHEN EXISTS (
+          SELECT 1 FROM production_runtime_schema_proofs
+          WHERE migration_id='0019_provider_configuration_attestation'
+            AND contract_sha256='${productionProviderConfigurationSchemaContractSha256}'
+        ) THEN 1 ELSE 0 END AS schema_proven
+      FROM production_provider_configuration_attestations AS attestation
+      WHERE attestation.release_sha=?`,
+    ).bind(env.COMMERCE_RELEASE_SHA).first<Record<string, string | number>>();
+    return proof?.schema_proven === 1 &&
+      proof.release_sha === expected.releaseSha &&
+      proof.worker_version_id === expected.workerVersionId &&
+      proof.stock_manifest_id === expected.stockManifestId &&
+      proof.protocol === expected.protocol &&
+      proof.configuration_sha256 === expected.configurationSha256 &&
+      proof.stripe_account_id === expected.stripeAccountId &&
+      proof.sendcloud_integration_id === expected.sendcloudIntegrationId &&
+      proof.sendcloud_sender_address_id === expected.sendcloudSenderAddressId &&
+      proof.resend_domain === expected.resendDomain &&
+      proof.commerce_origin === expected.commerceOrigin &&
+      proof.transactional_from_email === expected.transactionalFromEmail;
+  } catch {
+    return false;
+  }
+}
+
 export async function productionStockManifestRuntimeAttested(
   env: ProductionCommerceRuntimeEnvironment,
 ): Promise<boolean> {
+  if (!await productionProviderConfigurationRuntimeAttested(env)) return false;
   const metadata = env.CF_VERSION_METADATA;
   const evidenceVersionId = productionEvidenceVersionId(env);
   if (!env.DB || !env.STOCK_MANIFEST_ID || !env.STOCK_MANIFEST_SHA256 ||
@@ -663,7 +752,9 @@ export async function productionCommerceApiResponse(
       env.PRODUCTION_STOCK_IMPORT_ENABLED !== "true") {
       return fail("STOCK_IMPORT_CLOSED", 503);
     }
-    if (!await controlledOwnerRequestAuthenticated(request, env)) {
+    const stockImportOwnerAuthenticated = dependencies.stockImportOwnerAuthenticator ??
+      cloudflareAccessOwnerRequestAuthenticated;
+    if (!await stockImportOwnerAuthenticated(request, env)) {
       return fail("CONTROLLED_ACCESS_REQUIRED", 403);
     }
     if (!env.COMMERCE_ORIGIN || url.origin !== env.COMMERCE_ORIGIN ||
@@ -698,6 +789,7 @@ export async function productionCommerceApiResponse(
           releaseSha,
           workerVersionId,
           activatedAt: new Date().toISOString(),
+          providerIdentities: productionProviderIdentities(env),
         },
       );
       return json({ data: result }, result.disposition === "activated" ? 201 : 200);
@@ -706,7 +798,8 @@ export async function productionCommerceApiResponse(
         if (["DATABASE_NOT_EMPTY", "IMPORT_CONFLICT"].includes(cause.code)) {
           return fail("STOCK_IMPORT_CONFLICT", 409);
         }
-        if (["INVALID_RELEASE", "ACTIVATION_PRECEDES_APPROVAL"].includes(cause.code)) {
+        if (["INVALID_RELEASE", "ACTIVATION_PRECEDES_APPROVAL",
+          "INVALID_PROVIDER_CONFIGURATION"].includes(cause.code)) {
           return fail("STOCK_IMPORT_RELEASE_EVIDENCE_MISSING", 503);
         }
       }
@@ -771,7 +864,7 @@ export async function productionCommerceApiResponse(
   }
   const gate = evaluateWiredProductionReleaseGate(env);
   if (url.pathname === routes.health && request.method !== "GET") return fail("METHOD_NOT_ALLOWED", 405);
-  const blockers = runtimeBlockers(env, gate.mode);
+  const blockers = productionCommerceRuntimeBlockers(env, gate.mode);
   if (url.pathname === routes.health) {
     if (gate.mode !== "closed" && !await productionDeliveryRuntimeInstalled(env.DB)) {
       blockers.push("delivery-schema-0013-not-installed");

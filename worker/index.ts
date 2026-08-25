@@ -152,7 +152,7 @@ const PREPROD_DIAGNOSTICS_PATH = `${PREPROD_API_PREFIX}diagnostics`;
 const PREPROD_TRACKING_ADVANCE_PATH =
   `${PREPROD_API_PREFIX}orders/current/tracking/advance`;
 const CART_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
-const CART_MAX_QUANTITY = 5;
+const CART_MAX_QUANTITY = 3;
 const CART_MAX_ACTIVE_SESSIONS = 250;
 const CART_MAX_CREATIONS_PER_MINUTE = 30;
 const CART_RETENTION_DAYS = 30;
@@ -2179,7 +2179,7 @@ async function handleCartApi(
         if (quantity === null) {
           return cartErrorResponse(
             "INVALID_BODY",
-            "La quantité doit être un entier compris entre 1 et 5.",
+            "La quantité doit être un entier compris entre 1 et 3.",
             400,
           );
         }
@@ -2208,7 +2208,7 @@ async function handleCartApi(
       if (error instanceof CommerceError && error.code === "INVALID_INPUT") {
         return cartErrorResponse(
           "INVALID_BODY",
-          "La quantité doit être un entier compris entre 1 et 5.",
+          "La quantité doit être un entier compris entre 1 et 3.",
           400,
         );
       }

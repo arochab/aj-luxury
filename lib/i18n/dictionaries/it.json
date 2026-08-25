@@ -106,6 +106,7 @@
   "cart.summary": "Riepilogo",
   "cart.estimatedTotal": "Totale stimato",
   "cart.subtotal": "Subtotale",
+  "cart.packSaving": "Risparmio pack {count}",
   "cart.shipping": "Spedizione",
   "cart.toDefine": "Da definire",
   "cart.provisionalTotal": "Totale provvisorio",

@@ -21,6 +21,7 @@
     "0015_production_release_attestation.sql",
     "0016_return_operator_state_machine.sql",
     "0017_rich_dreadnoughts.sql",
-    "0018_volatile_blob.sql"
+    "0018_volatile_blob.sql",
+    "0019_provider_configuration_attestation.sql"
   ]
 }

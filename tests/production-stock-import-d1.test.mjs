@@ -58,7 +58,7 @@ function productionDatabase() {
   const sqlite = new DatabaseSync(":memory:");
   sqlite.exec("PRAGMA foreign_keys=ON");
   const names = readdirSync(new URL("../drizzle/", import.meta.url))
-    .filter((name) => /^00(?:0[0-7]|0[9]|1[0-8])_.+\.sql$/.test(name))
+    .filter((name) => /^00(?:0[0-7]|0[9]|1[0-9])_.+\.sql$/.test(name))
     .sort();
   for (const name of names) {
     const migration = readFileSync(new URL(`../drizzle/${name}`, import.meta.url), "utf8");
@@ -118,6 +118,14 @@ function input(stockManifest) {
     releaseSha,
     workerVersionId,
     activatedAt: "2026-08-25T09:00:00.000Z",
+    providerIdentities: {
+      stripeAccountId: "acct_1U4iFTC0NIklfc9C",
+      sendcloudIntegrationId: "612109",
+      sendcloudSenderAddressId: "sender_ajl_001",
+      resendDomain: "ajluxurystore.com",
+      commerceOrigin: "https://ajluxurystore.com",
+      transactionalFromEmail: "orders@ajluxurystore.com",
+    },
   };
 }
 
@@ -145,10 +153,30 @@ test("production stock activation atomically proves 756 physical, 26 gifts and 7
       FROM production_launch_stock_manifest_lines`).get() },
     { lines: 12, physical: 756, gifts: 26, sellable: 730 },
   );
+  assert.equal(
+    sqlite.prepare("SELECT COUNT(*) count FROM production_provider_configuration_attestations").get().count,
+    1,
+  );
+  assert.equal(
+    sqlite.prepare("SELECT configuration_sha256 FROM production_provider_configuration_attestations").get()
+      .configuration_sha256,
+    first.providerConfigurationSha256,
+  );
 
   const second = await activateProductionLaunchStock(database, input(stockManifest));
   assert.equal(second.disposition, "already-activated");
   assert.equal(sqlite.prepare("SELECT COUNT(*) count FROM inventory_movements WHERE kind='gift_allocation'").get().count, 12);
+
+  await assert.rejects(
+    () => activateProductionLaunchStock(database, {
+      ...input(stockManifest),
+      providerIdentities: {
+        ...input(stockManifest).providerIdentities,
+        stripeAccountId: "acct_DIFFERENT123456",
+      },
+    }),
+    (error) => error instanceof ProductionStockImportError && error.code === "IMPORT_PROOF_FAILED",
+  );
 });
 
 test("production stock activation rejects unsigned timing and non-empty commerce state", async () => {
@@ -172,4 +200,24 @@ test("production stock activation rejects unsigned timing and non-empty commerce
   );
   assert.equal(dirty.sqlite.prepare("SELECT COUNT(*) count FROM inventory").get().count, 0);
   assert.equal(dirty.sqlite.prepare("SELECT COUNT(*) count FROM production_launch_stock_manifests").get().count, 0);
+
+  const preallocated = productionDatabase();
+  const countedAt = "2026-08-25T08:00:00.000Z";
+  const activationAt = "2026-08-25T08:01:00.000Z";
+  const variantId = launchVariantSeed[0].id;
+  const { database: preallocatedD1, sqlite: preallocatedSqlite } = preallocated;
+  const { D1CommerceStore } = await import("../lib/commerce/d1-commerce-store.ts");
+  await new D1CommerceStore(preallocatedD1).seedLaunchCatalog(countedAt);
+  await preallocatedD1.prepare(`INSERT INTO inventory_movements (
+    id, variant_id, kind, quantity, reference_type, reference_id,
+    actor_type, actor_id, idempotency_key, created_at
+  ) VALUES ('movement_preexisting_gift', ?, 'gift_allocation', 1,
+    'gift_reserve_increase', 'preexisting', 'admin', 'operator',
+    'preexisting-gift-allocation', ?)`).bind(variantId, activationAt).run();
+  await assert.rejects(
+    () => activateProductionLaunchStock(preallocatedD1, input(stockManifest)),
+    (error) => error instanceof ProductionStockImportError && error.code === "DATABASE_NOT_EMPTY",
+  );
+  assert.equal(preallocatedSqlite.prepare("SELECT COUNT(*) count FROM production_launch_stock_manifests").get().count, 0);
+  assert.equal(preallocatedSqlite.prepare("SELECT COUNT(*) count FROM production_launch_stock_manifest_lines").get().count, 0);
 });

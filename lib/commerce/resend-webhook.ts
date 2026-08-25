@@ -14,6 +14,12 @@ const ALLOWED_EVENTS = new Set([
 ]);
 const MAX_CLOCK_SKEW_SECONDS = 300;
 
+function ownedArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const owned = new Uint8Array(bytes.byteLength);
+  owned.set(bytes);
+  return owned.buffer;
+}
+
 export class ResendWebhookError extends Error {
   readonly code: "INVALID_SIGNATURE" | "INVALID_PAYLOAD" | "PERSISTENCE_FAILURE";
 
@@ -78,7 +84,7 @@ async function verifySignature(input: Readonly<{
   const signed = `${input.eventId}.${input.timestamp}.${body}`;
   const key = await crypto.subtle.importKey(
     "raw",
-    keyBytes,
+    ownedArrayBuffer(keyBytes),
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign"],
@@ -86,7 +92,7 @@ async function verifySignature(input: Readonly<{
   const wanted = new Uint8Array(await crypto.subtle.sign(
     "HMAC",
     key,
-    new TextEncoder().encode(signed),
+    ownedArrayBuffer(new TextEncoder().encode(signed)),
   ));
   const candidates = input.signatures.split(" ")
     .map((part) => part.trim())
@@ -153,7 +159,10 @@ export async function recordVerifiedResendWebhook(input: Readonly<{
     nowEpochSeconds: input.nowEpochSeconds,
   });
   const event = parseEvent(input.rawBody);
-  const payloadSha256 = hex(new Uint8Array(await crypto.subtle.digest("SHA-256", input.rawBody)));
+  const payloadSha256 = hex(new Uint8Array(await crypto.subtle.digest(
+    "SHA-256",
+    ownedArrayBuffer(input.rawBody),
+  )));
   if (!SHA256.test(payloadSha256)) {
     throw new ResendWebhookError("PERSISTENCE_FAILURE", "Resend payload fingerprint failed.");
   }

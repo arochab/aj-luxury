@@ -2,6 +2,11 @@ import { D1CommerceStore } from "./d1-commerce-store.ts";
 import type { CommerceD1Database, CommerceD1PreparedStatement } from "./d1-port.ts";
 import { isCanonicalUtcTimestamp } from "./account-security.ts";
 import { validateLaunchStockImport } from "./launch-stock-import.ts";
+import {
+  createProductionProviderConfigurationAttestation,
+  type ProductionProviderConfigurationAttestation,
+  type ProductionProviderIdentities,
+} from "./production-provider-configuration.ts";
 
 const SHA_1 = /^[0-9a-f]{40}$/;
 const WORKER_VERSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -12,7 +17,8 @@ export class ProductionStockImportError extends Error {
     | "ACTIVATION_PRECEDES_APPROVAL"
     | "DATABASE_NOT_EMPTY"
     | "IMPORT_CONFLICT"
-    | "IMPORT_PROOF_FAILED";
+    | "IMPORT_PROOF_FAILED"
+    | "INVALID_PROVIDER_CONFIGURATION";
 
   constructor(code: ProductionStockImportError["code"], message: string, options?: ErrorOptions) {
     super(message, options);
@@ -26,6 +32,7 @@ export type ProductionStockImportInput = Readonly<{
   releaseSha: string;
   workerVersionId: string;
   activatedAt: string;
+  providerIdentities: ProductionProviderIdentities;
 }>;
 
 export type ProductionStockImportReceipt = Readonly<{
@@ -34,6 +41,7 @@ export type ProductionStockImportReceipt = Readonly<{
   payloadSha256: string;
   releaseSha: string;
   workerVersionId: string;
+  providerConfigurationSha256: string;
   physicalQuantity: 756;
   giftingReserveQuantity: 26;
   sellableQuantity: 730;
@@ -52,6 +60,35 @@ type ExistingManifestRow = Readonly<{
   payload_sha256: string;
   release_sha: string;
   worker_version_id: string;
+}>;
+
+type ExistingProviderConfigurationRow = Readonly<{
+  release_sha: string;
+  worker_version_id: string;
+  stock_manifest_id: string;
+  protocol: string;
+  configuration_sha256: string;
+  stripe_account_id: string;
+  sendcloud_integration_id: string;
+  sendcloud_sender_address_id: string;
+  resend_domain: string;
+  commerce_origin: string;
+  transactional_from_email: string;
+}>;
+
+type SeedOnlyRow = Readonly<{
+  variant_id: string;
+  product_id: string;
+  internal_reference: string;
+  physical_quantity: number;
+  gift_reserve_quantity: number;
+  safety_reserve_quantity: number;
+  active_reserved_quantity: number;
+  sold_quantity: number;
+  reserves_validated: number;
+  seed_movements: number;
+  seed_quantity: number;
+  non_seed_movements: number;
 }>;
 
 type ProofRow = Readonly<{
@@ -74,6 +111,7 @@ function receipt(
   payloadSha256: string,
   releaseSha: string,
   workerVersionId: string,
+  providerConfigurationSha256: string,
 ): ProductionStockImportReceipt {
   return Object.freeze({
     disposition,
@@ -81,6 +119,7 @@ function receipt(
     payloadSha256,
     releaseSha,
     workerVersionId,
+    providerConfigurationSha256,
     physicalQuantity: 756,
     giftingReserveQuantity: 26,
     sellableQuantity: 730,
@@ -112,6 +151,71 @@ async function existingManifest(
     `SELECT id, payload_sha256, release_sha, worker_version_id
     FROM production_launch_stock_manifests WHERE id=?`,
   ).bind(manifestId).first<ExistingManifestRow>();
+}
+
+async function providerConfigurationProofMatches(
+  database: CommerceD1Database,
+  expected: ProductionProviderConfigurationAttestation,
+): Promise<boolean> {
+  const row = await database.prepare(
+    `SELECT release_sha, worker_version_id, stock_manifest_id, protocol,
+      configuration_sha256, stripe_account_id, sendcloud_integration_id,
+      sendcloud_sender_address_id, resend_domain, commerce_origin,
+      transactional_from_email
+    FROM production_provider_configuration_attestations
+    WHERE release_sha=? AND worker_version_id=? AND stock_manifest_id=?`,
+  ).bind(
+    expected.releaseSha,
+    expected.workerVersionId,
+    expected.stockManifestId,
+  ).first<ExistingProviderConfigurationRow>();
+  return row?.protocol === expected.protocol &&
+    row.configuration_sha256 === expected.configurationSha256 &&
+    row.stripe_account_id === expected.stripeAccountId &&
+    row.sendcloud_integration_id === expected.sendcloudIntegrationId &&
+    row.sendcloud_sender_address_id === expected.sendcloudSenderAddressId &&
+    row.resend_domain === expected.resendDomain &&
+    row.commerce_origin === expected.commerceOrigin &&
+    row.transactional_from_email === expected.transactionalFromEmail;
+}
+
+async function seedOnlyCatalogMatches(
+  database: CommerceD1Database,
+  variants: readonly Readonly<{
+    variantId: string;
+    internalReference: string;
+    physicalQuantity: number;
+  }>[],
+): Promise<boolean> {
+  const result = await database.prepare(
+    `SELECT variant.id AS variant_id, variant.product_id,
+      variant.internal_reference, stock.physical_quantity,
+      stock.gift_reserve_quantity, stock.safety_reserve_quantity,
+      stock.active_reserved_quantity, stock.sold_quantity,
+      stock.reserves_validated,
+      (SELECT COUNT(*) FROM inventory_movements AS movement
+        WHERE movement.variant_id=variant.id AND movement.kind='seed'
+          AND movement.idempotency_key='seed:' || variant.id) AS seed_movements,
+      (SELECT COALESCE(SUM(quantity), 0) FROM inventory_movements AS movement
+        WHERE movement.variant_id=variant.id AND movement.kind='seed'
+          AND movement.idempotency_key='seed:' || variant.id) AS seed_quantity,
+      (SELECT COUNT(*) FROM inventory_movements WHERE kind<>'seed') AS non_seed_movements
+    FROM variants AS variant
+    INNER JOIN inventory AS stock ON stock.variant_id=variant.id
+    ORDER BY variant.sort_order, variant.id`,
+  ).all<SeedOnlyRow>();
+  return result.success && result.results.length === variants.length &&
+    result.results.every((row, index) => {
+      const expected = variants[index];
+      return expected !== undefined && row.variant_id === expected.variantId &&
+        row.product_id === "product_apollon" &&
+        row.internal_reference === expected.internalReference &&
+        row.physical_quantity === expected.physicalQuantity &&
+        row.gift_reserve_quantity === 0 && row.safety_reserve_quantity === 0 &&
+        row.active_reserved_quantity === 0 && row.sold_quantity === 0 &&
+        row.reserves_validated === 0 && row.seed_movements === 1 &&
+        row.seed_quantity === expected.physicalQuantity && row.non_seed_movements === 0;
+    });
 }
 
 async function verifyProof(
@@ -173,6 +277,21 @@ export async function activateProductionLaunchStock(
     throw new ProductionStockImportError("INVALID_RELEASE", "Release, Worker version or activation time is invalid.");
   }
   const validated = await validateLaunchStockImport(input.manifest);
+  let providerConfiguration: ProductionProviderConfigurationAttestation;
+  try {
+    providerConfiguration = await createProductionProviderConfigurationAttestation({
+      releaseSha: input.releaseSha,
+      workerVersionId: input.workerVersionId,
+      stockManifestId: validated.manifestId,
+      ...input.providerIdentities,
+    });
+  } catch (cause) {
+    throw new ProductionStockImportError(
+      "INVALID_PROVIDER_CONFIGURATION",
+      "Provider configuration identities are invalid.",
+      { cause },
+    );
+  }
   if (input.activatedAt < validated.countedAt ||
     input.activatedAt < validated.approvedAt.stock_owner ||
     input.activatedAt < validated.approvedAt.release_owner) {
@@ -186,10 +305,18 @@ export async function activateProductionLaunchStock(
       preexisting.worker_version_id !== input.workerVersionId) {
       throw new ProductionStockImportError("IMPORT_CONFLICT", "The manifest id is already bound to different release evidence.");
     }
-    if (!await verifyProof(database, validated.manifestId, validated.payloadSha256)) {
+    if (!await verifyProof(database, validated.manifestId, validated.payloadSha256) ||
+      !await providerConfigurationProofMatches(database, providerConfiguration)) {
       throw new ProductionStockImportError("IMPORT_PROOF_FAILED", "Existing stock activation does not reconcile.");
     }
-    return receipt("already-activated", validated.manifestId, validated.payloadSha256, input.releaseSha, input.workerVersionId);
+    return receipt(
+      "already-activated",
+      validated.manifestId,
+      validated.payloadSha256,
+      input.releaseSha,
+      input.workerVersionId,
+      providerConfiguration.configurationSha256,
+    );
   }
 
   const before = await databaseCounts(database);
@@ -201,6 +328,8 @@ export async function activateProductionLaunchStock(
 
   if (catalogEmpty) {
     await new D1CommerceStore(database).seedLaunchCatalog(validated.countedAt);
+  } else if (!await seedOnlyCatalogMatches(database, validated.variants)) {
+    throw new ProductionStockImportError("DATABASE_NOT_EMPTY", "The seed-only catalog contains non-seed stock state or mismatched variants.");
   }
 
   const validationAt = oneMillisecondAfter(input.activatedAt);
@@ -211,16 +340,26 @@ export async function activateProductionLaunchStock(
         `INSERT INTO inventory_movements (
           id, variant_id, kind, quantity, reference_type, reference_id,
           actor_type, actor_id, idempotency_key, created_at
-        ) VALUES (?, ?, 'gift_allocation', ?, 'gift_reserve_increase', ?,
-          'admin', ?, ?, ?)`,
+        ) SELECT ?, stock.variant_id, 'gift_allocation',
+          CASE WHEN stock.physical_quantity=? AND stock.gift_reserve_quantity=0
+            AND stock.safety_reserve_quantity=0 AND stock.active_reserved_quantity=0
+            AND stock.sold_quantity=0 AND stock.reserves_validated=0
+            AND NOT EXISTS (
+              SELECT 1 FROM inventory_movements
+              WHERE variant_id=stock.variant_id AND kind<>'seed'
+            )
+            THEN ? ELSE 0 END,
+          'gift_reserve_increase', ?, 'admin', ?, ?, ?
+        FROM inventory AS stock WHERE stock.variant_id=?`,
       ).bind(
         `movement_launch_gift_${String(position).padStart(2, "0")}`,
-        variant.variantId,
+        variant.physicalQuantity,
         variant.giftingReserveQuantity,
         validated.manifestId,
         validated.approvedBy.stock_owner,
         `launch-stock-gift:${validated.payloadSha256.slice(0, 32)}:${String(position).padStart(2, "0")}`,
         input.activatedAt,
+        variant.variantId,
       ));
     }
     statements.push(database.prepare(
@@ -276,6 +415,26 @@ export async function activateProductionLaunchStock(
       variant.sellableQuantity,
     ));
   });
+  statements.push(database.prepare(
+    `INSERT INTO production_provider_configuration_attestations (
+      release_sha, worker_version_id, stock_manifest_id, protocol,
+      configuration_sha256, stripe_account_id, sendcloud_integration_id,
+      sendcloud_sender_address_id, resend_domain, commerce_origin,
+      transactional_from_email, attested_at
+    ) VALUES (?, ?, ?, 'ajl-production-provider-configuration-v1', ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).bind(
+    providerConfiguration.releaseSha,
+    providerConfiguration.workerVersionId,
+    providerConfiguration.stockManifestId,
+    providerConfiguration.configurationSha256,
+    providerConfiguration.stripeAccountId,
+    providerConfiguration.sendcloudIntegrationId,
+    providerConfiguration.sendcloudSenderAddressId,
+    providerConfiguration.resendDomain,
+    providerConfiguration.commerceOrigin,
+    providerConfiguration.transactionalFromEmail,
+    validationAt,
+  ));
 
   try {
     const results = await database.batch(statements);
@@ -285,8 +444,16 @@ export async function activateProductionLaunchStock(
   } catch (cause) {
     throw new ProductionStockImportError("IMPORT_CONFLICT", "Production stock activation was rejected atomically.", { cause });
   }
-  if (!await verifyProof(database, validated.manifestId, validated.payloadSha256)) {
+  if (!await verifyProof(database, validated.manifestId, validated.payloadSha256) ||
+    !await providerConfigurationProofMatches(database, providerConfiguration)) {
     throw new ProductionStockImportError("IMPORT_PROOF_FAILED", "Activated stock does not reconcile to its immutable manifest.");
   }
-  return receipt("activated", validated.manifestId, validated.payloadSha256, input.releaseSha, input.workerVersionId);
+  return receipt(
+    "activated",
+    validated.manifestId,
+    validated.payloadSha256,
+    input.releaseSha,
+    input.workerVersionId,
+    providerConfiguration.configurationSha256,
+  );
 }

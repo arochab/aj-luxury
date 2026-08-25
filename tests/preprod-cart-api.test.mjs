@@ -233,7 +233,7 @@ test("preproduction cart keeps raw tokens out of D1 and survives reload", async 
   assert.equal(first.status, 200);
   const firstPayload = await first.json();
   assert.equal(firstPayload.data.itemCount, 2);
-  assert.equal(firstPayload.data.subtotalCents, 5_998);
+  assert.equal(firstPayload.data.subtotalCents, 4_999);
   assert.deepEqual(firstPayload.data.lines[0], {
     variantId,
     productId: "product_apollon",
@@ -247,6 +247,10 @@ test("preproduction cart keeps raw tokens out of D1 and survives reload", async 
     lineTotalCents: 5_998,
     stockState: "available",
   });
+  assert.equal(
+    firstPayload.data.lines[0].lineTotalCents - firstPayload.data.subtotalCents,
+    999,
+  );
   assert.doesNotMatch(
     JSON.stringify(firstPayload),
     /physical|reserve|available_to_sell|internal_reference|sku|email/i,

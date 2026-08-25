@@ -11,6 +11,12 @@ const MAX_JWT_BYTES = 16 * 1024;
 const MAX_CERTS_BYTES = 128 * 1024;
 const CLOCK_SKEW_SECONDS = 30;
 
+function ownedArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const owned = new Uint8Array(bytes.byteLength);
+  owned.set(bytes);
+  return owned.buffer;
+}
+
 type AccessConfiguration = Readonly<{
   issuer: string;
   audience: string;
@@ -179,8 +185,8 @@ export async function cloudflareAccessOwnerRequestAuthenticated(
     validSignature = await crypto.subtle.verify(
       { name: "RSASSA-PKCS1-v1_5" },
       key,
-      signature,
-      new TextEncoder().encode(`${segments[0]}.${segments[1]}`),
+      ownedArrayBuffer(signature),
+      ownedArrayBuffer(new TextEncoder().encode(`${segments[0]}.${segments[1]}`)),
     );
   } catch {
     return false;

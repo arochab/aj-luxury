@@ -15,7 +15,7 @@ import { productionReleaseSchemaInstalled } from "../worker/production-commerce-
 
 const directory = fileURLToPath(new URL("../drizzle/", import.meta.url));
 const migrations = readdirSync(directory)
-  .filter((name) => /^(?:000[0-7]|0009|001[0-7])_.+\.sql$/.test(name))
+  .filter((name) => /^(?:000[0-7]|0009|001[0-9])_.+\.sql$/.test(name))
   .sort();
 class Statement {
   constructor(database, query, values = []) { this.database = database; this.query = query; this.values = values; }

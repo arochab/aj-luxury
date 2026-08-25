@@ -432,7 +432,7 @@ test("shipping quote is D1-persistent, deterministic and exposes only the public
   context.sqlite.close();
 });
 
-test("parcel selection sums multiple lines and unmeasured carts fail closed", async () => {
+test("parcel selection sums multiple lines and carts above the launch limit fail closed", async () => {
   const multi = await fixture();
   activate(multi, "EU", 1375);
   const multiSession = await cartWithLine(multi, "variant_boxer_pourpre_m", 1);
@@ -464,20 +464,25 @@ test("parcel selection sums multiple lines and unmeasured carts fail closed", as
 
   const overLimit = await fixture();
   activate(overLimit, "EU", 1375);
-  const overLimitSession = await cartWithLine(
-    overLimit,
-    "variant_boxer_pourpre_m",
-    4,
-  );
+  const opened = await invoke(overLimit, "/api/preprod/cart", {
+    method: "POST",
+    headers: headers(),
+  });
+  assert.equal(opened.status, 201);
+  const overLimitSession = cookies(opened);
   const rejected = await invoke(
     overLimit,
-    "/api/preprod/checkout/shipping-quote",
-    quoteRequest(overLimitSession, france, "quote-attempt-over-profile-limit"),
+    "/api/preprod/cart/lines/variant_boxer_pourpre_m",
+    {
+      method: "PUT",
+      headers: headers(overLimitSession, { "Content-Type": "application/json" }),
+      body: JSON.stringify({ quantity: 4 }),
+    },
   );
-  assert.equal(rejected.status, 422);
+  assert.equal(rejected.status, 400);
   assert.equal(
     (await rejected.json()).error.code,
-    "PARCEL_CONFIGURATION_UNAVAILABLE",
+    "INVALID_BODY",
   );
   assert.equal(
     overLimit.sqlite.prepare("SELECT COUNT(*) count FROM shipping_quotes").get()

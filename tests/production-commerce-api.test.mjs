@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   controlledRequestAuthorization,
+  productionCommerceRuntimeBlockers,
   productionCommerceApiResponse,
   productionDeliveryRuntimeInstalled,
   productionLatePaymentRefundRuntimeReady,
@@ -13,6 +14,11 @@ import {
   productionReleaseSchemaContract,
   productionReleaseSchemaContractSha256,
 } from "../lib/commerce/production-schema-contract.ts";
+import {
+  createProductionProviderConfigurationAttestation,
+  productionProviderConfigurationSchemaContract,
+  productionProviderConfigurationSchemaContractSha256,
+} from "../lib/commerce/production-provider-configuration.ts";
 
 const releaseSha = "a".repeat(40);
 const controlledSecret = "controlled-auth-secret-value-0001";
@@ -35,13 +41,17 @@ const controlled = Object.freeze({
   STRIPE_SECRET_KEY: "sk_live_redacted",
   STRIPE_WEBHOOK_SECRET: "whsec_redacted",
   STRIPE_SETTLEMENT_MODE: "live",
+  STRIPE_ACCOUNT_ID: "acct_1U4iFTC0NIklfc9C",
   DELIVERY_PROVIDER: "sendcloud",
   SENDCLOUD_API_VERSION: "3",
   SENDCLOUD_PUBLIC_KEY: "public-redacted",
   SENDCLOUD_SECRET_KEY: "secret-redacted-secret",
+  SENDCLOUD_INTEGRATION_ID: "612109",
+  SENDCLOUD_SENDER_ADDRESS_ID: "sender_ajl_001",
   EMAIL_PROVIDER: "resend",
   RESEND_API_KEY: "re_redacted",
   RESEND_WEBHOOK_SECRET: "whsec_resend_redacted",
+  RESEND_DOMAIN: "ajluxurystore.com",
   TRANSACTIONAL_FROM_EMAIL: "commandes@ajluxurystore.com",
   SELLER_LEGAL_IDENTITY_APPROVED: "true",
   TAX_DUTY_POLICY_APPROVED: "true",
@@ -60,14 +70,20 @@ const ownerHeaders = Object.freeze({
 });
 
 test("production release schema sentinel is bound to its canonical contract", async () => {
-  const digest = new Uint8Array(await crypto.subtle.digest(
-    "SHA-256",
-    new TextEncoder().encode(productionReleaseSchemaContract),
-  ));
-  assert.equal(
-    Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join(""),
-    productionReleaseSchemaContractSha256,
-  );
+  for (const [contract, expected] of [
+    [productionReleaseSchemaContract, productionReleaseSchemaContractSha256],
+    [productionProviderConfigurationSchemaContract,
+      productionProviderConfigurationSchemaContractSha256],
+  ]) {
+    const digest = new Uint8Array(await crypto.subtle.digest(
+      "SHA-256",
+      new TextEncoder().encode(contract),
+    ));
+    assert.equal(
+      Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join(""),
+      expected,
+    );
+  }
 });
 
 async function authenticatedOwnerHeaders(method, pathname) {
@@ -196,34 +212,88 @@ test("the one-shot stock importer is wired before the stock gate but bound to ow
     },
     body: JSON.stringify({ manifest }),
   });
-  const rejected = await productionCommerceApiResponse(
+  const legacyRejected = await productionCommerceApiResponse(
     request("WRONG"), env,
     { stockImporter: async () => { calls += 1; throw new Error("not-called"); } },
+  );
+  assert.equal(legacyRejected.status, 403);
+  assert.equal(calls, 0);
+
+  const rejected = await productionCommerceApiResponse(
+    request("WRONG"), env,
+    {
+      stockImportOwnerAuthenticator: async () => true,
+      stockImporter: async () => { calls += 1; throw new Error("not-called"); },
+    },
   );
   assert.equal(rejected.status, 503);
   assert.equal(calls, 0);
 
   const accepted = await productionCommerceApiResponse(
     request("IMPORT_756_PHYSICAL_26_GIFTS_730_SELLABLE"), env,
-    { stockImporter: async (_database, input) => {
+    {
+      stockImportOwnerAuthenticator: async () => true,
+      stockImporter: async (_database, input) => {
       calls += 1;
       assert.equal(input.releaseSha, releaseSha);
       assert.equal(input.workerVersionId, controlled.CF_VERSION_METADATA.id);
+      assert.deepEqual(input.providerIdentities, {
+        stripeAccountId: controlled.STRIPE_ACCOUNT_ID,
+        sendcloudIntegrationId: controlled.SENDCLOUD_INTEGRATION_ID,
+        sendcloudSenderAddressId: controlled.SENDCLOUD_SENDER_ADDRESS_ID,
+        resendDomain: controlled.RESEND_DOMAIN,
+        commerceOrigin: controlled.COMMERCE_ORIGIN,
+        transactionalFromEmail: controlled.TRANSACTIONAL_FROM_EMAIL,
+      });
       return {
         disposition: "activated",
         manifestId: manifest.manifestId,
         payloadSha256,
         releaseSha,
         workerVersionId: controlled.CF_VERSION_METADATA.id,
+        providerConfigurationSha256: "d".repeat(64),
         physicalQuantity: 756,
         giftingReserveQuantity: 26,
         sellableQuantity: 730,
       };
-    } },
+      },
+    },
   );
   assert.equal(accepted.status, 201);
   assert.equal((await accepted.json()).data.sellableQuantity, 730);
   assert.equal(calls, 1);
+});
+
+test("live runtime opens only after the manual returns label and refund process is approved", () => {
+  const base = {
+    ...controlled,
+    COMMERCE_MODE: "live",
+    CLOUDFLARE_ACCESS_TEAM_DOMAIN: "https://aj-luxury.cloudflareaccess.com",
+    CLOUDFLARE_ACCESS_AUD: "accessAudience_1234567890",
+    COMMERCE_CART_HMAC_SECRET: "x".repeat(32),
+    DELIVERY_REFERENCE_ENCRYPTION_KEY_BASE64: btoa("x".repeat(32)),
+    DELIVERY_REFERENCE_KEY_VERSION: "key-version-0001",
+    DELIVERY_REFERENCE_DECRYPTION_KEYS_JSON: JSON.stringify({
+      "key-version-0001": btoa("x".repeat(32)),
+    }),
+    COMMERCE_RATE_LIMITER: { limit: async () => ({ success: true }) },
+    PROVIDER_RATE_LIMITER: { limit: async () => ({ success: true }) },
+    WEBHOOK_RATE_LIMITER: { limit: async () => ({ success: true }) },
+    OPERATOR_RATE_LIMITER: { limit: async () => ({ success: true }) },
+    LATE_PAYMENT_REFUND_DISPATCH_ENABLED: "true",
+    OUTBOUND_SHIPMENT_CREATION_ENABLED: "true",
+    OPERATOR_ADMIN_MFA_ENABLED: "true",
+    TRANSACTIONAL_EMAIL_DISPATCH_ENABLED: "true",
+    TRANSACTIONAL_EMAIL_DISPATCH_MODE: "resend",
+    RETURNS_WORKFLOW_ENABLED: "true",
+    RESERVATION_EXPIRY_ENABLED: "true",
+  };
+  assert.ok(productionCommerceRuntimeBlockers(base, "live")
+    .includes("returns-label-and-refund-process-unapproved"));
+  assert.equal(productionCommerceRuntimeBlockers({
+    ...base,
+    RETURNS_LABEL_AND_REFUND_PROCESS_APPROVED: "true",
+  }, "live").includes("returns-label-and-refund-process-unapproved"), false);
 });
 
 test("cart creation rejects a missing exact origin before touching D1", async () => {
@@ -301,13 +371,14 @@ test("delivery runtime proof rejects missing and prefix-colliding 0013 objects",
   assert.equal(await productionDeliveryRuntimeInstalled(database([...exact, { ...exact[1], name: "delivery_provider_reference_vault_shadow" }])), false);
 });
 
-function stockProofDatabase(proof, lines, releaseProof) {
+function stockProofDatabase(proof, lines, releaseProof, providerProof) {
   return {
     prepare(query) {
       return {
         bind() { return this; },
         async first() {
           if (query.includes("FROM production_launch_stock_manifests")) return proof;
+          if (query.includes("FROM production_provider_configuration_attestations")) return providerProof;
           if (query.includes("FROM production_release_attestations")) return releaseProof;
           return null;
         },
@@ -364,8 +435,34 @@ test("live stock attestation recomputes the exact 12-line manifest and controlle
     jeremy_approver_id: "jeremy", adam_approver_id: "adam",
     controlled_order_proven: 1,
   };
+  const provider = await createProductionProviderConfigurationAttestation({
+    releaseSha,
+    workerVersionId: controlled.CF_VERSION_METADATA.id,
+    stockManifestId: unsigned.manifestId,
+    stripeAccountId: controlled.STRIPE_ACCOUNT_ID,
+    sendcloudIntegrationId: controlled.SENDCLOUD_INTEGRATION_ID,
+    sendcloudSenderAddressId: controlled.SENDCLOUD_SENDER_ADDRESS_ID,
+    resendDomain: controlled.RESEND_DOMAIN,
+    commerceOrigin: controlled.COMMERCE_ORIGIN,
+    transactionalFromEmail: controlled.TRANSACTIONAL_FROM_EMAIL,
+  });
+  const providerProof = {
+    release_sha: provider.releaseSha,
+    worker_version_id: provider.workerVersionId,
+    stock_manifest_id: provider.stockManifestId,
+    protocol: provider.protocol,
+    configuration_sha256: provider.configurationSha256,
+    stripe_account_id: provider.stripeAccountId,
+    sendcloud_integration_id: provider.sendcloudIntegrationId,
+    sendcloud_sender_address_id: provider.sendcloudSenderAddressId,
+    resend_domain: provider.resendDomain,
+    commerce_origin: provider.commerceOrigin,
+    transactional_from_email: provider.transactionalFromEmail,
+    schema_proven: 1,
+  };
   const env = {
-    DB: stockProofDatabase(proof, lines, releaseProof), STOCK_MANIFEST_ID: unsigned.manifestId,
+    ...controlled,
+    DB: stockProofDatabase(proof, lines, releaseProof, providerProof), STOCK_MANIFEST_ID: unsigned.manifestId,
     STOCK_MANIFEST_SHA256: payload, COMMERCE_RELEASE_SHA: releaseSha,
     COMMERCE_CONTROLLED_ORDER_PROOF_ID: "order-controlled-0001",
     COMMERCE_MODE: "live",
@@ -379,10 +476,11 @@ test("live stock attestation recomputes the exact 12-line manifest and controlle
   const redistributed = lines.map((line, index) => index === 0
     ? { ...line, live_physical_quantity: line.live_physical_quantity + 1 }
     : line);
-  assert.equal(await productionStockRuntimeAttested({ ...env, DB: stockProofDatabase(proof, redistributed, releaseProof) }), false);
-  assert.equal(await productionStockRuntimeAttested({ ...env, DB: stockProofDatabase({ ...proof, worker_version_id: crypto.randomUUID() }, lines, releaseProof) }), false);
+  assert.equal(await productionStockRuntimeAttested({ ...env, DB: stockProofDatabase(proof, redistributed, releaseProof, providerProof) }), false);
+  assert.equal(await productionStockRuntimeAttested({ ...env, DB: stockProofDatabase({ ...proof, worker_version_id: crypto.randomUUID() }, lines, releaseProof, providerProof) }), false);
   assert.equal(await productionStockRuntimeAttested({ ...env, STOCK_MANIFEST_SHA256: "c".repeat(64) }), false);
   assert.equal(await productionStockRuntimeAttested({ ...env, COMMERCE_PROMOTED_FROM_VERSION_ID: env.CF_VERSION_METADATA.id }), false);
+  assert.equal(await productionStockRuntimeAttested({ ...env, STRIPE_ACCOUNT_ID: "acct_DIFFERENT123456" }), false);
 });
 
 test("controlled payment session stays closed until refund schema and dispatcher are ready", async () => {
