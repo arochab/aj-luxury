@@ -1,33 +1,35 @@
 import StoreFooter from "./components/StoreFooter";
-import StoreHeader from "./components/StoreHeader";
-import HomeExperienceV9, {
+import HomeExperienceV10, {
   type HomeColorway,
-} from "./components/HomeExperienceV9";
-import { HOME_V9_COLORWAYS } from "./components/HomeExperienceV9.content";
+} from "./components/HomeExperienceV10";
 import { getProducts } from "../lib/products";
-import { getServerCommerceRuntimeMode } from "../lib/commerce/commerce-runtime.server";
 
 export default function Home() {
   const products = getProducts();
-  const commerceOpen = getServerCommerceRuntimeMode() === "production";
 
-  const colorways: HomeColorway[] = HOME_V9_COLORWAYS.map((entry) => {
-    const product = products.find((candidate) => candidate.slug === entry.slug);
-    if (!product) {
-      throw new Error(`Missing homepage product: ${entry.slug}`);
-    }
+  const keys = {
+    "rose-pale": "sequence.color.rose",
+    "lilas-bleu-clair": "sequence.color.lilac",
+    pourpre: "sequence.color.purple",
+  } as const;
 
-    return {
-      ...entry,
-      priceCents: product.priceCents,
+  const colorways: HomeColorway[] = products.flatMap((product) => {
+    if (!(product.slug in keys)) return [];
+    const slug = product.slug as HomeColorway["slug"];
+    return [{
+      slug,
+      nameKey: keys[slug],
+      image: product.image,
+      width: 1731,
+      height: 2600,
+      position: "center top",
       swatch: product.swatch,
-    };
+    }];
   });
 
   return (
-    <main className="aj-home aj-home-v9">
-      <StoreHeader />
-      <HomeExperienceV9 colorways={colorways} commerceOpen={commerceOpen} />
+    <main className="aj-home aj-home-v10">
+      <HomeExperienceV10 colorways={colorways} />
       <StoreFooter />
     </main>
   );
