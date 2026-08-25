@@ -9,7 +9,8 @@
   "preview_urls": true,
   "vars": {
     "APP_ENV": "preview",
-    "COMMERCE_MODE": "closed"
+    "COMMERCE_MODE": "closed",
+    "COMMERCE_REVIEW_MODE": "true"
   },
   "assets": {
     "binding": "ASSETS",

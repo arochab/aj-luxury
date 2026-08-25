@@ -5,7 +5,10 @@ import { T } from "../../lib/i18n/TranslatedText";
 import CartClient from "./CartClient";
 import styles from "./CommerceShell.module.css";
 import tunnel from "../components/Tunnel.module.css";
-import { getServerCommerceRuntimeMode } from "../../lib/commerce/commerce-runtime.server";
+import {
+  getServerCommerceRuntimeMode,
+  isServerCommerceReview,
+} from "../../lib/commerce/commerce-runtime.server";
 
 export const metadata = {
   title: "Votre panier | AJ Luxury",
@@ -57,6 +60,7 @@ function FilDEtapes({ etape }: { etape: 1 | 2 | 3 }) {
 
 export default function CartPage() {
   const runtimeMode = getServerCommerceRuntimeMode();
+  const reviewMode = isServerCommerceReview();
   return (
     <main className={`${styles.shell} ${tunnel.sol}`}>
       <StoreHeader />
@@ -86,25 +90,25 @@ export default function CartPage() {
           <section className={tunnel.scene} aria-labelledby="cart-closed-title">
             <p className={tunnel.oeil}>Panier</p>
             <h1 className={tunnel.geste} id="cart-closed-title">
-              La collection avant le panier.
+              {reviewMode ? "Le panier est prêt pour la recette." : "La collection avant le panier."}
             </h1>
             <p className={tunnel.lede}>
-              La vente en ligne n’est pas encore ouverte : ce site est une
-              démonstration. Rien n’est enregistré, rien n’est débité, et aucune
-              donnée bancaire n’est collectée.
+              {reviewMode
+                ? "Les 730 pièces vendables, les tailles et les packs sont préparés. Cette adresse publique reste volontairement verrouillée : aucun débit et aucune donnée bancaire."
+                : "La vente en ligne n’est pas encore ouverte : ce site est une démonstration. Rien n’est enregistré, rien n’est débité, et aucune donnée bancaire n’est collectée."}
             </p>
             <ul className={`${tunnel.gages} ${tunnel.montee}`}>
               <li>
                 <span>Paiement</span>
-                <strong>Fermé</strong>
+                <strong>{reviewMode ? "Recette privée" : "Fermé"}</strong>
               </li>
               <li>
-                <span>Données bancaires</span>
-                <strong>Aucune collecte</strong>
+                <span>{reviewMode ? "Stock" : "Données bancaires"}</span>
+                <strong>{reviewMode ? "730 vendables" : "Aucune collecte"}</strong>
               </li>
               <li>
-                <span>Ce site</span>
-                <strong>Démonstration privée</strong>
+                <span>{reviewMode ? "Packs" : "Ce site"}</span>
+                <strong>{reviewMode ? "2 ou 3, stock réel" : "Démonstration privée"}</strong>
               </li>
             </ul>
             <div className={tunnel.actions}>

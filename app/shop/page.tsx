@@ -3,7 +3,10 @@ import type { CSSProperties } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { getProducts, sizes } from "../../lib/products";
-import { getServerCommerceRuntimeMode } from "../../lib/commerce/commerce-runtime.server";
+import {
+  getServerCommerceRuntimeMode,
+  isServerCommerceReview,
+} from "../../lib/commerce/commerce-runtime.server";
 import LocalizedPrice from "../components/LocalizedPrice";
 import LocalizedProductText from "../components/LocalizedProductText";
 import StoreFooter from "../components/StoreFooter";
@@ -28,6 +31,7 @@ const MATIERE_IMAGE = "/images/client/product-pourpre-detail.webp";
 export default function ShopPage() {
   const products = getProducts();
   const runtimeMode = getServerCommerceRuntimeMode();
+  const reviewMode = isServerCommerceReview();
   const prixCents = products[0]?.priceCents ?? null;
 
   return (
@@ -193,7 +197,11 @@ export default function ShopPage() {
                 n'est pas ouverte, qui est la seule raison pour laquelle on
                 peut afficher un prix sans mentir.
               */}
-              {runtimeMode !== "production" && (
+              {reviewMode ? (
+                <p className={styles.statutNote}>
+                  <T id="shop.reviewNotice" />
+                </p>
+              ) : runtimeMode !== "production" && (
                 <p className={styles.statutNote}>
                   <T id="shop.saleNotice" />{" "}
                   <Link className={styles.statutLien} href="/contact">

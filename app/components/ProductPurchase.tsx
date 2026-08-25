@@ -32,6 +32,7 @@ type ProductPurchaseProps = {
      de résolution : seul cas où l'on retombe sur « vérifié à l'ajout ». */
   availability: PublicStockBySize | null;
   runtimeMode: CommerceRuntimeMode;
+  reviewMode: boolean;
 };
 
 export default function ProductPurchase({
@@ -39,6 +40,7 @@ export default function ProductPurchase({
   products,
   availability,
   runtimeMode,
+  reviewMode,
 }: ProductPurchaseProps) {
   const [selectedSize, setSelectedSize] = useState<ProductSize | null>(null);
   const [feedback, setFeedback] = useState<
@@ -90,6 +92,16 @@ export default function ProductPurchase({
   }
 
   function stockLabel(size: ProductSize) {
+    if (reviewMode) {
+      const stock = stockOf(size);
+      if (!stock) return t("product.stockCheckedAtAdd");
+      if (stock.state === "sold-out") return t("product.soldOutLive");
+      if (stock.state === "low-stock") {
+        return t("product.onlyLeft").replace("{count}", String(stock.remaining));
+      }
+      return t("product.availableLive");
+    }
+
     /* EN PRODUCTION, LE REGISTRE DE MAQUETTE NE PARLE PAS. Il est codé en dur
        et ne lit pas D1 : afficher « Disponible » ou « Plus que 3 » à partir de
        lui serait annoncer à un client un chiffre inventé. On dit donc ce qui
@@ -294,6 +306,7 @@ export default function ProductPurchase({
       }
       return t("product.cartUnavailable");
     }
+    if (reviewMode) return t("product.reviewNotice");
     return runtimeMode === "preproduction"
       ? t("product.cartSecureNotice")
       : runtimeMode === "production"
@@ -359,9 +372,11 @@ export default function ProductPurchase({
           traduit ici, seule sa condition d'affichage change. */}
       <div className={styles.price} data-aj-reveal>
         <strong>{formatPrice(product.priceCents, locale)}</strong>
-        {runtimeMode !== "production" && (
-          <span>{t("product.priceLabel")}</span>
-        )}
+        {reviewMode
+          ? <span>{t("product.reviewPrice")}</span>
+          : runtimeMode !== "production" && (
+              <span>{t("product.priceLabel")}</span>
+            )}
       </div>
 
       <p className={styles.description} data-aj-reveal>
@@ -426,7 +441,9 @@ export default function ProductPurchase({
                    taille tiennent chacune sur une ligne ; l'assistance reçoit la
                    phrase entière, qui dit ce que « À l'ouverture » sous-entend. */
                 aria-label={`${t("product.size")} ${size}, ${
-                  runtimeMode === "closed"
+                  reviewMode
+                    ? label
+                    : runtimeMode === "closed"
                     ? t("product.availabilityAtOpening")
                     : label
                 }`}
@@ -546,7 +563,9 @@ export default function ProductPurchase({
         }}
         aria-busy={cartBusy}
       >
-        {runtimeMode === "closed"
+        {reviewMode
+          ? t("product.reviewButton")
+          : runtimeMode === "closed"
           ? t("product.openingSoon")
           : cartBusy
             ? t("product.adding")
@@ -588,9 +607,9 @@ export default function ProductPurchase({
       </div>
 
       <div className={styles.service}>
-        <span>{runtimeMode === "production" ? "Livraison calculée à l’adresse" : t("product.shippingPending")}</span>
-        <span>{runtimeMode === "production" ? "Paiement sécurisé par Stripe" : t("product.paymentPending")}</span>
-        <span>{runtimeMode === "production" ? "Retours selon les conditions de vente" : t("product.returnsPending")}</span>
+        <span>{reviewMode ? t("product.reviewShipping") : runtimeMode === "production" ? "Livraison calculée à l’adresse" : t("product.shippingPending")}</span>
+        <span>{reviewMode ? t("product.reviewPayment") : runtimeMode === "production" ? "Paiement sécurisé par Stripe" : t("product.paymentPending")}</span>
+        <span>{reviewMode ? t("product.reviewPacks") : runtimeMode === "production" ? "Retours selon les conditions de vente" : t("product.returnsPending")}</span>
       </div>
     </aside>
   );

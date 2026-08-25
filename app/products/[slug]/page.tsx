@@ -16,7 +16,10 @@ import { getPublicStockBySize } from "../../../lib/commerce/internal-stock";
 import type { PublicStockBySize } from "../../../lib/commerce/public-stock";
 import { getProduct, getProducts } from "../../../lib/products";
 import { T } from "../../../lib/i18n/TranslatedText";
-import { getServerCommerceRuntimeMode } from "../../../lib/commerce/commerce-runtime.server";
+import {
+  getServerCommerceRuntimeMode,
+  isServerCommerceReview,
+} from "../../../lib/commerce/commerce-runtime.server";
 
 type ProductPageProps = {
   params: Promise<{ slug: string }>;
@@ -66,6 +69,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
     availability = null;
   }
   const runtimeMode = getServerCommerceRuntimeMode();
+  const reviewMode = isServerCommerceReview();
   const otherProducts = products.filter((item) => item.slug !== product.slug);
 
   return (
@@ -116,6 +120,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
             products={products}
             availability={availability}
             runtimeMode={runtimeMode}
+            reviewMode={reviewMode}
           />
         </section>
 
