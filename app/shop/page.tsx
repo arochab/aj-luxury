@@ -77,7 +77,7 @@ export default function ShopPage() {
           */}
           <div className={styles.identite}>
             <p className={styles.eyebrow} data-aj-reveal>
-              <T id="nav.shop" /> · <T id="shop.firstModel" />
+              <T id="nav.shop" />
             </p>
 
             <h1
@@ -179,10 +179,6 @@ export default function ShopPage() {
           </ul>
 
           <div className={styles.dire}>
-            <p className={styles.chapo} data-aj-reveal>
-              <T id="shop.intro" />
-            </p>
-
             <div className={styles.statut} data-aj-reveal>
               <p className={styles.prix}>
                 <LocalizedPrice amountCents={prixCents} />

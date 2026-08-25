@@ -95,8 +95,8 @@ test("the redesigned homepage only references retained repository assets", async
     /generated_images|concept|hero-figures|identity-overlay|hero-v[67]-|apollon-world/i.test(source),
   ));
   assert.doesNotMatch(`${page}\n${experience}`, /<video/i);
-  assert.match(experience, /shoot\/duo-pourpre-full\.webp/);
-  assert.match(experience, /shoot\/rose-standing\.webp/);
+  assert.match(experience, /hero-v4-tablet-1440x810-poster\.webp/);
+  assert.match(experience, /hero-v4-portrait-480x623-poster\.webp/);
 });
 
 test("homepage controls answer quickly and scroll-linked product motion has no lag", async () => {

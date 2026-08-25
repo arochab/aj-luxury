@@ -408,9 +408,6 @@ export default function NotreHistoirePage() {
         >
           <div className={styles.chapitreGrille}>
             <div className={styles.chapitreAncre}>
-              <p className={`${styles.mouvement} aj-label`}>
-                <T id="story.movementOrigin" />
-              </p>
               <span aria-hidden="true" className={styles.filet} />
               <h2
                 className={`${styles.titreChapitre} aj-display`}
@@ -443,9 +440,6 @@ export default function NotreHistoirePage() {
                 ligne en space-between, avec le titre à gauche et l'index à
                 droite — donc la seule des trois à ne pas suivre la règle. */}
             <div className={styles.duoTete}>
-              <p className={`${styles.mouvement} aj-label`}>
-                <T id="story.movementFounders" />
-              </p>
               <span aria-hidden="true" className={styles.filet} />
               <h2
                 className={`${styles.titreDuo} aj-display`}
@@ -559,9 +553,6 @@ export default function NotreHistoirePage() {
 
           <div className={styles.matiereTexte}>
             <div className={styles.matiereTete}>
-              <p className={`${styles.mouvement} aj-label`}>
-                <T id="story.movementMaterial" />
-              </p>
               <span aria-hidden="true" className={styles.filet} />
               <h2
                 className={`${styles.titreChapitre} aj-display`}

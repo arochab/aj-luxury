@@ -348,12 +348,20 @@ export default function HomeExperienceV10({ colorways }: Props) {
         <figure className={styles.heroMedia} data-motion="hero-media">
           <div className={styles.heroPanelLeft}>
             <picture>
-              <source media="(max-width: 760px)" srcSet="/images/client/shoot/rose-standing.webp" />
+              <source
+                media="(max-width: 760px)"
+                srcSet="/images/client/hero-v4-portrait-480x623-poster.webp 480w, /images/client/hero-v4-portrait-720x934-poster.webp 720w"
+                sizes="100vw"
+              />
+              <source
+                srcSet="/images/client/hero-v4-tablet-1440x810-poster.avif"
+                type="image/avif"
+              />
               <img
-                src="/images/client/shoot/duo-pourpre-full.webp"
-                alt="AJ Luxury — Alex et Jérémy portent Apollon"
-                width={2200}
-                height={2070}
+                src="/images/client/hero-v4-tablet-1440x810-poster.webp"
+                alt="AJ Luxury — Jérémy et Alex portent Apollon Lilas Céleste"
+                width={1440}
+                height={810}
                 fetchPriority="high"
                 decoding="async"
               />

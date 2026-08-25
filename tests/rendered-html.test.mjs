@@ -648,9 +648,9 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
   assert.match(html, /Reveal Your[\s\S]*Inner Beauty/);
   assert.match(
     html,
-    /shoot\/duo-pourpre-full\.webp"[^>]*fetchPriority="high"[^>]*decoding="async"/,
+    /hero-v4-tablet-1440x810-poster\.webp"[^>]*fetchPriority="high"[^>]*decoding="async"/,
   );
-  assert.match(html, /shoot\/rose-standing\.webp/);
+  assert.match(html, /hero-v4-portrait-480x623-poster\.webp/);
   assert.match(html, /product-rose-model\.webp/);
   assert.match(html, /editorial-lilas-chair\.webp/);
   assert.match(html, /shoot\/pourpre-seated\.webp/);
@@ -824,9 +824,7 @@ test("server-renders the complete AJ Luxury story", async () => {
   const html = await response.text();
   assert.match(html, /Notre histoire/);
   // Les trois mouvements sont nommés, plus jamais numérotés (retour du 19/08).
-  assert.match(html, /Le marbre/);
-  assert.match(html, /La lyre/);
-  assert.match(html, /Le laurier/);
+  assert.doesNotMatch(html, /Le marbre|La lyre|Le laurier/);
   assert.doesNotMatch(html, /<p[^>]*>0[123]<\/p>/);
   assert.match(html, /Le vêtement que personne ne voit/);
   assert.match(html, /Jérémy et Alex/);
