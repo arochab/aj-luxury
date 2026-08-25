@@ -78,6 +78,47 @@ test("rotating attacker-controlled cookies cannot rotate the edge counter", asyn
   assert.equal(new Set(keys).size, 1);
 });
 
+test("backend-only counters use the secret-bound storefront actor, not the cross-zone Worker IP", async () => {
+  const keys = [];
+  const env = {
+    ...ready,
+    COMMERCE_BACKEND_ONLY: "true",
+    COMMERCE_RATE_LIMITER: {
+      async limit({ key }) { keys.push(key); return { success: true }; },
+    },
+  };
+  for (const actor of ["a".repeat(64), "b".repeat(64), "a".repeat(64)]) {
+    await productionCommerceRateLimitResponse(new Request(
+      "https://ajluxurystore.com/api/commerce/cart",
+      { headers: {
+        "CF-Connecting-IP": "2a06:98c0:3600::103",
+        "X-AJ-Trusted-Rate-Limit-Actor": actor,
+      } },
+    ), env);
+  }
+  assert.equal(keys[0], keys[2]);
+  assert.notEqual(keys[0], keys[1]);
+});
+
+test("direct backend webhooks retain separate edge counters", async () => {
+  const keys = [];
+  const env = {
+    ...ready,
+    COMMERCE_BACKEND_ONLY: "true",
+    WEBHOOK_RATE_LIMITER: {
+      async limit({ key }) { keys.push(key); return { success: true }; },
+    },
+  };
+  for (const address of ["192.0.2.10", "192.0.2.11", "192.0.2.10"]) {
+    await productionCommerceRateLimitResponse(new Request(
+      "https://ajluxurystore.com/api/commerce/webhooks/stripe",
+      { headers: { "CF-Connecting-IP": address } },
+    ), env);
+  }
+  assert.equal(keys[0], keys[2]);
+  assert.notEqual(keys[0], keys[1]);
+});
+
 test("cart, provider, webhook and operator traffic use separate bindings", async () => {
   const calls = [];
   const env = {

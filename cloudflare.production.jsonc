@@ -54,9 +54,10 @@
     "crons": ["*/2 * * * *"]
   },
 
-  // Pas de workers.dev en production : l'acces se fera par le domaine
-  // canonique, une fois qu'il sera decide de l'ouvrir.
-  "workers_dev": false,
+  // Backend API uniquement. Le client reste sur ajluxurystore.com ; le Site
+  // relaie strictement /api/commerce/* vers cette origine technique.
+  "workers_dev": true,
+  "preview_urls": false,
 
   "d1_databases": [
     {
@@ -71,6 +72,9 @@
     "APP_ENV": "production",
     "COMMERCE_MODE": "sandbox",
     "COMMERCE_ORIGIN": "https://ajluxurystore.com",
+    "COMMERCE_BACKEND_ONLY": "true",
+    "COMMERCE_CONTROLLED_STOREFRONT_ORIGIN": "https://aj-luxury-awwwards-private.arochab.chatgpt.site",
+    "COMMERCE_PUBLIC_STOREFRONT_ORIGINS_JSON": "[\"https://ajluxurystore.com\",\"https://www.ajluxurystore.com\"]",
     "PAYMENT_PROVIDER": "stripe",
     "DELIVERY_PROVIDER": "sendcloud",
     "SENDCLOUD_API_VERSION": "3",
@@ -89,8 +93,8 @@
     //   COMMERCE_PROMOTED_FROM_VERSION_ID
     //                                  en live, l'ID immutable de la version
     //                                  controlled ayant passe la commande preuve
-    //   CLOUDFLARE_ACCESS_TEAM_DOMAIN  origine https://<team>.cloudflareaccess.com
-    //   CLOUDFLARE_ACCESS_AUD          audience de l'application Access owner
+    //   COMMERCE_CONTROLLED_OWNER_EMAIL
+    //                                  compte Adam seul autorise sur le Site prive
     //   PRODUCTION_STOCK_IMPORT_ENABLED
     //                                  true uniquement pendant l'import one-shot
     //   COMMERCE_ADAM_APPROVAL_SHA     le meme SHA, approuve par Adam
@@ -120,6 +124,10 @@
   //   SENDCLOUD_SECRET_KEY
   //   RESEND_API_KEY
   //   RESEND_WEBHOOK_SECRET
+  //   COMMERCE_PROXY_SECRET
+  //   COMMERCE_CART_HMAC_SECRET
+  //   COMMERCE_CONTROLLED_AUTH_HMAC_SECRET
+  //   DELIVERY_REFERENCE_ENCRYPTION_KEY_BASE64
 
   "assets": {
     "binding": "ASSETS",

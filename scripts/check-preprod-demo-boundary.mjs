@@ -29,12 +29,15 @@ const expectedSourceBranches = [
 const releaseBuildEpoch = 1786622400000;
 const frozenMigrationHash =
   "794e1c67471427ba3d92e979e79e07a8393244794d7d98b827db6b0fda07b5b5";
+const productionFrontendProjectIds = new Set([
+  "appgprj_6a81995167048191b50b37833695f3dc",
+  "appgprj_6a63835f347c819187cdbb7ee16641cc",
+]);
 
 assert.equal(marker.production_promotion, "forbidden");
 assert.equal(marker.dataset_kind, SYNTHETIC_DEMO_DATASET_KIND);
 assert.equal(marker.fixture_version, SYNTHETIC_DEMO_FIXTURE_VERSION);
 assert.equal(marker.expires_at, SYNTHETIC_DEMO_EXPIRES_AT);
-assert.equal(marker.project_id, hosting.project_id);
 assert.deepEqual(marker.allowed_source_branches, expectedSourceBranches);
 assert.match(migration, /PREPRODUCTION-ONLY SYNTHETIC DATASET/);
 assert.match(migration, new RegExp(SYNTHETIC_DEMO_MIGRATION.replace(".sql", "")));
@@ -65,15 +68,18 @@ assert.ok(
   "the additive production provider attestation migration must follow the frozen synthetic release",
 );
 
-if (
-  process.env.APP_ENV !== "preproduction" ||
-  process.env.PREPROD_TARGET_PROJECT_ID !== hosting.project_id
-) {
+const preproductionBuild = process.env.APP_ENV === "preproduction" &&
+  process.env.PREPROD_TARGET_PROJECT_ID === marker.project_id;
+const productionFrontendBuild = process.env.APP_ENV === "production" &&
+  !process.env.PREPROD_TARGET_PROJECT_ID &&
+  productionFrontendProjectIds.has(hosting.project_id) &&
+  hosting.d1 === null;
+if (!preproductionBuild && !productionFrontendBuild) {
   throw new Error(
-    "Synthetic migration 0008 requires the exact preproduction environment and target project.",
+    "Build target must be the exact synthetic preproduction project or a D1-detached production frontend.",
   );
 }
-if (process.env.GITHUB_ACTIONS === "true") {
+if (preproductionBuild && process.env.GITHUB_ACTIONS === "true") {
   const sourceBranch = process.env.GITHUB_HEAD_REF || process.env.GITHUB_REF_NAME;
   if (!marker.allowed_source_branches.includes(sourceBranch)) {
     throw new Error(
@@ -81,10 +87,10 @@ if (process.env.GITHUB_ACTIONS === "true") {
     );
   }
 }
-if (
+if (preproductionBuild && (
   process.env.GITHUB_REF_NAME === "main" ||
   process.env.GITHUB_BASE_REF === "main"
-) {
+)) {
   throw new Error(
     "Synthetic migration 0008 cannot be built from or proposed to the production main branch.",
   );

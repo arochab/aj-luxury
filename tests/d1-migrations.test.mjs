@@ -348,7 +348,7 @@ function migrationRows(input) {
   });
 }
 
-test("Wrangler applies the canonical D1 chain 0000 to 0007 on empty and journaled databases, then replays as a no-op", async (t) => {
+test("detached Sites build keeps migrations out of the frontend while Wrangler applies the governed chain", async (t) => {
   assert.ok(existsSync(builtConfigPath), "npm run build must create Wrangler config");
   assert.ok(existsSync(wranglerCliPath), "local Wrangler must be installed");
   const migrationNames = readdirSync(migrationDirectory)
@@ -380,7 +380,7 @@ test("Wrangler applies the canonical D1 chain 0000 to 0007 on empty and journale
   );
 
   const canonicalConfig = JSON.parse(readFileSync(builtConfigPath, "utf8"));
-  assert.equal(canonicalConfig.d1_databases[0].migrations_dir, "../../drizzle");
+  assert.deepEqual(canonicalConfig.d1_databases, []);
 
   const baseline = readFileSync(baselineMigrationPath, "utf8").replaceAll(
     "\r\n",

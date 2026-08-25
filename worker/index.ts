@@ -65,6 +65,10 @@ import {
 } from "../lib/preprod/synthetic-demo.ts";
 import { productionCommerceApiResponse } from "./production-commerce-api.ts";
 import {
+  commerceBackendProxyResponse,
+  prepareBackendOnlyCommerceRequest,
+} from "./commerce-backend-bridge.ts";
+import {
   productionOperationsApiResponse,
   runProductionScheduledOperations,
 } from "./production-operations-api.ts";
@@ -89,6 +93,18 @@ interface Env {
   RETURNS_WORKFLOW_ENABLED?: string;
   RESERVATION_EXPIRY_ENABLED?: string;
   COMMERCE_REPORTING_ENABLED?: string;
+  COMMERCE_BACKEND_ONLY?: string;
+  COMMERCE_BACKEND_ORIGIN?: string;
+  COMMERCE_MODE?: string;
+  COMMERCE_ORIGIN?: string;
+  COMMERCE_PROXY_SECRET?: string;
+  COMMERCE_STOREFRONT_ORIGINS_JSON?: string;
+  COMMERCE_CONTROLLED_STOREFRONT_ORIGIN?: string;
+  COMMERCE_PUBLIC_STOREFRONT_ORIGINS_JSON?: string;
+  COMMERCE_SITES_OWNER_AUTH_ENABLED?: string;
+  COMMERCE_SITES_OWNER_AUTH_ORIGIN?: string;
+  COMMERCE_CONTROLLED_OWNER_EMAIL?: string;
+  COMMERCE_CONTROLLED_AUTH_HMAC_SECRET?: string;
   IMAGES: {
     input(stream: ReadableStream): {
       transform(options: Record<string, unknown>): {
@@ -2861,9 +2877,30 @@ const worker = {
     env: RuntimeEnv,
     ctx: ExecutionContext,
   ): Promise<Response> {
-    const url = new URL(request.url);
+    const ingress = prepareBackendOnlyCommerceRequest(request, env);
+    if (ingress.response) {
+      return withSecurityHeaders(
+        ingress.response,
+        new URL(request.url).pathname,
+        env?.APP_ENV,
+      );
+    }
+    const effectiveRequest = ingress.request;
+    const url = new URL(effectiveRequest.url);
 
-    const productionRateLimitResponse = await productionCommerceRateLimitResponse(request, env);
+    const commerceBackendResponse = await commerceBackendProxyResponse(
+      effectiveRequest,
+      env,
+    );
+    if (commerceBackendResponse) {
+      return withSecurityHeaders(
+        commerceBackendResponse,
+        url.pathname,
+        env?.APP_ENV,
+      );
+    }
+
+    const productionRateLimitResponse = await productionCommerceRateLimitResponse(effectiveRequest, env);
     if (productionRateLimitResponse) {
       return withSecurityHeaders(
         productionRateLimitResponse,
@@ -2872,7 +2909,7 @@ const worker = {
       );
     }
 
-    const productionOperationsResponse = await productionOperationsApiResponse(request, env);
+    const productionOperationsResponse = await productionOperationsApiResponse(effectiveRequest, env);
     if (productionOperationsResponse) {
       return withSecurityHeaders(
         productionOperationsResponse,
@@ -2881,7 +2918,7 @@ const worker = {
       );
     }
 
-    const productionShippingResponse = await productionShippingLabelAdminResponse(request, env);
+    const productionShippingResponse = await productionShippingLabelAdminResponse(effectiveRequest, env);
     if (productionShippingResponse) {
       return withSecurityHeaders(
         productionShippingResponse,
@@ -2890,7 +2927,13 @@ const worker = {
       );
     }
 
-    const productionCommerceResponse = await productionCommerceApiResponse(request, env);
+    const productionCommerceResponse = await productionCommerceApiResponse(
+      effectiveRequest,
+      env,
+      ingress.storefrontOrigin
+        ? { trustedStorefrontOrigin: ingress.storefrontOrigin }
+        : {},
+    );
     if (productionCommerceResponse) {
       return withSecurityHeaders(
         productionCommerceResponse,
@@ -2899,13 +2942,13 @@ const worker = {
       );
     }
 
-    const preprodResponse = await preprodApiResponse(request, env);
+    const preprodResponse = await preprodApiResponse(effectiveRequest, env);
     if (preprodResponse) {
       return withSecurityHeaders(await preprodResponse, url.pathname, env?.APP_ENV);
     }
 
     if (isStaticAsset(url.pathname)) {
-      if (env?.ASSETS) return serveStaticAsset(request, env.ASSETS);
+      if (env?.ASSETS) return serveStaticAsset(effectiveRequest, env.ASSETS);
 
       if (env === undefined) {
         const physicalPath = mediaAssetPath(url.pathname) ?? url.pathname;
@@ -2930,8 +2973,8 @@ const worker = {
     const assets = env?.ASSETS;
     if (url.pathname === "/_vinext/image" && assets && env?.IMAGES) {
       const allowedWidths = [...DEFAULT_DEVICE_SIZES, ...DEFAULT_IMAGE_SIZES];
-      return handleImageOptimization(request, {
-        fetchAsset: (path) => assets.fetch(new Request(new URL(path, request.url))),
+      return handleImageOptimization(effectiveRequest, {
+        fetchAsset: (path) => assets.fetch(new Request(new URL(path, effectiveRequest.url))),
         transformImage: async (body, { width, format, quality }) => {
           const result = await env.IMAGES.input(body).transform(width > 0 ? { width } : {}).output({ format, quality });
           return result.response();
@@ -2940,7 +2983,7 @@ const worker = {
     }
 
     return withSecurityHeaders(
-      await serveApplication(request, env, ctx),
+      await serveApplication(effectiveRequest, env, ctx),
       url.pathname,
       env?.APP_ENV,
       (env === undefined || env.APP_ENV === undefined) &&

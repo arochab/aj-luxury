@@ -42,6 +42,7 @@ import {
   cloudflareAccessOwnerConfigurationValid,
   cloudflareAccessOwnerRequestAuthenticated,
 } from "./cloudflare-access-owner.ts";
+import { isConfiguredStorefrontOrigin } from "./commerce-backend-bridge.ts";
 
 const PREFIX = "/api/commerce/";
 const routes = Object.freeze({
@@ -89,8 +90,13 @@ export type ProductionCommerceRuntimeEnvironment = ProductionCommerceEnvironment
   DELIVERY_REFERENCE_ENCRYPTION_KEY_BASE64?: string;
   DELIVERY_REFERENCE_KEY_VERSION?: string;
   DELIVERY_REFERENCE_DECRYPTION_KEYS_JSON?: string;
+  COMMERCE_BACKEND_ONLY?: string;
+  COMMERCE_STOREFRONT_ORIGINS_JSON?: string;
+  COMMERCE_CONTROLLED_STOREFRONT_ORIGIN?: string;
+  COMMERCE_PUBLIC_STOREFRONT_ORIGINS_JSON?: string;
 }>;
 export type ProductionCommerceRouterDependencies = Readonly<{
+  trustedStorefrontOrigin?: string;
   deliveryProvider?: DeliveryProviderPorts;
   paymentProvider?: PaymentProviderPorts;
   paymentEffects?: PaymentWebhookEffectsPort;
@@ -304,7 +310,7 @@ export function productionCommerceRuntimeBlockers(
     ...(!productionRateLimitBindingsReady(env) ? ["production-rate-limits-not-configured"] : []),
     ...(mode === "sandbox" && !accessConfigured && !controlledAuthConfigured(env)
       ? ["controlled-owner-auth-not-configured"] : []),
-    ...(["controlled", "live"].includes(mode) && !accessConfigured
+    ...(["controlled", "live"].includes(mode) && !accessConfigured && !controlledAuthConfigured(env)
       ? ["cloudflare-access-owner-not-configured"] : []),
     ...(settlementMode(env) !== expectedSettlement ? ["stripe-settlement-mode-mismatch"] : []),
     ...(["controlled", "live"].includes(mode)
@@ -753,7 +759,7 @@ export async function productionCommerceApiResponse(
       return fail("STOCK_IMPORT_CLOSED", 503);
     }
     const stockImportOwnerAuthenticated = dependencies.stockImportOwnerAuthenticator ??
-      cloudflareAccessOwnerRequestAuthenticated;
+      controlledOwnerRequestAuthenticated;
     if (!await stockImportOwnerAuthenticated(request, env)) {
       return fail("CONTROLLED_ACCESS_REQUIRED", 403);
     }
@@ -896,7 +902,10 @@ export async function productionCommerceApiResponse(
     return json({ status: ready ? "ready" : "closed", environment: "production", mode: gate.mode, releaseSha: gate.releaseSha, origin: gate.origin, launchZones: gate.launchZones, blockers: [...gate.blockers, ...blockers], capabilities: { sandboxCheckout: ready && gate.mode === "sandbox", realPayment: ready && ["controlled", "live"].includes(gate.mode), realDelivery: ready && ["controlled", "live"].includes(gate.mode), transactionalEmail: ready && productionEmailDispatchRuntimeConfigured(env), returns: ready && gate.mode === "live" && env.RETURNS_WORKFLOW_ENABLED === "true", controlledOrder: ready && gate.mode === "controlled", publicCommerce: ready && gate.mode === "live" }, routes: { cart: "wired", homeDelivery: "wired-provider-priced", order: "wired", paymentSession: "sandbox-controlled-or-live-behind-release-gate", servicePoint: "wired-encrypted", stripeWebhook: "atomic-d1-effects-and-late-refund-obligation", resendWebhook: "svix-signed-idempotent-audit", lateRefundDispatch: "wired-bounded-owner-only", returns: "workflow-gated" } }, ready ? 200 : 503);
   }
   if (!gate.ready || !gate.origin || url.origin !== gate.origin) return fail("COMMERCE_CLOSED", 503);
-  if (gate.mode !== "live" && !await controlledOwnerRequestAuthenticated(request, env)) {
+  const controlledStorefront = env.COMMERCE_BACKEND_ONLY === "true" &&
+    dependencies.trustedStorefrontOrigin === env.COMMERCE_CONTROLLED_STOREFRONT_ORIGIN;
+  if ((gate.mode !== "live" || controlledStorefront) &&
+    !await controlledOwnerRequestAuthenticated(request, env)) {
     return fail("CONTROLLED_ACCESS_REQUIRED", 403);
   }
   if (!env.DB) return fail("DATABASE_UNAVAILABLE", 503);
@@ -1054,7 +1063,12 @@ export async function productionCommerceApiResponse(
     const empty = await bytes(request, 1); if (!empty || empty.length) return fail("INVALID_BODY", 400);
     try {
       const checkout = new D1ProductionCheckoutStore(env.DB);
-      const prepared = await checkout.prepareCheckoutSession({ cartId: current.cartId, idempotencyKey: key(request)!, origin: gate.origin, locale: "fr", now: now() });
+      const returnOrigin = env.COMMERCE_BACKEND_ONLY === "true" &&
+        dependencies.trustedStorefrontOrigin &&
+        isConfiguredStorefrontOrigin(dependencies.trustedStorefrontOrigin, env)
+        ? dependencies.trustedStorefrontOrigin
+        : gate.origin;
+      const prepared = await checkout.prepareCheckoutSession({ cartId: current.cartId, idempotencyKey: key(request)!, origin: returnOrigin, locale: "fr", now: now() });
       const mode = settlementMode(env);
       if (!mode) return fail("SETTLEMENT_UNAVAILABLE", 503);
       const provider = dependencies.paymentProvider ?? createStripePaymentProviderPorts({ apiKey: env.STRIPE_SECRET_KEY, webhookSecret: env.STRIPE_WEBHOOK_SECRET, mode });

@@ -4,6 +4,7 @@ type RateLimitBinding = Readonly<{
 
 export type ProductionRateLimitEnvironment = Readonly<{
   APP_ENV?: string;
+  COMMERCE_BACKEND_ONLY?: string;
   COMMERCE_RATE_LIMITER?: RateLimitBinding;
   PROVIDER_RATE_LIMITER?: RateLimitBinding;
   WEBHOOK_RATE_LIMITER?: RateLimitBinding;
@@ -52,7 +53,16 @@ function cookie(request: Request, name: string): string | null {
   return values.length === 1 && values[0].length <= 512 ? values[0] : null;
 }
 
-function safeActor(request: Request): string {
+function safeActor(request: Request, env: ProductionRateLimitEnvironment): string {
+  if (env.COMMERCE_BACKEND_ONLY === "true") {
+    const trusted = request.headers.get("X-AJ-Trusted-Rate-Limit-Actor")?.trim();
+    if (trusted && /^[0-9a-f]{64}$/.test(trusted)) return `sites-proxy:${trusted}`;
+    const webhookAddress = request.headers.get("CF-Connecting-IP")?.trim();
+    return webhookAddress && webhookAddress.length <= 64 &&
+      /^[0-9a-f:.]+$/i.test(webhookAddress)
+      ? `webhook-edge:${webhookAddress.toLowerCase()}`
+      : "backend-unattributed";
+  }
   // Cloudflare supplies this value at the edge. It remains the mandatory base
   // for anonymous commerce so rotating a forged cart/owner header cannot mint
   // unlimited counters. No raw address is persisted or exposed.
@@ -124,7 +134,7 @@ export async function productionCommerceRateLimitResponse(
         : env.OPERATOR_RATE_LIMITER;
   if (!binding?.limit) return failure("RATE_LIMIT_UNAVAILABLE", 503);
   try {
-    const key = `${classification}:${await digest(safeActor(request))}`;
+    const key = `${classification}:${await digest(safeActor(request, env))}`;
     const result = await binding.limit({ key });
     return result.success ? null : failure("RATE_LIMIT_EXCEEDED", 429);
   } catch {

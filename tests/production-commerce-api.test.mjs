@@ -212,11 +212,15 @@ test("the one-shot stock importer is wired before the stock gate but bound to ow
     },
     body: JSON.stringify({ manifest }),
   });
-  const legacyRejected = await productionCommerceApiResponse(
+  const hmacAuthenticatedBeforeEvidence = await productionCommerceApiResponse(
     request("WRONG"), env,
     { stockImporter: async () => { calls += 1; throw new Error("not-called"); } },
   );
-  assert.equal(legacyRejected.status, 403);
+  assert.equal(hmacAuthenticatedBeforeEvidence.status, 503);
+  assert.equal(
+    (await hmacAuthenticatedBeforeEvidence.json()).error.code,
+    "STOCK_IMPORT_RELEASE_EVIDENCE_MISSING",
+  );
   assert.equal(calls, 0);
 
   const rejected = await productionCommerceApiResponse(
