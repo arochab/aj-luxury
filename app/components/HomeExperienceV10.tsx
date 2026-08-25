@@ -32,8 +32,8 @@ const featuredEditorialImages = [
     crop: "left",
   },
   {
-    src: "/images/client/campaign-duo-pourpre.webp",
-    alt: "AJ Luxury — Jérémy et Alex — Apollon Pourpre Impérial",
+    src: "/images/client/hero-pourpre-model.webp",
+    alt: "AJ Luxury — Alex — Apollon Pourpre Impérial",
     crop: "lead",
   },
   {
@@ -348,12 +348,12 @@ export default function HomeExperienceV10({ colorways }: Props) {
         <figure className={styles.heroMedia} data-motion="hero-media">
           <div className={styles.heroPanelLeft}>
             <picture>
-              <source media="(max-width: 760px)" srcSet="/images/client/campaign-duo-lilas-seated.webp" />
+              <source media="(max-width: 760px)" srcSet="/images/client/shoot/rose-standing.webp" />
               <img
-                src="/images/client/campaign-duo-pourpre.webp"
+                src="/images/client/shoot/duo-pourpre-full.webp"
                 alt="AJ Luxury — Alex et Jérémy portent Apollon"
-                width={2000}
-                height={1882}
+                width={2200}
+                height={2070}
                 fetchPriority="high"
                 decoding="async"
               />

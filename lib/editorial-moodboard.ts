@@ -7,30 +7,30 @@ export type EditorialMoodboardImage = {
 };
 
 /**
- * Campagne éditoriale resserrée : trois coloris distincts, un solo de chaque
- * fondateur et une image duo. L'ordre évite toute répétition de coloris dans
- * une même séquence visuelle.
+ * Campagne éditoriale resserrée : trois coloris et trois prises distinctes du
+ * photoshoot client source. Ces dérivés web viennent des masters IMG_5573,
+ * IMG_5531 et IMG_5441 ; aucun plan n'est répété dans l'accueil.
  */
 export const editorialMoodboardImages: EditorialMoodboardImage[] = [
   {
-    src: "/images/client/editorial-pourpre-chair.webp",
+    src: "/images/client/shoot/pourpre-seated.webp",
     alt: "AJ Luxury — Jérémy — Apollon Pourpre Impérial",
     crop: "portrait-left",
-    width: 1864,
-    height: 2600,
+    width: 1200,
+    height: 1803,
   },
   {
-    src: "/images/client/campaign-duo-lilas-seated.webp",
-    alt: "AJ Luxury — Alex et Jérémy — Apollon Lilas Céleste",
+    src: "/images/client/shoot/lilas-seated.webp",
+    alt: "AJ Luxury — Jérémy — Apollon Lilas Céleste",
     crop: "duo",
-    width: 1484,
-    height: 2229,
+    width: 1200,
+    height: 1803,
   },
   {
-    src: "/images/client/editorial-rose-profile.webp",
-    alt: "AJ Luxury — Alex — Apollon Rose Velours",
+    src: "/images/client/shoot/rose-standing-jeremy.webp",
+    alt: "AJ Luxury — Jérémy — Apollon Rose Velours",
     crop: "portrait-right",
-    width: 1731,
-    height: 2600,
+    width: 1200,
+    height: 1803,
   },
 ];
