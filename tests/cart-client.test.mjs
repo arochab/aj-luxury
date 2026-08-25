@@ -246,6 +246,10 @@ test("product and cart UI have no demo cart or URL-variant path", async () => {
   assert.match(purchase, /aria-busy=\{cartBusy\}/);
   assert.match(purchase, /cartRequestInFlight\.current = true/);
   assert.match(purchase, /kind: "success"; quantity: number; size: ProductSize/);
+  assert.match(purchase, /AJ_APOLLON_PACK_PRICE_CENTS/);
+  assert.match(purchase, /currentCart\.itemCount \+ selectedPackSize/);
+  assert.match(purchase, /product\.sameColorPackBody/);
+  assert.match(purchase, /product\.mixedColorPackBody/);
   assert.match(cartClient, /removeCartLine|setCartLineQuantity/);
   assert.match(cartClient, /mutationInFlight\.current = true/);
   assert.match(cartClient, /disabled=\{cartMutating/);

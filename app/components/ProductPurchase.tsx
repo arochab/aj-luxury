@@ -11,6 +11,10 @@ import {
   setCartLineQuantity,
 } from "../../lib/commerce/preprod-cart-client";
 import { createLaunchVariantId } from "../../lib/commerce/product-identifiers";
+import {
+  AJ_APOLLON_MAX_PACK_SIZE,
+  AJ_APOLLON_PACK_PRICE_CENTS,
+} from "../../lib/commerce/pack-pricing";
 import type {
   PublicStockBySize,
   PublicStockStatus,
@@ -24,6 +28,38 @@ import type { CommerceRuntimeMode } from "../../lib/commerce/commerce-runtime";
    stable entre le rendu serveur et l'hydratation, ce qu'un id généré ne
    garantirait pas pour une cible d'`aria-describedby`. */
 const NOTICE_ID = "aj-purchase-notice";
+
+type PackSize = keyof typeof AJ_APOLLON_PACK_PRICE_CENTS;
+
+const PACK_OPTIONS: ReadonlyArray<{
+  count: PackSize;
+  labelKey: "product.unitOffer" | "product.duoOffer" | "product.trioOffer";
+  detailKey: "product.unitDetail" | "product.duoDetail" | "product.trioDetail";
+  savingCents: number;
+  savingPercent: string | null;
+}> = [
+  {
+    count: 1,
+    labelKey: "product.unitOffer",
+    detailKey: "product.unitDetail",
+    savingCents: 0,
+    savingPercent: null,
+  },
+  {
+    count: 2,
+    labelKey: "product.duoOffer",
+    detailKey: "product.duoDetail",
+    savingCents: 999,
+    savingPercent: "16,66 %",
+  },
+  {
+    count: 3,
+    labelKey: "product.trioOffer",
+    detailKey: "product.trioDetail",
+    savingCents: 1_998,
+    savingPercent: "22,21 %",
+  },
+];
 
 type ProductPurchaseProps = {
   product: Product;
@@ -43,6 +79,7 @@ export default function ProductPurchase({
   reviewMode,
 }: ProductPurchaseProps) {
   const [selectedSize, setSelectedSize] = useState<ProductSize | null>(null);
+  const [selectedPackSize, setSelectedPackSize] = useState<PackSize>(1);
   const [feedback, setFeedback] = useState<
     | { kind: "success"; quantity: number; size: ProductSize }
     | { kind: "error"; code: string }
@@ -88,6 +125,11 @@ export default function ProductPurchase({
     if (isSoldOut(size)) return;
 
     setSelectedSize(size);
+    setFeedback(null);
+  }
+
+  function selectPackSize(packSize: PackSize) {
+    setSelectedPackSize(packSize);
     setFeedback(null);
   }
 
@@ -253,7 +295,15 @@ export default function ProductPurchase({
         throw new CartApiError("MAX_QUANTITY");
       }
 
-      const fingerprint = `${variantId}:${currentQuantity + 1}`;
+      const nextQuantity = currentQuantity + selectedPackSize;
+      if (
+        nextQuantity > AJ_APOLLON_MAX_PACK_SIZE ||
+        currentCart.itemCount + selectedPackSize > AJ_APOLLON_MAX_PACK_SIZE
+      ) {
+        throw new CartApiError("MAX_QUANTITY");
+      }
+
+      const fingerprint = `${variantId}:${nextQuantity}`;
       const lineKey = runtimeMode === "production"
         ? cartLineAttempt.current?.fingerprint === fingerprint
           ? cartLineAttempt.current.key
@@ -264,7 +314,7 @@ export default function ProductPurchase({
       }
       const updatedCart = await setCartLineQuantity(
         variantId,
-        currentQuantity + 1,
+        nextQuantity,
         runtimeMode,
         lineKey,
       );
@@ -382,6 +432,51 @@ export default function ProductPurchase({
       <p className={styles.description} data-aj-reveal>
         {localizedProduct.description}
       </p>
+
+      <fieldset className={`${styles.selector} ${styles.packSelector}`}>
+        <legend className={styles.selectorHeading}>
+          <span>{t("product.chooseOffer")}</span>
+          <strong>{t("product.bestPriceAutomatic")}</strong>
+        </legend>
+
+        <div className={styles.packOptions}>
+          {PACK_OPTIONS.map((option) => (
+            <button
+              className={styles.packOption}
+              type="button"
+              key={option.count}
+              aria-pressed={selectedPackSize === option.count}
+              onClick={() => selectPackSize(option.count)}
+            >
+              <span className={styles.packOptionTopline}>
+                <span className={styles.packOptionName}>{t(option.labelKey)}</span>
+                <strong>
+                  {formatPrice(AJ_APOLLON_PACK_PRICE_CENTS[option.count], locale)}
+                </strong>
+              </span>
+              <span className={styles.packOptionBottomline}>
+                <span>{t(option.detailKey)}</span>
+                {option.savingCents > 0 && option.savingPercent ? (
+                  <span className={styles.packSaving}>
+                    {t("product.packSaving")
+                      .replace("{amount}", formatPrice(option.savingCents, locale))
+                      .replace("{percent}", option.savingPercent)}
+                  </span>
+                ) : (
+                  <span>{t("product.unitPriceReference")}</span>
+                )}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        <p className={styles.packExplanation}>
+          <strong>{t("product.sameColorPack")}</strong>{" "}
+          {t("product.sameColorPackBody")}{" "}
+          <strong>{t("product.mixedColorPack")}</strong>{" "}
+          {t("product.mixedColorPackBody")}
+        </p>
+      </fieldset>
 
       <div className={styles.selector}>
         <div className={styles.selectorHeading}>
@@ -564,13 +659,25 @@ export default function ProductPurchase({
         aria-busy={cartBusy}
       >
         {reviewMode
-          ? t("product.reviewButton")
+          ? `${t("product.reviewButton")} · ${formatPrice(
+              AJ_APOLLON_PACK_PRICE_CENTS[selectedPackSize],
+              locale,
+            )}`
           : runtimeMode === "closed"
           ? t("product.openingSoon")
           : cartBusy
             ? t("product.adding")
             : selectedSize
-              ? t("product.addDemo")
+              ? selectedPackSize === 1
+                ? `${t("product.addDemo")} · ${formatPrice(
+                    AJ_APOLLON_PACK_PRICE_CENTS[1],
+                    locale,
+                  )}`
+                : `${t("product.addPack")
+                    .replace("{count}", String(selectedPackSize))} · ${formatPrice(
+                      AJ_APOLLON_PACK_PRICE_CENTS[selectedPackSize],
+                      locale,
+                    )}`
               : t("product.selectSizePrompt")}
       </button>
 

@@ -379,6 +379,102 @@
   color: var(--aj-encre);
 }
 
+/* Les packs sont une décision d'achat, pas une note promotionnelle. Ils
+   reprennent donc la grammaire des sélecteurs couleur/taille, mais occupent
+   toute la largeur pour garder prix et économie lisibles au premier regard. */
+.packSelector {
+  margin-bottom: clamp(28px, 3.8vh, 44px);
+  padding: clamp(18px, 2.4vh, 26px) 0;
+  border-top: 1px solid var(--aj-filet);
+  border-bottom: 1px solid var(--aj-filet);
+}
+
+.packOptions {
+  display: grid;
+  gap: 2px;
+}
+
+.packOption {
+  display: grid;
+  min-height: 5.15rem;
+  gap: 10px;
+  padding: 15px 16px;
+  border: 1px solid var(--aj-filet-bouton);
+  background: transparent;
+  color: var(--aj-encre);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition:
+    border-color var(--aj-d-court) var(--e1),
+    background-color var(--aj-d-court) var(--e1),
+    color var(--aj-d-court) var(--e1);
+}
+
+.packOption:hover {
+  border-color: var(--aj-filet-fort);
+}
+
+.packOption[aria-pressed="true"] {
+  border-color: var(--aj-encre);
+  background: var(--aj-encre);
+  color: var(--aj-noir);
+}
+
+.packOptionTopline,
+.packOptionBottomline {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.packOptionName {
+  font-family: var(--disp);
+  font-optical-sizing: auto;
+  font-size: var(--t2);
+  font-weight: var(--aj-w-fin);
+  letter-spacing: var(--aj-ls-titre);
+}
+
+.packOptionTopline strong {
+  font-family: var(--disp);
+  font-optical-sizing: auto;
+  font-size: var(--t2);
+  font-weight: var(--aj-w-fin);
+  letter-spacing: var(--aj-ls-grand);
+  white-space: nowrap;
+}
+
+.packOptionBottomline {
+  color: var(--aj-encre-72);
+  font-size: var(--t0);
+  font-weight: var(--aj-w-moyen);
+  letter-spacing: 0.02em;
+}
+
+.packOption[aria-pressed="true"] .packOptionBottomline {
+  color: rgba(8, 8, 10, 0.66);
+}
+
+.packSaving {
+  color: inherit;
+  font-weight: var(--aj-w-gras);
+  white-space: nowrap;
+}
+
+.packExplanation {
+  margin: 14px 0 0;
+  color: var(--aj-encre-72);
+  font-size: var(--t0);
+  line-height: 1.55;
+}
+
+.packExplanation strong {
+  color: var(--aj-encre);
+  font-weight: var(--aj-w-gras);
+}
+
 .variantOptions {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -973,6 +1069,7 @@
 
 .zoomTrigger:focus-visible,
 .variant:focus-visible,
+.packOption:focus-visible,
 .sizeButton:focus-visible,
 .purchaseButton:focus-visible,
 .cartLink:focus-visible,
@@ -1104,6 +1201,16 @@
     grid-template-columns: 1fr;
   }
 
+  .packOptionTopline,
+  .packOptionBottomline {
+    gap: 10px;
+  }
+
+  .packOptionBottomline {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
   .variant {
     min-height: 4rem;
     grid-auto-flow: column;
@@ -1155,6 +1262,7 @@
   .otherColorFilet,
   .zoomLabel,
   .sizeButton,
+  .packOption,
   .variant,
   .purchaseButton,
   .breadcrumb a,
