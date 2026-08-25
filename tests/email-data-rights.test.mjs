@@ -14,7 +14,7 @@ import { D1RetentionPolicyStore } from "../lib/commerce/retention-policy.ts";
 
 const drizzleDirectory = fileURLToPath(new URL("../drizzle/", import.meta.url));
 const migrations = readdirSync(drizzleDirectory)
-  .filter((name) => /^000[0-4]_.+\.sql$/.test(name))
+  .filter((name) => /^000[0-4]_.+\.sql$/.test(name) || name === "0018_volatile_blob.sql")
   .sort()
   .map((name) => `${drizzleDirectory}${name}`);
 
@@ -84,7 +84,7 @@ function fixture(options = {}) {
     delivery: {
       async deliver(message) {
         deliveries.push(Object.freeze({ ...message }));
-        return { idempotencyKey: message.idempotencyKey, providerMessageId: `email_${messages.length}`, acceptedAt: utcNow };
+        return { idempotencyKey: message.idempotencyKey, providerMessageId: `email_${deliveries.length}`, acceptedAt: utcNow };
       },
     },
     rateLimit: { async take() { return true; } },
@@ -397,9 +397,12 @@ test("provider retries use one stable mandatory key after success-before-mark cr
     "payment_confirmation:order_provider_retry",
     "payment_confirmation:order_provider_retry",
   ]);
-  assert.equal(context.database.prepare(
-    "SELECT status FROM email_outbox WHERE id = 'email_provider_retry'",
-  ).get().status, "sent");
+  assert.deepEqual({ ...context.database.prepare(
+    "SELECT status, provider_message_id FROM email_outbox WHERE id = 'email_provider_retry'",
+  ).get() }, {
+    status: "sent",
+    provider_message_id: "email_delivery_1",
+  });
   context.database.close();
 });
 
