@@ -653,9 +653,9 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
   assert.match(html, /hero-v4-portrait-480x623-poster\.webp/);
   assert.match(html, /product-rose-model\.webp/);
   assert.match(html, /editorial-lilas-chair\.webp/);
-  assert.match(html, /shoot\/pourpre-seated\.webp/);
+  assert.match(html, /shoot\/rose-standing\.webp/);
   assert.match(html, /shoot\/lilas-seated\.webp/);
-  assert.match(html, /shoot\/rose-standing-jeremy\.webp/);
+  assert.match(html, /shoot\/duo-pourpre-full\.webp/);
 
   /* Les trois produits canoniques et leurs routes PDP existent au premier
      rendu. La motion ne porte jamais la responsabilité du contenu commerce. */

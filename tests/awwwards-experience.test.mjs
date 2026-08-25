@@ -99,6 +99,26 @@ test("the redesigned homepage only references retained repository assets", async
   assert.match(experience, /hero-v4-portrait-480x623-poster\.webp/);
 });
 
+test("the homepage gives Alex and Jérémy equal visual weight without repeats", async () => {
+  const experience = await readFile(
+    projectFile("app/components/HomeExperienceV10.tsx"),
+    "utf8",
+  );
+  const moodboard = await readFile(projectFile("lib/editorial-moodboard.ts"), "utf8");
+
+  assert.match(
+    experience,
+    /product-rose-model\.webp[\s\S]*campaign-duo-pourpre\.webp[\s\S]*editorial-lilas-chair\.webp/,
+  );
+  assert.match(
+    moodboard,
+    /rose-standing\.webp[\s\S]*duo-pourpre-full\.webp[\s\S]*lilas-seated\.webp/,
+  );
+  assert.equal((moodboard.match(/AJ Luxury — Alex —/g) ?? []).length, 1);
+  assert.equal((moodboard.match(/AJ Luxury — Jérémy —/g) ?? []).length, 1);
+  assert.equal((moodboard.match(/AJ Luxury — Alex et Jérémy —/g) ?? []).length, 1);
+});
+
 test("homepage controls answer quickly and scroll-linked product motion has no lag", async () => {
   const designSystem = await readFile(projectFile("app/design-system.css"), "utf8");
   const homepageCss = await readFile(

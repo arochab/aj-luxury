@@ -439,9 +439,12 @@
 }
 
 .moodboardportrait-left,
-.moodboardduo,
 .moodboardportrait-right {
   aspect-ratio: 1200 / 1803;
+}
+
+.moodboardduo {
+  aspect-ratio: 2200 / 2070;
 }
 
 .moodboardItem img {

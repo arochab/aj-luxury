@@ -32,8 +32,8 @@ const featuredEditorialImages = [
     crop: "left",
   },
   {
-    src: "/images/client/hero-pourpre-model.webp",
-    alt: "AJ Luxury — Alex — Apollon Pourpre Impérial",
+    src: "/images/client/campaign-duo-pourpre.webp",
+    alt: "AJ Luxury — Alex et Jérémy — Apollon Pourpre Impérial",
     crop: "lead",
   },
   {
