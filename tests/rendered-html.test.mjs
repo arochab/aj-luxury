@@ -180,7 +180,7 @@ test("preproduction APIs are invisible without the exact isolated environment", 
   });
 });
 
-test("production pages remain indexable while preproduction is explicitly noindex", async () => {
+test("production pages remain indexable while preproduction and branch previews are noindex", async () => {
   const production = await render("/");
   assert.equal(production.headers.get("x-robots-tag"), null);
 
@@ -189,6 +189,12 @@ test("production pages remain indexable while preproduction is explicitly noinde
     environment: "preproduction",
   });
   assert.equal(preproduction.headers.get("x-robots-tag"), "noindex, nofollow");
+
+  const preview = await invokeWorker("/", {
+    headers: { accept: "text/html" },
+    environment: "preview",
+  });
+  assert.equal(preview.headers.get("x-robots-tag"), "noindex, nofollow");
 });
 
 test("synthetic candidate stays unavailable on migration 0007 without its sentinel", async () => {
@@ -642,13 +648,17 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
   assert.match(html, /Reveal Your[\s\S]*Inner Beauty/);
   assert.match(
     html,
-    /campaign-duo-pourpre\.webp"[^>]*fetchPriority="high"[^>]*decoding="async"/,
+    /hero-v7-paysage-plate\.webp"[^>]*fetchPriority="high"[^>]*decoding="async"/,
   );
-  assert.match(html, /campaign-duo-lilas-seated\.webp/);
-  assert.match(html, /product-rose-model\.webp/);
-  assert.match(html, /editorial-lilas-chair\.webp/);
-  assert.match(html, /editorial-rose-profile\.webp/);
-  assert.match(html, /editorial-pourpre-chair\.webp/);
+  assert.match(html, /hero-v7-portrait-plate\.webp/);
+  assert.match(
+    html,
+    /product-rose-model\.webp[\s\S]*campaign-duo-pourpre\.webp[\s\S]*editorial-lilas-chair\.webp/,
+  );
+  assert.match(
+    html,
+    /editorial-pourpre-chair\.webp[\s\S]*campaign-duo-lilas-seated\.webp[\s\S]*editorial-rose-profile\.webp/,
+  );
 
   /* Les trois produits canoniques et leurs routes PDP existent au premier
      rendu. La motion ne porte jamais la responsabilité du contenu commerce. */
@@ -674,10 +684,10 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
     /Chez AJ Luxury,[\s\S]*le véritable luxe commence[\s\S]*au plus près de soi/,
   );
 
-  /* Aucun film, rendu métallique, asset généré ni classe CSS invalide ne doit
+  /* Aucun film, ancien poster v6, asset généré ni classe CSS invalide ne doit
      réapparaître dans le document réellement servi. */
   assert.doesNotMatch(html, /<video|data-metallic-mounted|metallic-field__canvas|Figer le métal/);
-  assert.doesNotMatch(html, /generated_images|hero-figures|identity-overlay|hero-v[67]-|apollon-world/);
+  assert.doesNotMatch(html, /generated_images|hero-figures|identity-overlay|hero-v6-|apollon-world/);
   assert.doesNotMatch(html, /class="[^"]*\bundefined\b/);
 
   /* Le chrome et les destinations restent ceux de la production validée. */
@@ -692,14 +702,14 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
   assert.doesNotMatch(html, /pika|Signature 01|Contour 02|Ligne 03|Motion 04|Libre 05|iStock|Getty/i);
 });
 
-/* Tailles de galerie depuis la reprise des fiches du 19/08 (natures mortes) :
-   pourpre 5, rose 4, lilas 3. L'ancienne garde « >= 4 placeholders » était un
+/* Tailles de galerie courantes : pourpre 5, rose 3, lilas 3. L'ancienne garde
+   « >= 4 placeholders » était un
    proxy calibré sur le catalogue d'avant ; l'invariant exact est plus fort —
    chaque cadre porte son placeholder, la vue principale portant EN PLUS la
    seule image pleine résolution : n placeholders, 1 full. */
 const productCases = [
   ["/products/pourpre", "Pourpre Impérial", 5],
-  ["/products/rose-pale", "Rose Velours", 4],
+  ["/products/rose-pale", "Rose Velours", 3],
   ["/products/lilas-bleu-clair", "Lilas Céleste", 3],
 ];
 
@@ -717,7 +727,7 @@ for (const [pathname, colorName, galerie] of productCases) {
        offre active alors que la vente n'est pas ouverte. */
     assert.match(html, /Vente non encore ouverte/);
     assert.match(html, /29,99(?:\s|&nbsp;|&#xA0;)*€/);
-    assert.match(html, /Sélectionnez une taille/);
+    assert.match(html, /Choisir une taille/);
     assert.match(
       html,
       /94\s*%\s*modal\s*(?:,|–|-|et)\s*6\s*%\s*élasthanne/,
@@ -726,6 +736,35 @@ for (const [pathname, colorName, galerie] of productCases) {
     assert.match(html, /Description complète/);
     assert.match(html, /Caractéristiques/);
     assert.match(html, /Guide des tailles/);
+    assert.match(html, /Choisir votre formule/);
+    assert.match(html, /À l’unité/);
+    assert.match(html, /Pack Duo/);
+    assert.match(html, /Pack Trio/);
+    assert.match(html, /49,99(?:\s|&nbsp;|&#xA0;)*€/);
+    assert.match(html, /69,99(?:\s|&nbsp;|&#xA0;)*€/);
+    assert.match(html, /Même coloris/);
+    assert.match(html, /Coloris au choix/);
+    const packFieldset = html.match(
+      /<fieldset[^>]*>[\s\S]*?Choisir votre formule[\s\S]*?<\/fieldset>/,
+    )?.[0];
+    assert.ok(packFieldset, "la formule pack doit être rendue côté serveur");
+    assert.equal(
+      (packFieldset.match(/<button\b/g) ?? []).length,
+      3,
+      "unité, Duo et Trio restent trois boutons accessibles",
+    );
+    assert.equal(
+      (packFieldset.match(/aria-pressed="(?:true|false)"/g) ?? []).length,
+      3,
+      "chaque formule expose son état sélectionné",
+    );
+    assert.equal(
+      (html.match(/À l’ouverture/g) ?? []).length,
+      4,
+      "les quatre tailles doivent rester visibles sans inventer de stock public",
+    );
+    assert.match(html, /La vente en ligne n’est pas encore ouverte[^<]*ce site est une démonstration/i);
+    assert.match(html, /Ouverture prochaine/);
     assert.match(html, /Agrandir la vue 1/);
     assert.equal(
       (html.match(/data-gallery-media="full"/g) ?? []).length,
@@ -737,7 +776,7 @@ for (const [pathname, colorName, galerie] of productCases) {
       galerie,
       "every gallery frame keeps a lightweight visual placeholder",
     );
-    assert.match(html, /Disponibilité simulée/);
+    assert.doesNotMatch(html, /Disponibilité simulée/);
     assert.match(html, />Accueil</);
     assert.match(
       html,
@@ -772,18 +811,26 @@ test("server-renders the real boutique and its complete navigation", async () =>
   assert.equal(response.status, 200);
   const html = await response.text();
   assert.match(html, /<h1[^>]*>Apollon<\/h1>/);
-  /* Depuis la reprise du 19/08, la boutique NOMME les coloris au lieu de les
-     compter — « Coloris : Rose Velours · Lilas Céleste · Pourpre Impérial ». */
-  assert.match(
-    html,
-    /Coloris[\s\S]*Rose Velours[\s\S]*Lilas Céleste[\s\S]*Pourpre Impérial/,
-  );
+  assert.match(html, /3 coloris/);
   assert.match(html, /Pourpre Impérial/);
   assert.match(html, /Rose Velours/);
   assert.match(html, /Lilas Céleste/);
+  assert.match(
+    html,
+    /Pourpre Impérial[\s\S]*Rose Velours[\s\S]*Lilas Céleste/,
+    "la boutique doit conserver l'ordre validé en production",
+  );
   assert.match(html, /href="\/products\/pourpre"/);
   assert.match(html, /href="\/products\/rose-pale"/);
   assert.match(html, /href="\/products\/lilas-bleu-clair"/);
+  assert.equal(
+    (html.match(/role="listitem"/g) ?? []).length,
+    3,
+    "les trois cartes doivent rester accessibles, y compris sur mobile",
+  );
+  for (const name of ["Pourpre Impérial", "Rose Velours", "Lilas Céleste"]) {
+    assert.match(html, new RegExp(`aria-label="Apollon ${name}"`));
+  }
   assert.match(html, />Accueil</);
   assert.match(
     html,
@@ -801,14 +848,7 @@ test("server-renders the real boutique and its complete navigation", async () =>
     /<h[1-6][^>]*>(?:Collection Apollon|Les trois coloris|3 produits)<\/h[1-6]>/,
   );
   assert.doesNotMatch(html, />\s*Best Seller\s*</i);
-  /* L'interdit « aucun prix en boutique » est tombé avec la reprise du 19/08 :
-     les trois coloris partagent UN prix et la boutique le dit une fois
-     (app/shop/page.tsx, LocalizedPrice). Le contrat devient : le prix unique,
-     jamais un prix par carte. */
-  assert.ok(
-    (html.match(/29,99(?:\s|&nbsp;|&#xA0;)*€/g) ?? []).length >= 1,
-    "the boutique states the single shared price",
-  );
+  assert.doesNotMatch(html, /MATIERE_IMAGE|plan matière/i);
 });
 
 test("server-renders the complete AJ Luxury story", async () => {
@@ -816,39 +856,34 @@ test("server-renders the complete AJ Luxury story", async () => {
   assert.equal(response.status, 200);
   const html = await response.text();
   assert.match(html, /Notre histoire/);
-  // Les trois mouvements sont nommés, plus jamais numérotés (retour du 19/08).
-  assert.match(html, /Le marbre/);
-  assert.match(html, /La lyre/);
-  assert.match(html, /Le laurier/);
-  assert.doesNotMatch(html, /<p[^>]*>0[123]<\/p>/);
-  assert.match(html, /Le vêtement que personne ne voit/);
-  assert.match(html, /Jérémy et Alex/);
-  // La seule prise de parole signée du site, et le seul endroit où le double
-  // rôle fondateurs/mannequins est explicité.
-  assert.match(html, /Apollon est notre premier modèle\. Il ne sera pas le dernier\./);
-  assert.match(html, /et les deux corps de toutes ces images/);
+  assert.match(html, /Le véritable luxe commence par ce que l’on porte au plus près de soi/);
+  assert.match(html, /Le point de départ/);
+  assert.match(html, /Tout est parti d’un constat simple/);
+  assert.match(html, /Alex &amp; Jérémy/);
+  assert.match(
+    html,
+    /Alex et Jérémy sont les cofondateurs d’AJ Luxury[^<]*Ensemble, ils imaginent les collections/i,
+  );
   assert.match(html, /Pas d’excès\. Simplement la justesse des détails\./);
-  // Retour n°4, 19/08. Les deux portraits sont la seule référence NOMINATIVE
-  // du site : un prénom écrit sous un visage. Ils portaient Jérémy en Rose et
-  // Alex en Lilas, soit l'inverse de ce que montrent l'accueil, /shop et les
-  // fiches. Chacun porte désormais son coloris, et cette page ne peut plus
-  // dériver sans casser ce test.
-  assert.match(html, /editorial-lilas-chair\.webp/); // Jérémy — Lilas Céleste
-  assert.match(html, /hero-pourpre-model\.webp/); // Alex — Pourpre Impérial
-  assert.doesNotMatch(html, /story-jeremy-retouched\.jpeg/);
-  assert.doesNotMatch(html, /product-lilas-model\.webp/);
-  assert.match(html, /campaign-duo-pourpre\.webp/);
+  assert.match(html, /Notre ambition est de réinventer cet essentiel du quotidien/);
+  assert.equal((html.match(/>0[123]<\/p>/g) ?? []).length, 3);
+  assert.match(html, /campaign-duo-lilas-seated\.webp/);
+  assert.match(html, /product-lilas-model\.webp/);
+  assert.match(html, /story-jeremy-retouched\.jpeg/);
   assert.match(html, /product-pourpre-detail\.webp/);
+  assert.match(
+    html,
+    /product-lilas-model\.webp[\s\S]*alt="AJ Luxury — Alex — Apollon Lilas Céleste"[\s\S]*>Alex<\/figcaption>/,
+  );
+  assert.match(
+    html,
+    /story-jeremy-retouched\.jpeg[\s\S]*alt="AJ Luxury — Jérémy — Apollon Rose Velours"[\s\S]*>Jérémy<\/figcaption>/,
+  );
   assert.match(html, />Accueil</);
   assert.match(
     html,
     /href="\/notre-histoire"[^>]*aria-current="page"[^>]*>Notre histoire</,
   );
-  assert.doesNotMatch(html, /Le premier chapitre/);
-  /* L'interdit « pas de fiche technique dans le recit » est tombe avec la
-     section Le Laurier (reprise du recit, 19-20/08) : la matiere y est
-     presentee en composition — 94 MODAL · 6 ELASTHANNE — et cette section
-     fait partie du design courant, verifie par captures le 21/08. */
   assert.doesNotMatch(
     html,
     /intention d’image|casting|futurs? shootings?|compte officiel à confirmer/i,
@@ -1004,38 +1039,44 @@ test("withdrawal route is visible but cannot fake a live order workflow", async 
   assert.match(html, /contact@ajluxurystore\.com/);
 });
 
-test("cart renders a secure loading state and ignores legacy URL variants", async () => {
+test("the public candidate keeps the cart closed and ignores legacy URL variants", async () => {
   const response = await render(
     "/cart?variant=variant_boxer_rose-pale_xl",
   );
   assert.equal(response.status, 200);
   const html = await response.text();
-  assert.match(html, /prix et stocks simulés, non commerciaux/i);
-  assert.match(html, /Chargement du panier/i);
-  assert.match(html, /aria-busy="true"/);
+  assert.match(html, /La collection avant le panier/i);
+  assert.match(html, /La vente en ligne n’est pas encore ouverte[^<]*ce site est une démonstration/i);
+  assert.match(html, /Rien n’est enregistré, rien n’est débité/i);
+  assert.match(html, /Paiement[\s\S]*Fermé/);
+  assert.match(html, /Données bancaires[\s\S]*Aucune collecte/);
+  assert.doesNotMatch(html, /Chargement du panier|aria-busy="true"/i);
   assert.doesNotMatch(html, /Rose Velours|Taille[\s\S]*XL|29,99/);
   assert.doesNotMatch(html, /href="\/checkout|cart\?variant/);
 });
 
-test("checkout uses the cookie-backed cart and ignores legacy URL variants", async () => {
+test("the public candidate stops before checkout and ignores legacy URL variants", async () => {
   const checkout = await render(
     "/checkout?variant=variant_boxer_rose-pale_xl",
   );
   const checkoutHtml = await checkout.text();
-  assert.match(checkoutHtml, /Préproduction privée/i);
-  assert.match(checkoutHtml, /Chargement du panier/i);
-  assert.match(checkoutHtml, /aria-busy="true"/);
+  assert.match(checkoutHtml, /Commerce fermé/);
+  assert.match(checkoutHtml, /Le paiement n’est pas ouvert/);
+  assert.match(checkoutHtml, /Aucun prestataire de paiement n’est branché/);
+  assert.match(checkoutHtml, /Numéro de carte[\s\S]*Jamais demandé/);
+  assert.doesNotMatch(checkoutHtml, /Chargement du panier|aria-busy="true"/i);
   assert.doesNotMatch(checkoutHtml, /Rose Velours|29,99|cart\?variant/);
+  assert.doesNotMatch(checkoutHtml, /<input[^>]*(?:card|carte)|<iframe/i);
 });
 
 const commerceCases = [
-  ["/cart", /prix et stocks simulés, non commerciaux/i],
-  ["/checkout", /aucun débit, e-mail ou transporteur réel/i],
-  ["/account", /espace client privé de préproduction[^<]*aucune commande réelle/i],
+  ["/cart", /La vente en ligne n’est pas encore ouverte[^<]*ce site est une démonstration/i],
+  ["/checkout", /Aucun prestataire de paiement n’est branché/i],
+  ["/account", /Espace client fermé[\s\S]*Le commerce n’est pas disponible dans cet environnement/i],
 ];
 
 for (const [pathname, marker] of commerceCases) {
-  test(`server-renders the simulated commerce route ${pathname}`, async () => {
+  test(`server-renders the closed public commerce route ${pathname}`, async () => {
     const response = await render(pathname);
     assert.equal(response.status, 200);
     assert.doesNotMatch(response.headers.get("cache-control") ?? "", /s-maxage/i);

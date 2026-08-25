@@ -61,9 +61,25 @@ test("the homepage is a native-scroll GSAP editorial document, never a film", as
   assert.match(experience, /scrub:\s*true/g);
   assert.doesNotMatch(experience, /scrub:\s*0\.|\bpin:\s*/);
   assert.match(experience, /if \(desktop && featured && featuredCards\.length === 3\)/);
-  assert.match(experience, /if \(desktop && collectionStage && collectionCards\.length === 3\)/);
+  assert.doesNotMatch(experience, /collectionSequence|collectionCards/);
+  assert.doesNotMatch(css, /260svh/);
+  assert.doesNotMatch(
+    css,
+    /\.collectionSticky\s*\{[^}]*position:\s*sticky/s,
+    "la collection ne doit plus être un tunnel desktop épinglé",
+  );
+  assert.match(
+    css,
+    /\.productRail\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\)/s,
+    "desktop doit toujours montrer les trois produits ensemble",
+  );
+  assert.match(
+    css,
+    /@media \(max-width:\s*760px\)[\s\S]*?\.productRail\s*\{[^}]*grid-template-columns:\s*none;[^}]*grid-auto-columns:\s*78vw;[^}]*grid-auto-flow:\s*column;[^}]*overflow-x:\s*auto;[^}]*scroll-snap-type:\s*x mandatory;/s,
+    "mobile doit conserver le rail tactile à trois cartes",
+  );
+  assert.match(experience, /onScroll=\{syncMobileProgress\}/);
   assert.match(experience, /if \(desktop\) \{[\s\S]*moodboardMedia\.forEach/);
-  assert.match(css, /@media \(min-width: 761px\) and \(prefers-reduced-motion: no-preference\)/);
   assert.match(css, /scroll-snap-type:\s*x mandatory/);
   assert.match(css, /flex:\s*0 0 78vw/);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
@@ -92,11 +108,19 @@ test("the redesigned homepage only references retained repository assets", async
   }
 
   assert.ok(!sources.some((source) =>
-    /generated_images|concept|hero-figures|identity-overlay|hero-v[67]-|apollon-world/i.test(source),
+    /generated_images|concept|hero-figures|identity-overlay|hero-v6-|apollon-world/i.test(source),
   ));
+  assert.deepEqual(
+    [...new Set(sources.filter((source) => source.includes("/hero-v7-")))].sort(),
+    [
+      "/images/client/hero-v7-paysage-plate.webp",
+      "/images/client/hero-v7-portrait-plate.webp",
+    ].sort(),
+    "seules les deux plaques statiques v7 validées peuvent servir de hero",
+  );
   assert.doesNotMatch(`${page}\n${experience}`, /<video/i);
   assert.match(experience, /campaign-duo-pourpre\.webp/);
-  assert.match(experience, /campaign-duo-lilas-seated\.webp/);
+  assert.match(moodboard, /campaign-duo-lilas-seated\.webp/);
 });
 
 test("homepage controls answer quickly and scroll-linked product motion has no lag", async () => {
@@ -111,6 +135,10 @@ test("homepage controls answer quickly and scroll-linked product motion has no l
   );
   const gallery = await readFile(
     projectFile("app/components/ProductGalleryZoom.tsx"),
+    "utf8",
+  );
+  const motionHook = await readFile(
+    projectFile("app/components/useAjMotion.ts"),
     "utf8",
   );
   const storeHeader = await readFile(
@@ -132,12 +160,31 @@ test("homepage controls answer quickly and scroll-linked product motion has no l
   assert.match(storeChrome, /min-height:\s*2\.75rem/);
   assert.match(homepage, /scrub:\s*true/g);
   assert.doesNotMatch(homepage, /scrub:\s*0\.[1-9]|\bpin:\s*/);
-  assert.match(homepage, /collectionCleanup = \(\) =>/);
-  assert.match(homepage, /return collectionCleanup/);
+  assert.match(
+    motionHook,
+    /nettoyer = \(\) => \{[\s\S]*mm\.revert\(\);[\s\S]*contexte\.revert\(\);[\s\S]*\};/,
+    "le hook motion doit défaire matchMedia puis son contexte GSAP",
+  );
+  assert.match(motionHook, /return \(\) => \{[\s\S]*annule = true;[\s\S]*nettoyer\?\.\(\);/);
   assert.match(worker, /if \(allowLocalPreviewFrame\) headers\.delete\("X-Frame-Options"\)/);
   assert.match(worker, /env === undefined \|\| env\.APP_ENV === undefined[\s\S]*url\.hostname === "localhost"[\s\S]*frontend-design[\s\S]*round-4/);
   assert.match(gallery, /scrub: true/);
   assert.doesNotMatch(gallery, /scrub:\s*0\.[1-9]/);
+  assert.match(
+    gallery,
+    /const blocs = window\.matchMedia\("\(min-width: 861px\)"\)\.matches[\s\S]*?\? Array\.from\([\s\S]*?\)\.filter\([\s\S]*?\)\s*:\s*\[\];/,
+    "sous 861 px aucun bloc reveal ne doit être sélectionné puis masqué",
+  );
+  assert.match(gallery, /if \(blocs\.length > 0\) \{\s*gsap\.set\(blocs, \{ autoAlpha: 0, y: 28 \}\);/);
+  assert.match(gallery, /surface\.addEventListener\("pointerdown", engager\);/);
+  assert.match(gallery, /surface\.addEventListener\("pointerup", relacher\);/);
+  assert.match(gallery, /surface\.removeEventListener\("pointerdown", engager\);/);
+  assert.match(gallery, /surface\.removeEventListener\("pointerup", relacher\);/);
+  assert.doesNotMatch(
+    gallery,
+    /addEventListener\(\s*["']pointerenter["']/,
+    "le zoom ne doit jamais se déclencher au simple survol d'ouverture",
+  );
 });
 
 test("new editorial messages are localized in every supported locale", async () => {

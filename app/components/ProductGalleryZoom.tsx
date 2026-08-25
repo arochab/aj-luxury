@@ -93,9 +93,15 @@ export function AjScrollReveal({ className, children }: AjScrollRevealProps) {
          * appliquée au bon seuil.
          */
         const seuil = window.innerHeight;
-        const blocs = Array.from(
-          noeud.querySelectorAll<HTMLElement>("[data-aj-reveal]"),
-        ).filter((bloc) => bloc.getBoundingClientRect().top > seuil);
+        /* Sur mobile, un flick peut faire entrer plusieurs cartes entre deux
+           rafraîchissements de ScrollTrigger. Elles ne doivent jamais rester
+           masquées pendant que le doigt a déjà amené leur cadre à l'écran :
+           le rail tactile garde donc tout son contenu peint en permanence. */
+        const blocs = window.matchMedia("(min-width: 861px)").matches
+          ? Array.from(
+              noeud.querySelectorAll<HTMLElement>("[data-aj-reveal]"),
+            ).filter((bloc) => bloc.getBoundingClientRect().top > seuil)
+          : [];
 
         if (blocs.length > 0) {
           gsap.set(blocs, { autoAlpha: 0, y: 28 });
@@ -157,19 +163,14 @@ export function AjScrollReveal({ className, children }: AjScrollRevealProps) {
           "[data-aj-presse]",
         )) {
           const enfoncer = () => {
-            gsap.to(carte, {
-              scale: 0.988,
-              duration: 0.32,
-              ease: "power3.out",
-              overwrite: "auto",
-            });
+            gsap.killTweensOf(carte);
+            gsap.set(carte, { scale: 0.988 });
           };
           const relever = () => {
             gsap.to(carte, {
               scale: 1,
-              duration: 0.75,
-              // expo.out : l'équivalent GSAP le plus proche de --e1.
-              ease: "expo.out",
+              duration: 0.12,
+              ease: "power3.out",
               overwrite: "auto",
             });
           };
@@ -212,8 +213,8 @@ export function AjScrollReveal({ className, children }: AjScrollRevealProps) {
 
           const trace = gsap
             .timeline({ onComplete: () => filet.remove() })
-            .to(filet, { scaleX: 1, duration: 0.9, ease: "expo.out" })
-            .to(filet, { autoAlpha: 0, duration: 0.5, ease: "power2.out" }, ">-0.15");
+            .to(filet, { scaleX: 1, duration: 0.18, ease: "power3.out" })
+            .to(filet, { autoAlpha: 0, duration: 0.1, ease: "power2.out" }, ">-0.02");
 
           defaire.push(() => {
             trace.kill();
@@ -238,8 +239,10 @@ export function AjScrollReveal({ className, children }: AjScrollRevealProps) {
   );
 }
 
-function galleryPlaceholderSrc(src: string): string {
-  return `${src.replace(/\.[^.]+$/, "-placeholder-v1.webp")}?v=v1`;
+function galleryPlaceholderSrc(image: ProductMedia): string {
+  const src = image.placeholderSrc ??
+    image.src.replace(/\.[^.]+$/, "-placeholder-v1.webp");
+  return `${src}?v=v1`;
 }
 
 function DeferredGalleryMedia({
@@ -353,7 +356,7 @@ function DeferredGalleryMedia({
       <img
         className={styles.galleryPlaceholder}
         data-gallery-media="placeholder"
-        src={galleryPlaceholderSrc(image.src)}
+        src={galleryPlaceholderSrc(image)}
         alt=""
         aria-hidden="true"
         width={48}
@@ -504,9 +507,9 @@ export default function ProductGalleryZoom({
      La loupe de la vue agrandie.
      L'image est déjà cadrée en `contain` : le zoom n'est donc pas une béquille
      de lisibilité mais un examen du tissu — la maille du modal et le jacquard
-     de la ceinture. Il ne touche que `transform`, piloté par gsap.quickTo :
-     un seul tween réutilisé par propriété, donc aucune allocation par
-     pointermove et rien qui recalcule le layout.
+     de la ceinture. Il ne touche que `transform`. La position suit directement
+     le pointeur via quickSetter ; seuls l'entrée et le relâchement créent un
+     tween court. Rien ne recalcule le layout pendant le déplacement.
 
      Réservé au pointeur fin : sur écran tactile il n'existe pas d'état de
      survol, et un zoom collé au doigt masquerait la zone observée. Le cadre
@@ -531,47 +534,65 @@ export default function ProductGalleryZoom({
         "(prefers-reduced-motion: reduce)",
       ).matches;
       const ZOOM = 1.85;
-      const suivreX = gsap.quickTo(media, "x", {
-        duration: reduit ? 0 : 0.55,
-        ease: "power3",
-      });
-      const suivreY = gsap.quickTo(media, "y", {
-        duration: reduit ? 0 : 0.55,
-        ease: "power3",
-      });
-      const echelle = gsap.quickTo(media, "scale", {
-        duration: reduit ? 0 : 0.7,
-        ease: "power3",
-      });
+      const suivreX = gsap.quickSetter(media, "x", "px");
+      const suivreY = gsap.quickSetter(media, "y", "px");
 
       let cadre = surface.getBoundingClientRect();
+      let actif = false;
       const remesurer = () => {
         cadre = surface.getBoundingClientRect();
       };
 
+      const engager = () => {
+        remesurer();
+        actif = true;
+        gsap.killTweensOf(media);
+        gsap.to(media, {
+          scale: ZOOM,
+          duration: reduit ? 0 : 0.18,
+          ease: "power3.out",
+          overwrite: "auto",
+        });
+      };
+
       const suivre = (event: PointerEvent) => {
-        if (cadre.width === 0 || cadre.height === 0) return;
+        if (!actif || cadre.width === 0 || cadre.height === 0) return;
         const versLaDroite = (event.clientX - cadre.left) / cadre.width - 0.5;
         const versLeBas = (event.clientY - cadre.top) / cadre.height - 0.5;
-        echelle(ZOOM);
         suivreX(-versLaDroite * cadre.width * (ZOOM - 1));
         suivreY(-versLeBas * cadre.height * (ZOOM - 1));
       };
 
       const relacher = () => {
-        echelle(1);
-        suivreX(0);
-        suivreY(0);
+        actif = false;
+        gsap.killTweensOf(media);
+        gsap.to(media, {
+          x: 0,
+          y: 0,
+          scale: 1,
+          duration: reduit ? 0 : 0.14,
+          ease: "power3.out",
+          overwrite: "auto",
+        });
       };
 
-      surface.addEventListener("pointerenter", remesurer);
+      /* L'ouverture du dialogue se produit sous le pointeur qui vient de
+         cliquer « Agrandir ». Un zoom sur pointerenter se déclenchait donc
+         sans intention et coupait immédiatement le visage. Le grossissement
+         devient un geste volontaire : maintenir le clic pour inspecter la
+         matière, relâcher pour retrouver le cadrage intégral. */
+      surface.addEventListener("pointerdown", engager);
       surface.addEventListener("pointermove", suivre);
+      surface.addEventListener("pointerup", relacher);
+      surface.addEventListener("pointercancel", relacher);
       surface.addEventListener("pointerleave", relacher);
       window.addEventListener("resize", remesurer);
 
       detacher = () => {
-        surface.removeEventListener("pointerenter", remesurer);
+        surface.removeEventListener("pointerdown", engager);
         surface.removeEventListener("pointermove", suivre);
+        surface.removeEventListener("pointerup", relacher);
+        surface.removeEventListener("pointercancel", relacher);
         surface.removeEventListener("pointerleave", relacher);
         window.removeEventListener("resize", remesurer);
         gsap.killTweensOf(media);

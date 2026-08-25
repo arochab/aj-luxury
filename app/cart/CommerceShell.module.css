@@ -75,13 +75,14 @@
 .lineImage {
   position: relative;
   display: block;
-  aspect-ratio: 4 / 5;
+  aspect-ratio: 2 / 3;
   overflow: hidden;
   background: #deded9;
 }
 
 .lineImage img {
-  object-fit: cover;
+  object-fit: contain;
+  object-position: center;
 }
 
 .line h2 {

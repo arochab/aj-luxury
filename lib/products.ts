@@ -8,6 +8,9 @@ export type ProductMedia = {
   src: string;
   frame: "main" | "portrait" | "landscape";
   objectPosition?: string;
+  /** Placeholder client existant à réutiliser quand le master n'en possède
+      pas un portant le même nom. Aucun pixel n'est généré par le front. */
+  placeholderSrc?: string;
   /* Ratio NATIF de la source, à ne renseigner que lorsqu'il diffère du cadre
      de sa famille. Il n'est appliqué que là où la vignette est seule sur sa
      ligne (sous 560 px, cf. ProductPage.module.css) : ailleurs, la règle
@@ -65,6 +68,10 @@ export const wearerByAsset: Readonly<Record<string, Wearer | "duo">> =
     "apollon-world/apollon-rose-model-color-v2.webp": "alex",
     "apollon-world/apollon-lilas-model-color-v2.webp": "jeremy",
     "apollon-world/apollon-pourpre-model-color-v2.webp": "alex",
+    "apollon-world/apollon-lilas-model-color-v1.webp": "jeremy",
+    "apollon-world/apollon-rose-model-world-v1.webp": "alex",
+    "apollon-world/apollon-lilas-model-world-v1.webp": "jeremy",
+    "apollon-world/apollon-pourpre-model-world-v1.webp": "alex",
     // Le film d'ouverture : les deux dans le même plan. Les posters v6 sont
     // tirés des deux images validées par Adam le 21/08 — même duo.
     "hero-v6-desktop-1920x1080-poster.webp": "duo",
@@ -136,9 +143,9 @@ export type Product = {
   swatch: string;
   /** L'homme qui porte CE coloris, partout où il est porté. */
   wearer: Wearer;
-  /* Le plan de carte, et le plan de tête de fiche : c'est le MÊME fichier.
-     Une carte qui ouvre sur un autre corps que celui qu'elle montrait était
-     le défaut relevé le 19/08 sur le Lilas — carte Jérémy, fiche Alex. */
+  /* Le plan de carte et le plan de tête de fiche restent portés par le même
+     homme, mais utilisent désormais deux prises distinctes : aucun visuel
+     n'est recyclé entre la liste et la fiche. */
   image: string;
   /** La nature morte du plateau : marbre, lyre, arc, laurier, carquois.
       Aucun corps, donc aucune question de parité — c'est ce qui permet aux
@@ -212,9 +219,9 @@ export const products: Product[] = deepFreeze([
       {
         src: "/images/client/raw/product-card-rose.webp",
         frame: "main",
+        placeholderSrc: "/images/client/raw/product-card-rose-placeholder-v1.webp",
         objectPosition: "center 30%",
       },
-      { src: "/images/client/editorial-rose-profile.webp", frame: "portrait" },
       {
         src: "/images/client/raw/product-rose-front.webp",
         frame: "portrait",
@@ -249,17 +256,14 @@ export const products: Product[] = deepFreeze([
     wearer: "jeremy",
     image: "/images/client/editorial-lilas-chair.webp",
     still: "/images/editorial/isabelle-apollon/apollon-lilas-lyre-v1.webp",
-    /* La carte montrait Jérémy et la fiche s'ouvrait sur Alex
-       (`product-lilas-model.webp`) : on cliquait sur un homme et on en
-       obtenait un autre, sur le même coloris. Le plan de tête est désormais
-       le plan de carte, et les deux vignettes qui suivent sont sans visage.
-       `product-lilas-front.webp` est retiré : il redit `-detail` de face, et
-       trois vignettes dans une grille à deux colonnes laisseraient une
-       demi-ligne vide, que l'AGENTS interdit. */
+    /* La carte et la fiche montrent toutes deux Jérémy, sur deux prises
+       différentes. Deux vues produit complètent le plan porté sans recycler
+       les images éditoriales de l'accueil. */
     gallery: [
       {
         src: "/images/client/editorial-lilas-chair.webp",
         frame: "main",
+        placeholderSrc: "/images/client/editorial-lilas-chair-placeholder-v1.webp",
         objectPosition: "center 30%",
       },
       { src: "/images/client/raw/product-lilas-detail.webp", frame: "portrait" },
@@ -295,6 +299,7 @@ export const products: Product[] = deepFreeze([
       {
         src: "/images/client/raw/product-card-pourpre.webp",
         frame: "main",
+        placeholderSrc: "/images/client/raw/product-card-pourpre-placeholder-v1.webp",
         objectPosition: "center 30%",
       },
       { src: "/images/client/raw/product-pourpre-detail.webp", frame: "portrait" },

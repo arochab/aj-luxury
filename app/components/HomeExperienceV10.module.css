@@ -96,8 +96,7 @@
 }
 
 .heroPanelLeft img {
-  object-fit: cover;
-  object-position: center 15%;
+  object-position: center;
 }
 
 .heroGrade {
@@ -207,15 +206,14 @@
 
 .featuredCard img {
   position: absolute;
-  inset: -3%;
-  width: 106%;
-  height: 106%;
-  object-fit: cover;
-  transform: scale(1.001);
-  transition: transform 140ms cubic-bezier(0.22, 1, 0.36, 1);
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .featuredlead img {
+  object-fit: cover;
   object-position: center;
 }
 
@@ -299,9 +297,7 @@
 .productImage img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
-  transform: scale(1.001);
-  transition: transform 140ms cubic-bezier(0.22, 1, 0.36, 1);
+  object-fit: contain;
 }
 
 .productCaption {
@@ -409,7 +405,7 @@
 .moodboardTrack {
   display: grid;
   width: min(1440px, 100%);
-  min-height: 80svh;
+  min-height: 70svh;
   grid-template-columns: minmax(0, 0.72fr) minmax(0, 1.18fr) minmax(0, 0.72fr);
   align-items: center;
   gap: clamp(12px, 1.5vw, 24px);
@@ -437,12 +433,10 @@
 
 .moodboardItem img {
   position: absolute;
-  inset: -3%;
-  width: 106%;
-  height: 106%;
-  object-fit: cover;
-  transform: scale(1.001);
-  transition: transform 140ms cubic-bezier(0.22, 1, 0.36, 1);
+  inset: 3%;
+  width: 94%;
+  height: 94%;
+  object-fit: contain;
 }
 
 .moodboardduo img {
@@ -490,97 +484,6 @@
   min-width: min(100%, 220px);
 }
 
-@media (min-width: 761px) and (prefers-reduced-motion: no-preference) {
-  .featured {
-    min-height: 145svh;
-  }
-
-  .featuredStage {
-    position: sticky;
-    top: 0;
-    height: 100svh;
-  }
-
-  .collectionStage {
-    height: 260svh;
-  }
-
-  .collectionSticky {
-    position: sticky;
-    top: 0;
-    height: 100svh;
-    border-top: 1px solid rgba(17, 17, 18, 0.16);
-  }
-
-  .wordmark {
-    position: absolute;
-    top: 18%;
-    right: -3%;
-    left: auto;
-    margin: 0;
-    font-size: min(8vw, 120px);
-  }
-
-  .productRail {
-    position: absolute;
-    inset: 0;
-    display: block;
-    padding: 0;
-  }
-
-  .productCard {
-    position: absolute;
-    inset: clamp(28px, 3vw, 48px) var(--gutter);
-    grid-template-columns:
-      minmax(0, calc((100svh - 96px) * 0.8))
-      minmax(260px, 1fr);
-    grid-template-rows: 1fr;
-    gap: clamp(28px, 5vw, 86px);
-  }
-
-  .productCard:not(:first-child) {
-    visibility: hidden;
-    opacity: 0;
-  }
-
-  .productImage {
-    grid-column: 1;
-    grid-row: 1;
-    height: 100%;
-    aspect-ratio: auto;
-  }
-
-  .productCaption {
-    grid-column: 2;
-    grid-row: 1;
-    grid-template-columns: 1fr;
-    align-content: end;
-    padding: 28px 0 46px;
-    border-top-width: 3px;
-  }
-
-  .productCaption h3 {
-    font-size: clamp(20px, 1.7vw, 27px);
-  }
-
-  .productCaption .action {
-    width: 100%;
-    margin-top: 34px;
-  }
-
-  .collectionProgress {
-    position: absolute;
-    z-index: 4;
-    right: var(--gutter);
-    bottom: 20px;
-    left: var(--gutter);
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 8px;
-  }
-
-}
-
 @media (hover: hover) and (pointer: fine) {
   .heroAction:hover > span:last-child,
   .heroAction:focus-visible > span:last-child {
@@ -595,14 +498,6 @@
   .action:hover .arrowDiagonal,
   .action:focus-visible .arrowDiagonal {
     transform: translate3d(3px, -3px, 0);
-  }
-
-  .featuredCard:hover img,
-  .featuredCard:focus-within img,
-  .productImage:hover img,
-  .productImage:focus-visible img,
-  .moodboardItem:hover img {
-    transform: scale(1.018);
   }
 
   .productImage:hover::after,
@@ -626,7 +521,7 @@
 
   .heroPanelLeft img {
     object-fit: cover;
-    object-position: center top;
+    object-position: center;
   }
 
   .heroMedia,

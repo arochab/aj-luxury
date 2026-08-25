@@ -2,31 +2,24 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-/* ==========================================================================
-   PARITÉ ET ALTERNANCE — retour n°4 d'Adam, 19/08
+/* ===========================================================================
+   IDENTITÉ DES MANNEQUINS ET FIDÉLITÉ À LA PRODUCTION
    --------------------------------------------------------------------------
-   « Jamais deux photos du même mannequin à la suite, nulle part », et un
-   coloris porté par le même homme partout.
+   L'attribution vient de `wearerByAsset`, renseignée après inspection des
+   images. Un nom de fichier ne prouve rien : `product-rose-profile.webp`
+   montre Jérémy, tandis que `product-card-rose.webp` montre Alex.
 
-   Ce fichier remplace une version qui épinglait des noms de fichiers un par
-   un, et qui a laissé passer la séquence Jérémy / Jérémy / Alex sur l'accueil
-   ET sur /shop : elle vérifiait que telle image portait tel alt, jamais que
-   la SUITE des images tenait. Le contrat est donc reconstruit à l'envers —
-   on reconstitue la séquence de chaque route dans l'ordre du document, on la
-   traduit en prénoms via la table d'attribution de lib/products, et on refuse
-   toute répétition immédiate.
-
-   L'attribution vient de `wearerByAsset`, renseignée à l'inspection des
-   images. Un nom de fichier ne prouve rien ici : `product-rose-profile.webp`
-   montre Jérémy, `product-card-rose.webp` montre Alex.
+   L'accueil conserve sa séquence visuelle validée. La boutique suit en
+   revanche l'ordre actuellement publié — Pourpre, Rose, Lilas — même si cet
+   ordre n'alterne pas parfaitement les mannequins. Un test ne doit jamais
+   forcer une refonte différente du site que le client a approuvé.
    ========================================================================== */
 
 const lire = (chemin) => readFile(new URL(chemin, import.meta.url), "utf8");
 
-const [produits, sequence, accueil, moodboard, recit, boutique, fiche] =
+const [produits, accueil, moodboard, recit, boutique, fiche] =
   await Promise.all([
     lire("../lib/products.ts"),
-    lire("../app/components/ApollonGuidedSequence.tsx"),
     lire("../app/page.tsx"),
     lire("../lib/editorial-moodboard.ts"),
     lire("../app/notre-histoire/page.tsx"),
@@ -93,6 +86,29 @@ function exigerAlternance(suite, etiquette) {
 
 const blocsProduits = () => produits.split(/\n {4}slug: "/).slice(1);
 
+/* Exception volontaire et fermée : le site de production validé emploie le
+   même lead sur la carte et en tête de PDP pour chacun des trois coloris.
+   Ajouter un quatrième chemin ou remplacer l'un de ces masters doit casser le
+   test et repasser par une validation visuelle explicite. */
+const LEADS_PRODUCTION_VALIDES = Object.freeze({
+  "rose-pale": "/images/client/raw/product-card-rose.webp",
+  "lilas-bleu-clair": "/images/client/editorial-lilas-chair.webp",
+  pourpre: "/images/client/raw/product-card-pourpre.webp",
+});
+
+function ordreProductionAccueil() {
+  const bloc = accueil.match(
+    /const productionOrder = \[([\s\S]*?)\n\s*\] as const;/,
+  )?.[1];
+  assert.ok(bloc, "productionOrder doit exister sur l'accueil");
+
+  const ordre = [...bloc.matchAll(
+    /\{\s*slug:\s*"([a-z-]+)",[\s\S]*?image:\s*"([^"]+)"[\s\S]*?\}/g,
+  )].map(([, slug, src]) => ({ slug, src, qui: porteur(src) }));
+  assert.equal(ordre.length, 3, "productionOrder doit contenir trois coloris");
+  return ordre;
+}
+
 /* ── 1 · Un coloris, un homme ─────────────────────────────────────────── */
 
 test("chaque coloris déclare son porteur et n'en montre aucun autre", () => {
@@ -121,13 +137,27 @@ test("chaque coloris déclare son porteur et n'en montre aucun autre", () => {
   }
 });
 
-test("la carte d'un coloris est le plan de tête de sa fiche", () => {
-  // C'est ce qui faisait changer de mannequin au clic sur le Lilas : carte
-  // Jérémy, fiche Alex.
+test("la carte et la tête de fiche répètent uniquement les trois leads de production validés", () => {
+  assert.equal(
+    blocsProduits().length,
+    Object.keys(LEADS_PRODUCTION_VALIDES).length,
+    "l'exception carte/lead doit rester strictement limitée aux trois coloris",
+  );
+
   for (const bloc of blocsProduits()) {
+    const slug = bloc.match(/^([a-z-]+)"/)?.[1];
     const carte = bloc.match(/\n\s*image:\s*"([^"]+)"/)?.[1];
     const tete = bloc.match(/gallery:\s*\[\s*\{\s*src:\s*"([^"]+)"/)?.[1];
-    assert.equal(tete, carte, `plan de tête différent de la carte : ${carte}`);
+    const leadValide = LEADS_PRODUCTION_VALIDES[slug];
+
+    assert.ok(leadValide, `aucune exception carte/lead autorisée pour ${slug}`);
+    assert.equal(carte, leadValide, `carte de production inattendue pour ${slug}`);
+    assert.equal(tete, leadValide, `lead PDP de production inattendu pour ${slug}`);
+    assert.equal(
+      porteur(tete),
+      porteur(carte),
+      `changement de porteur entre ${carte} et ${tete}`,
+    );
   }
 });
 
@@ -146,58 +176,71 @@ test("les recommandations de bas de fiche ne portent aucun corps", () => {
 
 /* ── 2 · Jamais deux fois le même homme à la suite ────────────────────── */
 
-test("la séquence guidée de l'accueil alterne", () => {
-  const suite = personnes(sequence);
+test("l'ordre de production de l'accueil alterne", () => {
+  const suite = ordreProductionAccueil();
   assert.deepEqual(
-    suite.map((entree) => entree.qui),
-    ["alex", "jeremy", "alex"],
+    suite.map(({ slug, qui }) => ({ slug, qui })),
+    [
+      { slug: "pourpre", qui: "alex" },
+      { slug: "rose-pale", qui: "jeremy" },
+      { slug: "lilas-bleu-clair", qui: "alex" },
+    ],
   );
-  exigerAlternance(suite, "séquence guidée");
+  assert.match(accueil, /productionOrder\.flatMap\(\(entry\) =>/);
+  assert.match(accueil, /<HomeExperienceV10 colorways=\{colorways\} \/>/);
+  exigerAlternance(suite, "ordre de production de l'accueil");
 });
 
-test("les cartes de /shop alternent", () => {
-  /* L'accueil ne rend plus de grille de coloris depuis le 20/08 : elle
-     rejouait en vignettes ce que la séquence guidée étale sur neuf écrans, et
-     elle a été retirée. Son ordre de lecture reste néanmoins contraint ici,
-     parce que `ORDRE_COLORIS` alimente toujours les trois panneaux de la
-     séquence — c'est lui qui décide de la suite Alex / Jérémy / Alex sur
-     l'accueil, et la séquence a son propre test juste au-dessus.
-     La parité des cartes reste vérifiée là où des cartes existent : /shop. */
+test("les trois cartes de /shop suivent l'ordre de production validé", () => {
   assert.match(
-    accueil,
-    /ORDRE_COLORIS = \["rose-pale", "lilas-bleu-clair", "pourpre"\]/,
+    boutique,
+    /const PRODUCTION_ORDER = \["pourpre", "rose-pale", "lilas-bleu-clair"\] as const;/,
   );
-  assert.doesNotMatch(accueil, /src=\{item\.image\}/);
-  assert.match(boutique, /src=\{[a-zA-Z]+\.image\}/);
+  assert.match(boutique, /const catalog = getProducts\(\);/);
+  assert.match(boutique, /PRODUCTION_ORDER\.flatMap\(\(slug\) =>/);
+  assert.match(boutique, /\{products\.map\(\(product,\s*index\) => \(/);
+  assert.match(boutique, /src=\{product\.image\}/);
+  assert.match(boutique, /className=\{styles\.productGrid\} role="list"/);
+  assert.match(boutique, /role="listitem"/);
+  assert.match(boutique, /aria-label=\{`\$\{product\.model\} \$\{product\.name\}`\}/);
+  assert.match(boutique, /href=\{`\/products\/\$\{product\.slug\}`\}/);
 
-  const suite = ["rose-pale", "lilas-bleu-clair", "pourpre"].map((slug) => {
-    const bloc = blocsProduits().find((part) => part.startsWith(`${slug}"`));
+  const parSlug = new Map(blocsProduits().map((bloc) => {
+    const slug = bloc.match(/^([a-z-]+)"/)?.[1];
     const src = bloc.match(/\n\s*image:\s*"([^"]+)"/)[1];
-    return { src, qui: porteur(src) };
-  });
-  assert.deepEqual(
-    suite.map((entree) => entree.qui),
-    ["alex", "jeremy", "alex"],
+    return [slug, { slug, src, qui: porteur(src) }];
+  }));
+  const suite = ["pourpre", "rose-pale", "lilas-bleu-clair"].map(
+    (slug) => parSlug.get(slug),
   );
-  exigerAlternance(suite, "cartes de /shop");
+  assert.deepEqual(
+    suite.map(({ slug, qui }) => ({ slug, qui })),
+    [
+      { slug: "pourpre", qui: "alex" },
+      { slug: "rose-pale", qui: "alex" },
+      { slug: "lilas-bleu-clair", qui: "jeremy" },
+    ],
+  );
 });
 
 test("la bande éditoriale de l'accueil alterne", () => {
   exigerAlternance(personnes(moodboard), "bande éditoriale");
 });
 
-test("/notre-histoire alterne, et nomme chacun dans SON coloris", () => {
+test("/notre-histoire identifie exactement Alex et Jérémy sur les prises validées", () => {
   exigerAlternance(personnes(recit), "notre-histoire");
 
-  // La seule page qui écrit un prénom sous un visage : elle doit dire la même
-  // chose que les cartes et les fiches, sinon c'est elle qu'on croit.
   assert.match(
     recit,
-    /alt="AJ Luxury — Jérémy — Apollon Lilas Céleste"[\s\S]{0,320}editorial-lilas-chair\.webp/,
+    /campaign-duo-lilas-seated\.webp"[\s\S]{0,180}alt="AJ Luxury — Jérémy, Alex — Apollon Lilas Céleste"/,
   );
   assert.match(
     recit,
-    /alt="AJ Luxury — Alex — Apollon Pourpre Impérial"[\s\S]{0,320}hero-pourpre-model\.webp/,
+    /product-lilas-model\.webp"[\s\S]{0,180}alt="AJ Luxury — Alex — Apollon Lilas Céleste"[\s\S]{0,180}<figcaption>Alex<\/figcaption>/,
+  );
+  assert.match(
+    recit,
+    /story-jeremy-retouched\.jpeg"[\s\S]{0,180}alt="AJ Luxury — Jérémy — Apollon Rose Velours"[\s\S]{0,180}<figcaption>Jérémy<\/figcaption>/,
   );
 });
 
@@ -223,7 +266,10 @@ test("aucune photo contredisant l'attribution ne reste dans le commerce", () => 
     .slice(produits.indexOf("export const products"))
     .replace(/\/\*[\s\S]*?\*\//g, "")
     .replace(/\/\/[^\n]*/g, "");
-  for (const source of [catalogue, boutique, fiche, recit]) {
+  // Notre histoire reste éditoriale : elle peut employer les portraits de la
+  // production tant que leurs alt et légendes identifient la bonne personne.
+  // Le garde-fou ci-dessous ne vise que le tunnel commercial.
+  for (const source of [catalogue, boutique, fiche]) {
     for (const bannie of bannies) {
       assert.ok(
         !source.includes(bannie),

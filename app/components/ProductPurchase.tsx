@@ -35,29 +35,33 @@ const PACK_OPTIONS: ReadonlyArray<{
   count: PackSize;
   labelKey: "product.unitOffer" | "product.duoOffer" | "product.trioOffer";
   detailKey: "product.unitDetail" | "product.duoDetail" | "product.trioDetail";
+  perItemCents: number;
   savingCents: number;
-  savingPercent: string | null;
+  savingRatio: number | null;
 }> = [
   {
     count: 1,
     labelKey: "product.unitOffer",
     detailKey: "product.unitDetail",
+    perItemCents: 2_999,
     savingCents: 0,
-    savingPercent: null,
+    savingRatio: null,
   },
   {
     count: 2,
     labelKey: "product.duoOffer",
     detailKey: "product.duoDetail",
+    perItemCents: 2_500,
     savingCents: 999,
-    savingPercent: "16,66 %",
+    savingRatio: 0.1666,
   },
   {
     count: 3,
     labelKey: "product.trioOffer",
     detailKey: "product.trioDetail",
+    perItemCents: 2_333,
     savingCents: 1_998,
-    savingPercent: "22,21 %",
+    savingRatio: 0.2221,
   },
 ];
 
@@ -100,6 +104,14 @@ export default function ProductPurchase({
   const restoreSizeGuideFocus = useRef(false);
   const { locale, t } = useI18n();
   const localizedProduct = getLocalizedProductCopy(t, product.slug);
+
+  function formatDiscountPercent(ratio: number) {
+    return new Intl.NumberFormat(locale, {
+      style: "percent",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(ratio);
+  }
 
   /* Une seule lecture de la disponibilité, la même pour l'étiquette, l'état
      grisé et le garde-fou de sélection. `null` = non résolue. */
@@ -449,33 +461,48 @@ export default function ProductPurchase({
               onClick={() => selectPackSize(option.count)}
             >
               <span className={styles.packOptionTopline}>
-                <span className={styles.packOptionName}>{t(option.labelKey)}</span>
+                <span className={styles.packOptionIdentity}>
+                  <span className={styles.packOptionIndex} aria-hidden="true">
+                    {String(option.count).padStart(2, "0")}
+                  </span>
+                  <span className={styles.packOptionName}>{t(option.labelKey)}</span>
+                </span>
                 <strong>
                   {formatPrice(AJ_APOLLON_PACK_PRICE_CENTS[option.count], locale)}
                 </strong>
               </span>
               <span className={styles.packOptionBottomline}>
-                <span>{t(option.detailKey)}</span>
-                {option.savingCents > 0 && option.savingPercent ? (
+                <span>
+                  {t(option.detailKey)} · {t("product.perItem").replace(
+                    "{amount}",
+                    formatPrice(option.perItemCents, locale),
+                  )}
+                </span>
+                {option.savingCents > 0 && option.savingRatio ? (
                   <span className={styles.packSaving}>
                     {t("product.packSaving")
                       .replace("{amount}", formatPrice(option.savingCents, locale))
-                      .replace("{percent}", option.savingPercent)}
+                      .replace(
+                        "{percent}",
+                        formatDiscountPercent(option.savingRatio),
+                      )}
                   </span>
-                ) : (
-                  <span>{t("product.unitPriceReference")}</span>
-                )}
+                ) : null}
               </span>
             </button>
           ))}
         </div>
 
-        <p className={styles.packExplanation}>
-          <strong>{t("product.sameColorPack")}</strong>{" "}
-          {t("product.sameColorPackBody")}{" "}
-          <strong>{t("product.mixedColorPack")}</strong>{" "}
-          {t("product.mixedColorPackBody")}
-        </p>
+        <dl className={styles.packRules}>
+          <div>
+            <dt>{t("product.sameColorPack")}</dt>
+            <dd>{t("product.sameColorPackBody")}</dd>
+          </div>
+          <div>
+            <dt>{t("product.mixedColorPack")}</dt>
+            <dd>{t("product.mixedColorPackBody")}</dd>
+          </div>
+        </dl>
       </fieldset>
 
       <div className={styles.selector}>

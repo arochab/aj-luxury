@@ -2539,7 +2539,7 @@ function withSecurityHeaders(
   if (environment === "production") {
     headers.set("Strict-Transport-Security", "max-age=31536000");
   }
-  if (environment === "preproduction") {
+  if (environment === "preproduction" || environment === "preview") {
     headers.set("X-Robots-Tag", "noindex, nofollow");
   }
   if (environment === "preproduction" && pathname.startsWith(PREPROD_API_PREFIX)) {

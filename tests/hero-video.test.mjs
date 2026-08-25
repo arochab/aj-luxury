@@ -175,16 +175,15 @@ test("every runtime rendition contains video only", async () => {
 });
 
 test("product blur-up placeholders preserve continuity at a negligible byte cost", async () => {
-  const gallerySources = new Set(
-    products.flatMap((product) => product.gallery.map((image) => image.src)),
-  );
-  /* 12 depuis la reprise des fiches du 19/08 (rose 4, lilas 3, pourpre 5) :
-     deux plans ont quitté les galeries avec les natures mortes. La valeur 14
-     datait du catalogue antérieur. */
-  assert.equal(gallerySources.size, 12);
+  const galleryMedia = products.flatMap((product) => product.gallery);
+  const gallerySources = new Set(galleryMedia.map((image) => image.src));
+  assert.equal(gallerySources.size, galleryMedia.length, "aucun master de galerie n'est répété");
+  // 11 masters de fiche : les trois prises déplacées vers l'éditorial
+  // accueil/moodboard ne sont plus rejouées dans les galeries produit.
+  assert.equal(gallerySources.size, 11);
 
-  for (const src of gallerySources) {
-    const placeholder = `${src.replace(/\.[^.]+$/, "-placeholder-v1.webp")}?v=v1`;
+  for (const image of galleryMedia) {
+    const placeholder = `${image.placeholderSrc ?? image.src.replace(/\.[^.]+$/, "-placeholder-v1.webp")}?v=v1`;
     const info = await stat(publicAssetFile(placeholder));
     assert.ok(info.size > 128, `${placeholder} is unexpectedly empty`);
     assert.ok(info.size < 1024, `${placeholder} exceeds its one-kilobyte budget`);
@@ -416,4 +415,46 @@ test("noncritical visual media stays outside the initial render path", async () 
   assert.match(gallery, /data-gallery-media="full"/);
   assert.match(deferredMetal, /lazy\(\(\) => import\("\.\/MetallicField"\)\)/);
   assert.match(deferredMetal, /rootMargin: "0px"/);
+});
+
+test("the approved homepage mounts a static metallic hero and no video", async () => {
+  const [homeExperience, homeStyles, moodboard] = await Promise.all([
+    readFile(projectFile("app/components/HomeExperienceV10.tsx"), "utf8"),
+    readFile(projectFile("app/components/HomeExperienceV10.module.css"), "utf8"),
+    readFile(projectFile("lib/editorial-moodboard.ts"), "utf8"),
+  ]);
+
+  assert.doesNotMatch(homeExperience, /HeroBackgroundVideo/);
+  assert.doesNotMatch(homeExperience, /<video\b/);
+  assert.match(homeExperience, /hero-v7-paysage-plate\.webp/);
+  assert.match(homeExperience, /hero-v7-portrait-plate\.webp/);
+  assert.match(
+    homeExperience,
+    /product-rose-model\.webp[\s\S]*campaign-duo-pourpre\.webp[\s\S]*editorial-lilas-chair\.webp/,
+    "le triptyque doit rester celui du site validé",
+  );
+  assert.match(
+    moodboard,
+    /editorial-pourpre-chair\.webp[\s\S]*campaign-duo-lilas-seated\.webp[\s\S]*editorial-rose-profile\.webp/,
+    "le moodboard de production doit conserver son image duo centrale",
+  );
+
+  assert.doesNotMatch(homeExperience, /collectionSequence|xPercent:\s*105|activate\(/);
+  assert.doesNotMatch(homeStyles, /260svh/);
+  assert.doesNotMatch(
+    homeStyles,
+    /\.collectionSticky\s*\{[^}]*position:\s*sticky/s,
+    "la collection desktop ne doit plus être un tunnel épinglé",
+  );
+  assert.match(
+    homeStyles,
+    /\.productRail\s*\{[^}]*grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\)/s,
+    "desktop doit montrer les trois produits ensemble",
+  );
+  assert.match(
+    homeStyles,
+    /@media \(max-width:\s*760px\)[\s\S]*?\.productRail\s*\{[^}]*grid-template-columns:\s*none;[^}]*grid-auto-columns:\s*78vw;[^}]*grid-auto-flow:\s*column;[^}]*overflow-x:\s*auto;[^}]*scroll-snap-type:\s*x mandatory;/s,
+    "mobile doit conserver son rail tactile à trois cartes",
+  );
+  assert.match(homeExperience, /onScroll=\{syncMobileProgress\}/);
 });
