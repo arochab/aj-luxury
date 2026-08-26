@@ -1,10 +1,10 @@
-"""Build the approved V4 hero into a subtle one-shot motion film.
+"""Build the approved V4 hero into a clearly readable liquid-motion film.
 
 Only retained AJ Luxury pixels are used. The existing responsive posters are
-the masters; the lower reflective floor is displaced and progressively
-revealed while two soft studio shadows travel across the architecture. A
-feathered protection matte keeps the models, faces, underwear and metallic
-seat unchanged.
+the masters; a plum-chrome liquid pool visibly expands across the reflective
+floor while two studio shadows travel across the architecture. The effect
+dissolves back to the untouched poster for a seamless replay. A feathered
+protection matte keeps the models, faces, underwear and metallic seat unchanged.
 
 Usage: python scripts/build_hero_v4_motion.py
 """
@@ -24,7 +24,7 @@ ROOT = Path(__file__).resolve().parents[1]
 IMAGES = ROOT / "public" / "images" / "client"
 VIDEOS = ROOT / "public" / "videos"
 FPS = 24
-FRAME_COUNT = 216  # Nine seconds, played once and held on the final frame.
+FRAME_COUNT = 192  # Eight-second seamless cycle: rise, hold, dissolve.
 
 
 @dataclass(frozen=True)
@@ -166,7 +166,13 @@ def build_frame(
 ) -> np.ndarray:
     height, width = base.shape[:2]
     time = frame_index / (FRAME_COUNT - 1)
-    growth = float(smoothstep((time - 0.035) / 0.76))
+    # The pool starts immediately, reaches its full footprint in five seconds,
+    # holds, then dissolves to the exact source frame before the replay. Keeping
+    # extent and visibility separate avoids a visually weak "small ripple".
+    extent = float(smoothstep((time - 0.012) / 0.62))
+    arrival = float(smoothstep(time / 0.045))
+    dissolve = float(1.0 - smoothstep((time - 0.84) / 0.16))
+    visibility = arrival * dissolve
     phase = time * np.pi * 2.0
     horizon = 0.705 if portrait else 0.705
 
@@ -176,7 +182,12 @@ def build_frame(
 
     # Reflection displacement increases towards the foreground. It never
     # reaches protected campaign pixels.
-    amplitude = floor * (1.0 - protect) * (0.65 + 2.45 * growth)
+    amplitude = (
+        floor
+        * (1.0 - protect)
+        * visibility
+        * (1.25 + 5.25 * extent)
+    )
     scale = min(width, height) / 934.0
     dx = amplitude * scale * (
         1.05 * np.sin(grid_y / (62.0 * scale) + phase * 0.82)
@@ -220,27 +231,48 @@ def build_frame(
     # The pool grows from the models' contact zone across the floor. The edge
     # is broad and asymmetric so the reveal reads as liquid, never as a wipe.
     center_x = 0.54 if portrait else 0.52
-    normalized_x = (x - center_x) / (0.11 + 0.59 * growth)
-    normalized_y = (y - (horizon + 0.13)) / 0.39
+    normalized_x = (x - center_x) / (0.12 + 0.64 * extent)
+    normalized_y = (y - (horizon + 0.125)) / (0.31 + 0.09 * extent)
     irregular = (
         0.060 * np.sin(x * 16.0 + phase * 0.23)
         + 0.035 * np.sin(x * 31.0 - phase * 0.17)
     )
     distance = np.sqrt(normalized_x * normalized_x + normalized_y * normalized_y)
-    pool = smoothstep((1.06 + irregular - distance) / 0.105)
-    pool *= floor * (1.0 - protect) * growth
+    pool = smoothstep((1.08 + irregular - distance) / 0.085)
+    pool *= floor * (1.0 - protect) * visibility
 
     result = base.astype(np.float32) * (1.0 - pool[..., None])
     result += chrome * pool[..., None]
 
-    # A narrow moving rim makes the growth distinct without tinting the image.
-    rim = np.exp(-((distance - (1.00 + irregular)) / 0.035) ** 2)
-    rim *= floor * (1.0 - protect) * growth * (1.0 - 0.35 * growth)
-    result += (13.0 * rim)[..., None]
+    # A restrained plum undertow makes the growing footprint legible against
+    # the already-silver floor. The colour is sampled from the approved
+    # campaign palette; it is not a separate or generated asset.
+    liquid_tint = np.array([66.0, 20.0, 82.0], dtype=np.float32)
+    tint_mix = pool * (0.18 + 0.12 * (1.0 - specular))
+    result = result * (1.0 - tint_mix[..., None])
+    result += liquid_tint[None, None, :] * tint_mix[..., None]
+
+    # Moving caustics keep the filled surface alive after the meniscus passes.
+    caustic = (
+        0.5
+        + 0.30 * np.sin(x * 27.0 + y * 8.0 + phase * 1.35)
+        + 0.20 * np.sin(x * 51.0 - y * 13.0 - phase * 0.92)
+    )
+    caustic *= pool * (0.35 + 0.65 * specular)
+    result += (18.0 * caustic)[..., None]
+
+    # A bright mercury meniscus plus a darker inner lip makes the growth
+    # unmistakable on phone screens without crossing the protected subjects.
+    rim = np.exp(-((distance - (1.015 + irregular)) / 0.026) ** 2)
+    rim *= floor * (1.0 - protect) * visibility
+    inner_lip = np.exp(-((distance - (0.955 + irregular)) / 0.045) ** 2)
+    inner_lip *= floor * (1.0 - protect) * visibility
+    result *= (1.0 - (0.12 * inner_lip)[..., None])
+    result += (62.0 * rim)[..., None]
 
     # Two wide studio shadows move across architecture only. Their strength
     # ramps in and out, so the first frame is exactly the approved photograph.
-    shadow_envelope = float(np.sin(np.pi * time) ** 1.35)
+    shadow_envelope = float((np.sin(np.pi * time) ** 1.15) * dissolve)
     diagonal = x + y * 0.31
     shadow_a_position = -0.16 + 1.42 * time
     shadow_b_position = 1.36 - 1.18 * time
@@ -250,7 +282,7 @@ def build_frame(
     )
     architecture = 1.0 - smoothstep((y - (horizon - 0.07)) / 0.10)
     shadow_mask = (1.0 - protect) * architecture
-    shadow_strength = 0.072 * shadow_envelope * shadow * shadow_mask
+    shadow_strength = 0.13 * shadow_envelope * shadow * shadow_mask
     result *= (1.0 - shadow_strength[..., None])
 
     return np.clip(np.round(result), 0, 255).astype(np.uint8)

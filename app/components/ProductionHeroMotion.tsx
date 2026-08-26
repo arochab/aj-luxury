@@ -77,6 +77,7 @@ export default function ProductionHeroMotion() {
       muted
       playsInline
       autoPlay
+      loop
       preload="none"
       aria-hidden="true"
       onPlaying={() => setStarted(true)}
@@ -85,21 +86,21 @@ export default function ProductionHeroMotion() {
         <>
           <source
             media="(max-aspect-ratio: 4 / 5)"
-            src="/videos/aj-luxury-hero-v4-motion-portrait-720x934.mp4"
+            src="/videos/aj-luxury-hero-v4-motion-portrait-720x934.mp4?v=2"
             type="video/mp4"
           />
           <source
             media="(min-aspect-ratio: 801 / 1000) and (min-width: 2200px)"
-            src="/videos/aj-luxury-hero-v4-motion-xl-native-1920x1080.mp4"
+            src="/videos/aj-luxury-hero-v4-motion-xl-native-1920x1080.mp4?v=2"
             type="video/mp4"
           />
           <source
             media="(min-aspect-ratio: 801 / 1000) and (min-width: 1441px)"
-            src="/videos/aj-luxury-hero-v4-motion-desktop-1920x1080.mp4"
+            src="/videos/aj-luxury-hero-v4-motion-desktop-1920x1080.mp4?v=2"
             type="video/mp4"
           />
           <source
-            src="/videos/aj-luxury-hero-v4-motion-tablet-1440x810.mp4"
+            src="/videos/aj-luxury-hero-v4-motion-tablet-1440x810.mp4?v=2"
             type="video/mp4"
           />
         </>

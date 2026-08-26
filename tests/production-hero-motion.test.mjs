@@ -26,7 +26,8 @@ test("the hero film uses only responsive derivatives of the approved V4 poster",
   assert.match(motion, /IntersectionObserver/);
   assert.match(motion, /visibilitychange/);
   assert.match(motion, /preload="none"/);
-  assert.doesNotMatch(motion, /\sloop(?:\s|=)/);
+  assert.match(motion, /\sloop(?:\s|=)/);
+  assert.match(motion, /\.mp4\?v=2/);
   assert.doesNotMatch(`${hero}\n${motion}`, /https?:\/\//i);
   assert.match(builder, /Only retained AJ Luxury pixels are used/);
   assert.match(builder, /hero-v4-portrait-720x934-poster\.webp/);
