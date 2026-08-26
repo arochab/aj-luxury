@@ -324,7 +324,7 @@ test("health and label routing share the exact outbound Sendcloud runtime", () =
   assert.equal(productionOutboundShippingRuntimeConfigured({ ...adminEnv, DELIVERY_REFERENCE_ENCRYPTION_KEY_BASE64: "invalid" }), false);
 });
 
-test("public shipping-label route stays closed while visible legal terms are not ready", async () => {
+test("controlled label route passes public-only legal gates but still requires a durable owner session", async () => {
   const DB = {
     prepare() { throw new Error("D1 must not be touched behind the legal gate"); },
     batch() { throw new Error("D1 must not be touched behind the legal gate"); },
@@ -332,6 +332,29 @@ test("public shipping-label route stays closed while visible legal terms are not
   const response = await productionShippingLabelAdminResponse(
     await adminRequest(),
     { ...adminEnv, DB },
+  );
+  assert.equal(response.status, 403);
+  assert.equal((await response.json()).error.code, "OWNER_SESSION_REQUIRED");
+});
+
+test("public live label route remains closed while legal terms are unresolved", async () => {
+  const DB = {
+    prepare() { throw new Error("D1 must not be touched behind the public legal gate"); },
+    batch() { throw new Error("D1 must not be touched behind the public legal gate"); },
+  };
+  const response = await productionShippingLabelAdminResponse(
+    await adminRequest(),
+    {
+      ...adminEnv,
+      COMMERCE_MODE: "live",
+      COMMERCE_CONTROLLED_ORDER_PROOF_ID: "proof-controlled-order-0001",
+      COMMERCE_PROMOTED_FROM_VERSION_ID: adminEnv.CF_VERSION_METADATA.id,
+      CF_VERSION_METADATA: {
+        ...adminEnv.CF_VERSION_METADATA,
+        id: "018f47ce-24bd-7b16-a1ea-4b3fc2d66b76",
+      },
+      DB,
+    },
   );
   assert.equal(response.status, 503);
   assert.equal((await response.json()).error.code, "COMMERCE_CLOSED");
@@ -379,6 +402,25 @@ test("platform owner headers alone cannot bypass the durable owner session and C
   );
   assert.equal(response.status, 403);
   assert.equal((await response.json()).error.code, "OWNER_SESSION_REQUIRED");
+});
+
+test("controlled labels defer MFA but live labels keep it mandatory", async () => {
+  const DB = { prepare() { throw new Error("D1 must not be touched without cookies"); }, batch() { throw new Error("D1 must not be touched"); } };
+  const controlled = await productionShippingLabelAdminReleaseCoreResponse(
+    await adminRequest(),
+    { ...adminEnv, OPERATOR_ADMIN_MFA_ENABLED: undefined, DB },
+    "https://ajluxurystore.com",
+  );
+  assert.equal(controlled.status, 403);
+  assert.equal((await controlled.json()).error.code, "OWNER_SESSION_REQUIRED");
+
+  const live = await productionShippingLabelAdminReleaseCoreResponse(
+    await adminRequest(),
+    { ...adminEnv, COMMERCE_MODE: "live", OPERATOR_ADMIN_MFA_ENABLED: undefined, DB },
+    "https://ajluxurystore.com",
+  );
+  assert.equal(live.status, 503);
+  assert.equal((await live.json()).error.code, "OUTBOUND_SHIPPING_NOT_ENABLED");
 });
 
 test("release health and the operator route share the exact outbound enablement flag", async () => {

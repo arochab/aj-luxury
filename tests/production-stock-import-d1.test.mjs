@@ -74,7 +74,7 @@ async function manifest() {
   const unsigned = {
     protocol: launchStockImportProtocol,
     manifestId: "ajl-stock-20260825",
-    countedAt: "2026-08-25T08:00:00.000Z",
+    countedAt: "2026-08-25",
     variants: launchVariantSeed.map((variant, index) => ({
       variantId: variant.id,
       internalReference: variant.internalReference,

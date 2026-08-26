@@ -34,8 +34,10 @@ single controlled version: publishing a second controlled version merely to
 turn the flag off would change the Worker version ID and invalidate the
 attestation. Close the import when promoting the separate `live` version, and
 set `COMMERCE_PROMOTED_FROM_VERSION_ID` there to the recorded controlled Worker
-version ID. The unresolved mediator blocker still keeps both controlled payment
-and public commerce closed until the visible legal terms are finalized.
+version ID. The private owner-only controlled order may defer the mediator,
+monitoring-alert approval and operator-MFA gates by the release owner's dated
+decision. All three remain mandatory before promotion to public `live` commerce;
+the controlled exception never represents those tasks as completed.
 
 ### Provider identity attestation
 
@@ -75,8 +77,8 @@ runtime-only groups against the exact release SHA and Worker version:
   vault key version;
 - Resend webhook verification plus transactional dispatch enabled in
   `controlled` mode;
-- operator MFA, late-payment refund dispatch, reservation expiry, returns,
-  shipment handover and reporting activation;
+- late-payment refund dispatch, reservation expiry, returns, shipment handover
+  and reporting activation; operator MFA may be deferred only in `controlled`;
 - the four controlled rate-limit bindings and the exact private bridge origin.
 
 Flags such as `PRODUCTION_STOCK_IMPORT_ENABLED`,
@@ -86,13 +88,14 @@ Flags such as `PRODUCTION_STOCK_IMPORT_ENABLED`,
 `RETURNS_WORKFLOW_ENABLED`, `SHIPMENT_HANDOVER_ENABLED`,
 `COMMERCE_REPORTING_ENABLED` and `OPERATOR_ADMIN_MFA_ENABLED` are runtime release
 decisions, not claims pre-signed in the committed config. The health response
-must remain closed if any required flag, schema proof, identity or legal term is
-missing. In particular, the unresolved mediator entry keeps controlled and live
-commerce closed.
+must remain closed if any gate required for the current mode, schema proof or
+identity is missing. The narrow `controlled` exception does not apply to
+`live`: unresolved mediator details, monitoring approval or operator MFA keep
+public commerce closed.
 
 ### First controlled order evidence
 
-After the legal gate is resolved and before any public promotion, retain one
+Before any public promotion, retain one
 redacted, timestamped evidence packet for the owner-only controlled order. It
 must prove all of the following against one order ID without storing credentials
 or card data:

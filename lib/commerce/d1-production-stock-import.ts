@@ -303,7 +303,10 @@ export async function activateProductionLaunchStock(
       { cause },
     );
   }
-  if (input.activatedAt < validated.countedAt ||
+  const activationPrecedesCount = /^\d{4}-\d{2}-\d{2}$/.test(validated.countedAt)
+    ? input.activatedAt.slice(0, 10) < validated.countedAt
+    : input.activatedAt < validated.countedAt;
+  if (activationPrecedesCount ||
     input.activatedAt < validated.approvedAt.stock_owner ||
     input.activatedAt < validated.approvedAt.release_owner) {
     throw new ProductionStockImportError("ACTIVATION_PRECEDES_APPROVAL", "Activation must follow both exact-payload approvals.");
@@ -338,7 +341,13 @@ export async function activateProductionLaunchStock(
   }
 
   if (catalogEmpty) {
-    await new D1CommerceStore(database).seedLaunchCatalog(validated.countedAt);
+    // The manifest may intentionally record only the verified calendar date.
+    // Catalog rows still require a strict timestamp, so UTC midnight is a
+    // deterministic storage normalization, not a claimed physical count time.
+    const catalogSeededAt = /^\d{4}-\d{2}-\d{2}$/.test(validated.countedAt)
+      ? `${validated.countedAt}T00:00:00.000Z`
+      : validated.countedAt;
+    await new D1CommerceStore(database).seedLaunchCatalog(catalogSeededAt);
   } else if (!await seedOnlyCatalogMatches(database, validated.variants)) {
     throw new ProductionStockImportError("DATABASE_NOT_EMPTY", "The seed-only catalog contains non-seed stock state or mismatched variants.");
   }

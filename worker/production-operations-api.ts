@@ -539,7 +539,10 @@ export async function productionOperationsApiResponse(
   if (!isReporting && !handoverMatch && env.RETURNS_WORKFLOW_ENABLED !== "true") {
     return fail("OPERATIONS_NOT_ACTIVATED", 503);
   }
-  if (!isCustomerReturn && env.OPERATOR_ADMIN_MFA_ENABLED !== "true") {
+  if (
+    !isCustomerReturn && configuration.mode !== "controlled" &&
+    env.OPERATOR_ADMIN_MFA_ENABLED !== "true"
+  ) {
     return fail("OPERATOR_MFA_NOT_ACTIVATED", 503);
   }
   if (

@@ -331,9 +331,12 @@ export function productionCommerceRuntimeBlockers(
         ...(productionOutboundShippingRuntimeConfigured(env)
           ? []
           : ["outbound-shipping-runtime-not-configured"]),
-        ...(env.OPERATOR_ADMIN_MFA_ENABLED === "true"
-          ? []
-          : ["operator-admin-mfa-not-enabled"]),
+        // Customer checkout does not expose operator administration. Keep MFA
+        // mandatory for public `live` promotion while allowing the owner-only
+        // controlled acceptance order to run before the admin console opens.
+        ...(mode !== "controlled" && env.OPERATOR_ADMIN_MFA_ENABLED !== "true"
+          ? ["operator-admin-mfa-not-enabled"]
+          : []),
         ...(productionEmailDispatchRuntimeConfigured(env)
           ? []
           : ["transactional-email-dispatch-not-enabled"]),

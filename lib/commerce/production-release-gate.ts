@@ -224,10 +224,16 @@ function evaluateProductionReleaseGateInternal(
   if (!isApproved(env.BACKUP_RESTORE_DRILL_APPROVED)) {
     blockers.push("backup-restore-drill-unapproved");
   }
-  if (!isApproved(env.MONITORING_ALERTS_APPROVED)) {
+  // The private controlled checkout is already owner-only and is the narrow
+  // acceptance path for the first real order. Every other mode keeps the
+  // explicit monitoring approval gate.
+  if (mode !== "controlled" && !isApproved(env.MONITORING_ALERTS_APPROVED)) {
     blockers.push("monitoring-alerts-unapproved");
   }
-  if (PRELAUNCH_BLOCKERS.length > 0) {
+  // Owner decision recorded on 2026-08-26: defer this formality only for the
+  // private first-order acceptance test. This does not claim completion and
+  // cannot open sandbox or public commerce.
+  if (mode !== "controlled" && PRELAUNCH_BLOCKERS.length > 0) {
     blockers.push("visible-legal-terms-not-ready");
   }
   if (

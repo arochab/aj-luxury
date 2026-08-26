@@ -68,8 +68,8 @@ test("controlled live evidence cannot enable an absent router", () => {
     STRIPE_SECRET_KEY: "sk_live_redacted",
   });
   assert.equal(gate.ready, false);
-  assert.equal(gate.evidenceComplete, false);
-  assert.deepEqual(gate.blockers, ["visible-legal-terms-not-ready", "commerce-router-not-wired"]);
+  assert.equal(gate.evidenceComplete, true);
+  assert.deepEqual(gate.blockers, ["commerce-router-not-wired"]);
   assert.equal(gate.capabilities.realPayment, false);
   assert.equal(gate.capabilities.realDelivery, false);
   assert.equal(gate.capabilities.controlledOrder, false);
@@ -109,6 +109,33 @@ test("public live remains closed until a controlled order proof is recorded", ()
     CF_VERSION_METADATA: { ...base.CF_VERSION_METADATA, id: liveVersionId },
   });
   assert.ok(selfPromotion.blockers.includes("promotion-source-version-missing"));
+});
+
+test("private controlled checkout defers monitoring and mediator gates but public live does not", () => {
+  const controlledGate = evaluateProductionReleaseGate({
+    ...base,
+    COMMERCE_MODE: "controlled",
+    STRIPE_SECRET_KEY: "sk_live_redacted",
+    MONITORING_ALERTS_APPROVED: undefined,
+  });
+  assert.deepEqual(controlledGate.blockers, ["commerce-router-not-wired"]);
+  assert.equal(controlledGate.evidenceComplete, true);
+
+  const liveGate = evaluateProductionReleaseGate({
+    ...base,
+    COMMERCE_MODE: "live",
+    STRIPE_SECRET_KEY: "sk_live_redacted",
+    MONITORING_ALERTS_APPROVED: undefined,
+    COMMERCE_CONTROLLED_ORDER_PROOF_ID: "proof-controlled-order-0001",
+    COMMERCE_PROMOTED_FROM_VERSION_ID: candidateVersionId,
+    CF_VERSION_METADATA: { ...base.CF_VERSION_METADATA, id: liveVersionId },
+  });
+  assert.deepEqual(liveGate.blockers, [
+    "monitoring-alerts-unapproved",
+    "visible-legal-terms-not-ready",
+    "commerce-router-not-wired",
+  ]);
+  assert.equal(liveGate.evidenceComplete, false);
 });
 
 test("approvals and exact origin are bound to the release", () => {

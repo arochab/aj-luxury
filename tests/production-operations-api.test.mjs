@@ -207,7 +207,6 @@ function controlledEnv(db = database()) {
     RETURNS_WORKFLOW_ENABLED: "true",
     RESERVATION_EXPIRY_ENABLED: "true",
     COMMERCE_REPORTING_ENABLED: "true",
-    OPERATOR_ADMIN_MFA_ENABLED: "true",
     SHIPMENT_HANDOVER_ENABLED: "true",
     OPERATOR_RATE_LIMITER: {
       async limit() { return { success: true }; },
@@ -609,6 +608,15 @@ test("owner handover route records one real handover and queues confirmation ide
   );
   assert.equal(unauthenticated.status, 403);
   assert.equal(unauthenticatedDatabase.queries.length, 0);
+
+  const liveWithoutMfaDatabase = database();
+  const liveWithoutMfa = await productionOperationsApiResponse(
+    await makeRequest(),
+    { ...controlledEnv(liveWithoutMfaDatabase), COMMERCE_MODE: "live" },
+  );
+  assert.equal(liveWithoutMfa.status, 503);
+  assert.equal((await liveWithoutMfa.json()).error.code, "OPERATOR_MFA_NOT_ACTIVATED");
+  assert.equal(liveWithoutMfaDatabase.queries.length, 0);
 });
 
 test("reporting is owner-only, aggregate-only and period-bounded", async () => {

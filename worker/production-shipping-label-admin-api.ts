@@ -265,7 +265,7 @@ export async function productionShippingLabelAdminReleaseCoreResponse(
     return fail("CONTROLLED_ACCESS_REQUIRED", 403);
   }
   if (env.OUTBOUND_SHIPMENT_CREATION_ENABLED !== "true" ||
-    env.OPERATOR_ADMIN_MFA_ENABLED !== "true") {
+    (env.COMMERCE_MODE !== "controlled" && env.OPERATOR_ADMIN_MFA_ENABLED !== "true")) {
     return fail("OUTBOUND_SHIPPING_NOT_ENABLED", 503);
   }
   if (!productionOutboundShippingRuntimeConfigured(env)) {

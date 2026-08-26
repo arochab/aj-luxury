@@ -34,7 +34,7 @@ function stockPayload() {
   return {
     protocol: launchStockImportProtocol,
     manifestId: "ajl-stock-20260815",
-    countedAt: "2026-08-15T08:00:00.000Z",
+    countedAt: "2026-08-15",
     variants,
     totals: {
       physicalQuantity: 749,
@@ -85,6 +85,7 @@ test("stock import reconciles the exact 12-variant current grid and reserve buck
     release_owner: "ajl-release-owner",
   });
   assert.match(validated.payloadSha256, /^[0-9a-f]{64}$/);
+  assert.equal(validated.countedAt, "2026-08-15");
 });
 
 test("stock import fails closed on unsigned, reordered, overallocated or tampered inputs", async (t) => {
@@ -94,6 +95,15 @@ test("stock import fails closed on unsigned, reordered, overallocated or tampere
       () => validateLaunchStockImport(manifest),
       (error) =>
         error instanceof LaunchStockImportError && error.code === "APPROVAL_MISSING",
+    );
+  });
+  await t.test("impossible calendar date", async () => {
+    const manifest = await approvedStockManifest();
+    manifest.countedAt = "2026-02-30";
+    await assert.rejects(
+      () => validateLaunchStockImport(manifest),
+      (error) =>
+        error instanceof LaunchStockImportError && error.code === "INVALID_MANIFEST",
     );
   });
   await t.test("reordered variants", async () => {

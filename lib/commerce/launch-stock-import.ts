@@ -84,6 +84,23 @@ export class LaunchStockImportError extends Error {
 
 const safeId = /^[a-z0-9][a-z0-9_.:-]{0,127}$/i;
 const sha256 = /^[0-9a-f]{64}$/;
+const calendarDate = /^\d{4}-\d{2}-\d{2}$/;
+
+function isCanonicalStockCountDate(value: unknown): value is string {
+  if (isCanonicalUtcTimestamp(value)) return true;
+  if (typeof value !== "string" || !calendarDate.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
+function approvalFollowsCount(
+  signedAt: string,
+  countedAt: string,
+): boolean {
+  return calendarDate.test(countedAt)
+    ? signedAt.slice(0, 10) >= countedAt
+    : signedAt >= countedAt;
+}
 
 const expectedVariants = Object.freeze(
   launchVariantSeed.map((variant) => {
@@ -345,8 +362,8 @@ export async function validateLaunchStockImport(
     throw new LaunchStockImportError("INVALID_MANIFEST", "Protocol is invalid.");
   }
   const manifestId = requireSafeId(candidate.manifestId, "Manifest id");
-  if (!isCanonicalUtcTimestamp(candidate.countedAt)) {
-    throw new LaunchStockImportError("INVALID_MANIFEST", "Counted at is invalid.");
+  if (!isCanonicalStockCountDate(candidate.countedAt)) {
+    throw new LaunchStockImportError("INVALID_MANIFEST", "Stock count date is invalid.");
   }
   const rawVariants = candidate.variants;
   if (!Array.isArray(rawVariants) || rawVariants.length !== 12) {
@@ -414,7 +431,7 @@ export async function validateLaunchStockImport(
       approvedBy[role] ||
       signerIds.has(signerId) ||
       !isCanonicalUtcTimestamp(rawApproval.signedAt) ||
-      rawApproval.signedAt < candidate.countedAt ||
+      !approvalFollowsCount(rawApproval.signedAt, candidate.countedAt) ||
       rawApproval.attestation !== "I_APPROVE_THIS_EXACT_STOCK_IMPORT"
     ) {
       throw new LaunchStockImportError(

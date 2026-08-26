@@ -187,13 +187,13 @@ test("health rejects non-GET methods", async () => {
   assert.equal(response.status, 405);
 });
 
-test("Worker keeps controlled routes closed while visible legal terms are not ready", async () => {
-  const response = await productionCommerceApiResponse(
-    new Request("https://ajluxurystore.com/api/commerce/cart"),
-    controlled,
-  );
-  assert.equal(response.status, 503);
-  assert.equal((await response.json()).error.code, "COMMERCE_CLOSED");
+test("controlled runtime does not require the public-only admin MFA gate", () => {
+  const blockers = productionCommerceRuntimeBlockers({
+    ...controlled,
+    MONITORING_ALERTS_APPROVED: undefined,
+    OPERATOR_ADMIN_MFA_ENABLED: undefined,
+  }, "controlled");
+  assert.equal(blockers.includes("operator-admin-mfa-not-enabled"), false);
 });
 
 test("the one-shot stock importer is wired before the stock gate but bound to owner, SHA and exact manifest", async () => {
@@ -308,7 +308,23 @@ test("live runtime opens only after the manual returns label and refund process 
   }, "live").includes("returns-label-and-refund-process-unapproved"), false);
 });
 
-test("legal release blocker closes cart creation before origin or D1 evaluation", async () => {
+test("public live runtime still requires operator admin MFA", () => {
+  const live = {
+    ...controlled,
+    COMMERCE_MODE: "live",
+    LATE_PAYMENT_REFUND_DISPATCH_ENABLED: "true",
+    OUTBOUND_SHIPMENT_CREATION_ENABLED: "true",
+    TRANSACTIONAL_EMAIL_DISPATCH_ENABLED: "true",
+    TRANSACTIONAL_EMAIL_DISPATCH_MODE: "resend",
+    RETURNS_WORKFLOW_ENABLED: "true",
+    SHIPMENT_HANDOVER_ENABLED: "true",
+    RESERVATION_EXPIRY_ENABLED: "true",
+  };
+  assert.ok(productionCommerceRuntimeBlockers(live, "live")
+    .includes("operator-admin-mfa-not-enabled"));
+});
+
+test("controlled cart reaches origin validation after public-only legal gates are deferred", async () => {
   const headers = await authenticatedOwnerHeaders("POST", "/api/commerce/cart");
   const response = await productionCommerceApiResponse(
     new Request("https://ajluxurystore.com/api/commerce/cart", {
@@ -317,11 +333,11 @@ test("legal release blocker closes cart creation before origin or D1 evaluation"
     }),
     controlled,
   );
-  assert.equal(response.status, 503);
-  assert.equal((await response.json()).error.code, "COMMERCE_CLOSED");
+  assert.equal(response.status, 403);
+  assert.equal((await response.json()).error.code, "ORIGIN_REJECTED");
 });
 
-test("service-point purchase remains closed while legal terms are not ready", async () => {
+test("controlled service-point purchase reaches delivery schema validation", async () => {
   const cartToken = "A".repeat(43);
   const csrfToken = "B".repeat(43);
   const headers = await authenticatedOwnerHeaders("POST", "/api/commerce/checkout/service-points");
@@ -340,7 +356,7 @@ test("service-point purchase remains closed while legal terms are not ready", as
     controlled,
   );
   assert.equal(response.status, 503);
-  assert.equal((await response.json()).error.code, "COMMERCE_CLOSED");
+  assert.equal((await response.json()).error.code, "DELIVERY_SCHEMA_NOT_READY");
 });
 
 test("delivery runtime proof rejects missing and prefix-colliding 0013 objects", async () => {
@@ -498,7 +514,7 @@ test("live stock attestation recomputes the exact 12-line manifest and controlle
   assert.equal(await productionStockRuntimeAttested({ ...env, STRIPE_ACCOUNT_ID: "acct_DIFFERENT123456" }), false);
 });
 
-test("controlled payment session stays closed while legal terms are not ready", async () => {
+test("controlled payment session reaches its dedicated runtime validation", async () => {
   const cartToken = "A".repeat(43);
   const csrfToken = "B".repeat(43);
   const headers = await authenticatedOwnerHeaders("POST", "/api/commerce/checkout/payment-session");
@@ -517,7 +533,7 @@ test("controlled payment session stays closed while legal terms are not ready", 
     controlled,
   );
   assert.equal(response.status, 503);
-  assert.equal((await response.json()).error.code, "COMMERCE_CLOSED");
+  assert.equal((await response.json()).error.code, "CONTROLLED_PAYMENT_RUNTIME_NOT_READY");
 });
 
 test("late-refund runtime proof rejects terminal debt and prefix-colliding 0014 objects", async () => {
