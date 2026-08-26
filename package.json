@@ -19,6 +19,7 @@
     "postbuild": "npm run check:analytics-artifacts",
     "start": "vinext start",
     "test": "npm run build && npm run test:analytics-build-canaries && npm run test:analytics-types && node --experimental-strip-types --test tests/hero-video.test.mjs tests/motion-lifecycle.test.mjs tests/commerce-pricing.test.mjs tests/stock-privacy.test.mjs tests/backend-core.test.mjs tests/analytics-foundation.test.mjs tests/preprod-cart-api.test.mjs tests/cart-client.test.mjs tests/parcel-profiles.test.mjs tests/preprod-shipping-quote-api.test.mjs tests/preprod-shipping-client.test.mjs tests/root-typecheck-delta.test.mjs && npm run test:identity-access && npm run test:email-data && node --test tests/d1-migrations.test.mjs && npm run test:email-data-d1 && npm run test:fulfillment && npm run test:gate-c && npm run test:preprod-demo && npm run test:last-mile && node --test tests/i18n-dictionaries.test.mjs tests/i18n-provider.test.mjs tests/model-identity.test.mjs tests/product-gallery-layout.test.mjs tests/rendered-html.test.mjs && npm run test:lot2-policies",
+    "test:hero-motion": "node --test tests/production-hero-motion.test.mjs",
     "test:analytics-types": "tsc --project tsconfig.analytics.json",
     "test:backend": "node --experimental-strip-types --test tests/backend-core.test.mjs",
     "test:d1-migrations": "npm run build && node --test tests/d1-migrations.test.mjs",
