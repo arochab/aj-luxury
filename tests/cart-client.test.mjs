@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
+  addCartPack,
   CartApiError,
   ensureOpenCart,
   getCart,
@@ -117,6 +118,77 @@ test("the client rejects an internally inconsistent server total", async () => {
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("a composed pack keeps one size, repeated colours and its exact ordered payload", async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  const lines = [
+    {
+      variantId: "variant_boxer_rose-pale_m",
+      productId: "product_apollon",
+      productSlug: "rose-pale",
+      colorKey: "rose",
+      colorName: "Rose Velours",
+      size: "M",
+      imageUrl: "/images/client/raw/product-card-rose.webp",
+      quantity: 2,
+      unitPriceCents: 2999,
+      lineTotalCents: 5998,
+      stockState: "available",
+    },
+    {
+      variantId: "variant_boxer_lilas-bleu-clair_m",
+      productId: "product_apollon",
+      productSlug: "lilas-bleu-clair",
+      colorKey: "lilas",
+      colorName: "Lilas Céleste",
+      size: "M",
+      imageUrl: "/images/client/editorial-lilas-chair.webp",
+      quantity: 1,
+      unitPriceCents: 2999,
+      lineTotalCents: 2999,
+      stockState: "available",
+    },
+  ];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url, init });
+    return Response.json({
+      data: snapshot({
+        itemCount: 3,
+        subtotalCents: 6999,
+        lines,
+      }),
+    });
+  };
+
+  const variantIds = [
+    "variant_boxer_rose-pale_m",
+    "variant_boxer_lilas-bleu-clair_m",
+    "variant_boxer_rose-pale_m",
+  ];
+  try {
+    await withDocumentCookie(
+      `__Host-aj_cart_csrf=${csrf}`,
+      () => addCartPack(variantIds, "production", "pack-test-123"),
+    );
+    assert.throws(
+      () => addCartPack([
+        "variant_boxer_rose-pale_m",
+        "variant_boxer_lilas-bleu-clair_l",
+      ], "production", "pack-test-456"),
+      (error) => error instanceof CartApiError && error.code === "INVALID_PACK",
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, "/api/commerce/cart/packs");
+  assert.equal(calls[0].init.method, "POST");
+  assert.equal(calls[0].init.headers["X-CSRF-Token"], csrf);
+  assert.equal(calls[0].init.headers["Idempotency-Key"], "pack-test-123");
+  assert.deepEqual(JSON.parse(calls[0].init.body), { variantIds });
 });
 
 test("the client accepts the exact product slugs and color keys seeded by migration 0008", async () => {
@@ -248,8 +320,6 @@ test("product and cart UI have no demo cart or URL-variant path", async () => {
   assert.match(purchase, /kind: "success"; quantity: number; size: ProductSize/);
   assert.match(purchase, /AJ_APOLLON_PACK_PRICE_CENTS/);
   assert.match(purchase, /currentCart\.itemCount \+ selectedPackSize/);
-  assert.match(purchase, /product\.sameColorPackBody/);
-  assert.match(purchase, /product\.mixedColorPackBody/);
   assert.match(cartClient, /removeCartLine|setCartLineQuantity/);
   assert.match(cartClient, /mutationInFlight\.current = true/);
   assert.match(cartClient, /disabled=\{cartMutating/);
@@ -258,6 +328,66 @@ test("product and cart UI have no demo cart or URL-variant path", async () => {
   assert.match(cartClient, /role="group"[\s\S]*cart\.quantity/);
   assert.match(cartStyles, /\.quantityControl button,[\s\S]*min-height: 44px/);
   assert.match(cartStyles, /@media \(max-width: 360px\)/);
+});
+
+test("PDP pack builder uses one size and sends every selected colour to the cart", async () => {
+  const projectRoot = new URL("../", import.meta.url);
+  const [purchase, productStyles] = await Promise.all([
+    readFile(new URL("app/components/ProductPurchase.tsx", projectRoot), "utf8"),
+    readFile(new URL("app/components/ProductPage.module.css", projectRoot), "utf8"),
+  ]);
+
+  /* Le builder ne doit pas seulement montrer des slots : leur composition
+     doit être la source effective des variantes envoyées au panier. Les
+     assertions restent indépendantes des libellés traduits. */
+  assert.equal(
+    (purchase.match(/useState<ProductSize \| null>/g) ?? []).length,
+    1,
+    "one shared garment-size state serves the whole pack",
+  );
+  assert.match(purchase, /Array\.from\(\{ length: selectedPackSize \}/);
+  assert.match(
+    purchase,
+    /PRODUCT_COLOR_ORDER = \[\s*"pourpre",\s*"rose-pale",\s*"lilas-bleu-clair",/,
+  );
+  assert.match(purchase, /orderedProducts\.map\(\(variant\) =>/);
+  assert.match(
+    purchase,
+    /selectedPackColors\[slotIndex\] === variant\.slug/,
+  );
+  assert.match(purchase, /selectPackColor\(slotIndex, variant\.slug\)/);
+
+  const addToCartSource = purchase.slice(
+    purchase.indexOf("async function addToCart"),
+    purchase.indexOf("function cartFeedbackText"),
+  );
+  assert.match(
+    addToCartSource,
+    /selectedPackColors[\s\S]*addCartPack\(variantIds/,
+    "the cart mutation consumes the active slot colours",
+  );
+  assert.match(
+    addToCartSource,
+    /selectedPackSize === 1[\s\S]*?: selectedPackColors[\s\S]*?\.slice\(0, selectedPackSize\)[\s\S]*?createLaunchVariantId\(productSlug, selectedSize\)/,
+    "only the unit uses the PDP colour; Duo and Trio use every active slot",
+  );
+  assert.match(
+    productStyles,
+    /\.packColorOptions\s*\{[\s\S]*?grid-template-columns:\s*repeat\(3,/,
+  );
+  assert.match(
+    purchase,
+    /className=\{styles\.packColorOption\}[\s\S]*?aria-pressed=/,
+  );
+  assert.doesNotMatch(
+    purchase,
+    /className=\{styles\.packColorOption\}[\s\S]{0,400}?disabled=/,
+    "a colour selected in one slot remains available in every other slot",
+  );
+  assert.match(
+    productStyles,
+    /\.packColorOption\s*\{[\s\S]*?min-height:\s*3\.1[5-9]rem/,
+  );
 });
 
 test("owner account keeps long order and tracking references inside narrow viewports", async () => {

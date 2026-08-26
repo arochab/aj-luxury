@@ -2308,6 +2308,170 @@ test("D1 cart mutations fail closed for unknown stock, expired carts and convert
   database.close();
 });
 
+test("D1 mixed-colour packs add two or three same-size slots atomically and replay safely", async () => {
+  const { database, store } = createFixture();
+  const now = "2099-08-10T12:00:00.000Z";
+  await store.seedLaunchCatalog(now);
+
+  await store.createCart({
+    id: "cart_mixed_pack",
+    expiresAt: "2099-08-17T12:00:00.000Z",
+    now,
+  });
+  const duoInput = {
+    cartId: "cart_mixed_pack",
+    variantIds: [
+      "variant_boxer_pourpre_m",
+      "variant_boxer_rose-pale_m",
+    ],
+    idempotencyKey: "pack-attempt-mixed-0001",
+    now: "2099-08-10T12:01:00.000Z",
+  };
+  const duo = await store.addCartPack(duoInput);
+  const replay = await store.addCartPack({
+    ...duoInput,
+    now: "2099-08-10T12:02:00.000Z",
+  });
+  assert.deepEqual(replay, duo);
+  await assert.rejects(
+    () => store.addCartPack({
+      ...duoInput,
+      variantIds: [
+        "variant_boxer_pourpre_m",
+        "variant_boxer_lilas-bleu-clair_m",
+      ],
+      now: "2099-08-10T12:02:30.000Z",
+    }),
+    (error) =>
+      error instanceof CommerceError && error.code === "IDEMPOTENCY_CONFLICT",
+  );
+  assert.equal(duo.itemCount, 2);
+  assert.equal(duo.subtotalCents, 4_999);
+  assert.deepEqual(
+    duo.lines.map(({ variantId, quantity }) => ({ variantId, quantity })),
+    [
+      { variantId: "variant_boxer_pourpre_m", quantity: 1 },
+      { variantId: "variant_boxer_rose-pale_m", quantity: 1 },
+    ],
+  );
+  assert.equal(
+    database.prepare(
+      "SELECT COUNT(*) AS count FROM audit_log WHERE action = 'cart_pack_added'",
+    ).get().count,
+    1,
+  );
+
+  await store.createCart({
+    id: "cart_racing_pack_replay",
+    expiresAt: "2099-08-17T12:00:00.000Z",
+    now,
+  });
+  const racingInput = {
+    cartId: "cart_racing_pack_replay",
+    variantIds: [
+      "variant_boxer_pourpre_xl",
+      "variant_boxer_rose-pale_xl",
+    ],
+    idempotencyKey: "pack-racing-attempt-0001",
+    now: "2099-08-10T12:02:45.000Z",
+  };
+  const [racingFirst, racingSecond] = await Promise.all([
+    store.addCartPack(racingInput),
+    store.addCartPack(racingInput),
+  ]);
+  assert.deepEqual(racingSecond, racingFirst);
+  assert.equal(racingFirst.itemCount, 2);
+  assert.equal(
+    database.prepare(
+      "SELECT SUM(quantity) AS quantity FROM cart_lines WHERE cart_id = ?",
+    ).get(racingInput.cartId).quantity,
+    2,
+  );
+  assert.equal(
+    database.prepare(
+      `SELECT COUNT(*) AS count FROM audit_log
+      WHERE action = 'cart_pack_added' AND entity_id = ?`,
+    ).get(racingInput.cartId).count,
+    1,
+  );
+
+  await store.createCart({
+    id: "cart_repeated_pack",
+    expiresAt: "2099-08-17T12:00:00.000Z",
+    now,
+  });
+  const repeated = await store.addCartPack({
+    cartId: "cart_repeated_pack",
+    variantIds: [
+      "variant_boxer_lilas-bleu-clair_s",
+      "variant_boxer_lilas-bleu-clair_s",
+      "variant_boxer_pourpre_s",
+    ],
+    now: "2099-08-10T12:03:00.000Z",
+  });
+  assert.equal(repeated.itemCount, 3);
+  assert.equal(repeated.subtotalCents, 6_999);
+  assert.deepEqual(
+    repeated.lines.map(({ variantId, quantity }) => ({ variantId, quantity })),
+    [
+      { variantId: "variant_boxer_pourpre_s", quantity: 1 },
+      { variantId: "variant_boxer_lilas-bleu-clair_s", quantity: 2 },
+    ],
+  );
+
+  await store.createCart({
+    id: "cart_atomic_pack",
+    expiresAt: "2099-08-17T12:00:00.000Z",
+    now,
+  });
+  database.prepare(
+    `INSERT INTO inventory_movements (
+      id, variant_id, kind, quantity, reference_type, reference_id,
+      actor_type, actor_id, idempotency_key, created_at
+    ) VALUES (
+      'movement_pack_stock_guard', 'variant_boxer_rose-pale_l',
+      'gift_allocation', 87, 'gift_reserve_increase', 'pack-stock-guard',
+      'admin', NULL, 'stock:pack-stock-guard', '2099-08-10T12:03:30.000Z'
+    )`,
+  ).run();
+  await assert.rejects(
+    () => store.addCartPack({
+      cartId: "cart_atomic_pack",
+      variantIds: ["variant_boxer_pourpre_l", "variant_boxer_rose-pale_l"],
+      now: "2099-08-10T12:04:00.000Z",
+    }),
+    (error) => error instanceof CommerceError && error.code === "STOCK_UNAVAILABLE",
+  );
+  assert.equal(
+    database.prepare(
+      "SELECT COUNT(*) AS count FROM cart_lines WHERE cart_id = 'cart_atomic_pack'",
+    ).get().count,
+    0,
+  );
+
+  for (const variantIds of [
+    ["variant_boxer_pourpre_s"],
+    ["variant_boxer_pourpre_s", "variant_boxer_rose-pale_m"],
+    ["variant_boxer_pourpre_s", "variant_unknown_s"],
+  ]) {
+    await assert.rejects(
+      () => store.addCartPack({
+        cartId: "cart_atomic_pack",
+        variantIds,
+        now: "2099-08-10T12:05:00.000Z",
+      }),
+      (error) => error instanceof CommerceError && error.code === "INVALID_INPUT",
+    );
+  }
+  assert.equal(
+    database.prepare(
+      "SELECT COUNT(*) AS count FROM cart_lines WHERE cart_id = 'cart_atomic_pack'",
+    ).get().count,
+    0,
+  );
+  database.close();
+});
+
 test("D1 cart mutations stay locked once checkout has reserved stock", async () => {
   const { database, store } = createFixture();
   const now = "2099-08-10T12:00:00.000Z";

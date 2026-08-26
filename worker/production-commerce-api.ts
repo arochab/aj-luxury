@@ -50,6 +50,7 @@ import { isConfiguredStorefrontOrigin } from "./commerce-backend-bridge.ts";
 const PREFIX = "/api/commerce/";
 const routes = Object.freeze({
   health: `${PREFIX}health`, cart: `${PREFIX}cart`,
+  cartPacks: `${PREFIX}cart/packs`,
   delivery: `${PREFIX}checkout/delivery-options`,
   points: `${PREFIX}checkout/service-points`,
   select: `${PREFIX}checkout/delivery-options/select`,
@@ -1008,6 +1009,32 @@ export async function productionCommerceApiResponse(
       const headers = new Headers(); headers.append("Set-Cookie", buildSessionCookie("cart", cartToken, CART_TTL)); headers.append("Set-Cookie", buildCsrfCookie("cart", csrfToken, CART_TTL));
       return json({ data: await commerce.getPublicCartSnapshot(cartId, created) }, 201, headers);
     } catch (cause) { return map(cause); }
+  }
+  if (url.pathname === routes.cartPacks) {
+    if (request.method !== "POST") return fail("METHOD_NOT_ALLOWED", 405);
+    if (!current) return fail("CART_SESSION_REQUIRED", 401);
+    if (!key(request)) return fail("IDEMPOTENCY_KEY_REQUIRED", 400);
+    if (!mutationOk(request, gate.origin, current)) return fail("CSRF_REJECTED", 403);
+    const parsed = await body(request);
+    if (!parsed || !exact(parsed, ["variantIds"]) ||
+      !Array.isArray(parsed.variantIds) ||
+      parsed.variantIds.length < 2 || parsed.variantIds.length > 3 ||
+      parsed.variantIds.some((variantId) => typeof variantId !== "string")) {
+      return fail("INVALID_BODY", 400);
+    }
+    try {
+      return json({ data: await commerce.addCartPack({
+        cartId: current.cartId,
+        variantIds: parsed.variantIds as string[],
+        idempotencyKey: key(request)!,
+        now: now(),
+      }) });
+    } catch (cause) {
+      if (cause instanceof CommerceError && cause.code === "INVALID_INPUT") {
+        return fail("INVALID_BODY", 400);
+      }
+      return map(cause);
+    }
   }
   if (line && (request.method === "PUT" || request.method === "DELETE")) {
     if (!current) return fail("CART_SESSION_REQUIRED", 401);

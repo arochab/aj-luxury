@@ -16,6 +16,7 @@ type LimitClass = "commerce" | "provider" | "webhook" | "operator";
 const exactRoutes = new Map<string, LimitClass>([
   ["/api/commerce/health", "commerce"],
   ["/api/commerce/cart", "commerce"],
+  ["/api/commerce/cart/packs", "commerce"],
   ["/api/commerce/checkout/delivery-options", "provider"],
   ["/api/commerce/checkout/service-points", "provider"],
   ["/api/commerce/checkout/delivery-options/select", "commerce"],

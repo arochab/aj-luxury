@@ -46,7 +46,6 @@ export default function NotreHistoirePage() {
 
       <section className={styles.origin} aria-labelledby="origin-title">
         <div className={styles.actHeading}>
-          <p className={styles.actIndex}>01</p>
           <h2 id="origin-title">
             <T id="story.originTitle" />
           </h2>
@@ -65,7 +64,6 @@ export default function NotreHistoirePage() {
       <section className={styles.people} aria-labelledby="people-title">
         <div className={styles.peopleHeader}>
           <div className={styles.actHeading}>
-            <p className={styles.actIndex}>02</p>
             <h2 id="people-title">Alex &amp; Jérémy</h2>
           </div>
           <p className={styles.peopleStatement}>
@@ -104,7 +102,6 @@ export default function NotreHistoirePage() {
       >
         <div className={styles.definitionCopy}>
           <div className={styles.actHeading}>
-            <p className={styles.actIndex}>03</p>
             <h2 id="definition-title">
               <T id="story.definitionTitle" />
             </h2>

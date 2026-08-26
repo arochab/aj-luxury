@@ -130,6 +130,7 @@ test("cart, provider, webhook and operator traffic use separate bindings", async
   };
   for (const pathname of [
     "/api/commerce/cart",
+    "/api/commerce/cart/packs",
     "/api/commerce/checkout/payment-session",
     "/api/commerce/webhooks/stripe",
     "/api/commerce/admin/orders/order_1/shipping-label",
@@ -148,6 +149,7 @@ test("cart, provider, webhook and operator traffic use separate bindings", async
     ), null);
   }
   assert.deepEqual(calls, [
+    "commerce",
     "commerce",
     "provider",
     "webhook",

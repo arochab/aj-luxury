@@ -10,7 +10,8 @@
   margin-top: 0;
 }
 
-.home :global(.aj-film__hero-poster img) {
+.home :global(.aj-film__hero-poster img),
+.home :global(.aj-film__hero-video) {
   object-fit: contain;
   object-position: center;
 }
@@ -31,7 +32,8 @@
     height: auto;
   }
 
-  .home :global(.aj-film__hero-poster img) {
+  .home :global(.aj-film__hero-poster img),
+  .home :global(.aj-film__hero-video) {
     object-fit: contain;
     object-position: center;
   }
@@ -44,21 +46,22 @@
     --aj-tete-h: 8.7rem;
   }
 
-  /* Mesure du live à 390 × 844 : la photo commence 22 px sous le hero et
-     22 px après son bord gauche, puis s'arrête 22 px avant la signature.
-     Ce cadre plus étroit emploie cover, comme la production, pour rendre les
-     deux modèles à la même échelle sans couper visage ni boxer. */
+  /* Le cadre repart du bord gauche et remplit toute la hauteur disponible,
+     comme le visuel mobile de production : aucun vide latéral ou inférieur.
+     L'ancrage à gauche conserve le bras, les deux visages et les boxers ; le
+     rognage résiduel ne porte que sur le décor à droite. */
   .home :global(.aj-film__hero-stage) {
     top: 22px;
     right: 0;
     bottom: 92px;
-    left: 22px;
+    left: 0;
     height: auto;
   }
 
-  .home :global(.aj-film__hero-poster img) {
+  .home :global(.aj-film__hero-poster img),
+  .home :global(.aj-film__hero-video) {
     object-fit: cover;
-    object-position: 0 0;
+    object-position: left top;
   }
 }
 

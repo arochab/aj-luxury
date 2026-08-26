@@ -700,6 +700,8 @@
 }
 
 .zoomTrigger:focus-visible,
+.packOption:focus-visible,
+.packColorOption:focus-visible,
 .variant:focus-visible,
 .sizeButton:focus-visible,
 .purchaseButton:focus-visible,
@@ -911,6 +913,97 @@
   font-weight: 650;
 }
 
+.packComposer {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 0.8rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid var(--pdp-line);
+}
+
+.packComposerHeading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  font-size: 0.66rem;
+  line-height: 1.4;
+}
+
+.packComposerHeading strong {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.packComposerHeading span {
+  color: var(--pdp-muted);
+  text-align: right;
+}
+
+.packSlots {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.packSlot {
+  min-width: 0;
+  margin: 0;
+  padding: 0.65rem;
+  border: 1px solid var(--pdp-line);
+}
+
+.packSlot legend {
+  padding: 0 0.3rem;
+  color: var(--pdp-muted);
+  font-size: 0.59rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.packColorOptions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.35rem;
+}
+
+.packColorOption {
+  display: grid;
+  min-width: 0;
+  min-height: 3.15rem;
+  grid-template-columns: 0.75rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.45rem;
+  border: 1px solid transparent;
+  background: #f1f1ee;
+  color: var(--pdp-ink);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.63rem;
+  line-height: 1.2;
+  text-align: left;
+}
+
+.packColorOption:hover {
+  border-color: var(--pdp-muted);
+}
+
+.packColorOption[aria-pressed="true"] {
+  border-color: var(--pdp-ink);
+  background: #fff;
+  box-shadow: inset 0 0 0 1px var(--pdp-ink);
+}
+
+.packColorSwatch {
+  width: 0.75rem;
+  height: 0.75rem;
+  border: 1px solid rgba(18, 18, 20, 0.18);
+  border-radius: 50%;
+}
+
 .packExplanation {
   margin: 0.8rem 0 0;
   color: var(--pdp-muted);
@@ -993,6 +1086,29 @@
 
   .packOptionBottomline {
     flex-wrap: wrap;
+  }
+
+  .packComposerHeading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .packComposerHeading span {
+    text-align: left;
+  }
+
+  .packColorOption {
+    min-height: 3.35rem;
+    grid-template-columns: 0.65rem minmax(0, 1fr);
+    gap: 0.35rem;
+    padding: 0.35rem;
+    font-size: 0.6rem;
+  }
+
+  .packColorSwatch {
+    width: 0.65rem;
+    height: 0.65rem;
   }
 
   .sizeOptions {

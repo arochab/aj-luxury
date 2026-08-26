@@ -152,6 +152,7 @@ const CACHEABLE_HTML_ROUTES = new Set([
 const HTML_CACHE_VERSION = "2026-08-21-hero-v6";
 const PREPROD_API_PREFIX = "/api/preprod/";
 const PREPROD_CART_PATH = `${PREPROD_API_PREFIX}cart`;
+const PREPROD_CART_PACK_PATH = `${PREPROD_CART_PATH}/packs`;
 const PREPROD_CART_LINE_PATTERN = /^\/api\/preprod\/cart\/lines\/([^/]+)$/;
 const PREPROD_SHIPPING_QUOTE_PATH =
   `${PREPROD_API_PREFIX}checkout/shipping-quote`;
@@ -886,6 +887,38 @@ async function parseCartQuantity(request: Request): Promise<number | null> {
     (quantity as number) >= 1 &&
     (quantity as number) <= CART_MAX_QUANTITY
     ? (quantity as number)
+    : null;
+}
+
+async function parseCartPackVariantIds(
+  request: Request,
+): Promise<readonly string[] | null> {
+  const contentType = request.headers.get("Content-Type")?.split(";", 1)[0].trim();
+  if (contentType !== "application/json") return null;
+
+  let body: unknown;
+  try {
+    const bytes = await readBoundedBody(request, 1024);
+    if (bytes === null) return null;
+    body = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+  } catch {
+    return null;
+  }
+  if (
+    typeof body !== "object" ||
+    body === null ||
+    Array.isArray(body) ||
+    Object.getPrototypeOf(body) !== Object.prototype ||
+    Object.keys(body).length !== 1 ||
+    !("variantIds" in body)
+  ) {
+    return null;
+  }
+  const variantIds = (body as { variantIds?: unknown }).variantIds;
+  return Array.isArray(variantIds) &&
+    variantIds.length >= 2 && variantIds.length <= 3 &&
+    variantIds.every((variantId) => typeof variantId === "string")
+    ? variantIds
     : null;
 }
 
@@ -1921,10 +1954,15 @@ async function handleCartApi(
   url: URL,
 ): Promise<Response | null> {
   const isCartPath = url.pathname === PREPROD_CART_PATH;
+  const isPackPath = url.pathname === PREPROD_CART_PACK_PATH;
   const lineMatch = PREPROD_CART_LINE_PATTERN.exec(url.pathname);
-  if (!isCartPath && !lineMatch) return null;
+  if (!isCartPath && !isPackPath && !lineMatch) return null;
 
-  const allowedMethods = isCartPath ? "GET, POST" : "PUT, DELETE";
+  const allowedMethods = isCartPath
+    ? "GET, POST"
+    : isPackPath
+      ? "POST"
+      : "PUT, DELETE";
   if (!allowedMethods.split(", ").includes(request.method)) {
     const headers = new Headers({ Allow: allowedMethods });
     return cartErrorResponse(
@@ -2166,6 +2204,61 @@ async function handleCartApi(
     }
   }
 
+  if (isPackPath && request.method === "POST") {
+    if (!session) {
+      return cartErrorResponse(
+        "CART_SESSION_INVALID",
+        "Le panier doit être initialisé.",
+        401,
+      );
+    }
+    if (!mutationIsAuthorized(request, env)) {
+      return cartErrorResponse(
+        "CSRF_REJECTED",
+        "La requête n’est pas autorisée.",
+        403,
+      );
+    }
+    const variantIds = await parseCartPackVariantIds(request);
+    if (!variantIds) {
+      return cartErrorResponse(
+        "INVALID_BODY",
+        "Le pack doit contenir deux ou trois variantes de même taille.",
+        400,
+      );
+    }
+    const idempotencyKey = request.headers.get("Idempotency-Key") ?? undefined;
+    if (
+      idempotencyKey !== undefined &&
+      !SHIPPING_QUOTE_IDEMPOTENCY_PATTERN.test(idempotencyKey)
+    ) {
+      return cartErrorResponse(
+        "INVALID_BODY",
+        "La clé d’idempotence est invalide.",
+        400,
+      );
+    }
+    try {
+      return jsonResponse({
+        data: await store.addCartPack({
+          cartId: session.cartId,
+          variantIds,
+          idempotencyKey,
+          now: new Date().toISOString(),
+        }),
+      });
+    } catch (error) {
+      if (error instanceof CommerceError && error.code === "INVALID_INPUT") {
+        return cartErrorResponse(
+          "INVALID_BODY",
+          "Le pack doit contenir deux ou trois variantes de même taille.",
+          400,
+        );
+      }
+      return mapCartError(error);
+    }
+  }
+
   if (lineMatch && (request.method === "PUT" || request.method === "DELETE")) {
     if (!session) {
       return cartErrorResponse(
@@ -2283,6 +2376,7 @@ export async function preprodApiResponse(
       );
     } else if (
       url.pathname === PREPROD_CART_PATH ||
+      url.pathname === PREPROD_CART_PACK_PATH ||
       PREPROD_CART_LINE_PATTERN.test(url.pathname)
     ) {
       logPreprodUnavailable(
@@ -2475,6 +2569,7 @@ export async function preprodApiResponse(
   if (syntheticGate.required && !syntheticGate.ready) {
     if (
       url.pathname === PREPROD_CART_PATH ||
+      url.pathname === PREPROD_CART_PACK_PATH ||
       PREPROD_CART_LINE_PATTERN.test(url.pathname)
     ) {
       logPreprodUnavailable(

@@ -251,7 +251,7 @@ function productionIdempotencyHeaders(
   mode: ActiveCommerceRuntimeMode,
   idempotencyKey: string | undefined,
 ): HeadersInit {
-  if (mode === "preproduction") return {};
+  if (mode === "preproduction" && idempotencyKey === undefined) return {};
   if (!idempotencyKey || !IDEMPOTENCY_KEY_PATTERN.test(idempotencyKey)) {
     throw new CartApiError("IDEMPOTENCY_KEY_REQUIRED");
   }
@@ -326,6 +326,35 @@ export function setCartLineQuantity(
       body: JSON.stringify({ quantity }),
     },
   );
+}
+
+export function addCartPack(
+  variantIds: readonly string[],
+  mode: ActiveCommerceRuntimeMode = "preproduction",
+  idempotencyKey?: string,
+): Promise<PublicCartSnapshot> {
+  if (variantIds.length < 2 || variantIds.length > 3) {
+    throw new CartApiError("INVALID_PACK");
+  }
+  const variants = variantIds.map(
+    (variantId) =>
+      publicVariantContract[variantId as keyof typeof publicVariantContract],
+  );
+  if (
+    variants.some((variant) => !variant) ||
+    variants.some((variant) => variant[2] !== variants[0][2])
+  ) {
+    throw new CartApiError("INVALID_PACK");
+  }
+
+  return cartRequest(`${cartApiPath(mode)}/packs`, {
+    method: "POST",
+    headers: {
+      ...mutationHeaders(true),
+      ...productionIdempotencyHeaders(mode, idempotencyKey),
+    },
+    body: JSON.stringify({ variantIds }),
+  });
 }
 
 export function removeCartLine(

@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { getLocalizedProductCopy } from "@/lib/i18n/product-copy";
 import {
+  addCartPack,
   CartApiError,
   ensureOpenCart,
   getCart,
@@ -28,6 +29,11 @@ import type { CommerceRuntimeMode } from "../../lib/commerce/commerce-runtime";
    stable entre le rendu serveur et l'hydratation, ce qu'un id généré ne
    garantirait pas pour une cible d'`aria-describedby`. */
 const NOTICE_ID = "aj-purchase-notice";
+const PRODUCT_COLOR_ORDER = [
+  "pourpre",
+  "rose-pale",
+  "lilas-bleu-clair",
+] as const;
 
 type PackSize = keyof typeof AJ_APOLLON_PACK_PRICE_CENTS;
 
@@ -80,6 +86,9 @@ export default function ProductPurchase({
 }: ProductPurchaseProps) {
   const [selectedSize, setSelectedSize] = useState<ProductSize | null>(null);
   const [selectedPackSize, setSelectedPackSize] = useState<PackSize>(1);
+  const [selectedPackColors, setSelectedPackColors] = useState<string[]>(() =>
+    Array.from({ length: AJ_APOLLON_MAX_PACK_SIZE }, () => product.slug),
+  );
   const [feedback, setFeedback] = useState<
     | { kind: "success"; quantity: number; size: ProductSize }
     | { kind: "error"; code: string }
@@ -93,13 +102,17 @@ export default function ProductPurchase({
   const cartError = useRef<HTMLParagraphElement>(null);
   const cartRequestInFlight = useRef(false);
   const cartCreateAttempt = useRef<string | null>(null);
-  const cartLineAttempt = useRef<{
+  const cartMutationAttempt = useRef<{
     fingerprint: string;
     key: string;
   } | null>(null);
   const restoreSizeGuideFocus = useRef(false);
   const { locale, t } = useI18n();
   const localizedProduct = getLocalizedProductCopy(t, product.slug);
+  const orderedProducts = PRODUCT_COLOR_ORDER.flatMap((slug) => {
+    const variant = products.find((candidate) => candidate.slug === slug);
+    return variant ? [variant] : [];
+  });
 
   /* Une seule lecture de la disponibilité, la même pour l'étiquette, l'état
      grisé et le garde-fou de sélection. `null` = non résolue. */
@@ -130,6 +143,13 @@ export default function ProductPurchase({
 
   function selectPackSize(packSize: PackSize) {
     setSelectedPackSize(packSize);
+    setFeedback(null);
+  }
+
+  function selectPackColor(slotIndex: number, productSlug: string) {
+    setSelectedPackColors((current) =>
+      current.map((slug, index) => index === slotIndex ? productSlug : slug),
+    );
     setFeedback(null);
   }
 
@@ -271,7 +291,12 @@ export default function ProductPurchase({
     setCartBusy(true);
     setFeedback(null);
     try {
-      const variantId = createLaunchVariantId(product.slug, selectedSize);
+      const variantIds = selectedPackSize === 1
+        ? [createLaunchVariantId(product.slug, selectedSize)]
+        : selectedPackColors
+            .slice(0, selectedPackSize)
+            .map((productSlug) =>
+              createLaunchVariantId(productSlug, selectedSize));
       if (runtimeMode === "closed") throw new CartApiError("CART_UNAVAILABLE");
       let currentCart;
       if (runtimeMode === "production") {
@@ -285,47 +310,64 @@ export default function ProductPurchase({
       } else {
         currentCart = await ensureOpenCart("preproduction");
       }
-      const currentQuantity =
-        currentCart.lines.find((line) => line.variantId === variantId)
-          ?.quantity ?? 0;
-      if (
-        currentQuantity >= 5 ||
-        (runtimeMode === "production" && currentCart.itemCount >= 3)
-      ) {
+      if (currentCart.itemCount + selectedPackSize > AJ_APOLLON_MAX_PACK_SIZE) {
         throw new CartApiError("MAX_QUANTITY");
       }
 
-      const nextQuantity = currentQuantity + selectedPackSize;
-      if (
-        nextQuantity > AJ_APOLLON_MAX_PACK_SIZE ||
-        currentCart.itemCount + selectedPackSize > AJ_APOLLON_MAX_PACK_SIZE
-      ) {
+      const requestedQuantities = new Map<string, number>();
+      for (const variantId of variantIds) {
+        requestedQuantities.set(
+          variantId,
+          (requestedQuantities.get(variantId) ?? 0) + 1,
+        );
+      }
+      const exceedsVariantLimit = Array.from(requestedQuantities).some(
+        ([variantId, addition]) =>
+          (currentCart.lines.find((line) => line.variantId === variantId)
+            ?.quantity ?? 0) + addition > AJ_APOLLON_MAX_PACK_SIZE,
+      );
+      if (exceedsVariantLimit) {
         throw new CartApiError("MAX_QUANTITY");
       }
 
-      const fingerprint = `${variantId}:${nextQuantity}`;
+      const fingerprint = selectedPackSize === 1
+        ? `line:${variantIds[0]}:${
+            (currentCart.lines.find((line) =>
+              line.variantId === variantIds[0])?.quantity ?? 0) + 1}`
+        : `pack:${variantIds.join(",")}`;
       const lineKey = runtimeMode === "production"
-        ? cartLineAttempt.current?.fingerprint === fingerprint
-          ? cartLineAttempt.current.key
+        ? cartMutationAttempt.current?.fingerprint === fingerprint
+          ? cartMutationAttempt.current.key
           : crypto.randomUUID()
         : undefined;
       if (runtimeMode === "production" && lineKey) {
-        cartLineAttempt.current = { fingerprint, key: lineKey };
+        cartMutationAttempt.current = { fingerprint, key: lineKey };
       }
-      const updatedCart = await setCartLineQuantity(
-        variantId,
-        nextQuantity,
-        runtimeMode,
-        lineKey,
+      const updatedCart = selectedPackSize === 1
+        ? await setCartLineQuantity(
+            variantIds[0],
+            (currentCart.lines.find((line) =>
+              line.variantId === variantIds[0])?.quantity ?? 0) + 1,
+            runtimeMode,
+            lineKey,
+          )
+        : await addCartPack(variantIds, runtimeMode, lineKey);
+      cartMutationAttempt.current = null;
+      const packPersisted = Array.from(requestedQuantities).every(
+        ([variantId, addition]) => {
+          const previousQuantity = currentCart.lines.find(
+            (line) => line.variantId === variantId,
+          )?.quantity ?? 0;
+          const updatedQuantity = updatedCart.lines.find(
+            (line) => line.variantId === variantId,
+          )?.quantity ?? 0;
+          return updatedQuantity >= previousQuantity + addition;
+        },
       );
-      cartLineAttempt.current = null;
-      const updatedLine = updatedCart.lines.find(
-        (line) => line.variantId === variantId,
-      );
-      if (!updatedLine) throw new CartApiError("MALFORMED_RESPONSE");
+      if (!packPersisted) throw new CartApiError("MALFORMED_RESPONSE");
       setFeedback({
         kind: "success",
-        quantity: updatedLine.quantity,
+        quantity: selectedPackSize,
         size: selectedSize,
       });
     } catch (error) {
@@ -462,11 +504,57 @@ export default function ProductPurchase({
           ))}
         </div>
 
+        {selectedPackSize > 1 && (
+          <div className={styles.packComposer}>
+            <div className={styles.packComposerHeading}>
+              <strong>{t("product.composePack")}</strong>
+              <span>{t("product.oneSizeForPack")}</span>
+            </div>
+
+            <div className={styles.packSlots}>
+              {Array.from({ length: selectedPackSize }, (_, slotIndex) => (
+                <fieldset className={styles.packSlot} key={slotIndex}>
+                  <legend>
+                    {t("product.packPiece").replace(
+                      "{count}",
+                      String(slotIndex + 1),
+                    )}
+                  </legend>
+                  <div className={styles.packColorOptions}>
+                    {orderedProducts.map((variant) => (
+                      <button
+                        className={styles.packColorOption}
+                        type="button"
+                        key={variant.slug}
+                        aria-pressed={
+                          selectedPackColors[slotIndex] === variant.slug
+                        }
+                        aria-label={`${t("product.packPiece").replace(
+                          "{count}",
+                          String(slotIndex + 1),
+                        )} — ${variant.name}`}
+                        onClick={() =>
+                          selectPackColor(slotIndex, variant.slug)}
+                      >
+                        <span
+                          className={styles.packColorSwatch}
+                          style={{ backgroundColor: variant.swatch }}
+                          aria-hidden="true"
+                        />
+                        <span>{variant.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                </fieldset>
+              ))}
+            </div>
+          </div>
+        )}
+
         <p className={styles.packExplanation}>
-          <strong>{t("product.sameColorPack")}</strong>{" "}
-          {t("product.sameColorPackBody")}{" "}
-          <strong>{t("product.mixedColorPack")}</strong>{" "}
-          {t("product.mixedColorPackBody")}
+          {selectedPackSize === 1
+            ? t("product.unitColorNotice")
+            : t("product.packColorNotice")}
         </p>
       </fieldset>
 
@@ -476,7 +564,7 @@ export default function ProductPurchase({
           <strong>{product.color}</strong>
         </div>
         <div className={styles.variantOptions}>
-          {products.map((variant) => (
+          {orderedProducts.map((variant) => (
             <Link
               className={`${styles.variant} ${
                 variant.slug === product.slug ? styles.variantActive : ""

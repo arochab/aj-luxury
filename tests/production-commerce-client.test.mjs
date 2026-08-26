@@ -6,6 +6,7 @@ import {
   resolveCommerceRuntimeMode,
 } from "../lib/commerce/commerce-runtime.ts";
 import {
+  addCartPack,
   ensureOpenCart,
   getCart,
   setCartLineQuantity,
@@ -118,6 +119,11 @@ test("production cart mutations require and replay the exact attempt key", async
         "production",
         "cart-line-attempt-0001",
       );
+      await addCartPack(
+        ["variant_boxer_pourpre_m", "variant_boxer_rose-pale_m"],
+        "production",
+        "cart-pack-attempt-0001",
+      );
     });
   } finally {
     globalThis.fetch = originalFetch;
@@ -126,14 +132,50 @@ test("production cart mutations require and replay the exact attempt key", async
     "/api/commerce/cart",
     "/api/commerce/cart",
     "/api/commerce/cart/lines/variant_boxer_pourpre_m",
+    "/api/commerce/cart/packs",
   ]);
   assert.equal(calls[1].init.headers["Idempotency-Key"], "cart-create-attempt-0001");
   assert.equal(calls[2].init.headers["X-CSRF-Token"], csrf);
   assert.equal(calls[2].init.headers["Idempotency-Key"], "cart-line-attempt-0001");
+  assert.equal(calls[3].init.headers["X-CSRF-Token"], csrf);
+  assert.equal(calls[3].init.headers["Idempotency-Key"], "cart-pack-attempt-0001");
+  assert.deepEqual(JSON.parse(calls[3].init.body), {
+    variantIds: ["variant_boxer_pourpre_m", "variant_boxer_rose-pale_m"],
+  });
   await withDocumentCookie(() => assert.throws(
     () => setCartLineQuantity("variant_boxer_pourpre_m", 1, "production"),
     /IDEMPOTENCY_KEY_REQUIRED/,
   ));
+  await withDocumentCookie(() => assert.throws(
+    () => addCartPack(
+      ["variant_boxer_pourpre_m", "variant_boxer_rose-pale_m"],
+      "production",
+    ),
+    /IDEMPOTENCY_KEY_REQUIRED/,
+  ));
+});
+
+test("pack client rejects non-launch or mixed-size compositions before fetch", async () => {
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls += 1;
+    return Response.json({ data: cartSnapshot() });
+  };
+  try {
+    await withDocumentCookie(() => {
+      for (const variantIds of [
+        ["variant_boxer_pourpre_m"],
+        ["variant_boxer_pourpre_m", "variant_boxer_rose-pale_l"],
+        ["variant_boxer_pourpre_m", "variant_unknown_m"],
+      ]) {
+        assert.throws(() => addCartPack(variantIds), /INVALID_PACK/);
+      }
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+  assert.equal(calls, 0);
 });
 
 test("an ambiguous cart network retry keeps the caller's semantic key", async () => {

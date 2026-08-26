@@ -1,3 +1,5 @@
+import ProductionHeroMotion from "./ProductionHeroMotion";
+
 const PORTRAIT_SRC_SET =
   "/images/client/hero-v4-portrait-480x623-poster.webp 480w, /images/client/hero-v4-portrait-720x934-poster.webp 720w";
 
@@ -5,7 +7,7 @@ export default function StaticProductionHero() {
   return (
     <div
       className="aj-film__hero-scene"
-      data-hero-version="poster-v4-static"
+      data-hero-version="v4-motion-from-approved-poster"
     >
       <div className="aj-film__hero-media">
         <div className="aj-film__hero-stage">
@@ -52,6 +54,7 @@ export default function StaticProductionHero() {
               decoding="async"
             />
           </picture>
+          <ProductionHeroMotion />
         </div>
       </div>
 

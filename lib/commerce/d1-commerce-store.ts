@@ -88,8 +88,21 @@ type CartMutationLockRow = {
   order_count: number;
 };
 
+type CartPackReplayRow = {
+  metadata_json: string;
+};
+
+type CartPackReplayMetadata = {
+  variantIds: unknown;
+  cart: unknown;
+  lines: unknown;
+};
+
 const launchProductSlugByVariantId = new Map(
   launchVariantSeed.map((variant) => [variant.id, variant.sourceSlug] as const),
+);
+const launchVariantById = new Map(
+  launchVariantSeed.map((variant) => [variant.id, variant] as const),
 );
 
 type SeedIntegrityRow = {
@@ -142,6 +155,23 @@ export type SetCartLineQuantityInput = Readonly<{
   quantity: number;
   now: string;
 }>;
+
+export type AddCartPackInput = Readonly<{
+  cartId: string;
+  variantIds: readonly string[];
+  idempotencyKey?: string;
+  now: string;
+}>;
+
+const CART_PACK_IDEMPOTENCY_KEY_PATTERN =
+  /^[A-Za-z0-9][A-Za-z0-9_.:-]{7,127}$/;
+
+async function sha256Hex(value: string): Promise<string> {
+  const digest = new Uint8Array(
+    await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value)),
+  );
+  return Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
 
 export type RemoveCartLineInput = Readonly<{
   cartId: string;
@@ -595,6 +625,89 @@ export class D1CommerceStore {
     });
   }
 
+  #cartPackReplaySnapshot(
+    replay: CartPackReplayRow,
+    variantIds: readonly string[],
+    now: string,
+  ): PublicCartSnapshot {
+    let metadata: CartPackReplayMetadata;
+    try {
+      metadata = JSON.parse(replay.metadata_json) as CartPackReplayMetadata;
+    } catch (error) {
+      throw new CommerceError(
+        "IDEMPOTENCY_CONFLICT",
+        "The cart pack replay receipt is invalid.",
+        { cause: error },
+      );
+    }
+    if (
+      !Array.isArray(metadata.variantIds) ||
+      metadata.variantIds.length !== variantIds.length ||
+      metadata.variantIds.some(
+        (variantId, index) => variantId !== variantIds[index],
+      ) ||
+      typeof metadata.cart !== "object" || metadata.cart === null ||
+      Array.isArray(metadata.cart) ||
+      !Array.isArray(metadata.lines)
+    ) {
+      throw new CommerceError(
+        "IDEMPOTENCY_CONFLICT",
+        "The idempotency key was already used for different pack input.",
+      );
+    }
+    const cart = metadata.cart as Partial<CartRow>;
+    const rows: CartLineSnapshotRow[] = [];
+    for (const candidate of metadata.lines) {
+      if (typeof candidate !== "object" || candidate === null || Array.isArray(candidate)) {
+        throw new CommerceError(
+          "IDEMPOTENCY_CONFLICT",
+          "The cart pack replay receipt is invalid.",
+        );
+      }
+      const line = candidate as Partial<CartLineSnapshotRow>;
+      if (
+        typeof line.variant_id !== "string" ||
+        typeof line.product_id !== "string" ||
+        typeof line.color_key !== "string" ||
+        typeof line.color_name !== "string" ||
+        typeof line.size !== "string" ||
+        typeof line.image_url !== "string" ||
+        !Number.isSafeInteger(line.quantity) ||
+        !Number.isSafeInteger(line.unit_price_cents) ||
+        !Number.isSafeInteger(line.available_to_sell)
+      ) {
+        throw new CommerceError(
+          "IDEMPOTENCY_CONFLICT",
+          "The cart pack replay receipt is invalid.",
+        );
+      }
+      rows.push(line as CartLineSnapshotRow);
+    }
+    if (
+      typeof cart.id !== "string" ||
+      cart.status !== "open" ||
+      cart.currency !== "EUR" ||
+      typeof cart.expires_at !== "string"
+    ) {
+      throw new CommerceError(
+        "IDEMPOTENCY_CONFLICT",
+        "The cart pack replay receipt is invalid.",
+      );
+    }
+    return this.#toPublicCartSnapshot(
+      {
+        id: cart.id,
+        customer_id: null,
+        email: null,
+        status: cart.status,
+        currency: cart.currency,
+        expires_at: cart.expires_at,
+      },
+      rows,
+      now,
+    );
+  }
+
   async setCartLineQuantity(
     input: SetCartLineQuantityInput,
   ): Promise<PublicCartSnapshot> {
@@ -685,6 +798,276 @@ export class D1CommerceStore {
       }
       return this.#toPublicCartSnapshot(cart, lineResult.results, input.now);
     } catch (error) {
+      mapCommerceDatabaseError(error);
+    }
+  }
+
+  async addCartPack(input: AddCartPackInput): Promise<PublicCartSnapshot> {
+    assertSafeIdentifier(input.cartId, "cartId");
+    assertIsoTimestamp(input.now, "now");
+    if (
+      input.idempotencyKey !== undefined &&
+      !CART_PACK_IDEMPOTENCY_KEY_PATTERN.test(input.idempotencyKey)
+    ) {
+      throw new CommerceError("INVALID_INPUT", "The idempotency key is invalid.");
+    }
+    if (input.variantIds.length < 2 || input.variantIds.length > 3) {
+      throw new CommerceError(
+        "INVALID_INPUT",
+        "A pack must contain exactly two or three pieces.",
+      );
+    }
+
+    const requested = new Map<string, number>();
+    let packSize: string | null = null;
+    for (const variantId of input.variantIds) {
+      assertSafeIdentifier(variantId, "variantId");
+      const variant = launchVariantById.get(variantId);
+      if (!variant) {
+        throw new CommerceError("INVALID_INPUT", "The pack variant is invalid.");
+      }
+      if (packSize !== null && variant.size !== packSize) {
+        throw new CommerceError(
+          "INVALID_INPUT",
+          "Every piece in a pack must use the same size.",
+        );
+      }
+      packSize = variant.size;
+      requested.set(variantId, (requested.get(variantId) ?? 0) + 1);
+    }
+
+    const requestedEntries = [...requested.entries()];
+    const requestedValues = requestedEntries.map(() => "(?, ?)").join(", ");
+    const requestedBindings = requestedEntries.flatMap(([variantId, quantity]) => [
+      variantId,
+      quantity,
+    ]);
+    const variantPlaceholders = requestedEntries.map(() => "?").join(", ");
+    const receiptHash = await sha256Hex(
+      `${input.cartId}\0${input.idempotencyKey ?? crypto.randomUUID()}`,
+    );
+    const replayKey = `cart-pack:${receiptHash}`;
+    if (input.idempotencyKey) {
+      const replay = await this.#database
+        .prepare("SELECT metadata_json FROM audit_log WHERE idempotency_key = ?")
+        .bind(replayKey)
+        .first<CartPackReplayRow>();
+      if (replay) {
+        return this.#cartPackReplaySnapshot(replay, input.variantIds, input.now);
+      }
+    }
+
+    try {
+      const [
+        cartResult,
+        locksResult,
+        variantResult,
+        beforeResult,
+        ,
+        ,
+        afterResult,
+      ] = await this.#database.batch<
+        [
+          CartRow,
+          CartMutationLockRow,
+          SellableVariantRow,
+          CartLineSnapshotRow,
+          Record<string, never>,
+          Record<string, never>,
+          CartLineSnapshotRow,
+        ]
+      >([
+        this.#cartSnapshotStatement(input.cartId),
+        this.#cartMutationLockStatement(input.cartId),
+        this.#database
+          .prepare(
+            `SELECT variant.id AS variant_id,
+              product.price_cents AS unit_price_cents,
+              stock.physical_quantity - stock.gift_reserve_quantity
+                - stock.safety_reserve_quantity - stock.active_reserved_quantity
+                - stock.sold_quantity AS available_to_sell
+            FROM variants AS variant
+            INNER JOIN products AS product ON product.id = variant.product_id
+            INNER JOIN inventory AS stock ON stock.variant_id = variant.id
+            WHERE variant.id IN (${variantPlaceholders})
+              AND variant.active = 1 AND product.status = 'active'
+              AND product.currency = 'EUR'`,
+          )
+          .bind(...requestedEntries.map(([variantId]) => variantId)),
+        this.#cartLineSnapshotStatement(input.cartId),
+        this.#database
+          .prepare(
+            `WITH requested(variant_id, add_quantity) AS (
+              VALUES ${requestedValues}
+            ), eligible_cart AS (
+              SELECT cart.id
+              FROM carts AS cart
+              WHERE cart.id = ? AND cart.status = 'open' AND cart.expires_at > ?
+                AND COALESCE((
+                  SELECT SUM(existing.quantity)
+                  FROM cart_lines AS existing
+                  WHERE existing.cart_id = cart.id
+                ), 0) + ? <= 3
+                AND NOT EXISTS (
+                  SELECT 1 FROM stock_reservations WHERE cart_id = cart.id
+                )
+                AND NOT EXISTS (SELECT 1 FROM orders WHERE cart_id = cart.id)
+                AND (SELECT COUNT(*) FROM requested) = (
+                  SELECT COUNT(*)
+                  FROM requested AS item
+                  INNER JOIN variants AS variant ON variant.id = item.variant_id
+                  INNER JOIN products AS product ON product.id = variant.product_id
+                  INNER JOIN inventory AS stock ON stock.variant_id = variant.id
+                  LEFT JOIN cart_lines AS existing
+                    ON existing.cart_id = cart.id
+                    AND existing.variant_id = item.variant_id
+                  WHERE variant.active = 1 AND product.status = 'active'
+                    AND product.currency = 'EUR'
+                    AND stock.physical_quantity - stock.gift_reserve_quantity
+                      - stock.safety_reserve_quantity
+                      - stock.active_reserved_quantity - stock.sold_quantity
+                      >= COALESCE(existing.quantity, 0) + item.add_quantity
+                )
+            )
+            INSERT INTO cart_lines (
+              id, cart_id, variant_id, quantity, unit_price_cents, created_at,
+              updated_at
+            )
+            SELECT 'line:' || cart.id || ':' || item.variant_id,
+              cart.id, item.variant_id, item.add_quantity,
+              product.price_cents, ?, ?
+            FROM eligible_cart AS cart
+            CROSS JOIN requested AS item
+            INNER JOIN variants AS variant ON variant.id = item.variant_id
+            INNER JOIN products AS product ON product.id = variant.product_id
+            WHERE 1 = 1
+            ON CONFLICT(cart_id, variant_id) DO UPDATE SET
+              quantity = cart_lines.quantity + excluded.quantity,
+              updated_at = excluded.updated_at`,
+          )
+          .bind(
+            ...requestedBindings,
+            input.cartId,
+            input.now,
+            input.variantIds.length,
+            input.now,
+            input.now,
+          ),
+        this.#database
+          .prepare(
+            `INSERT INTO audit_log (
+              id, actor_type, actor_id, action, entity_type, entity_id,
+              idempotency_key, metadata_json, created_at
+            )
+            SELECT ?, 'customer', NULL, 'cart_pack_added', 'cart', cart.id,
+              ?, json_object(
+                'variantIds', json(?),
+                'cart', json_object(
+                  'id', cart.id,
+                  'status', cart.status,
+                  'currency', cart.currency,
+                  'expires_at', cart.expires_at
+                ),
+                'lines', json(COALESCE((
+                  SELECT json_group_array(json_object(
+                    'variant_id', line.variant_id,
+                    'product_id', line.product_id,
+                    'color_key', line.color_key,
+                    'color_name', line.color_name,
+                    'size', line.size,
+                    'image_url', line.image_url,
+                    'quantity', line.quantity,
+                    'unit_price_cents', line.unit_price_cents,
+                    'available_to_sell', line.available_to_sell
+                  ))
+                  FROM (
+                    SELECT cart_line.variant_id, product.id AS product_id,
+                      variant.color_key, variant.color_name, variant.size,
+                      variant.image_url, cart_line.quantity,
+                      cart_line.unit_price_cents,
+                      stock.physical_quantity - stock.gift_reserve_quantity
+                        - stock.safety_reserve_quantity
+                        - stock.active_reserved_quantity - stock.sold_quantity
+                        AS available_to_sell
+                    FROM cart_lines AS cart_line
+                    INNER JOIN variants AS variant
+                      ON variant.id = cart_line.variant_id
+                    INNER JOIN products AS product
+                      ON product.id = variant.product_id
+                    INNER JOIN inventory AS stock
+                      ON stock.variant_id = variant.id
+                    WHERE cart_line.cart_id = cart.id
+                    ORDER BY variant.sort_order, cart_line.id
+                  ) AS line
+                ), '[]'))
+              ), ?
+            FROM carts AS cart
+            WHERE cart.id = ? AND changes() = ?`,
+          )
+          .bind(
+            `audit_cart_pack_${receiptHash}`,
+            replayKey,
+            JSON.stringify(input.variantIds),
+            input.now,
+            input.cartId,
+            requestedEntries.length,
+          ),
+        this.#cartLineSnapshotStatement(input.cartId),
+      ]);
+
+      const cart = cartResult.results[0];
+      this.#assertOpenCart(cart, input.now);
+      this.#assertCartIsMutable(locksResult.results[0]);
+      const beforeQuantityByVariant = new Map(
+        beforeResult.results.map((line) => [line.variant_id, line.quantity]),
+      );
+      const beforeItemCount = beforeResult.results.reduce(
+        (total, line) => total + line.quantity,
+        0,
+      );
+      if (beforeItemCount + input.variantIds.length > 3) {
+        throw new CommerceError(
+          "MAX_QUANTITY",
+          "A launch cart is limited to three pieces.",
+        );
+      }
+      const sellableByVariant = new Map(
+        variantResult.results.map((variant) => [variant.variant_id, variant]),
+      );
+      for (const [variantId, addedQuantity] of requestedEntries) {
+        const variant = sellableByVariant.get(variantId);
+        if (!variant) {
+          throw new CommerceError("VARIANT_NOT_FOUND", "The variant is unavailable.");
+        }
+        const wantedQuantity =
+          (beforeQuantityByVariant.get(variantId) ?? 0) + addedQuantity;
+        if (variant.available_to_sell < wantedQuantity) {
+          throw new CommerceError(
+            "STOCK_UNAVAILABLE",
+            "The requested pack is unavailable.",
+          );
+        }
+        const persistedQuantity = afterResult.results.find(
+          (line) => line.variant_id === variantId,
+        )?.quantity;
+        if (persistedQuantity !== wantedQuantity) {
+          throw new CommerceError(
+            "STOCK_UNAVAILABLE",
+            "The requested pack could not be added atomically.",
+          );
+        }
+      }
+      return this.#toPublicCartSnapshot(cart, afterResult.results, input.now);
+    } catch (error) {
+      if (input.idempotencyKey) {
+        const replay = await this.#database
+          .prepare("SELECT metadata_json FROM audit_log WHERE idempotency_key = ?")
+          .bind(replayKey)
+          .first<CartPackReplayRow>();
+        if (replay) {
+          return this.#cartPackReplaySnapshot(replay, input.variantIds, input.now);
+        }
+      }
       mapCommerceDatabaseError(error);
     }
   }

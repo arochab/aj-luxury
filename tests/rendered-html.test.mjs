@@ -648,10 +648,10 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
   assert.match(html, /Pourpre Impérial/);
   assert.match(html, /Rose Velours/);
   assert.match(html, /Lilas Céleste/);
-  /* Le contrat du live est volontairement statique : le poster client est le
-     seul hero, présent dès le HTML initial, sans lecteur vidéo ni asset tiers. */
+  /* Le poster client reste la première image du hero. Le film progressif est
+     dérivé pixel pour pixel de cette source et ne remplace jamais le fallback. */
   assert.match(html, /<main class="aj-home [^"]+">/);
-  assert.match(html, /data-hero-version="poster-v4-static"/);
+  assert.match(html, /data-hero-version="v4-motion-from-approved-poster"/);
   assert.match(html, /Reveal Your[\s\S]*Inner Beauty/);
   assert.match(
     html,
@@ -706,7 +706,8 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
 
   /* Aucun film, rendu métallique, asset généré ni classe CSS invalide ne doit
      réapparaître dans le document réellement servi. */
-  assert.doesNotMatch(html, /<video|<iframe|data-metallic-mounted="true"|metallic-field__canvas|Figer le métal/);
+  assert.match(html, /<video[^>]*muted=""[^>]*playsInline=""[^>]*autoPlay=""[^>]*preload="none"/);
+  assert.doesNotMatch(html, /<iframe|data-metallic-mounted="true"|metallic-field__canvas|Figer le métal/);
   assert.doesNotMatch(html, /https?:\/\/(?!ajluxurystore\.com)/i);
   assert.doesNotMatch(html, /generated_images|hero-figures|identity-overlay|hero-v[67]-|apollon-world/);
   assert.doesNotMatch(html, /class="[^"]*\bundefined\b/);
@@ -807,7 +808,8 @@ for (const [pathname, colorName, galerie, assetOrder] of productCases) {
     );
     assertDomAssetOrder(html, assetOrder, `${pathname} live`);
     assert.doesNotMatch(html, /images\/editorial\/isabelle-apollon/);
-    assert.match(html, /Disponibilité vérifiée lors de l’ajout au panier/);
+    assert.match(html, /Pack Duo/);
+    assert.match(html, /Pack Trio/);
     assert.match(html, />Accueil</);
     assert.match(
       html,
@@ -885,9 +887,9 @@ test("server-renders the complete AJ Luxury story", async () => {
   assert.equal(response.status, 200);
   const html = await response.text();
   assert.match(html, /Notre histoire/);
-  // Le runtime publié est la version courte en trois actes numérotés.
+  // Le runtime publié conserve trois actes lisibles sans numérotation décorative.
   assert.doesNotMatch(html, /Le marbre|La lyre|Le laurier/);
-  assert.equal((html.match(/<p[^>]*>0[123]<\/p>/g) ?? []).length, 3);
+  assert.equal((html.match(/<p[^>]*>0[123]<\/p>/g) ?? []).length, 0);
   assert.match(html, /Le point de départ/);
   assert.match(html, /Alex (?:&amp;|&#x26;) Jérémy/);
   assert.match(html, /Pas d’excès\. Simplement la justesse des détails\./);

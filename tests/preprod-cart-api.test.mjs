@@ -204,6 +204,18 @@ function lineRequest(session, quantity) {
   };
 }
 
+function packRequest(session, variantIds, idempotencyKey = undefined) {
+  return {
+    method: "POST",
+    headers: {
+      ...requestHeaders(session),
+      "Content-Type": "application/json",
+      ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}),
+    },
+    body: JSON.stringify({ variantIds }),
+  };
+}
+
 test("preproduction cart keeps raw tokens out of D1 and survives reload", async () => {
   const fixture = await createFixture();
   const anonymous = await invoke(fixture, "/api/preprod/cart");
@@ -293,6 +305,99 @@ test("preproduction cart keeps raw tokens out of D1 and survives reload", async 
   assert.equal(
     fixture.sqlite.prepare("SELECT COUNT(*) AS count FROM carts").get().count,
     1,
+  );
+  fixture.sqlite.close();
+});
+
+test("preproduction pack endpoint is atomic, same-size and idempotent with repeated colours", async () => {
+  const fixture = await createFixture();
+  const session = await openCart(fixture);
+  const duo = [
+    "variant_boxer_pourpre_m",
+    "variant_boxer_rose-pale_m",
+  ];
+  const first = await invoke(
+    fixture,
+    "/api/preprod/cart/packs",
+    packRequest(session, duo, "preprod-pack-attempt-0001"),
+  );
+  assert.equal(first.status, 200);
+  const payload = await first.json();
+  assert.equal(payload.data.itemCount, 2);
+  assert.equal(payload.data.subtotalCents, 4_999);
+  assert.deepEqual(
+    payload.data.lines.map(({ variantId, quantity }) => ({ variantId, quantity })),
+    [
+      { variantId: "variant_boxer_pourpre_m", quantity: 1 },
+      { variantId: "variant_boxer_rose-pale_m", quantity: 1 },
+    ],
+  );
+  const replay = await invoke(
+    fixture,
+    "/api/preprod/cart/packs",
+    packRequest(session, duo, "preprod-pack-attempt-0001"),
+  );
+  assert.equal(replay.status, 200);
+  assert.deepEqual(await replay.json(), payload);
+  assert.equal(
+    fixture.sqlite.prepare(
+      "SELECT SUM(quantity) AS quantity FROM cart_lines",
+    ).get().quantity,
+    2,
+  );
+
+  for (const variantIds of [
+    ["variant_boxer_pourpre_m"],
+    ["variant_boxer_pourpre_m", "variant_boxer_rose-pale_l"],
+    ["variant_boxer_pourpre_m", "variant_unknown_m"],
+  ]) {
+    const invalid = await invoke(
+      fixture,
+      "/api/preprod/cart/packs",
+      packRequest(session, variantIds),
+    );
+    assert.equal(invalid.status, 400, JSON.stringify(variantIds));
+    assert.equal((await invalid.json()).error.code, "INVALID_BODY");
+  }
+  assert.equal(
+    fixture.sqlite.prepare("SELECT SUM(quantity) AS quantity FROM cart_lines").get().quantity,
+    2,
+  );
+
+  const overMaximum = await invoke(
+    fixture,
+    "/api/preprod/cart/packs",
+    packRequest(session, [
+      "variant_boxer_lilas-bleu-clair_m",
+      "variant_boxer_lilas-bleu-clair_m",
+    ]),
+  );
+  assert.equal(overMaximum.status, 409);
+  assert.equal((await overMaximum.json()).error.code, "CART_CONFLICT");
+  assert.equal(
+    fixture.sqlite.prepare("SELECT SUM(quantity) AS quantity FROM cart_lines").get().quantity,
+    2,
+  );
+
+  const repeatedSession = await openCart(fixture);
+  const repeated = await invoke(
+    fixture,
+    "/api/preprod/cart/packs",
+    packRequest(repeatedSession, [
+      "variant_boxer_lilas-bleu-clair_s",
+      "variant_boxer_lilas-bleu-clair_s",
+      "variant_boxer_pourpre_s",
+    ]),
+  );
+  assert.equal(repeated.status, 200);
+  const repeatedPayload = await repeated.json();
+  assert.equal(repeatedPayload.data.itemCount, 3);
+  assert.deepEqual(
+    repeatedPayload.data.lines.map(({ variantId, quantity }) => ({ variantId, quantity })),
+    [
+      { variantId: "variant_boxer_pourpre_s", quantity: 1 },
+      { variantId: "variant_boxer_lilas-bleu-clair_s", quantity: 2 },
+    ],
   );
   fixture.sqlite.close();
 });
