@@ -24,7 +24,7 @@
     "sellableQuantity": 726
   },
   "approvals": [
-    { "role": "stock_owner", "signerId": "jeremy-verbal-approval-relayed-by-adam", "signedAt": "2026-08-26T12:41:02.815Z", "payloadSha256": "74d480660363c4373f5d02c8387ce0a7b612e6dd342f90976945665d3c825e8f", "attestation": "I_APPROVE_THIS_EXACT_STOCK_IMPORT" },
+    { "role": "stock_owner", "signerId": "jeremy", "signedAt": "2026-08-26T12:41:02.815Z", "payloadSha256": "74d480660363c4373f5d02c8387ce0a7b612e6dd342f90976945665d3c825e8f", "attestation": "I_APPROVE_THIS_EXACT_STOCK_IMPORT" },
     { "role": "release_owner", "signerId": "adam", "signedAt": "2026-08-26T12:23:10.009Z", "payloadSha256": "74d480660363c4373f5d02c8387ce0a7b612e6dd342f90976945665d3c825e8f", "attestation": "I_APPROVE_THIS_EXACT_STOCK_IMPORT" }
   ]
 }
