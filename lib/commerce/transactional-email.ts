@@ -16,6 +16,7 @@ export type TransactionalEmailInput = {
   locale: "fr" | "en";
   recipientEmail: string;
   orderNumber?: string;
+  trackingReference?: string;
   trackingUrl?: string;
   accessUrl?: string;
 };
@@ -32,10 +33,7 @@ export type TransactionalEmail = {
 export const transactionalEmailKindAvailability = Object.freeze({
   "order-confirmation": Object.freeze({ available: true } as const),
   "payment-confirmation": Object.freeze({ available: true } as const),
-  "shipment-confirmation": Object.freeze({
-    available: false,
-    reason: "server-owned-carrier-policy-required",
-  } as const),
+  "shipment-confirmation": Object.freeze({ available: true } as const),
   "return-acknowledgement": Object.freeze({ available: true } as const),
   "withdrawal-acknowledgement": Object.freeze({ available: true } as const),
   "refund-confirmation": Object.freeze({ available: true } as const),
@@ -55,6 +53,7 @@ const transactionalEmailInputKeys = new Set([
   "locale",
   "recipientEmail",
   "orderNumber",
+  "trackingReference",
   "trackingUrl",
   "accessUrl",
 ]);
@@ -65,6 +64,7 @@ type TransactionalEmailSnapshot = {
   locale: unknown;
   recipientEmail: unknown;
   orderNumber: unknown;
+  trackingReference: unknown;
   trackingUrl: unknown;
   accessUrl: unknown;
 };
@@ -107,6 +107,7 @@ function snapshotTransactionalEmailInput(
       locale: descriptors.get("locale")?.value,
       recipientEmail: descriptors.get("recipientEmail")?.value,
       orderNumber: descriptors.get("orderNumber")?.value,
+      trackingReference: descriptors.get("trackingReference")?.value,
       trackingUrl: descriptors.get("trackingUrl")?.value,
       accessUrl: descriptors.get("accessUrl")?.value,
     };
@@ -238,12 +239,6 @@ export async function buildTransactionalEmail(
     );
   }
 
-  if (kind === "shipment-confirmation") {
-    throw new Error(
-      "Shipment tracking email is unavailable until a server-owned carrier policy is configured.",
-    );
-  }
-
   const eventId = requireIdentifier(snapshot.eventId, "eventId", safeEventId);
   const recipient = requireStrictMailboxAddress(snapshot.recipientEmail);
   const recipientFingerprint = await fingerprintRecipient(recipient);
@@ -252,6 +247,41 @@ export async function buildTransactionalEmail(
     "orderNumber",
     safeOrderNumber,
   );
+  if (kind === "shipment-confirmation") {
+    const trackingReference = requireIdentifier(
+      snapshot.trackingReference,
+      "trackingReference",
+      /^[A-Za-z0-9][A-Za-z0-9_.-]{2,127}$/,
+    );
+    const trackingUrl = snapshot.trackingUrl === undefined
+      ? null
+      : requireValue(snapshot.trackingUrl, "trackingUrl");
+    if (trackingUrl) {
+      let parsed: URL;
+      try {
+        parsed = new URL(trackingUrl);
+      } catch {
+        throw new Error("Invalid transactional email field: trackingUrl");
+      }
+      if (parsed.protocol !== "https:" || parsed.username || parsed.password) {
+        throw new Error("Invalid transactional email field: trackingUrl");
+      }
+    }
+    const subjectPrefix = locale === "fr" ? "Expédition confirmée" : "Shipment confirmed";
+    const line = locale === "fr"
+      ? `Votre commande ${orderNumber} a été confiée au transporteur. Référence de suivi : ${trackingReference}.`
+      : `Your order ${orderNumber} was handed to the carrier. Tracking reference: ${trackingReference}.`;
+    const link = trackingUrl
+      ? (locale === "fr" ? `\nSuivre le colis : ${trackingUrl}` : `\nTrack the parcel: ${trackingUrl}`)
+      : "";
+    return {
+      deduplicationKey: `${kind}:${eventId}:${orderNumber}:${recipientFingerprint}`,
+      deduplicationPersisted: false,
+      recipientEmail: recipient,
+      subject: `${subjectPrefix} ${orderNumber}`,
+      text: `${line}${link}`,
+    };
+  }
   const copyByKind = {
     "order-confirmation": {
       frSubject: "Commande reçue",

@@ -2,99 +2,221 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const [home, story, moodboard, products, gallery] = await Promise.all([
-  readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
-  readFile(new URL("../app/notre-histoire/page.tsx", import.meta.url), "utf8"),
-  readFile(new URL("../lib/editorial-moodboard.ts", import.meta.url), "utf8"),
-  readFile(new URL("../lib/products.ts", import.meta.url), "utf8"),
-  readFile(new URL("../app/components/ProductGalleryZoom.tsx", import.meta.url), "utf8"),
-]);
+/* ==========================================================================
+   PARITÉ ET ALTERNANCE — retour n°4 d'Adam, 19/08
+   --------------------------------------------------------------------------
+   « Jamais deux photos du même mannequin à la suite, nulle part », et un
+   coloris porté par le même homme partout.
 
-test("the homepage follows Jérémy's approved Rose, duo Pourpre and Lilas sequence", () => {
-  const alexRoseIndex = home.indexOf("/images/client/product-rose-model.webp");
-  const duoPourpreIndex = home.indexOf("/images/client/campaign-duo-pourpre.webp");
-  const jeremyLilasIndex = home.indexOf("/images/client/editorial-lilas-chair.webp");
+   Ce fichier remplace une version qui épinglait des noms de fichiers un par
+   un, et qui a laissé passer la séquence Jérémy / Jérémy / Alex sur l'accueil
+   ET sur /shop : elle vérifiait que telle image portait tel alt, jamais que
+   la SUITE des images tenait. Le contrat est donc reconstruit à l'envers —
+   on reconstitue la séquence de chaque route dans l'ordre du document, on la
+   traduit en prénoms via la table d'attribution de lib/products, et on refuse
+   toute répétition immédiate.
 
-  assert.ok(alexRoseIndex >= 0, "Alex in Rose Velours must be on the left");
-  assert.ok(duoPourpreIndex > alexRoseIndex, "the duo in Pourpre must be centered");
-  assert.ok(jeremyLilasIndex > duoPourpreIndex, "Jérémy in Lilas must be on the right");
-  assert.match(home, /AJ Luxury — Alex — Apollon Rose Velours/);
-  assert.match(home, /AJ Luxury — Jérémy et Alex — Apollon Pourpre Impérial/);
-  assert.match(home, /AJ Luxury — Jérémy — Apollon Lilas Céleste/);
-});
+   L'attribution vient de `wearerByAsset`, renseignée à l'inspection des
+   images. Un nom de fichier ne prouve rien ici : `product-rose-profile.webp`
+   montre Jérémy, `product-card-rose.webp` montre Alex.
+   ========================================================================== */
 
-test("story and moodboard identities match the photographed founders", () => {
-  assert.match(
-    story,
-    /product-lilas-model\.webp"[\s\S]*alt="AJ Luxury — Alex — Apollon Lilas Céleste/,
-  );
-  assert.match(
-    story,
-    /story-jeremy-retouched\.jpeg"[\s\S]*alt="AJ Luxury — Jérémy — Apollon Rose Velours/,
-  );
-  assert.match(
-    moodboard,
-    /editorial-pourpre-chair\.webp"[\s\S]*alt: "AJ Luxury — Jérémy — Apollon Pourpre Impérial/,
-  );
-  assert.match(
-    moodboard,
-    /campaign-duo-lilas-seated\.webp"[\s\S]*alt: "AJ Luxury — Alex et Jérémy — Apollon Lilas Céleste/,
-  );
-  assert.match(
-    moodboard,
-    /campaign-duo-lilas-seated\.webp"[\s\S]*objectPosition: "50% 22%"/,
-  );
-  assert.match(
-    moodboard,
-    /editorial-rose-profile\.webp"[\s\S]*alt: "AJ Luxury — Alex — Apollon Rose Velours/,
-  );
-});
+const lire = (chemin) => readFile(new URL(chemin, import.meta.url), "utf8");
 
-test("non-product editorial sequences never juxtapose the same color", () => {
-  const featuredBlock = home.match(
-    /const featuredEditorialImages = \[([\s\S]*?)\n\];/,
+const [produits, sequence, accueil, recit, boutique, fiche] =
+  await Promise.all([
+    lire("../lib/products.ts"),
+    lire("../app/components/ApollonGuidedSequence.tsx"),
+    lire("../app/page.tsx"),
+    lire("../app/notre-histoire/page.tsx"),
+    lire("../app/shop/page.tsx"),
+    lire("../app/products/[slug]/page.tsx"),
+  ]);
+
+/** La table d'attribution, relue depuis la source plutôt que recopiée : un
+ *  seul endroit peut la changer, et c'est celui que le site lit. */
+function tableAttribution(source) {
+  const bloc = source.match(
+    /wearerByAsset[\s\S]*?Object\.freeze\(\{([\s\S]*?)\n\s*\}\);/,
   )?.[1];
-  const moodboardBlock = moodboard.match(
-    /editorialMoodboardImages[^=]*= \[([\s\S]*?)\n\];/,
-  )?.[1];
-  const storyPortraitBlock = story.match(
-    /<div className=\{styles\.portraitGrid\}>([\s\S]*?)<\/div>\s*<\/section>/,
-  )?.[1];
+  assert.ok(bloc, "wearerByAsset doit exister dans lib/products.ts");
+  const table = new Map();
+  for (const [, actif, qui] of bloc.matchAll(
+    /"([^"]+)":\s*"(alex|jeremy|duo)"/g,
+  )) {
+    table.set(actif, qui);
+  }
+  assert.ok(table.size >= 12, "la table d'attribution doit être renseignée");
+  return table;
+}
 
-  assert.ok(featuredBlock, "the homepage editorial sequence must exist");
-  assert.ok(moodboardBlock, "the homepage moodboard sequence must exist");
-  assert.ok(storyPortraitBlock, "the story portrait sequence must exist");
+const ATTRIBUTION = tableAttribution(produits);
 
-  const colorsIn = (source) =>
-    [...source.matchAll(/Rose Velours|Pourpre Impérial|Lilas Céleste/g)].map(
-      ([color]) => color,
+/** Qui figure sur ce média, ou null s'il n'y a pas de visage. */
+function porteur(src) {
+  for (const [actif, qui] of ATTRIBUTION) {
+    if (src.endsWith(actif)) return qui;
+  }
+  return null;
+}
+
+/** Les chemins d'images d'un fichier source, dans l'ordre du document. */
+function medias(source) {
+  return [
+    ...source.matchAll(/\/images\/[A-Za-z0-9/_.-]+\.(?:webp|jpeg|jpg|png)/g),
+  ]
+    .map(([chemin]) => chemin)
+    .filter((chemin) => !chemin.includes("-placeholder-"));
+}
+
+/** La séquence des personnes visibles, dans l'ordre de lecture. */
+function personnes(source) {
+  return medias(source)
+    .map((src) => ({ src, qui: porteur(src) }))
+    .filter((entree) => entree.qui !== null);
+}
+
+function exigerAlternance(suite, etiquette) {
+  for (let i = 1; i < suite.length; i += 1) {
+    const avant = suite[i - 1];
+    const apres = suite[i];
+    // Une image duo n'est jamais une répétition : les deux y sont.
+    if (avant.qui === "duo" || apres.qui === "duo") continue;
+    assert.notEqual(
+      apres.qui,
+      avant.qui,
+      `${etiquette} : ${avant.src} puis ${apres.src} montrent deux fois ${apres.qui}`,
     );
+  }
+}
 
-  const featuredSequence = colorsIn(featuredBlock);
-  const moodboardSequence = colorsIn(moodboardBlock);
-  const storyPortraitSequence = colorsIn(storyPortraitBlock);
+const blocsProduits = () => produits.split(/\n {4}slug: "/).slice(1);
 
-  assert.deepEqual(featuredSequence, [
-    "Rose Velours",
-    "Pourpre Impérial",
-    "Lilas Céleste",
-  ]);
-  assert.deepEqual(moodboardSequence, [
-    "Pourpre Impérial",
-    "Lilas Céleste",
-    "Rose Velours",
-  ]);
-  assert.deepEqual(storyPortraitSequence, ["Lilas Céleste", "Rose Velours"]);
+/* ── 1 · Un coloris, un homme ─────────────────────────────────────────── */
 
-  for (const sequence of [featuredSequence, moodboardSequence, storyPortraitSequence]) {
-    for (let index = 1; index < sequence.length; index += 1) {
-      assert.notEqual(sequence[index], sequence[index - 1]);
-    }
+test("chaque coloris déclare le porteur visible sur sa photo principale", () => {
+  const blocs = blocsProduits();
+  assert.equal(blocs.length, 3, "trois coloris attendus");
+
+  const attendu = {
+    "rose-pale": "jeremy",
+    "lilas-bleu-clair": "alex",
+    pourpre: "alex",
+  };
+
+  for (const bloc of blocs) {
+    const slug = bloc.match(/^([a-z-]+)"/)?.[1];
+    assert.ok(slug in attendu, `slug inconnu : ${slug}`);
+    const declare = bloc.match(/wearer:\s*"(alex|jeremy)"/)?.[1];
+    assert.equal(declare, attendu[slug], `porteur déclaré de ${slug}`);
+
+    const principale = bloc.match(/\n\s*image:\s*"([^"]+)"/)?.[1];
+    assert.ok(principale, `photo principale absente : ${slug}`);
+    assert.equal(
+      porteur(principale),
+      declare,
+      `${slug} : ${principale} ne montre pas ${declare}`,
+    );
   }
 });
 
-test("the requested extra Pourpre view is Jérémy", () => {
-  assert.match(products, /gallery:[\s\S]*editorial-pourpre-chair\.webp/);
-  assert.match(gallery, /image\.src\.includes\("editorial-pourpre-chair"\)[\s\S]*Jérémy —/);
-  assert.doesNotMatch(products, /gallery:[\s\S]*hero-pourpre-model\.webp/);
+test("la carte d'un coloris est le plan de tête de sa fiche", () => {
+  // C'est ce qui faisait changer de mannequin au clic sur le Lilas : carte
+  // Jérémy, fiche Alex.
+  for (const bloc of blocsProduits()) {
+    const carte = bloc.match(/\n\s*image:\s*"([^"]+)"/)?.[1];
+    const tete = bloc.match(/gallery:\s*\[\s*\{\s*src:\s*"([^"]+)"/)?.[1];
+    assert.equal(tete, carte, `plan de tête différent de la carte : ${carte}`);
+  }
+});
+
+test("les recommandations de bas de fiche reprennent les cartes du live", () => {
+  assert.match(fiche, /src=\{item\.image\}/);
+  assert.doesNotMatch(fiche, /src=\{item\.still\}/);
+  assert.doesNotMatch(fiche, /editorial\/isabelle-apollon/);
+});
+
+/* ── 2 · Jamais deux fois le même homme à la suite ────────────────────── */
+
+test("la séquence guidée de l'accueil alterne", () => {
+  const suite = personnes(sequence);
+  assert.deepEqual(
+    suite.map((entree) => entree.qui),
+    ["alex", "jeremy", "alex"],
+  );
+  exigerAlternance(suite, "séquence guidée");
+});
+
+test("les cartes de /shop alternent", () => {
+  /* Le live présente les trois cartes dans cet ordre. Les deux actifs
+     principaux imposés par la production (Rose profil et Lilas modèle) sont
+     conservés, tout en maintenant Alex / Jérémy / Alex dans la grille. */
+  assert.match(
+    boutique,
+    /PRODUCTION_ORDER = \["pourpre", "rose-pale", "lilas-bleu-clair"\]/,
+  );
+  assert.match(boutique, /src=\{product\.image\}/);
+
+  const suite = ["pourpre", "rose-pale", "lilas-bleu-clair"].map((slug) => {
+    const bloc = blocsProduits().find((part) => part.startsWith(`${slug}"`));
+    const src = bloc.match(/\n\s*image:\s*"([^"]+)"/)[1];
+    return { src, qui: porteur(src) };
+  });
+  assert.deepEqual(
+    suite.map((entree) => entree.qui),
+    ["alex", "jeremy", "alex"],
+  );
+  exigerAlternance(suite, "cartes de /shop");
+});
+
+test("les neuf images portées de l'accueil suivent l'ordre du live", () => {
+  const suite = personnes(accueil);
+  assert.deepEqual(
+    suite.map((entree) => entree.qui),
+    ["alex", "duo", "jeremy", "alex", "jeremy", "alex", "jeremy", "duo", "alex"],
+  );
+  exigerAlternance(suite, "accueil live");
+});
+
+test("/notre-histoire alterne et nomme chaque portrait", () => {
+  exigerAlternance(personnes(recit), "notre-histoire");
+
+  // La seule page qui écrit un prénom sous chaque visage doit conserver
+  // l'identité visible dans les deux photographies du live.
+  assert.match(
+    recit,
+    /alt="AJ Luxury — Alex — collection Apollon"[\s\S]{0,180}product-lilas-model\.webp/,
+  );
+  assert.match(
+    recit,
+    /alt="AJ Luxury — Jérémy — collection Apollon"[\s\S]{0,180}story-jeremy-retouched\.jpeg/,
+  );
+});
+
+/* ── 3 · Les photos qui contredisent l'attribution sortent du tunnel ──── */
+
+test("le commerce conserve exactement les trois photos principales du live", () => {
+  const attendues = new Map([
+    ["pourpre", "/images/client/raw/product-card-pourpre.webp"],
+    ["rose-pale", "/images/client/raw/product-rose-profile.webp"],
+    ["lilas-bleu-clair", "/images/client/raw/product-lilas-model.webp"],
+  ]);
+
+  for (const [slug, src] of attendues) {
+    const bloc = blocsProduits().find((part) => part.startsWith(`${slug}"`));
+    assert.ok(bloc, `fiche absente : ${slug}`);
+    assert.equal(
+      bloc.match(/\n\s*image:\s*"([^"]+)"/)?.[1],
+      src,
+      `photo principale de ${slug}`,
+    );
+    assert.equal(
+      bloc.match(/gallery:\s*\[\s*\{\s*src:\s*"([^"]+)"/)?.[1],
+      src,
+      `première galerie de ${slug}`,
+    );
+  }
+
+  assert.match(boutique, /PRODUCTION_IMAGES/);
+  assert.match(fiche, /product\.gallery/);
 });

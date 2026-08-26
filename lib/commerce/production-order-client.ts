@@ -17,6 +17,8 @@ export type PublicProductionOrder = Readonly<{
   currency: "EUR";
   subtotalCents: number;
   shippingCents: number;
+  taxCents: 0;
+  invoiceTaxMention: string;
   totalCents: number;
   createdAt: string;
   paidAt: string | null;
@@ -59,8 +61,9 @@ function validAmount(value: unknown): value is number {
 
 export function parseProductionOrder(value: unknown): PublicProductionOrder {
   const keys = [
-    "createdAt", "currency", "lines", "orderNumber", "paidAt",
-    "shippingCents", "status", "subtotalCents", "totalCents",
+    "createdAt", "currency", "invoiceTaxMention", "lines", "orderNumber",
+    "paidAt", "shippingCents", "status", "subtotalCents", "taxCents",
+    "totalCents",
   ];
   const lineKeys = [
     "colorName", "lineTotalCents", "productName", "quantity", "size",
@@ -76,8 +79,11 @@ export function parseProductionOrder(value: unknown): PublicProductionOrder {
     value.currency !== "EUR" ||
     !validAmount(value.subtotalCents) ||
     !validAmount(value.shippingCents) ||
+    value.taxCents !== 0 ||
+    value.invoiceTaxMention !==
+      "TVA non applicable, article 293 B du Code général des impôts" ||
     !validAmount(value.totalCents) ||
-    value.totalCents !== value.subtotalCents + value.shippingCents ||
+    value.totalCents !== value.subtotalCents + value.shippingCents + value.taxCents ||
     typeof value.createdAt !== "string" ||
     !(value.paidAt === null || typeof value.paidAt === "string") ||
     value.lines.length < 1 || value.lines.length > 3

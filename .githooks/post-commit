@@ -1,0 +1,28 @@
+#!/bin/sh
+# AJ Luxury — regle GitHub-first.
+#
+# Raison d'etre : le 2026-08-17, 14 branches locales portant jusqu'a 85 commits d'avance
+# (toute la chaine Stripe/Sendcloud last-mile et la passe visuelle Awwwards) n'existaient que
+# sur le disque externe USB. Deux messages d'agent affirmaient a tort qu'elles etaient sur GitHub.
+#
+# Ce hook rend cette situation impossible : chaque commit part immediatement sur origin.
+# Le depot local n'est plus qu'une copie de travail jetable.
+
+branch=$(git symbolic-ref --quiet --short HEAD 2>/dev/null)
+
+if [ -z "$branch" ]; then
+  echo "[github-first] HEAD detache : rien a pousser. Cree une branche avant de committer."
+  exit 0
+fi
+
+printf '[github-first] envoi de %s vers origin... ' "$branch"
+
+if git push --quiet --set-upstream origin "$branch" 2>/dev/null; then
+  echo "OK"
+else
+  echo "ECHEC"
+  echo "[github-first] ⚠  Ce commit n'existe QUE sur ce disque."
+  echo "[github-first]    Corrige et relance :  git push -u origin $branch"
+fi
+
+exit 0

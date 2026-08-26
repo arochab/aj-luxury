@@ -42,7 +42,34 @@ next-env.d.ts
 /work/
 /tmp/
 /output/
+/migration-staging/
+/.aj-d1/
+/.secrets-local/
+/.codex-asset-work/
 /inputs_assets/
 /deliverables/
+/docs/internal/evidence/
+/artifacts/gauntlet-*/
 /tsconfig.tsbuildinfo
 /.openai/*.tar.gz
+
+# private client records and source media (stored in the separate private vault)
+/vocals_jeremy/
+/docs/review-captures/
+/docs/review-captures-v2/
+/experiments/
+/public/images/review/
+/docs/FEEDBACK-JEREMY-*.md
+/docs/PREUVE-*.md
+*.sqlite
+*.sqlite3
+*.sqlite-shm
+*.sqlite-wal
+*.db
+*.key
+*.p12
+*.pfx
+*.zip
+
+# Python bytecode des scripts de compositing
+/scripts/__pycache__/

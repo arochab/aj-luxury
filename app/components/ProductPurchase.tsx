@@ -11,6 +11,10 @@ import {
   setCartLineQuantity,
 } from "../../lib/commerce/preprod-cart-client";
 import { createLaunchVariantId } from "../../lib/commerce/product-identifiers";
+import {
+  AJ_APOLLON_MAX_PACK_SIZE,
+  AJ_APOLLON_PACK_PRICE_CENTS,
+} from "../../lib/commerce/pack-pricing";
 import type {
   PublicStockBySize,
   PublicStockStatus,
@@ -25,6 +29,38 @@ import type { CommerceRuntimeMode } from "../../lib/commerce/commerce-runtime";
    garantirait pas pour une cible d'`aria-describedby`. */
 const NOTICE_ID = "aj-purchase-notice";
 
+type PackSize = keyof typeof AJ_APOLLON_PACK_PRICE_CENTS;
+
+const PACK_OPTIONS: ReadonlyArray<{
+  count: PackSize;
+  labelKey: "product.unitOffer" | "product.duoOffer" | "product.trioOffer";
+  detailKey: "product.unitDetail" | "product.duoDetail" | "product.trioDetail";
+  savingCents: number;
+  savingPercent: string | null;
+}> = [
+  {
+    count: 1,
+    labelKey: "product.unitOffer",
+    detailKey: "product.unitDetail",
+    savingCents: 0,
+    savingPercent: null,
+  },
+  {
+    count: 2,
+    labelKey: "product.duoOffer",
+    detailKey: "product.duoDetail",
+    savingCents: 999,
+    savingPercent: "16,66 %",
+  },
+  {
+    count: 3,
+    labelKey: "product.trioOffer",
+    detailKey: "product.trioDetail",
+    savingCents: 1_998,
+    savingPercent: "22,21 %",
+  },
+];
+
 type ProductPurchaseProps = {
   product: Product;
   products: Product[];
@@ -32,6 +68,7 @@ type ProductPurchaseProps = {
      de résolution : seul cas où l'on retombe sur « vérifié à l'ajout ». */
   availability: PublicStockBySize | null;
   runtimeMode: CommerceRuntimeMode;
+  reviewMode: boolean;
 };
 
 export default function ProductPurchase({
@@ -39,8 +76,10 @@ export default function ProductPurchase({
   products,
   availability,
   runtimeMode,
+  reviewMode,
 }: ProductPurchaseProps) {
   const [selectedSize, setSelectedSize] = useState<ProductSize | null>(null);
+  const [selectedPackSize, setSelectedPackSize] = useState<PackSize>(1);
   const [feedback, setFeedback] = useState<
     | { kind: "success"; quantity: number; size: ProductSize }
     | { kind: "error"; code: string }
@@ -89,7 +128,22 @@ export default function ProductPurchase({
     setFeedback(null);
   }
 
+  function selectPackSize(packSize: PackSize) {
+    setSelectedPackSize(packSize);
+    setFeedback(null);
+  }
+
   function stockLabel(size: ProductSize) {
+    if (reviewMode) {
+      const stock = stockOf(size);
+      if (!stock) return t("product.stockCheckedAtAdd");
+      if (stock.state === "sold-out") return t("product.soldOutLive");
+      if (stock.state === "low-stock") {
+        return t("product.onlyLeft").replace("{count}", String(stock.remaining));
+      }
+      return t("product.availableLive");
+    }
+
     /* EN PRODUCTION, LE REGISTRE DE MAQUETTE NE PARLE PAS. Il est codé en dur
        et ne lit pas D1 : afficher « Disponible » ou « Plus que 3 » à partir de
        lui serait annoncer à un client un chiffre inventé. On dit donc ce qui
@@ -241,7 +295,15 @@ export default function ProductPurchase({
         throw new CartApiError("MAX_QUANTITY");
       }
 
-      const fingerprint = `${variantId}:${currentQuantity + 1}`;
+      const nextQuantity = currentQuantity + selectedPackSize;
+      if (
+        nextQuantity > AJ_APOLLON_MAX_PACK_SIZE ||
+        currentCart.itemCount + selectedPackSize > AJ_APOLLON_MAX_PACK_SIZE
+      ) {
+        throw new CartApiError("MAX_QUANTITY");
+      }
+
+      const fingerprint = `${variantId}:${nextQuantity}`;
       const lineKey = runtimeMode === "production"
         ? cartLineAttempt.current?.fingerprint === fingerprint
           ? cartLineAttempt.current.key
@@ -252,7 +314,7 @@ export default function ProductPurchase({
       }
       const updatedCart = await setCartLineQuantity(
         variantId,
-        currentQuantity + 1,
+        nextQuantity,
         runtimeMode,
         lineKey,
       );
@@ -294,6 +356,7 @@ export default function ProductPurchase({
       }
       return t("product.cartUnavailable");
     }
+    if (reviewMode) return t("product.reviewNotice");
     return runtimeMode === "preproduction"
       ? t("product.cartSecureNotice")
       : runtimeMode === "production"
@@ -327,17 +390,11 @@ export default function ProductPurchase({
       aria-label={t("product.purchaseInfoLabel")}
       aria-busy={cartBusy}
     >
-      {/*
-        L'identité tient en trois lignes : le modèle, le coloris en lettrage
-        métallique — comme sur l'accueil — puis le ton. Le prix vient juste
-        après, seul sur sa ligne, entre deux filets : c'est le premier chiffre
-        que l'œil rencontre.
-      */}
+      {/* Le modèle et le coloris reprennent l'identité sobre de la fiche publiée. */}
       <div className={styles.identity} data-aj-reveal>
         <p className={styles.eyebrow}>{t("product.status")}</p>
         <h1>{product.model}</h1>
         <p className={styles.colorName}>{product.name}</p>
-        <p className={styles.tone}>{localizedProduct.tone}</p>
       </div>
 
       {/* ── LE PRIX NE S'AFFICHE JAMAIS NU TANT QUE LA VENTE EST FERMEE ──
@@ -348,25 +405,70 @@ export default function ProductPurchase({
           Un chiffre nu sur une fiche produit se lit comme un prix de vente :
           c'est la lecture qu'un client en fait, et elle serait fausse.
 
-          CE QUI N'EST PAS ECRIT ICI, ET POURQUOI. Aucune mention « TTC ».
-          Le depot ne permet pas de l'affirmer : `lib/legal.ts` porte un numero
-          de TVA « A completer », et le dictionnaire dit lui-meme que « les
-          taxes et droits restent a confirmer avant l'ouverture des ventes ».
-          Ecrire TTC serait inventer un fait fiscal. La mention viendra quand
-          le regime sera arrete — pas avant.
+          CE QUI N'EST PAS ECRIT ICI, ET POURQUOI. Aucune mention « TTC » :
+          le vendeur ne collecte pas de TVA au titre de la franchise en base.
+          La mention fiscale canonique vit dans `lib/legal.ts` et sur les CGV
+          ainsi que les factures, sans surcharger le bloc prix restauré.
 
           `product.priceLabel` existe deja dans les cinq langues : rien n'est
           traduit ici, seule sa condition d'affichage change. */}
       <div className={styles.price} data-aj-reveal>
         <strong>{formatPrice(product.priceCents, locale)}</strong>
-        {runtimeMode !== "production" && (
-          <span>{t("product.priceLabel")}</span>
-        )}
+        {reviewMode
+          ? <span>{t("product.reviewPrice")}</span>
+          : runtimeMode !== "production" && (
+              <span>{t("product.priceLabel")}</span>
+            )}
       </div>
 
       <p className={styles.description} data-aj-reveal>
         {localizedProduct.description}
       </p>
+
+      <fieldset className={`${styles.selector} ${styles.packSelector}`}>
+        <legend className={styles.selectorHeading}>
+          <span>{t("product.chooseOffer")}</span>
+          <strong>{t("product.bestPriceAutomatic")}</strong>
+        </legend>
+
+        <div className={styles.packOptions}>
+          {PACK_OPTIONS.map((option) => (
+            <button
+              className={styles.packOption}
+              type="button"
+              key={option.count}
+              aria-pressed={selectedPackSize === option.count}
+              onClick={() => selectPackSize(option.count)}
+            >
+              <span className={styles.packOptionTopline}>
+                <span className={styles.packOptionName}>{t(option.labelKey)}</span>
+                <strong>
+                  {formatPrice(AJ_APOLLON_PACK_PRICE_CENTS[option.count], locale)}
+                </strong>
+              </span>
+              <span className={styles.packOptionBottomline}>
+                <span>{t(option.detailKey)}</span>
+                {option.savingCents > 0 && option.savingPercent ? (
+                  <span className={styles.packSaving}>
+                    {t("product.packSaving")
+                      .replace("{amount}", formatPrice(option.savingCents, locale))
+                      .replace("{percent}", option.savingPercent)}
+                  </span>
+                ) : (
+                  <span>{t("product.unitPriceReference")}</span>
+                )}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        <p className={styles.packExplanation}>
+          <strong>{t("product.sameColorPack")}</strong>{" "}
+          {t("product.sameColorPackBody")}{" "}
+          <strong>{t("product.mixedColorPack")}</strong>{" "}
+          {t("product.mixedColorPackBody")}
+        </p>
+      </fieldset>
 
       <div className={styles.selector}>
         <div className={styles.selectorHeading}>
@@ -426,7 +528,9 @@ export default function ProductPurchase({
                    taille tiennent chacune sur une ligne ; l'assistance reçoit la
                    phrase entière, qui dit ce que « À l'ouverture » sous-entend. */
                 aria-label={`${t("product.size")} ${size}, ${
-                  runtimeMode === "closed"
+                  reviewMode
+                    ? label
+                    : runtimeMode === "closed"
                     ? t("product.availabilityAtOpening")
                     : label
                 }`}
@@ -546,12 +650,26 @@ export default function ProductPurchase({
         }}
         aria-busy={cartBusy}
       >
-        {runtimeMode === "closed"
+        {reviewMode
+          ? `${t("product.reviewButton")} · ${formatPrice(
+              AJ_APOLLON_PACK_PRICE_CENTS[selectedPackSize],
+              locale,
+            )}`
+          : runtimeMode === "closed"
           ? t("product.openingSoon")
           : cartBusy
             ? t("product.adding")
             : selectedSize
-              ? t("product.addDemo")
+              ? selectedPackSize === 1
+                ? `${t("product.addDemo")} · ${formatPrice(
+                    AJ_APOLLON_PACK_PRICE_CENTS[1],
+                    locale,
+                  )}`
+                : `${t("product.addPack")
+                    .replace("{count}", String(selectedPackSize))} · ${formatPrice(
+                      AJ_APOLLON_PACK_PRICE_CENTS[selectedPackSize],
+                      locale,
+                    )}`
               : t("product.selectSizePrompt")}
       </button>
 
@@ -588,9 +706,9 @@ export default function ProductPurchase({
       </div>
 
       <div className={styles.service}>
-        <span>{runtimeMode === "production" ? "Livraison calculée à l’adresse" : t("product.shippingPending")}</span>
-        <span>{runtimeMode === "production" ? "Paiement sécurisé par Stripe" : t("product.paymentPending")}</span>
-        <span>{runtimeMode === "production" ? "Retours selon les conditions de vente" : t("product.returnsPending")}</span>
+        <span>{reviewMode ? t("product.reviewShipping") : runtimeMode === "production" ? "Livraison calculée à l’adresse" : t("product.shippingPending")}</span>
+        <span>{reviewMode ? t("product.reviewPayment") : runtimeMode === "production" ? "Paiement sécurisé par Stripe" : t("product.paymentPending")}</span>
+        <span>{reviewMode ? t("product.reviewPacks") : runtimeMode === "production" ? "Retours selon les conditions de vente" : t("product.returnsPending")}</span>
       </div>
     </aside>
   );

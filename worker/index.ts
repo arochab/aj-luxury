@@ -91,6 +91,7 @@ interface Env {
   TRANSACTIONAL_FROM_NAME?: string;
   TRANSACTIONAL_REPLY_TO?: string;
   RETURNS_WORKFLOW_ENABLED?: string;
+  SHIPMENT_HANDOVER_ENABLED?: string;
   RESERVATION_EXPIRY_ENABLED?: string;
   COMMERCE_REPORTING_ENABLED?: string;
   COMMERCE_BACKEND_ONLY?: string;
@@ -2539,7 +2540,7 @@ function withSecurityHeaders(
   if (environment === "production") {
     headers.set("Strict-Transport-Security", "max-age=31536000");
   }
-  if (environment === "preproduction") {
+  if (environment === "preproduction" || environment === "preview") {
     headers.set("X-Robots-Tag", "noindex, nofollow");
   }
   if (environment === "preproduction" && pathname.startsWith(PREPROD_API_PREFIX)) {

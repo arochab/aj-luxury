@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AJ Luxury — Digest lancement</title>
+  <style>
+    @font-face{font-family:AJ;src:url("../../public/fonts/manrope-latin-v1.woff2") format("woff2");font-weight:200 800;font-display:swap}
+    :root{--ink:#111112;--paper:#f6f6f3;--white:#fff;--mist:#ececeb;--muted:#59595c;--line:rgba(17,17,18,.15);--pourpre:#7d0f52;--rose:#dda9bd;--lilas:#a9abd9;--green:#365f45;--amber:#8a5a12;--red:#8b3f43}
+    *{box-sizing:border-box} body{margin:0;background:var(--paper);color:var(--ink);font-family:AJ,Arial,sans-serif;font-size:14px;line-height:1.5}
+    main{max-width:1180px;margin:auto;padding:40px 32px 72px}.eyebrow,.label,th{font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase}.eyebrow{color:var(--pourpre)}
+    h1{max-width:850px;margin:16px 0 20px;font-size:clamp(46px,7vw,92px);font-weight:320;letter-spacing:-.055em;line-height:.92}
+    h2{margin:0 0 20px;font-size:30px;font-weight:430;letter-spacing:-.03em} h3{margin:0 0 8px;font-size:16px} p{margin:0}
+    .hero{display:grid;grid-template-columns:1.45fr .55fr;gap:28px;padding-bottom:34px;border-bottom:1px solid var(--ink)}
+    .verdict{align-self:end;padding:22px;background:var(--ink);color:var(--white)}.verdict b{display:block;margin-top:8px;font-size:22px;font-weight:500}.verdict p{margin-top:8px;color:#d7d7d2;font-size:12px}
+    .summary{max-width:720px;color:var(--muted);font-size:16px}.status-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;margin:34px 0;background:var(--line);border:1px solid var(--line)}
+    .status{min-height:140px;padding:18px;background:var(--white)}.status strong{display:block;margin:16px 0 7px;font-size:22px;font-weight:480}.status p{color:var(--muted);font-size:12px}
+    .dot{display:inline-block;width:8px;height:8px;margin-right:7px;border-radius:50%}.live{background:var(--green)}.test{background:var(--amber)}.closed{background:var(--red)}
+    section{margin-top:48px}.matrix{width:100%;border-collapse:collapse;background:var(--white)}th,td{padding:14px 16px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line)}th{background:var(--mist)}td:first-child{width:17%;font-weight:650}td:nth-child(2){width:13%}.pill{display:inline-block;padding:4px 8px;border-radius:99px;font-size:9px;font-weight:750;letter-spacing:.08em;text-transform:uppercase}.pill-live{background:#dfe9e2;color:var(--green)}.pill-test{background:#f2e7d3;color:var(--amber)}.pill-closed{background:#f5e9e8;color:var(--red)}
+    .flow{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}.step{position:relative;min-height:130px;padding:15px;background:var(--white);border-top:3px solid var(--pourpre)}.step:not(:last-child)::after{position:absolute;right:-8px;top:50%;content:"→";transform:translate(50%,-50%);z-index:2}.step b{display:block;margin:10px 0 5px}.step small{color:var(--muted)}
+    .costs{display:grid;grid-template-columns:1.15fr .85fr;gap:20px}.callout{padding:24px;background:linear-gradient(135deg,var(--pourpre),#3c0d2c);color:white}.callout .number{margin:10px 0;font-size:50px;font-weight:300;letter-spacing:-.05em}.callout small{color:#ecdde7}.cost-table{width:100%;border-collapse:collapse;background:var(--white)}
+    .agentic{display:grid;grid-template-columns:1fr 1fr;gap:20px}.panel{padding:24px;background:var(--white)}.panel.safe{border-top:4px solid var(--lilas)}.panel.never{border-top:4px solid var(--pourpre)}ul{margin:12px 0 0;padding-left:18px}li{margin:6px 0}
+    .gates{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.gate{padding:20px;background:var(--white)}.gate b{display:block;margin-bottom:8px}.gate span{color:var(--muted);font-size:12px}
+    .score{font-size:34px;font-weight:330;letter-spacing:-.04em}.score small{font-size:12px;color:var(--muted);letter-spacing:0}.proof{margin-top:10px;color:var(--muted);font-size:11px}
+    footer{display:flex;justify-content:space-between;gap:20px;margin-top:52px;padding-top:16px;border-top:1px solid var(--ink);color:var(--muted);font-size:10px}
+    @media(max-width:800px){main{padding:28px 18px}.hero,.costs,.agentic{grid-template-columns:1fr}.status-grid{grid-template-columns:1fr 1fr}.flow{grid-template-columns:1fr 1fr}.step::after{display:none}.gates{grid-template-columns:1fr}.matrix{display:block;overflow-x:auto}h1{font-size:48px}}
+    @media print{body{background:white}main{max-width:none;padding:18mm}.status,.matrix,.step,.panel,.gate{break-inside:avoid}section{break-inside:avoid-page}}
+  </style>
+</head>
+<body>
+<main>
+  <header class="hero">
+    <div>
+      <div class="eyebrow">AJ Luxury · Cockpit lancement · 15 août 2026</div>
+      <h1>Une vitrine live.<br>Un commerce encore sous contrôle.</h1>
+      <p class="summary">Le site, la direction artistique et la vidéo d’accueil sont publics. Le routeur marchand production est maintenant câblé dans le candidat local, avec des sécurités qui ferment le commerce dès qu’une preuve manque. La vente réelle reste volontairement fermée tant que comptes fournisseurs, stock signé, authentification opérateur, migration D1 et commande contrôlée n’ont pas été prouvés sur le terrain.</p>
+    </div>
+    <aside class="verdict">
+      <span class="label">Réponse à Jérémy</span>
+      <b>Non, pas encore de caleçon commandable en production.</b>
+      <p>La vitrine est live. Le code marchand est candidat, mais aucun débit, e-mail, tarif ou colis réel n’a été autorisé.</p>
+    </aside>
+  </header>
+
+  <div class="status-grid">
+    <div class="status"><span class="label"><i class="dot live"></i>Public</span><strong>Front & DA</strong><p>Site, catalogue, fiches produit et vidéo V4 visibles sur ajluxurystore.com.</p></div>
+    <div class="status"><span class="label"><i class="dot test"></i>Privé</span><strong>Commande test</strong><p>Panier, option domicile fictive, paiement test, compte et suivi validés.</p></div>
+    <div class="status"><span class="label"><i class="dot test"></i>Candidat local</span><strong>Routeur de vente</strong><p>Panier, relais, Stripe, Sendcloud v3, stock, retours, e-mails et reporting sont câblés ou en gate final.</p></div>
+    <div class="status"><span class="label"><i class="dot closed"></i>Veto</span><strong>Vente réelle</strong><p>Aucun compte marchand, tarif, label, débit ou e-mail réel n’est encore activé.</p></div>
+  </div>
+
+  <section>
+    <div class="eyebrow">01 · État MECE</div><h2>Ce qui fonctionne, sans ambiguïté</h2>
+    <table class="matrix">
+      <thead><tr><th>Domaine</th><th>État</th><th>Acquis</th><th>Dernier verrou</th></tr></thead>
+      <tbody>
+        <tr><td>Front & design</td><td><span class="pill pill-live">Live vitrine</span></td><td>Accueil premium, navigation, 3 coloris et responsive sont publics. Le client production sait appeler le nouveau routeur sans exposer de secret.</td><td>Le nouveau client marchand n’est pas encore déployé sur le domaine public.</td></tr>
+        <tr><td>Vidéo accueil</td><td><span class="pill pill-live">Live</span></td><td>Hero V4 et relecture intégrés à la DA AJ Luxury.</td><td>Surveiller poids média et Core Web Vitals après trafic réel.</td></tr>
+        <tr><td>Commerce</td><td><span class="pill pill-test">Câblé, fermé</span></td><td>Routeur <code>/api/commerce</code>, panier D1, idempotence, réservations, commande, succès relu côté serveur et limitation des abus avant coût.</td><td>Déploiement du même SHA, D1 production sans données démo, émetteur de sessions client/opérateur et drill réel.</td></tr>
+        <tr><td>Livraison</td><td><span class="pill pill-test">Câblée, fermée</span></td><td>Sendcloud v3, domicile et relais chiffré, prix fournisseur, document A6, suivi. Colis 150/250/350 g, 40×32×4 cm.</td><td>Compte/tarifs réels, identité opérateur utilisable et preuve terrain. L’étiquette réelle est UE uniquement ; UK/US/CA restent fermés jusqu’à la douane.</td></tr>
+        <tr><td>Paiement</td><td><span class="pill pill-test">Câblé, fermé</span></td><td>Stripe Checkout hébergé, signature brute, anti-rejeu, session unique et compensation durable planifiée des paiements tardifs.</td><td>KYC/IBAN, clés test puis live, webhook sandbox, alerte de dette et commande contrôlée.</td></tr>
+        <tr><td>Retours</td><td><span class="pill pill-test">Partiel, fermé</span></td><td>Politique 14 jours et états demande → approbation → réception → inspection sont câblés sans effet fournisseur implicite.</td><td>Il manque encore l’émetteur de session client, l’étiquette retour réelle et le remboursement Stripe lié ; validation juridique et smoke complet obligatoires.</td></tr>
+        <tr><td>Stock</td><td><span class="pill pill-test">À cosigner</span></td><td>12 variantes/756 unités exactes, réserves atomiques, expiration des paniers abandonnés et anti-survente. Le total seul ne suffit plus.</td><td>Jérémy renseigne cadeaux/sécurité/SAV ; Jérémy et Adam signent le même manifeste lié au SHA déployé.</td></tr>
+        <tr><td>Analytics & reporting</td><td><span class="pill pill-test">Candidat ops</span></td><td>KPI D1 first-party agrégés : ventes, paiement, remboursement, stock, livraison, retours et e-mails, sans SDK public ni PII.</td><td>Création réelle de session administrateur, définitions KPI validées et smoke sur données contrôlées.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <div class="eyebrow">02 · Mécanique client</div><h2>Un flux simple, avec vérité serveur</h2>
+    <div class="flow">
+      <div class="step"><span class="label">1</span><b>Panier</b><small>Variante et quantité contrôlées contre le stock vendable.</small></div>
+      <div class="step"><span class="label">2</span><b>Adresse</b><small>Architecture UE, UK, US et Canada. Activation initiale réelle limitée aux zones juridiquement prêtes.</small></div>
+      <div class="step"><span class="label">3</span><b>Transport</b><small>Offres Sendcloud avec transporteur, prix et délai réels.</small></div>
+      <div class="step"><span class="label">4</span><b>Réservation</b><small>Stock bloqué atomiquement avant le paiement.</small></div>
+      <div class="step"><span class="label">5</span><b>Paiement</b><small>Stripe hébergé ; seule une signature serveur confirme la vente.</small></div>
+      <div class="step"><span class="label">6</span><b>Opération</b><small>Jérémy emballe, imprime et dépose ; e-mail, suivi, retour et remboursement restent tracés.</small></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">03 · Coût maîtrisé</div><h2>La stack minimale recommandée</h2>
+    <div class="costs">
+      <table class="cost-table">
+        <thead><tr><th>Poste</th><th>Choix</th><th>Coût de départ</th></tr></thead>
+        <tbody>
+          <tr><td>Hébergement + D1</td><td>Cloudflare Workers</td><td>5 $/mois recommandé ; quotas D1 très larges inclus.</td></tr>
+          <tr><td>Paiement</td><td>Stripe Checkout</td><td>0 € fixe ; 1,5 % + 0,25 € carte EEE, 2,5 % + 0,25 € UK.</td></tr>
+          <tr><td>Livraison</td><td>Sendcloud Lite</td><td>≈ 35 €/mois mensuel, ou ≈ 28 €/mois annualisé, + traitement/étiquette et transport réel.</td></tr>
+          <tr><td>E-mails</td><td>Resend Free</td><td>0 $ jusqu’à 3 000 e-mails/mois, 100/jour ; Pro 20 $ si besoin.</td></tr>
+          <tr><td>Analytics</td><td>D1 first-party</td><td>0 € additionnel ; pas de PostHog au lancement.</td></tr>
+        </tbody>
+      </table>
+      <aside class="callout"><span class="label">Budget fixe recommandé</span><div class="number">≈ 40 €/mois</div><p>Avant frais de paiement et coût réel des étiquettes/transport.</p><small>Alternative ultra-lean : Sendcloud Free jusqu’à 20 colis/mois, mais moins adapté au choix dynamique domicile + automatisation souhaités.</small></aside>
+    </div>
+    <p style="margin-top:10px;color:var(--muted);font-size:10px">Tarifs vérifiés le 15/08/2026 : <a href="https://stripe.com/fr/pricing">Stripe France</a> · <a href="https://www.sendcloud.com/pricing/">Sendcloud</a> · <a href="https://resend.com/pricing">Resend</a> · <a href="https://developers.cloudflare.com/workers/platform/pricing/">Cloudflare Workers</a>. Les frais de transport réels restent ceux du compte AJ Luxury au jour de l’étiquette.</p>
+  </section>
+
+  <section>
+    <div class="eyebrow">04 · Agentique, phase suivante</div><h2>Automatiser le travail, jamais la vérité financière</h2>
+    <div class="agentic">
+      <div class="panel safe"><h3>À agentifier après le lancement</h3><ul><li>Résumé quotidien des commandes, retards et retours.</li><li>Préparation de réponses SAV soumises à validation humaine.</li><li>Détection et priorisation des exceptions transport.</li><li>Comparaison hebdomadaire des coûts et délais transporteurs.</li><li>Propositions de contenu et reporting dirigeant.</li><li>Budget API conseillé : 5 à 10 € par mois au départ, plafonné et mesuré.</li></ul></div>
+      <div class="panel never"><h3>À garder déterministe</h3><ul><li>Débit, remboursement et validation des webhooks.</li><li>Calcul, réservation et décrément du stock.</li><li>Prix payé, taxes, douane et choix du service acheté.</li><li>Création d’étiquette ou retour sans règle et approbation.</li><li>Publication externe ou contact client sans contrôle.</li></ul></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">05 · Gate d’ouverture</div><h2>Trois preuves, dans cet ordre</h2>
+    <div class="gates">
+      <div class="gate"><b>1. Fournisseurs et vérité stock</b><span>Stripe KYC/IBAN + Sendcloud + domaine e-mail + manifeste stock et réserves signés.</span></div>
+      <div class="gate"><b>2. Production contrôlée</b><span>D1 neuve sans 0008, même SHA partout, HMAC/MFA opérateur, 3DS, refus, remboursement, offre transport, label, e-mail et restauration.</span></div>
+      <div class="gate"><b>3. Commande contrôlée</b><span>Un vrai boxer : paiement, stock, label, dépôt et tracking remis au transporteur. Retours/remboursements smôkés avant ouverture publique.</span></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">06 · Gauntlet final</div><h2>La qualité du plan n’est pas une preuve de production</h2>
+    <div class="gates">
+      <div class="gate"><b>Socle technique</b><div class="score">8,6<small>/10</small></div><span>Aucun P0 au jury. Routeur fail-closed, build et lint verts, 106/106 tests last-mile, 0 vulnérabilité sur les dépendances runtime.</span></div>
+      <div class="gate"><b>Préparation terrain</b><div class="score">0,5<small>/10</small></div><span>Aucun compte fournisseur, secret, migration production, session opérateur ni vraie commande contrôlée n’a été prouvé.</span></div>
+      <div class="gate"><b>Verdict 9,5</b><div class="score">Non atteint</div><span>Le score ne sera relevé qu’après preuve navigateur des sessions, retour réellement remboursé et commande complète jusqu’à la remise transporteur.</span></div>
+    </div>
+    <p class="proof">Preuves locales au 15/08/2026 : jury P0 = 0 ; tests last-mile = 106/106 ; fulfillment = 59/59, dont une vraie chaîne SQLite/D1 ; lint et build verts ; audit npm production = 0 vulnérabilité. Ces preuves n’autorisent ni déploiement ni encaissement.</p>
+  </section>
+
+  <footer><span>Document interne AJ Luxury · aucune clé ni donnée client</span><span>Vente publique interdite sans validation Adam + Jérémy de la même version</span></footer>
+</main>
+</body>
+</html>

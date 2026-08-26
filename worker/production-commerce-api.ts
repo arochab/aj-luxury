@@ -22,7 +22,10 @@ import {
   productionProviderConfigurationSchemaContractSha256,
   type ProductionProviderIdentities,
 } from "../lib/commerce/production-provider-configuration.ts";
-import { productionReleaseSchemaContractSha256 } from "../lib/commerce/production-schema-contract.ts";
+import {
+  productionLaunchStockCurrentGridContractSha256,
+  productionReleaseSchemaContractSha256,
+} from "../lib/commerce/production-schema-contract.ts";
 import { evaluateWiredProductionReleaseGate, productionEvidenceVersionId, type ProductionCommerceEnvironment } from "../lib/commerce/production-release-gate.ts";
 import { recordVerifiedResendWebhook, ResendWebhookError } from "../lib/commerce/resend-webhook.ts";
 import { createSendcloudProviderPorts } from "../lib/commerce/sendcloud-provider.ts";
@@ -85,6 +88,7 @@ export type ProductionCommerceRuntimeEnvironment = ProductionCommerceEnvironment
   TRANSACTIONAL_FROM_NAME?: string;
   RESEND_DOMAIN?: string;
   RETURNS_WORKFLOW_ENABLED?: string;
+  SHIPMENT_HANDOVER_ENABLED?: string;
   RETURNS_LABEL_AND_REFUND_PROCESS_APPROVED?: string;
   RESERVATION_EXPIRY_ENABLED?: string;
   DELIVERY_REFERENCE_ENCRYPTION_KEY_BASE64?: string;
@@ -327,15 +331,21 @@ export function productionCommerceRuntimeBlockers(
         ...(productionOutboundShippingRuntimeConfigured(env)
           ? []
           : ["outbound-shipping-runtime-not-configured"]),
-        ...(env.OPERATOR_ADMIN_MFA_ENABLED === "true"
-          ? []
-          : ["operator-admin-mfa-not-enabled"]),
+        // Customer checkout does not expose operator administration. Keep MFA
+        // mandatory for public `live` promotion while allowing the owner-only
+        // controlled acceptance order to run before the admin console opens.
+        ...(mode !== "controlled" && env.OPERATOR_ADMIN_MFA_ENABLED !== "true"
+          ? ["operator-admin-mfa-not-enabled"]
+          : []),
         ...(productionEmailDispatchRuntimeConfigured(env)
           ? []
           : ["transactional-email-dispatch-not-enabled"]),
         ...(env.RETURNS_WORKFLOW_ENABLED === "true"
           ? []
           : ["returns-workflow-not-activated"]),
+        ...(env.SHIPMENT_HANDOVER_ENABLED === "true"
+          ? []
+          : ["shipment-handover-not-enabled"]),
         ...(mode === "live" && env.RETURNS_LABEL_AND_REFUND_PROCESS_APPROVED !== "true"
           ? ["returns-label-and-refund-process-unapproved"] : []),
         ...(env.RESERVATION_EXPIRY_ENABLED === "true"
@@ -625,6 +635,10 @@ export async function productionStockManifestRuntimeAttested(
           SELECT 1 FROM production_runtime_schema_proofs
           WHERE migration_id='0015_production_release_attestation'
             AND contract_sha256='${productionReleaseSchemaContractSha256}'
+        ) AND EXISTS (
+          SELECT 1 FROM production_runtime_schema_proofs
+          WHERE migration_id='0020_launch_stock_current_grid'
+            AND contract_sha256='${productionLaunchStockCurrentGridContractSha256}'
         ) THEN 1 ELSE 0 END AS schema_proven
       FROM production_launch_stock_manifests AS manifest
       WHERE manifest.id=? AND manifest.payload_sha256=? AND manifest.release_sha=?`,
@@ -770,7 +784,7 @@ export async function productionCommerceApiResponse(
     const workerVersionId = env.CF_VERSION_METADATA?.id ?? "";
     if (request.headers.get("X-AJ-Release-SHA") !== releaseSha ||
       request.headers.get("X-AJ-Stock-Import-Confirmation") !==
-        "IMPORT_756_PHYSICAL_26_GIFTS_730_SELLABLE" ||
+        "IMPORT_749_CURRENT_23_GIFTS_726_SELLABLE" ||
       env.CF_VERSION_METADATA?.tag !== releaseSha ||
       env.COMMERCE_ADAM_APPROVAL_SHA !== releaseSha ||
       env.COMMERCE_JEREMY_APPROVAL_SHA !== releaseSha ||

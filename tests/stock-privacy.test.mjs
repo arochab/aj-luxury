@@ -25,8 +25,7 @@ function readTree(directory) {
 }
 
 const exactStockSignatures = [
-  /26\D{0,40}103\D{0,40}87\D{0,40}36/,
-  /26\D{0,40}102\D{0,40}88\D{0,40}36/,
+  /63\D{0,40}63\D{0,40}63\D{0,40}63/,
 ];
 
 function assertNoStockLeak(payload) {
@@ -40,7 +39,7 @@ function assertNoStockLeak(payload) {
   );
   assert.doesNotMatch(
     payload,
-    /(?:26|36|87|88|102|103)\s+(?:en stock|disponibles?)/i,
+    /(?:60|61|63)\s+(?:en stock|disponibles?)/i,
   );
 
   for (const signature of exactStockSignatures) {
@@ -74,9 +73,9 @@ async function render(pathname) {
 
 test("internal stock separates physical, reserved and available-to-sell", () => {
   assert.deepEqual(getInternalStockPosition("pourpre", "M"), {
-    physical: 103,
-    reserved: 0,
-    availableToSell: 103,
+    physical: 102,
+    reserved: 2,
+    availableToSell: 100,
   });
   assert.deepEqual(getInternalStockPosition("unknown", "S"), {
     physical: 0,
@@ -86,7 +85,7 @@ test("internal stock separates physical, reserved and available-to-sell", () => 
 });
 
 test("public stock projection never exposes a quantity above five", () => {
-  assert.deepEqual(toPublicStockStatus(103), { state: "available" });
+  assert.deepEqual(toPublicStockStatus(61), { state: "available" });
   assert.deepEqual(toPublicStockStatus(6), { state: "available" });
   assert.deepEqual(toPublicStockStatus(5), {
     state: "low-stock",
@@ -121,9 +120,29 @@ test("the client purchase component receives only public stock states", () => {
   );
 
   assert.match(clientSource, /PublicStockBySize/);
-  assert.match(clientSource, /disabled=\{soldOut\}/);
+  /* `aria-disabled`, pas `disabled`. L'assertion attendait encore la forme
+     native, abandonnee depuis : un bouton nativement desactive sort de l'ordre
+     de tabulation et n'est plus annonce, donc le refus de vente devient muet
+     pour un lecteur d'ecran. Le contrat verifie ici est donc double, et plus
+     strict que l'ancien : la taille epuisee porte bien l'etat refuse, ET le
+     refus est reellement applique dans le gestionnaire de selection, pas
+     seulement signale visuellement. */
+  assert.match(clientSource, /aria-disabled=\{soldOut/);
+  assert.match(clientSource, /if \(isSoldOut\(size\)\) return;/);
   assert.match(clientSource, /product\.available/);
-  assert.match(clientSource, /product\.onlyLeft/);
+  assert.match(clientSource, /product\.lowStockSimulated/);
+  /* L'interdiction seche de `product.onlyLeft` datait du temps ou ce composant
+     ne servait que la preproduction : afficher un compte exact y aurait ete un
+     chiffre invente. Depuis, une branche production existe et affiche le compte
+     reel. Interdire le libelle partout revenait a interdire une fonctionnalite
+     du magasin en ligne, pas a proteger une donnee.
+     Ce qui doit rester garanti est plus precis, et c'est ce qu'on verifie ici :
+     le chemin SIMULE ne divulgue jamais de compte, le compte exact appartient
+     au seul chemin reel. La forme ternaire est donc epinglee telle quelle. */
+  assert.match(
+    clientSource,
+    /simulated\s*\?\s*t\("product\.lowStockSimulated"\)\s*:\s*t\("product\.onlyLeft"\)/,
+  );
   assert.match(clientSource, /product\.soldOut/);
   assert.match(productPageSource, /getPublicStockBySize/);
   assert.match(productPageSource, /availability=\{availability\}/);

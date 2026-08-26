@@ -168,7 +168,7 @@
        padding-bas de l'ouverture, clamp(14px, 2vh, 22px). C'est maintenant
        l'écart de rangée, à la valeur identique : la mesure ne bouge d'aucun
        pixel à 1920, 1440, 1280 et 1024. */
-    row-gap: clamp(14px, 2vh, 22px);
+    row-gap: clamp(28px, 3.4vh, 48px);
     padding-inline: var(--bq-marge);
     padding-bottom: 0;
   }
@@ -425,7 +425,7 @@
      même x, à toutes les tailles. Les 2 px restants sont une couture, pas un
      intervalle : ils marquent que ce sont trois états d'un même objet. */
   justify-content: center;
-  gap: 2px;
+  gap: clamp(18px, 2vw, 32px);
   /* La gouttière latérale est conditionnelle, voir la règle juste sous
      celle-ci : passé 900 px elle est déjà portée par l'ouverture, qui la
      calcule sur la bande des trois cadres. La reprendre ici la compterait deux

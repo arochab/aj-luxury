@@ -35,6 +35,7 @@ import {
   assertVerifiedCarrierEvent,
   type VerifiedCarrierEvent,
 } from "./verified-carrier-event.ts";
+import { buildTransactionalEmail } from "./transactional-email.ts";
 
 type QuoteConfigurationRow = {
   id: string;
@@ -1079,11 +1080,17 @@ export class D1FulfillmentStore {
         input.now,
       ]),
     );
+    const shipmentEmail = await buildTransactionalEmail({
+      kind: "shipment-confirmation",
+      eventId: input.eventId,
+      locale: input.locale,
+      recipientEmail: shipment.email,
+      orderNumber: shipment.order_number,
+      trackingReference: shipment.tracking_reference,
+    });
     const payloadJson = JSON.stringify({
-      subject: input.locale === "fr" ? "Votre colis a été remis au transporteur" : "Your parcel was handed to the carrier",
-      text: input.locale === "fr"
-        ? `La commande ${shipment.order_number} a été remise au transporteur. Suivi : ${shipment.tracking_reference}.`
-        : `Order ${shipment.order_number} was handed to the carrier. Tracking: ${shipment.tracking_reference}.`,
+      subject: shipmentEmail.subject,
+      text: shipmentEmail.text,
     });
     try {
       const results = await this.#database.batch([

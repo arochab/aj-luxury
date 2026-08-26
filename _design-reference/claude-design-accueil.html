@@ -1,0 +1,991 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AJ Luxury — Apollon</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="crossorigin" />
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@200..800&display=swap" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/gsap.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/ScrollTrigger.min.js"></script>
+<style>
+  @property --seam-live { syntax: '<percentage>'; inherits: true; initial-value: 100%; }
+  *, *::before, *::after { box-sizing: border-box; }
+  html { scroll-behavior: auto; }
+  body {
+    margin: 0; background: #08080a; color: #fff;
+    font-family: 'Manrope', 'Helvetica Neue', Helvetica, sans-serif;
+    font-synthesis-weight: none; text-wrap: pretty; -webkit-font-smoothing: antialiased;
+  }
+  a { color: inherit; text-decoration: none; }
+  a:hover { color: #fff; }
+  :where(a, button, input, [tabindex]):focus-visible {
+    outline: 1px solid #fff; outline-offset: 4px;
+  }
+</style>
+</helmet>
+
+<div id="ajRoot" style="
+  --gut:clamp(20px,4vw,68px);
+  --metal:linear-gradient(100deg,#ffffff 0%,#d4d7db 11%,#7c828a 24%,#ffffff 38%,#969ca4 50%,#f2f4f5 62%,#6d737b 76%,#e2e5e8 89%,#ffffff 100%);
+  --t0:15px; --t1:clamp(16px,1.05vw,18px); --t2:clamp(21px,1.5vw,25px);
+  --t4:clamp(34px,2.6vw,44px); --t6:clamp(52px,5.6vw,86px); --t7:clamp(60px,7.6vw,132px);
+  --disp:'Manrope','Helvetica Neue',Helvetica,sans-serif;
+  --e1:cubic-bezier(.16,1,.3,1);
+  position:relative; font-size:var(--t1); line-height:1.5; background:#08080a
+">
+
+  <header style="position:fixed; z-index:40; top:0; right:0; left:0; display:grid; grid-template-columns:1fr auto 1fr; align-items:center; gap:20px; height:76px; padding:0 var(--gut); background:rgba(8,8,10,.86); backdrop-filter:blur(14px); border-bottom:1px solid rgba(255,255,255,.14); color:#fff">
+    <a href="#haut" aria-label="AJ Luxury — accueil" style="display:inline-grid; place-items:center; justify-self:start">
+      <img src="prod/aj-luxury-logo-212.png" alt="" width="212" height="153" style="width:82px; height:auto; filter:brightness(2.2) contrast(.82) drop-shadow(0 6px 14px rgba(0,0,0,.25))" />
+    </a>
+    <nav style="display:flex; align-items:center; gap:clamp(18px,2.4vw,42px); font-size:var(--t0); font-weight:600; letter-spacing:.14em; text-transform:uppercase">
+      <a class="ajNav" href="#haut" style="position:relative; display:inline-flex; min-height:44px; align-items:center">Accueil<span class="ajNavBar" aria-hidden="true" style="position:absolute; right:0; bottom:9px; left:0; height:1px; background:currentColor; transform:scaleX(1); transform-origin:left; transition:transform 350ms cubic-bezier(.2,.8,.2,1)"></span></a>
+      <a class="ajNav" href="#coloris" style="position:relative; display:inline-flex; min-height:44px; align-items:center">Boutique<span class="ajNavBar" aria-hidden="true" style="position:absolute; right:0; bottom:9px; left:0; height:1px; background:currentColor; transform:scaleX(0); transform-origin:right; transition:transform 350ms cubic-bezier(.2,.8,.2,1)"></span></a>
+      <a class="ajNav" href="#matiere" style="position:relative; display:inline-flex; min-height:44px; align-items:center">Notre histoire<span class="ajNavBar" aria-hidden="true" style="position:absolute; right:0; bottom:9px; left:0; height:1px; background:currentColor; transform:scaleX(0); transform-origin:right; transition:transform 350ms cubic-bezier(.2,.8,.2,1)"></span></a>
+    </nav>
+    <div style="display:flex; justify-self:end; align-items:center; gap:clamp(14px,1.8vw,30px); font-size:var(--t0); font-weight:600; letter-spacing:.14em; text-transform:uppercase">
+      <span style="display:inline-flex; min-height:44px; align-items:center; padding:0 12px; border:1px solid rgba(255,255,255,.4)">FR</span>
+      <a class="ajNav" href="#coloris" style="position:relative; display:inline-flex; min-height:44px; align-items:center">Compte<span class="ajNavBar" aria-hidden="true" style="position:absolute; right:0; bottom:9px; left:0; height:1px; background:currentColor; transform:scaleX(0); transform-origin:right; transition:transform 350ms cubic-bezier(.2,.8,.2,1)"></span></a>
+      <a class="ajNav" href="#coloris" style="position:relative; display:inline-flex; min-height:44px; align-items:center">Panier<span class="ajNavBar" aria-hidden="true" style="position:absolute; right:0; bottom:9px; left:0; height:1px; background:currentColor; transform:scaleX(0); transform-origin:right; transition:transform 350ms cubic-bezier(.2,.8,.2,1)"></span></a>
+    </div>
+  </header>
+
+  <section id="haut" data-screen-label="01 Film" style="position:relative; height:100svh; min-height:100svh; overflow:hidden; background:#08080a">
+    <figure id="ajFilm" style="position:absolute; margin:0; inset:76px 0 0 0; overflow:hidden; background:#101014">
+      <img id="ajFilmPoster" src="prod/hero-v4-desktop.webp" alt="" width="1920" height="1080" fetchpriority="high" decoding="async" style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover; object-position:50% 12%" />
+      <video id="ajFilmVideo" muted="muted" playsinline="playsinline" preload="auto" aria-label="Film Apollon" style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover; object-position:50% 12%; opacity:0"></video>
+      <span aria-hidden="true" style="position:absolute; inset:0; pointer-events:none; background:linear-gradient(0deg, rgba(6,6,8,.62) 0%, rgba(6,6,8,0) 26%)"></span>
+    </figure>
+
+    <div style="position:absolute; right:var(--gut); bottom:clamp(26px,4vh,44px); left:var(--gut); display:flex; align-items:flex-end; justify-content:space-between; gap:24px; flex-wrap:wrap">
+      <h1 id="ajH1" style="margin:0; font-size:var(--t0); font-weight:600; letter-spacing:.24em; text-transform:uppercase; line-height:1.4; color:#fff">
+        <span style="display:block">Reveal Your Inner Beauty</span>
+      </h1>
+      <a id="ajDecouvrir" href="#plaque" style="display:inline-flex; align-items:center; gap:clamp(14px,2vw,30px); min-height:44px; color:#fff; font-size:var(--t0); font-weight:600; letter-spacing:.2em; text-transform:uppercase">
+        <span style="padding-bottom:6px; border-bottom:1px solid rgba(255,255,255,.75)">Découvrir</span>
+        <span aria-hidden="true" style="font-size:var(--t2); font-weight:300">↓</span>
+      </a>
+    </div>
+  </section>
+
+  <section id="plaque" data-screen-label="02 Le modèle" style="position:relative; height:420svh; background:#97666a">
+    <div id="ajSticky" style="position:sticky; top:0; height:100svh; overflow:hidden; background:#97666a">
+
+      <div id="ajRail" style="position:absolute; inset:0; display:flex; width:300%; will-change:transform">
+
+        <article class="ajPanel" data-i="0" style="position:relative; flex:0 0 33.3333%; display:grid; grid-template-columns:minmax(0,300px) minmax(0,1fr); align-items:center; gap:clamp(18px,2.6vw,48px); padding:clamp(88px,11vh,124px) var(--gut) clamp(80px,10vh,112px)">
+          <div class="ajSeqC" style="padding:clamp(18px,1.8vw,26px) clamp(20px,2vw,30px); background:rgba(20,14,16,.62)">
+            <h2 style="margin:0 0 .34em; font-family:var(--disp); font-weight:200; font-size:var(--t4); line-height:.96; letter-spacing:-.055em; background:var(--metal); background-clip:text; -webkit-background-clip:text; color:transparent; -webkit-text-fill-color:transparent">Rose Velours</h2>
+            <p style="margin:0 0 .9em; font-size:var(--t1); font-weight:300; line-height:1.5; color:rgba(255,255,255,.94)">Une pièce qui réinvente le sous-vêtement masculin avec subtilité et sophistication.</p>
+            <p style="margin:0; font-size:var(--t0); font-weight:600; letter-spacing:.18em; text-transform:uppercase; color:#fff">Doux et raffiné · 29,99 €</p>
+          </div>
+          <div class="ajDuo" style="position:relative; display:flex; align-items:center; justify-content:center; height:100%; min-width:0; overflow:hidden">
+            <img class="ajStill" src="plaques/apollon-rose-lyre-v1.webp" alt="Le boxer Apollon Rose Velours seul, sur le plateau" width="1024" height="1536" style="max-width:50%; max-height:100%; width:auto; height:auto; object-fit:contain; display:block" />
+            <img class="ajWorn" src="plaques/apollon-rose-model-world-v1.webp" alt="Apollon Rose Velours porté, sur le même plateau" width="1731" height="2600" style="max-width:50%; max-height:100%; width:auto; height:auto; object-fit:contain; display:block; transform:translate3d(0,0,0); will-change:transform" />
+          </div>
+        </article>
+
+        <article class="ajPanel" data-i="1" style="position:relative; flex:0 0 33.3333%; display:grid; grid-template-columns:minmax(0,300px) minmax(0,1fr); align-items:center; gap:clamp(18px,2.6vw,48px); padding:clamp(88px,11vh,124px) var(--gut) clamp(80px,10vh,112px)">
+          <div class="ajSeqC" style="padding:clamp(18px,1.8vw,26px) clamp(20px,2vw,30px); background:rgba(14,14,22,.62)">
+            <h2 style="margin:0 0 .34em; font-family:var(--disp); font-weight:200; font-size:var(--t4); line-height:.96; letter-spacing:-.055em; background:var(--metal); background-clip:text; -webkit-background-clip:text; color:transparent; -webkit-text-fill-color:transparent">Lilas Céleste</h2>
+            <p style="margin:0 0 .9em; font-size:var(--t1); font-weight:300; line-height:1.5; color:rgba(255,255,255,.94)">Un boxer masculin où la douceur rencontre l’élégance contemporaine.</p>
+            <p style="margin:0; font-size:var(--t0); font-weight:600; letter-spacing:.18em; text-transform:uppercase; color:#fff">Délicat et lumineux · 29,99 €</p>
+          </div>
+          <div class="ajDuo" style="position:relative; display:flex; align-items:center; justify-content:center; height:100%; min-width:0; overflow:hidden">
+            <img class="ajStill" src="plaques/apollon-lilas-lyre-v1.webp" alt="Le boxer Apollon Lilas Céleste seul, sur le plateau" width="1024" height="1536" style="max-width:50%; max-height:100%; width:auto; height:auto; object-fit:contain; display:block" />
+            <img class="ajWorn" src="plaques/apollon-lilas-model-world-v1.webp" alt="Apollon Lilas Céleste porté, sur le même plateau" width="1731" height="2600" style="max-width:50%; max-height:100%; width:auto; height:auto; object-fit:contain; display:block; transform:translate3d(0,0,0); will-change:transform" />
+          </div>
+        </article>
+
+        <article class="ajPanel" data-i="2" style="position:relative; flex:0 0 33.3333%; display:grid; grid-template-columns:minmax(0,300px) minmax(0,1fr); align-items:center; gap:clamp(18px,2.6vw,48px); padding:clamp(88px,11vh,124px) var(--gut) clamp(80px,10vh,112px)">
+          <div class="ajSeqC" style="padding:clamp(18px,1.8vw,26px) clamp(20px,2vw,30px); background:rgba(20,6,12,.62)">
+            <h2 style="margin:0 0 .34em; font-family:var(--disp); font-weight:200; font-size:var(--t4); line-height:.96; letter-spacing:-.055em; background:var(--metal); background-clip:text; -webkit-background-clip:text; color:transparent; -webkit-text-fill-color:transparent">Pourpre Impérial</h2>
+            <p style="margin:0 0 .9em; font-size:var(--t1); font-weight:300; line-height:1.5; color:rgba(255,255,255,.94)">Pensé pour ceux qui recherchent l’alliance parfaite entre élégance, confort et raffinement.</p>
+            <p style="margin:0; font-size:var(--t0); font-weight:600; letter-spacing:.18em; text-transform:uppercase; color:#fff">Profond et sophistiqué · 29,99 €</p>
+          </div>
+          <div class="ajDuo" style="position:relative; display:flex; align-items:center; justify-content:center; height:100%; min-width:0; overflow:hidden">
+            <img class="ajStill" src="plaques/apollon-pourpre-lyre-v1.webp" alt="Le boxer Apollon Pourpre Impérial seul, sur le plateau" width="1024" height="1536" style="max-width:50%; max-height:100%; width:auto; height:auto; object-fit:contain; display:block" />
+            <img class="ajWorn" src="plaques/apollon-pourpre-model-world-v1.webp" alt="Apollon Pourpre Impérial porté, sur le même plateau" width="1731" height="2600" style="max-width:50%; max-height:100%; width:auto; height:auto; object-fit:contain; display:block; transform:translate3d(0,0,0); will-change:transform" />
+          </div>
+        </article>
+      </div>
+
+      <div id="ajCtl" style="position:absolute; right:var(--gut); bottom:clamp(24px,3.4vh,42px); left:var(--gut); display:flex; align-items:center; justify-content:space-between; gap:20px; flex-wrap:wrap; color:#fff">
+        <div style="display:flex; gap:clamp(16px,2vw,34px)">
+          <button type="button" class="ajTab" data-t="0" aria-label="Rose Velours" style="appearance:none; background:none; border:0; padding:4px 0; min-height:44px; min-width:44px; cursor:pointer; color:inherit; font-family:inherit; font-size:var(--t0); font-weight:600; letter-spacing:.18em">01</button>
+          <button type="button" class="ajTab" data-t="1" aria-label="Lilas Céleste" style="appearance:none; background:none; border:0; padding:4px 0; min-height:44px; min-width:44px; cursor:pointer; color:inherit; font-family:inherit; font-size:var(--t0); font-weight:600; letter-spacing:.18em; opacity:.5">02</button>
+          <button type="button" class="ajTab" data-t="2" aria-label="Pourpre Impérial" style="appearance:none; background:none; border:0; padding:4px 0; min-height:44px; min-width:44px; cursor:pointer; color:inherit; font-family:inherit; font-size:var(--t0); font-weight:600; letter-spacing:.18em; opacity:.5">03</button>
+        </div>
+        <span id="ajChapitreEtat" style="font-size:var(--t0); font-weight:600; letter-spacing:.2em; text-transform:uppercase">Seul</span>
+      </div>
+
+      <div style="position:absolute; right:var(--gut); bottom:0; left:var(--gut); height:1px; background:rgba(255,255,255,.3)">
+        <div id="ajProg" style="position:absolute; inset:0; background:#fff; transform-origin:0 50%; transform:scaleX(0); will-change:transform"></div>
+      </div>
+
+      <p id="ajLive" aria-live="polite" aria-atomic="true" style="position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap"></p>
+    </div>
+  </section>
+
+  <section id="coloris" data-screen-label="03 Les coloris" style="background:#08080a; color:#fff; padding:clamp(60px,9vh,120px) 0 0">
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(min(100%,260px), 1fr)); gap:2px; padding:0 2px">
+      <button type="button" class="ajCard" data-c="0" aria-pressed="true" style="position:relative; display:block; min-height:clamp(420px,64vh,720px); overflow:hidden; padding:0; border:0; cursor:pointer; background:#101014; color:#fff; text-align:left; font-family:inherit">
+        <img src="prod/product-card-rose.webp" alt="Boxer Apollon Rose Velours" width="1200" height="1600" style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover; object-position:center 62%; transition:transform 1.1s var(--e1)" />
+        <span style="position:absolute; right:20px; bottom:22px; left:20px; display:flex; align-items:baseline; justify-content:space-between; gap:14px">
+          <span style="font-family:var(--disp); font-optical-sizing:auto; font-size:var(--t2); font-weight:400; letter-spacing:-.01em">Rose Velours</span>
+          <span style="font-size:var(--t0); font-weight:500; letter-spacing:.1em">29,99 €</span>
+        </span>
+        <span class="ajBar" aria-hidden="true" style="position:absolute; z-index:3; right:0; bottom:0; left:0; height:2px; background:#dda9bd; transform:scaleX(1); transform-origin:left; transition:transform 700ms var(--e1)"></span>
+      </button>
+
+      <button type="button" class="ajCard" data-c="1" aria-pressed="false" style="position:relative; display:block; min-height:clamp(420px,64vh,720px); overflow:hidden; padding:0; border:0; cursor:pointer; background:#101014; color:#fff; text-align:left; font-family:inherit">
+        <img src="prod/product-lilas-model.webp" alt="Boxer Apollon Lilas Céleste" width="1731" height="2600" style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover; object-position:center 62%; transition:transform 1.1s var(--e1)" />
+        <span style="position:absolute; right:20px; bottom:22px; left:20px; display:flex; align-items:baseline; justify-content:space-between; gap:14px">
+          <span style="font-family:var(--disp); font-optical-sizing:auto; font-size:var(--t2); font-weight:400; letter-spacing:-.01em">Lilas Céleste</span>
+          <span style="font-size:var(--t0); font-weight:500; letter-spacing:.1em">29,99 €</span>
+        </span>
+        <span class="ajBar" aria-hidden="true" style="position:absolute; z-index:3; right:0; bottom:0; left:0; height:2px; background:#a9abd9; transform:scaleX(0); transform-origin:left; transition:transform 700ms var(--e1)"></span>
+      </button>
+
+      <button type="button" class="ajCard" data-c="2" aria-pressed="false" style="position:relative; display:block; min-height:clamp(420px,64vh,720px); overflow:hidden; padding:0; border:0; cursor:pointer; background:#101014; color:#fff; text-align:left; font-family:inherit">
+        <img src="prod/product-card-pourpre.webp" alt="Boxer Apollon Pourpre Impérial" width="1200" height="1600" style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover; object-position:center 62%; transition:transform 1.1s var(--e1)" />
+        <span style="position:absolute; right:20px; bottom:22px; left:20px; display:flex; align-items:baseline; justify-content:space-between; gap:14px">
+          <span style="font-family:var(--disp); font-optical-sizing:auto; font-size:var(--t2); font-weight:400; letter-spacing:-.01em">Pourpre Impérial</span>
+          <span style="font-size:var(--t0); font-weight:500; letter-spacing:.1em">29,99 €</span>
+        </span>
+        <span class="ajBar" aria-hidden="true" style="position:absolute; z-index:3; right:0; bottom:0; left:0; height:2px; background:#7d0f52; transform:scaleX(0); transform-origin:left; transition:transform 700ms var(--e1)"></span>
+      </button>
+    </div>
+
+    <div style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:clamp(20px,3vw,48px); padding:clamp(28px,4vh,44px) var(--gut) clamp(56px,8vh,96px)">
+      <div style="display:flex; flex-wrap:wrap; gap:8px">
+        <button type="button" class="ajSize" data-s="S" aria-pressed="false" style="min-width:58px; min-height:48px; cursor:pointer; background:transparent; border:1px solid rgba(255,255,255,.34); color:inherit; font-family:inherit; font-size:var(--t0); font-weight:500; letter-spacing:.08em">S</button>
+        <button type="button" class="ajSize" data-s="M" aria-pressed="false" style="min-width:58px; min-height:48px; cursor:pointer; background:transparent; border:1px solid rgba(255,255,255,.34); color:inherit; font-family:inherit; font-size:var(--t0); font-weight:500; letter-spacing:.08em">M</button>
+        <button type="button" class="ajSize" data-s="L" aria-pressed="false" style="min-width:58px; min-height:48px; cursor:pointer; background:transparent; border:1px solid rgba(255,255,255,.34); color:inherit; font-family:inherit; font-size:var(--t0); font-weight:500; letter-spacing:.08em">L</button>
+        <button type="button" class="ajSize" data-s="XL" aria-pressed="false" style="min-width:58px; min-height:48px; cursor:pointer; background:transparent; border:1px solid rgba(255,255,255,.34); color:inherit; font-family:inherit; font-size:var(--t0); font-weight:500; letter-spacing:.08em">XL</button>
+      </div>
+      <button type="button" id="ajBuy" style="min-height:56px; padding:0 34px; cursor:pointer; background:#fff; border:0; color:#08080a; font-family:inherit; font-size:var(--t1); font-weight:700">Ajouter — 29,99 €</button>
+      <p id="ajBuyNote" style="margin:0; flex-basis:100%; color:rgba(255,255,255,.72); font-size:var(--t0)">Sélectionnez une taille.</p>
+    </div>
+  </section>
+
+  <section id="matiere" data-screen-label="04 La matière" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(min(100%,340px), 1fr)); background:#08080a; color:#fff">
+    <div style="position:relative; min-height:100svh; overflow:hidden">
+      <img class="ajPara" src="prod/product-pourpre-detail.webp" alt="Ceinture premium 3,5 cm, logo métallique AJ Luxury" width="1200" height="1600" style="position:absolute; inset:-6% 0; width:100%; height:112%; object-fit:cover; will-change:transform" />
+    </div>
+
+    <div style="display:flex; flex-direction:column; justify-content:center; gap:clamp(30px,5vh,56px); padding:clamp(72px,12vh,132px) var(--gut)">
+      <div class="ajUp" style="display:flex; align-items:baseline; gap:clamp(18px,2.4vw,40px)">
+        <span style="font-family:var(--disp); font-optical-sizing:auto; font-variation-settings:'opsz' 72; font-size:var(--t6); font-weight:400; letter-spacing:-.03em; line-height:.86">94</span>
+        <span style="font-size:var(--t0); font-weight:500; letter-spacing:.16em; text-transform:uppercase">Modal</span>
+        <span style="font-family:var(--disp); font-optical-sizing:auto; font-variation-settings:'opsz' 72; font-size:var(--t6); font-weight:400; letter-spacing:-.03em; line-height:.86">6</span>
+        <span style="font-size:var(--t0); font-weight:500; letter-spacing:.16em; text-transform:uppercase">Élasthanne</span>
+      </div>
+      <p class="ajUp" style="margin:0; max-width:30ch; color:rgba(255,255,255,.9); font-size:var(--t2); font-weight:200; line-height:1.4; letter-spacing:-.01em">Une sensation de seconde peau.</p>
+      <span class="ajUp" style="font-size:var(--t0); font-weight:500; letter-spacing:.14em; text-transform:uppercase; color:rgba(255,255,255,.84)">Ceinture premium 3,5 cm</span>
+    </div>
+  </section>
+
+  <section data-screen-label="05 Editorial" style="background:#08080a; padding:0 2px">
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(min(100%,280px), 1fr)); gap:2px">
+      <figure class="ajUp" style="position:relative; margin:0; min-height:clamp(400px,72vh,820px); overflow:hidden; background:#101014">
+        <img src="prod/editorial-pourpre-chair.webp" alt="AJ Luxury — Jérémy — Apollon Pourpre Impérial" width="1864" height="2600" style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover; object-position:30% 28%" />
+        <figcaption style="position:absolute; bottom:22px; left:20px; font-size:var(--t0); font-weight:500; letter-spacing:.16em; text-transform:uppercase; color:#fff">Jérémy</figcaption>
+      </figure>
+      <figure class="ajUp" style="position:relative; margin:0; min-height:clamp(400px,72vh,820px); overflow:hidden; background:#101014">
+        <img src="prod/campaign-duo-lilas-seated.webp" alt="AJ Luxury — Alex et Jérémy — Apollon Lilas Céleste" width="1484" height="2229" style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover; object-position:50% 28%" />
+        <figcaption style="position:absolute; bottom:22px; left:20px; font-size:var(--t0); font-weight:500; letter-spacing:.16em; text-transform:uppercase; color:#fff">Alex et Jérémy</figcaption>
+      </figure>
+      <figure class="ajUp" style="position:relative; margin:0; min-height:clamp(400px,72vh,820px); overflow:hidden; background:#101014">
+        <img src="prod/editorial-rose-profile.webp" alt="AJ Luxury — Alex — Apollon Rose Velours" width="1731" height="2600" style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover; object-position:70% 28%" />
+        <figcaption style="position:absolute; bottom:22px; left:20px; font-size:var(--t0); font-weight:500; letter-spacing:.16em; text-transform:uppercase; color:#fff">Alex</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section data-screen-label="06 Clôture" style="min-height:88svh; display:grid; place-items:center; background:#08080a; padding:clamp(80px,14vh,180px) var(--gut)">
+    <div style="display:flex; flex-direction:column; gap:clamp(40px,7vh,84px); width:100%; max-width:1100px">
+      <h2 class="ajUp" style="margin:0; max-width:22ch; font-family:var(--disp); font-optical-sizing:auto; font-variation-settings:'opsz' 72; font-size:var(--t6); font-weight:400; letter-spacing:-.028em; line-height:.94; background:var(--metal); background-clip:text; -webkit-background-clip:text; color:transparent; -webkit-text-fill-color:transparent">Le véritable luxe commence par ce que l’on porte au plus près de soi.</h2>
+
+      <form id="ajForm" class="ajUp" style="display:flex; flex-direction:column; gap:12px; max-width:520px">
+        <label for="ajMail" style="font-size:var(--t0); font-weight:500; letter-spacing:.16em; text-transform:uppercase; color:rgba(255,255,255,.84)">Newsletter</label>
+        <div style="display:grid; grid-template-columns:1fr auto; gap:12px; border-bottom:1px solid rgba(255,255,255,.5)">
+          <input id="ajMail" type="email" required="required" placeholder="votre@email.fr" style="min-width:0; padding:14px 0; border:0; outline:0; background:transparent; color:#fff; font-family:inherit; font-size:var(--t1)" />
+          <button type="submit" style="min-height:48px; padding:0 6px; border:0; background:transparent; color:#fff; cursor:pointer; font-family:inherit; font-size:var(--t0); font-weight:500; letter-spacing:.16em; text-transform:uppercase">Envoyer</button>
+        </div>
+        <p id="ajFormNote" aria-live="polite" style="margin:0; min-height:1.5em; color:rgba(255,255,255,.72); font-size:var(--t0)"></p>
+      </form>
+    </div>
+  </section>
+
+  <footer style="display:flex; flex-wrap:wrap; align-items:baseline; justify-content:space-between; gap:20px; padding:clamp(28px,4vw,48px) var(--gut); background:#08080a; color:rgba(255,255,255,.72); font-size:var(--t0)">
+    <span style="font-family:var(--disp); font-optical-sizing:auto; font-size:var(--t1); color:#fff">AJ Luxury</span>
+    <span>Adam CHABBI</span>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{
+  &quot;$preview&quot;: { &quot;width&quot;: 1440, &quot;height&quot;: 900 }
+}">
+class Component extends DCLogic {
+  componentDidMount() { this.demarrer(); }
+
+  demarrer() {
+    if (this._on) return;
+    this._on = true;
+    if (window.ScrollTrigger) {
+      window.ScrollTrigger.getAll().forEach((t) => {
+        if (t.vars && t.vars.id && String(t.vars.id).indexOf('aj-') === 0) t.kill();
+      });
+    }
+    this.reduit = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    this.film();
+    this.titre();
+    this.sequence();
+    this.boutique();
+    this.reveler();
+    this.formulaire();
+    this.nav();
+  }
+
+  // Survol de nav repris de la production (globals.css:1583-1713) : le filet
+  // sort par la droite et rentre par la gauche. Un simple border-bottom ne
+  // rend pas ce balayage — il faut le changement d'origine entre entrée et
+  // sortie, donc deux transformations pilotées, pas une transition CSS seule.
+  nav() {
+    if (this.reduit) return;
+    Array.from(document.querySelectorAll('.ajNav')).forEach((a) => {
+      const barre = a.querySelector('.ajNavBar');
+      if (!barre) return;
+      const actif = barre.style.transform.indexOf('scaleX(1)') >= 0;
+      a.addEventListener('mouseenter', () => {
+        barre.style.transformOrigin = 'left';
+        barre.style.transform = 'scaleX(1)';
+      });
+      a.addEventListener('mouseleave', () => {
+        if (actif) return;
+        barre.style.transformOrigin = 'right';
+        barre.style.transform = 'scaleX(0)';
+      });
+    });
+  }
+
+  // ─── L'animatique d'Isabelle, intacte.
+  // Deux règles non négociables : aucun texte ni voile par-dessus, et
+  // hero-identity-overlay-*.png n'est JAMAIS composé — vérifié à l'image,
+  // agrandi ×5 : les visages du film ont leurs mèches et un raccord
+  // mâchoire/cou continu, l'overlay est un ovale dur. Le composer dégraderait.
+  // Parallélisation : poster, source et polices partent ensemble.
+  film() {
+    const fig = document.getElementById('ajFilm');
+    const video = document.getElementById('ajFilmVideo');
+    const poster = document.getElementById('ajFilmPoster');
+    if (!fig || !video) return;
+
+    const portrait = window.innerWidth < 780;
+    video.setAttribute('poster', 'prod/hero-v4-desktop.webp');
+
+    const pretPoster = poster && poster.decode ? poster.decode().catch(() => {}) : Promise.resolve();
+    const pretPolices = document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve();
+    const pretVideo = new Promise((ok) => {
+      let fait = false;
+      const fini = () => { if (!fait) { fait = true; ok(); } };
+      video.addEventListener('loadeddata', fini, { once: true });
+      video.addEventListener('canplay', fini, { once: true });
+      video.addEventListener('error', fini, { once: true });
+      setTimeout(fini, 6000);
+      video.src = portrait ? 'prod/hero-v4-portrait.mp4' : 'prod/hero-v4-desktop.mp4';
+      video.load();
+    });
+
+    Promise.all([pretPoster, pretPolices, pretVideo]).then(() => {
+      if (video.readyState < 2) return;
+      video.style.transition = 'opacity 1s var(--e1)';
+      video.style.opacity = '1';
+      if (this.reduit) { video.pause(); return; }
+      const j = video.play();
+      if (j && j.catch) j.catch(() => {});
+    });
+
+    // Boucle douce : le film reprend au bout de six secondes d'arrêt, pour que
+    // la page ne montre jamais une image morte sans rien demander à personne.
+    video.addEventListener('ended', () => {
+      if (this._mortFilm || this.reduit) return;
+      this._reprise = setTimeout(() => {
+        video.currentTime = 0;
+        video.play().catch(() => {});
+      }, 6000);
+    });
+
+    const io = new IntersectionObserver((es) => {
+      es.forEach((e) => {
+        if (this.reduit) return;
+        if (e.isIntersecting) { if (!video.ended) video.play().catch(() => {}); }
+        else { video.pause(); clearTimeout(this._reprise); }
+      });
+    }, { threshold: 0.15 });
+    io.observe(fig);
+    this._ioFilm = io;
+
+    let rt = null;
+    const auResize = () => {
+      clearTimeout(rt);
+      rt = setTimeout(() => {
+        const voulu = window.innerWidth < 780 ? 'prod/hero-v4-portrait.mp4' : 'prod/hero-v4-desktop.mp4';
+        if (video.src.indexOf(voulu) < 0) {
+          const t = video.currentTime;
+          video.src = voulu;
+          video.load();
+          video.addEventListener('loadeddata', () => { try { video.currentTime = t; } catch (e) { /* hors plage */ } }, { once: true });
+          if (!this.reduit) video.play().catch(() => {});
+        }
+      }, 200);
+    };
+    addEventListener('resize', auResize);
+    this._offFilm = () => removeEventListener('resize', auResize);
+  }
+
+  // Le dégradé métallique reste sur le h1 : les lignes montent À TRAVERS le
+  // métal au lieu de l'emporter avec elles.
+  titre() {
+    const h = document.getElementById('ajH1');
+    if (!h) return;
+    const lignes = Array.from(h.children);
+    if (!lignes.length) return;
+    if (this.reduit) { lignes.forEach((l) => { l.style.opacity = '1'; }); return; }
+
+    lignes.forEach((l) => {
+      const inner = document.createElement('span');
+      inner.style.display = 'block';
+      inner.style.transform = 'translate3d(0,110%,0)';
+      inner.style.willChange = 'transform';
+      while (l.firstChild) inner.appendChild(l.firstChild);
+      l.appendChild(inner);
+      l.style.overflow = 'hidden';
+      // Le masque doit contenir l'extent COMPLET du glyphe, pas la boîte de
+      // ligne : une line-height serrée donne une boîte plus courte que les
+      // glyphes, donc les descendantes étaient tranchées. La marge négative
+      // rend la hauteur au flux pour ne
+      // pas décaler le rythme. C'est le rapport boîte/extent qui est corrigé,
+      // pas une valeur en pixels — sinon le défaut revient à chaque corps.
+      l.style.paddingBottom = '.3em';
+      l.style.marginBottom = '-.3em';
+    });
+
+    const jouer = () => lignes.forEach((l, i) => {
+      const inner = l.firstElementChild;
+      if (!inner) return;
+      inner.style.transition = 'transform 1.15s var(--e1) ' + (140 + i * 150) + 'ms';
+      inner.style.transform = 'translate3d(0,0,0)';
+      setTimeout(() => { inner.style.willChange = 'auto'; }, 1600 + i * 150);
+    });
+
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(jouer);
+    else requestAnimationFrame(jouer);
+
+    this.ouverture();
+  }
+
+  // ─── Le hook des cinq premières secondes.
+  //
+  // Rien ne se pose sur la vidéo : c'est le CADRE qui joue. Un volet noir
+  // s'ouvre du bas vers le haut sur le film, la plaque se détend d'un léger
+  // sur-cadrage, la signature monte sous son masque et une brillance de métal
+  // la traverse une seule fois. Tout en transform et opacity, donc composité.
+  ouverture() {
+    const fig = document.getElementById('ajFilm');
+    const sig = document.getElementById('ajH1');
+    const dec = document.getElementById('ajDecouvrir');
+    if (!fig) return;
+
+    if (this.reduit) {
+      fig.style.clipPath = 'none';
+      if (sig) sig.style.opacity = '1';
+      if (dec) dec.style.opacity = '1';
+      return;
+    }
+
+    // Volet d'ouverture : un bloc noir qui remonte, plutôt qu'un fondu — le
+    // fondu montre une image grise, le volet montre une image nette d'emblée.
+    const volet = document.createElement('span');
+    volet.setAttribute('aria-hidden', 'true');
+    volet.style.cssText = 'position:absolute;inset:0;z-index:4;background:#08080a;transform-origin:50% 100%;will-change:transform';
+    fig.appendChild(volet);
+
+    const media = fig.querySelectorAll('img,video');
+    media.forEach((m) => { m.style.transform = 'scale(1.09)'; m.style.willChange = 'transform'; });
+
+    if (dec) { dec.style.opacity = '0'; dec.style.transform = 'translate3d(0,14px,0)'; }
+
+    requestAnimationFrame(() => {
+      volet.style.transition = 'transform 1.15s cubic-bezier(.76,0,.24,1) 120ms';
+      volet.style.transform = 'scaleY(0)';
+      media.forEach((m) => {
+        m.style.transition = 'transform 2.6s cubic-bezier(.16,1,.3,1) 120ms';
+        m.style.transform = 'scale(1)';
+      });
+      if (dec) {
+        dec.style.transition = 'opacity .8s var(--e1) 1.5s, transform .8s var(--e1) 1.5s';
+        dec.style.opacity = '1';
+        dec.style.transform = 'translate3d(0,0,0)';
+      }
+      setTimeout(() => {
+        volet.remove();
+        media.forEach((m) => { m.style.willChange = 'auto'; });
+      }, 2900);
+    });
+
+    // La brillance : une bande claire traverse la signature une fois, à la
+    // fin de l'ouverture. Masquée par le texte, donc elle n'éclaire que lui.
+    if (sig) {
+      const eclat = document.createElement('span');
+      eclat.setAttribute('aria-hidden', 'true');
+      eclat.style.cssText = 'position:absolute;inset:-40% -10%;pointer-events:none;'
+        + 'background:linear-gradient(100deg,transparent 38%,rgba(255,255,255,.92) 50%,transparent 62%);'
+        + 'transform:translate3d(-115%,0,0);will-change:transform;mix-blend-mode:screen';
+      sig.style.position = 'relative';
+      sig.style.overflow = 'hidden';
+      sig.appendChild(eclat);
+      setTimeout(() => {
+        eclat.style.transition = 'transform 1.15s cubic-bezier(.4,0,.2,1)';
+        eclat.style.transform = 'translate3d(115%,0,0)';
+        setTimeout(() => eclat.remove(), 1500);
+      }, 1750);
+    }
+  }
+
+  // ─── Trois actes, une seule horloge : le scroll. Aucun minuteur.
+  // ─── Le modèle : un rail horizontal piloté par le scroll vertical.
+  //
+  // Trois panneaux, trois murs. Le fond de TOUT l'écran interpole entre les
+  // trois couleurs échantillonnées sur les plateaux, donc la page change de
+  // teinte en même temps que le coloris. À l'intérieur de chaque panneau, le
+  // mannequin se dévoile en glissant depuis le bord droit.
+  //
+  // Zéro recadrage : les deux plaques sont en hauteur pleine, largeur auto,
+  // `contain`. Rien n'est coupé, jamais — c'est le mur qui remplit le reste.
+  sequence() {
+    const seq = document.getElementById('plaque');
+    const sticky = document.getElementById('ajSticky');
+    const rail = document.getElementById('ajRail');
+    if (!seq || !rail || !sticky) return this.sequenceLegacy();
+
+    const panneaux = Array.from(rail.querySelectorAll('.ajPanel'));
+    const onglets = Array.from(document.querySelectorAll('.ajTab'));
+    const prog = document.getElementById('ajProg');
+    const etat = document.getElementById('ajChapitreEtat');
+    const live = document.getElementById('ajLive');
+    const NOMS = ['Rose Velours', 'Lilas Céleste', 'Pourpre Impérial'];
+    // Murs échantillonnés au pixel sur les six plaques, jamais inventés.
+    const MURS = [[151, 102, 106], [97, 99, 132], [63, 5, 28]];
+    const borne = (v, a, b) => Math.min(b, Math.max(a, v));
+    const lisse = (t) => t * t * (3 - 2 * t);
+    let vu = -1;
+
+    const piloter = (p) => {
+      // Le domaine part de −1, pas de 0 : sans cette course d'entrée, le
+      // premier panneau est déjà « porté » avant le moindre scroll et ne se
+      // dévoile jamais. Le rail, lui, reste borné à [0, n−1].
+      const xr = borne(p, 0, 1) * panneaux.length - 1;
+      const x = borne(xr, 0, panneaux.length - 1);
+      rail.style.transform = 'translate3d(' + (-x * (100 / panneaux.length)).toFixed(4) + '%,0,0)';
+
+      // Fond : interpolation continue entre les murs voisins.
+      const i0 = Math.min(MURS.length - 1, Math.floor(x));
+      const i1 = Math.min(MURS.length - 1, i0 + 1);
+      const t = lisse(x - i0);
+      const c = [0, 1, 2].map((k) => Math.round(MURS[i0][k] + (MURS[i1][k] - MURS[i0][k]) * t));
+      const fond = 'rgb(' + c[0] + ',' + c[1] + ',' + c[2] + ')';
+      sticky.style.background = fond;
+      seq.style.background = fond;
+
+      // Révélation : le mannequin glisse depuis le bord droit du panneau.
+      // Le mannequin est entré quand son panneau est centré (local = 1), pas
+      // à moitié : c'est l'approche du panneau qui le fait glisser, et l'arrêt
+      // le montre porté.
+      panneaux.forEach((pan, i) => {
+        const local = borne(xr - i + 1, 0, 1);
+        const worn = pan.querySelector('.ajWorn');
+        if (worn) worn.style.transform = 'translate3d(' + ((1 - lisse(local)) * 100).toFixed(2) + '%,0,0)';
+      });
+
+      if (prog) prog.style.transform = 'scaleX(' + borne(p, 0, 1).toFixed(4) + ')';
+
+      const actif = Math.round(x);
+      if (actif !== vu) {
+        vu = actif;
+        onglets.forEach((el, i) => { el.style.opacity = i === actif ? '1' : '0.5'; });
+      }
+      if (etat) {
+        const local = borne(xr - actif + 1, 0, 1);
+        const mot = local < 0.12 ? 'Seul' : local < 0.88 ? 'Se dévoile' : 'Porté';
+        if (etat.textContent !== mot) etat.textContent = mot;
+      }
+    };
+
+    const amplitude = () => seq.offsetHeight - window.innerHeight;
+    const avancee = () => borne((window.scrollY - seq.offsetTop) / Math.max(1, amplitude()), 0, 1);
+
+    if (this.reduit) {
+      piloter(0);
+      panneaux.forEach((pan) => { const w = pan.querySelector('.ajWorn'); if (w) w.style.transform = 'none'; });
+    } else {
+      const brancher = () => {
+        const g = window.gsap, ST = window.ScrollTrigger;
+        if (!g || !ST) return false;
+        g.registerPlugin(ST);
+        this._st = ST.create({
+          id: 'aj-plaque',
+          trigger: seq, start: 'top top', end: 'bottom bottom',
+          invalidateOnRefresh: true, fastScrollEnd: 2500,
+          onUpdate: (s) => piloter(s.progress),
+          onRefresh: (s) => piloter(s.progress),
+        });
+        window.__ajST = this._st;
+        Promise.all(Array.from(rail.querySelectorAll('img'))
+          .map((im) => (im.decode ? im.decode().catch(() => {}) : Promise.resolve())))
+          .then(() => ST.refresh());
+        return true;
+      };
+      if (!brancher()) {
+        let raf = null;
+        const tick = () => { raf = null; piloter(avancee()); };
+        const auScroll = () => { if (!raf) raf = requestAnimationFrame(tick); };
+        addEventListener('scroll', auScroll, { passive: true });
+        this._off = () => removeEventListener('scroll', auScroll);
+        piloter(avancee());
+        let essais = 0;
+        const guet = setInterval(() => {
+          if (brancher()) { clearInterval(guet); if (this._off) { this._off(); this._off = null; } }
+          else if (++essais > 40) clearInterval(guet);
+        }, 100);
+      }
+    }
+
+    onglets.forEach((btn, i) => btn.addEventListener('click', () => {
+      window.scrollTo({ top: seq.offsetTop + ((i + 1) / panneaux.length) * amplitude(), behavior: 'auto' });
+      if (live) live.textContent = NOMS[i];
+    }));
+
+    let m = null;
+    const auResize = () => {
+      clearTimeout(m);
+      m = setTimeout(() => {
+        this.geometrie();
+        piloter(avancee());
+        if (window.ScrollTrigger) window.ScrollTrigger.refresh();
+      }, 140);
+    };
+    addEventListener('resize', auResize);
+    this._offResize = () => removeEventListener('resize', auResize);
+    this.geometrie();
+  }
+
+  sequenceLegacy() {
+    const $ = (s) => document.querySelector(s);
+    const $$ = (s) => Array.from(document.querySelectorAll(s));
+    const seq = $('#plaque'), stage = $('#ajStage'), prog = $('#ajProg'), live = $('#ajLive');
+    if (!seq || !stage) return;
+
+    const frames = $$('.ajFrame'), copies = $$('.ajSeqC');
+    const onglets = $$('.ajTab');
+    const etat = $('#ajChapitreEtat');
+    const NOMS = ['Rose Velours', 'Lilas Céleste', 'Pourpre Impérial'];
+    // Chaque plateau range ses cuivres ailleurs — mesuré au pixel sur les six
+    // fichiers. Une césure unique en trancherait forcément un : elle est donc
+    // propre à chaque frame, posée dans la bande vide de sa propre plaque.
+    const SEAMS = [36, 40, 50];
+    const BORNES = [0.20, 0.58];
+    const lisse = (t) => t * t * (3 - 2 * t);
+    const borne = (v, a, b) => Math.min(b, Math.max(a, v));
+    let frameVue = -1, motVu = '';
+
+    const piloter = (p) => {
+      // Acte 1 — la plaque se révèle.
+      const a1 = borne(p / BORNES[0], 0, 1);
+      stage.style.opacity = String(lisse(a1));
+      stage.style.transform = 'translate3d(0,' + ((1 - lisse(a1)) * 22).toFixed(2) + 'px,0)';
+
+      // Acte 2 — le volet : le vêtement seul devient le vêtement porté.
+      const a2 = borne((p - BORNES[0]) / (BORNES[1] - BORNES[0]), 0, 1);
+      if (!this._prise) {
+        for (let i = 0; i < 3; i++) {
+          frames[i].style.setProperty('--seam-live', (100 - (100 - SEAMS[i]) * lisse(a2)) + '%');
+        }
+        this.poignee(a2);
+      }
+
+      // Acte 3 — le coloris bascule sur un décor tenu.
+      const q = borne((p - BORNES[1]) / (1 - BORNES[1]), 0, 1);
+      const o = [
+        1 - lisse(borne(q / 0.5, 0, 1)),
+        q < 0.5 ? lisse(borne(q / 0.5, 0, 1)) : 1 - lisse(borne((q - 0.5) / 0.5, 0, 1)),
+        q < 0.5 ? 0 : lisse(borne((q - 0.5) / 0.5, 0, 1)),
+      ];
+      for (let i = 0; i < 3; i++) {
+        frames[i].style.opacity = String(o[i]);
+        copies[i].style.opacity = String(o[i]);
+      }
+      if (prog) prog.style.transform = 'scaleX(' + p + ')';
+
+      const fi = q < 0.25 ? 0 : q < 0.75 ? 1 : 2;
+      this._frameActive = fi;
+
+      // La narration tient en un mot : où on en est dans l'histoire.
+      if (etat) {
+        const seam = parseFloat(getComputedStyle(frames[fi]).getPropertyValue('--seam-live')) || 100;
+        const mot = p < BORNES[0] ? 'Seul'
+          : p < BORNES[1] ? (seam > 78 ? 'Seul' : seam > 55 ? 'Le volet' : 'Porté')
+          : NOMS[fi];
+        if (mot !== motVu) { motVu = mot; etat.textContent = mot; }
+      }
+      if (fi !== frameVue) {
+        frameVue = fi;
+        onglets.forEach((el, i) => { el.style.opacity = i === fi ? '1' : '0.5'; });
+      }
+    };
+
+    this.saisir(stage, SEAMS, () => this._frameActive || 0);
+
+    const amplitude = () => seq.offsetHeight - window.innerHeight;
+    const avancee = () => borne((window.scrollY - seq.offsetTop) / Math.max(1, amplitude()), 0, 1);
+
+    if (this.reduit) {
+      seq.style.height = 'auto';
+      const collant = seq.firstElementChild;
+      if (collant) { collant.style.position = 'static'; collant.style.height = 'auto'; collant.style.minHeight = '100svh'; }
+      piloter(BORNES[1]);
+      stage.style.opacity = '1';
+      stage.style.transform = 'none';
+    } else {
+      const brancher = () => {
+        const g = window.gsap, ST = window.ScrollTrigger;
+        if (!g || !ST) return false;
+        g.registerPlugin(ST);
+        this._st = ST.create({
+          id: 'aj-plaque',
+          trigger: seq, start: 'top top', end: 'bottom bottom',
+          invalidateOnRefresh: true, fastScrollEnd: 2500,
+          onUpdate: (self) => piloter(self.progress),
+          onRefresh: (self) => piloter(self.progress),
+        });
+        window.__ajST = this._st;
+        Promise.all(Array.from(stage.querySelectorAll('img'))
+          .map((i) => (i.decode ? i.decode().catch(() => {}) : Promise.resolve())))
+          .then(() => ST.refresh());
+        return true;
+      };
+
+      if (!brancher()) {
+        let raf = null;
+        const tick = () => { raf = null; piloter(avancee()); };
+        const auScroll = () => { if (!raf) raf = requestAnimationFrame(tick); };
+        addEventListener('scroll', auScroll, { passive: true });
+        this._off = () => removeEventListener('scroll', auScroll);
+        piloter(avancee());
+        let essais = 0;
+        const guet = setInterval(() => {
+          if (brancher()) { clearInterval(guet); if (this._off) { this._off(); this._off = null; } }
+          else if (++essais > 40) clearInterval(guet);
+        }, 100);
+      }
+    }
+
+    const cible = (i) => seq.offsetTop + (BORNES[1] + (1 - BORNES[1]) * [0.06, 0.5, 0.96][i]) * amplitude();
+    onglets.forEach((btn, i) => btn.addEventListener('click', () => {
+      window.scrollTo({ top: cible(i), behavior: 'auto' });
+      if (live) live.textContent = NOMS[i];
+    }));
+
+    let minuteur = null;
+    const auResize = () => {
+      clearTimeout(minuteur);
+      minuteur = setTimeout(() => {
+        this.geometrie();
+        piloter(avancee());
+        if (window.ScrollTrigger) window.ScrollTrigger.refresh();
+      }, 140);
+    };
+    addEventListener('resize', auResize);
+    this._offResize = () => removeEventListener('resize', auResize);
+    this.geometrie();
+  }
+
+  poignee(ouverture) {
+    const h = document.getElementById('ajHandle');
+    const frames = Array.from(document.querySelectorAll('.ajFrame'));
+    const i = this._frameActive || 0;
+    if (!h || !frames[i]) return;
+    const seam = parseFloat(getComputedStyle(frames[i]).getPropertyValue('--seam-live')) || 100;
+    h.style.opacity = String(Math.max(0, Math.min(1, (ouverture - 0.35) / 0.35)) * 0.85);
+    if (this._etroit) {
+      h.style.top = seam + '%'; h.style.left = '0'; h.style.right = '0';
+      h.style.width = 'auto'; h.style.height = '1px'; h.style.bottom = 'auto';
+    } else {
+      h.style.left = seam + '%'; h.style.top = '0'; h.style.bottom = '0';
+      h.style.width = '1px'; h.style.height = 'auto'; h.style.right = 'auto';
+    }
+  }
+
+  // Prise directe, 1:1, sans inertie : sur un comparateur c'est la précision
+  // qui fait le luxe, pas le rebond.
+  saisir(stage, SEAMS, frameActive) {
+    if (this.reduit || !stage) return;
+    const frames = Array.from(document.querySelectorAll('.ajFrame'));
+
+    const ecrire = (pct) => {
+      const i = frameActive();
+      if (frames[i]) frames[i].style.setProperty('--seam-live', pct + '%');
+      this.poignee(1);
+    };
+    const depuis = (e) => {
+      const r = stage.getBoundingClientRect();
+      const pct = this._etroit ? ((e.clientY - r.top) / r.height) * 100 : ((e.clientX - r.left) / r.width) * 100;
+      return Math.max(10, Math.min(92, pct));
+    };
+    const lacher = (e) => {
+      if (!this._prise) return;
+      this._prise = false;
+      stage.style.cursor = this._etroit ? 'ns-resize' : 'ew-resize';
+      try { stage.releasePointerCapture(e.pointerId); } catch (err) { /* déjà relâché */ }
+    };
+
+    stage.addEventListener('pointerdown', (e) => {
+      if (e.button !== undefined && e.button !== 0) return;
+      this._prise = true;
+      stage.setPointerCapture(e.pointerId);
+      stage.style.cursor = 'grabbing';
+      ecrire(depuis(e));
+      e.preventDefault();
+    });
+    stage.addEventListener('pointermove', (e) => { if (this._prise) ecrire(depuis(e)); });
+    stage.addEventListener('pointerup', lacher);
+    stage.addEventListener('pointercancel', lacher);
+    addEventListener('wheel', () => { this._prise = false; }, { passive: true });
+  }
+
+  // Deux branches réelles, câblées sur #ajScene — l'ancienne visait #ajGrid,
+  // supprimé par la refonte, donc elle sortait à chaque appel et il n'y avait
+  // plus AUCUN responsive sur cet écran.
+  // Deux branches réelles, câblées sur #ajScene. Le mobile n'est pas une
+  // amputation : mêmes trois actes, même volet — il passe simplement en
+  // vertical, la plaque au-dessus et le nom dessous.
+  // Sous 900 px la copie passe AU-DESSUS des plaques : en deux colonnes elle
+  // confisquerait la largeur dont les deux images ont besoin pour rester
+  // entières. Le rail reste horizontal — le récit ne change pas.
+  geometrie() {
+    const rail = document.getElementById('ajRail');
+    if (rail) {
+      const etroit = window.innerWidth < 900;
+      this._etroit = etroit;
+      Array.from(rail.querySelectorAll('.ajPanel')).forEach((pan) => {
+        pan.style.gridTemplateColumns = etroit ? '1fr' : 'minmax(0,260px) minmax(0,1fr)';
+        pan.style.gridTemplateRows = etroit ? 'auto minmax(0,1fr)' : '';
+        // JAMAIS la chaîne vide ici : assigner '' à une longhand issue d'une
+        // shorthand la SUPPRIME de la déclaration inline, le padding bas
+        // retombe à 0 et les plaques passent sous la barre de contrôle.
+        pan.style.paddingBottom = etroit ? 'clamp(86px,13vh,116px)' : 'clamp(80px,10vh,112px)';
+        // La surface rendue au vêtement se prend sur la piste de copie et la
+        // gouttière, pas sur le max-width des images — sinon elles débordent.
+        pan.style.gap = etroit ? 'clamp(14px,2.4vh,24px)' : 'clamp(14px,1.8vw,32px)';
+      });
+      return;
+    }
+    return this.geometrieLegacy();
+  }
+
+  geometrieLegacy() {
+    const scene = document.getElementById('ajScene');
+    const stage = document.getElementById('ajStage');
+    const copie = document.getElementById('ajCopy');
+    if (!scene || !stage) return;
+    const etroit = window.innerWidth < 820;
+    this._etroit = etroit;
+    stage.style.cursor = etroit ? 'ns-resize' : 'ew-resize';
+    stage.style.touchAction = etroit ? 'pan-x' : 'pan-y';
+    const clips = Array.from(stage.querySelectorAll('.ajClip'));
+    const shifts = Array.from(stage.querySelectorAll('.ajShift'));
+
+    if (etroit) {
+      scene.style.gridTemplateColumns = '1fr';
+      scene.style.gridTemplateRows = 'minmax(0,1fr) auto';
+      scene.style.alignItems = 'stretch';
+      scene.style.justifyItems = 'center';
+      scene.style.gap = 'clamp(16px,2.6vh,28px)';
+      scene.style.paddingBottom = 'clamp(78px,12vh,106px)';
+      stage.style.order = '1';
+      stage.style.aspectRatio = 'auto';
+      stage.style.height = '100%';
+      stage.style.width = '100%';
+      stage.style.maxWidth = 'none';
+      stage.style.maxHeight = 'none';
+      if (copie) { copie.style.order = '2'; copie.style.minHeight = '0'; copie.style.textAlign = 'center'; copie.style.width = '100%'; }
+      clips.forEach((c) => { c.style.transform = 'translate3d(0, calc(var(--seam-live) - 100%), 0)'; });
+      shifts.forEach((s) => { s.style.transform = 'translate3d(0, calc(100% - var(--seam-live)), 0)'; });
+      // L'échelle se dérive de la boîte réelle : sinon un viewport court laisse
+      // des bandes de mur nu de part et d'autre de la plaque.
+      requestAnimationFrame(() => {
+        const b = stage.getBoundingClientRect();
+        if (!b.width || !b.height) return;
+        const k = Math.max(0.95, Math.min(2.4, b.width / (0.6667 * b.height)));
+        stage.querySelectorAll('img').forEach((img) => { img.style.height = (k * 100).toFixed(1) + '%'; img.style.left = '0%'; });
+        stage.querySelectorAll('.ajStill').forEach((img) => { img.style.top = ((0.21 - 0.353 * k) * 100).toFixed(1) + '%'; });
+        stage.querySelectorAll('.ajWorn').forEach((img) => { img.style.top = ((0.44 - 0.05 * k) * 100).toFixed(1) + '%'; });
+      });
+    } else {
+      scene.style.gridTemplateColumns = 'minmax(0,300px) minmax(0,1fr)';
+      scene.style.gridTemplateRows = '';
+      scene.style.alignItems = 'center';
+      scene.style.justifyItems = '';
+      scene.style.gap = '';
+      scene.style.paddingBottom = '';
+      stage.style.order = '';
+      stage.style.aspectRatio = '1.34 / 1';
+      stage.style.height = '';
+      stage.style.width = '100%';
+      stage.style.maxWidth = 'calc((100svh - 200px) * 1.34)';
+      stage.style.maxHeight = 'calc(100svh - 200px)';
+      if (copie) { copie.style.order = ''; copie.style.minHeight = '150px'; copie.style.textAlign = ''; copie.style.width = ''; }
+      clips.forEach((c) => { c.style.transform = 'translate3d(calc(var(--seam-live) - 100%), 0, 0)'; });
+      shifts.forEach((s) => { s.style.transform = 'translate3d(calc(100% - var(--seam-live)), 0, 0)'; });
+      // L'échelle se DÉRIVE de la boîte, elle n'est pas écrite en dur : un
+      // 140 % figé donnait 317 px de plaque dans un stage de 455, donc jusqu'à
+      // 184 px de mur nu à droite du vêtement fantôme. Une seule échelle pour
+      // les deux prises, conformément à l'interdit n°1 — c'est elle qui garde
+      // la lyre à la même taille de part et d'autre du raccord.
+      requestAnimationFrame(() => {
+        const b = stage.getBoundingClientRect();
+        if (!b.width || !b.height) return;
+        const R_STILL = 1024 / 1536;   // packshot
+        const R_WORN = 1731 / 2600;    // plan porté
+        const H_STILL = 0.693;         // horizon du marbre, mesuré
+        const H_WORN = 0.627;
+        const HORIZON = 0.82;          // où il se pose dans le stage
+        const DX = [0, -10.6, 0], SEAMS = [36, 40, 50];
+        // 1,18 de marge latérale : sans elle, un dx-still négatif (le lilas)
+        // rouvrirait exactement le trou qu'on vient de fermer.
+        const k = Math.max(1, (b.width * 1.18) / (R_STILL * b.height));
+        Array.from(stage.querySelectorAll('.ajFrame')).forEach((f, i) => {
+          const still = f.querySelector('.ajStill'), worn = f.querySelector('.ajWorn');
+          if (still) {
+            still.style.height = (k * 100).toFixed(1) + '%';
+            still.style.top = ((HORIZON - H_STILL * k) * 100).toFixed(1) + '%';
+            still.style.left = DX[i] + '%';
+          }
+          // La plaque portée démarre EXACTEMENT à la césure : rien du plan
+          // porté ne peut donc être tranché par elle.
+          if (worn) {
+            worn.style.height = (k * 100).toFixed(1) + '%';
+            worn.style.top = ((HORIZON - H_WORN * k) * 100).toFixed(1) + '%';
+            worn.style.left = SEAMS[i] + '%';
+          }
+        });
+      });
+    }
+  }
+
+  boutique() {
+    const cartes = Array.from(document.querySelectorAll('.ajCard'));
+    const tailles = Array.from(document.querySelectorAll('.ajSize'));
+    const bouton = document.getElementById('ajBuy');
+    const note = document.getElementById('ajBuyNote');
+    if (!cartes.length || !bouton) return;
+    const NOMS = ['Rose Velours', 'Lilas Céleste', 'Pourpre Impérial'];
+    let coloris = 0, taille = null;
+
+    const peindre = () => {
+      cartes.forEach((c, i) => {
+        const actif = i === coloris;
+        c.setAttribute('aria-pressed', actif ? 'true' : 'false');
+        const barre = c.querySelector('.ajBar');
+        if (barre) barre.style.transform = actif ? 'scaleX(1)' : 'scaleX(0)';
+      });
+      tailles.forEach((b) => {
+        const actif = b.dataset.s === taille;
+        b.setAttribute('aria-pressed', actif ? 'true' : 'false');
+        b.style.background = actif ? '#fff' : 'transparent';
+        b.style.color = actif ? '#08080a' : 'inherit';
+        b.style.borderColor = actif ? '#fff' : 'rgba(255,255,255,.34)';
+      });
+      bouton.style.opacity = taille ? '1' : '0.55';
+      bouton.textContent = taille ? 'Ajouter — ' + taille + ' — 29,99 €' : 'Ajouter — 29,99 €';
+      if (note) note.textContent = taille ? NOMS[coloris] + ' · taille ' + taille : 'Sélectionnez une taille.';
+    };
+
+    cartes.forEach((c, i) => {
+      c.addEventListener('click', () => { coloris = i; peindre(); });
+      const img = c.querySelector('img');
+      if (img && !this.reduit) {
+        c.addEventListener('mouseenter', () => { img.style.transform = 'scale(1.04)'; });
+        c.addEventListener('mouseleave', () => { img.style.transform = 'none'; });
+      }
+    });
+    tailles.forEach((b) => b.addEventListener('click', () => { taille = b.dataset.s; peindre(); }));
+    peindre();
+  }
+
+  reveler() {
+    const blocs = Array.from(document.querySelectorAll('.ajUp'));
+    if (this.reduit) { blocs.forEach((b) => { b.style.opacity = '1'; b.style.transform = 'none'; }); return; }
+    blocs.forEach((b) => { b.style.opacity = '0'; b.style.transform = 'translate3d(0,26px,0)'; b.style.willChange = 'opacity, transform'; });
+
+    const io = new IntersectionObserver((es) => {
+      es.forEach((e) => {
+        if (!e.isIntersecting) return;
+        const groupe = Array.from(e.target.parentElement.querySelectorAll('.ajUp'));
+        const i = Math.max(0, groupe.indexOf(e.target));
+        e.target.style.transition = 'opacity .75s var(--e1) ' + (i * 100) + 'ms, transform .75s var(--e1) ' + (i * 100) + 'ms';
+        e.target.style.opacity = '1';
+        e.target.style.transform = 'translate3d(0,0,0)';
+        setTimeout(() => { e.target.style.willChange = 'auto'; }, 1100 + i * 100);
+        io.unobserve(e.target);
+      });
+    }, { rootMargin: '0px 0px -12% 0px', threshold: 0.12 });
+    blocs.forEach((b) => io.observe(b));
+    this._io = io;
+
+    const g = window.gsap, ST = window.ScrollTrigger;
+    if (!g || !ST) return;
+    g.utils.toArray('.ajPara').forEach((el, i) => {
+      g.fromTo(el, { yPercent: -4 }, {
+        yPercent: 4, ease: 'none',
+        scrollTrigger: { id: 'aj-para-' + i, trigger: el, start: 'top bottom', end: 'bottom top', scrub: 0.6 },
+      });
+    });
+  }
+
+  formulaire() {
+    const f = document.getElementById('ajForm');
+    const note = document.getElementById('ajFormNote');
+    if (!f) return;
+    f.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const champ = document.getElementById('ajMail');
+      if (note) note.textContent = champ && champ.value ? 'Merci.' : 'Une adresse valide, et c\u2019est fait.';
+    });
+  }
+
+  componentWillUnmount() {
+    this._on = false;
+    this._mortFilm = true;
+    clearTimeout(this._reprise);
+    if (this._off) this._off();
+    if (this._offResize) this._offResize();
+    if (this._offFilm) this._offFilm();
+    if (this._io) this._io.disconnect();
+    if (this._ioFilm) this._ioFilm.disconnect();
+  }
+
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

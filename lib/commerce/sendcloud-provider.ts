@@ -20,8 +20,14 @@ const PANEL_ORIGIN = "https://panel.sendcloud.sc";
 const MAX_RESPONSE_BYTES = 256 * 1024;
 const MAX_DOCUMENT_BYTES = 8 * 1024 * 1024;
 const REQUEST_TIMEOUT_MS = 8_000;
+const MAX_FALLBACK_PRICE_CONCURRENCY = 4;
 const SAFE_CODE = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/;
+const SAFE_SHIPPING_OPTION_CODE = /^[A-Za-z0-9][A-Za-z0-9_.:,\/-]{0,159}$/;
 const SAFE_PARCEL_ID = /^[1-9]\d{0,18}$/;
+const EU_COUNTRY_CODES = Object.freeze([
+  "AT", "BE", "BG", "HR", "CY", "CZ", "DE", "DK", "EE", "ES", "FI", "FR", "GR", "HU",
+  "IE", "IT", "LT", "LU", "LV", "MT", "NL", "PL", "PT", "RO", "SE", "SI", "SK",
+] as const);
 const LEAD_TIME_KEYS = Object.freeze([
   "p10", "p20", "p30", "p40", "p50", "p60", "p70", "p80", "p90", "p95",
 ] as const);
@@ -38,6 +44,21 @@ type SendcloudConfiguration = Readonly<{
 }>;
 
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+
+type SendcloudUnpricedOption = Readonly<{
+  carrierCode: string;
+  shippingOptionCode: string;
+  deliveryMode: "home" | "service_point";
+}>;
+
+type SendcloudFallbackPrice = Readonly<{
+  amountCents: number;
+  sourceFingerprint: string;
+}>;
+
+type SendcloudFallbackPriceResolver = (
+  option: SendcloudUnpricedOption,
+) => Promise<SendcloudFallbackPrice | null>;
 
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -130,6 +151,7 @@ export async function parseSendcloudDeliveryOptions(
     now: string;
     ttlSeconds: number;
     dutiesTerms: DeliveryDutiesTerms;
+    resolveFallbackPrice?: SendcloudFallbackPriceResolver;
   }>,
 ): Promise<readonly DeliveryQuoteOffer[]> {
   if (
@@ -138,6 +160,35 @@ export async function parseSendcloudDeliveryOptions(
     value.delivery_options.length > 100
   ) throw new DeliveryProviderError("MALFORMED_RESPONSE", "Delivery options envelope is invalid.");
   internalExpiry(context.now, context.ttlSeconds);
+  const fallbackCache = new Map<string, Promise<SendcloudFallbackPrice | null>>();
+  const fallbackWaiters: Array<() => void> = [];
+  let activeFallbacks = 0;
+  async function limitedFallback(
+    option: SendcloudUnpricedOption,
+  ): Promise<SendcloudFallbackPrice | null> {
+    if (!context.resolveFallbackPrice) return null;
+    const key = JSON.stringify([
+      option.carrierCode,
+      option.shippingOptionCode,
+      option.deliveryMode,
+    ]);
+    const cached = fallbackCache.get(key);
+    if (cached) return cached;
+    const task = (async () => {
+      if (activeFallbacks >= MAX_FALLBACK_PRICE_CONCURRENCY) {
+        await new Promise<void>((resolve) => fallbackWaiters.push(resolve));
+      }
+      activeFallbacks += 1;
+      try {
+        return await context.resolveFallbackPrice!(option);
+      } finally {
+        activeFallbacks -= 1;
+        fallbackWaiters.shift()?.();
+      }
+    })();
+    fallbackCache.set(key, task);
+    return task;
+  }
   const parsed = await Promise.all(value.delivery_options.map(
     async (candidate): Promise<DeliveryQuoteOffer | null> => {
     const keys = [
@@ -168,8 +219,8 @@ export async function parseSendcloudDeliveryOptions(
       return null;
     }
     // The documented V3 response may explicitly return no transit percentiles.
-    // A null rate is not a zero/free rate. Omit either incomplete option only.
-    if (candidate.lead_time_hours === null || candidate.shipping_rate.value === null) return null;
+    // We cannot safely infer these, even when a separate price endpoint is available.
+    if (candidate.lead_time_hours === null) return null;
     const leadTime = candidate.lead_time_hours as Record<
       (typeof LEAD_TIME_KEYS)[number],
       unknown
@@ -188,14 +239,38 @@ export async function parseSendcloudDeliveryOptions(
     }
     const expiresAt = optionExpiry(context.now, context.ttlSeconds, candidate.cut_off_time);
     if (!expiresAt) return null;
+    const deliveryMode = candidate.delivery_method_type === "service_point_delivery"
+      ? "service_point" as const
+      : "home" as const;
+    let amountCents: number;
+    let fallbackSourceFingerprint: string | null = null;
+    if (candidate.shipping_rate.value === null) {
+      const fallback = await limitedFallback({
+        carrierCode: candidate.carrier.code,
+        shippingOptionCode: candidate.checkout_identifier.value,
+        deliveryMode,
+      });
+      if (!fallback) return null;
+      if (
+        !Number.isSafeInteger(fallback.amountCents) || fallback.amountCents <= 0 ||
+        !/^[0-9a-f]{64}$/.test(fallback.sourceFingerprint)
+      ) {
+        throw new DeliveryProviderError("MALFORMED_RESPONSE", "Fallback price is invalid.");
+      }
+      amountCents = fallback.amountCents;
+      fallbackSourceFingerprint = fallback.sourceFingerprint;
+    } else {
+      amountCents = centsFromDecimal(candidate.shipping_rate.value);
+    }
     const canonical = JSON.stringify({
       carrierCode: candidate.carrier.code,
       checkoutIdentifier: candidate.checkout_identifier,
       configurationId: value.configuration_id,
       deliveryMethodType: candidate.delivery_method_type,
+      fallbackSourceFingerprint,
       id: candidate.id,
       leadTimeHours: leadTime,
-      shippingRate: candidate.shipping_rate,
+      shippingRate: { amountCents, currency: "EUR" },
     });
     return Object.freeze({
       providerCode: "sendcloud",
@@ -209,11 +284,9 @@ export async function parseSendcloudDeliveryOptions(
       ]),
       carrierCode: candidate.carrier.code,
       serviceCode: candidate.checkout_identifier.value,
-      displayName: candidate.title,
-      deliveryMode: candidate.delivery_method_type === "service_point_delivery"
-        ? "service_point" as const
-        : "home" as const,
-      amountCents: centsFromDecimal(candidate.shipping_rate.value),
+      displayName: candidate.carrier.name,
+      deliveryMode,
+      amountCents,
       currency: "EUR" as const,
       estimatedDaysMin: Math.max(1, Math.ceil((leadTime.p50 as number) / 24)),
       estimatedDaysMax: Math.max(1, Math.ceil((leadTime.p90 as number) / 24)),
@@ -226,6 +299,203 @@ export async function parseSendcloudDeliveryOptions(
     },
   ));
   return Object.freeze(parsed.filter((option): option is DeliveryQuoteOffer => option !== null));
+}
+
+function expectedLastMile(mode: SendcloudUnpricedOption["deliveryMode"]): string {
+  return mode === "service_point" ? "service_point" : "home_delivery";
+}
+
+function exactProductCodeMatch(option: SendcloudUnpricedOption, productCode: string): boolean {
+  if (option.shippingOptionCode === productCode) return true;
+  // Sendcloud V3 currently appends this account-specific Mondial Relay suffix,
+  // while the V2 product endpoint exposes the underlying product code. No other
+  // prefix/suffix or fuzzy matching is permitted.
+  return option.carrierCode === "mondial_relay" &&
+    option.shippingOptionCode.endsWith("/c2c") &&
+    option.shippingOptionCode.slice(0, -4) === productCode;
+}
+
+function finiteNonNegativeInteger(value: unknown): value is number {
+  return Number.isSafeInteger(value) && (value as number) >= 0;
+}
+
+function dimensionInMillimeters(value: unknown, unit: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return null;
+  if (unit === "millimeter") return value;
+  if (unit === "centimeter") return value * 10;
+  if (unit === "meter") return value * 1000;
+  return null;
+}
+
+function productLastMiles(value: unknown): readonly string[] | null {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 4) return null;
+  const modes = value.filter((candidate): candidate is string =>
+    candidate === "home_delivery" || candidate === "service_point"
+  );
+  return modes.length === value.length ? Object.freeze(modes) : null;
+}
+
+function methodMatchesParcel(
+  properties: unknown,
+  request: DeliveryQuoteRequest,
+): boolean {
+  if (!record(properties) ||
+    !finiteNonNegativeInteger(properties.min_weight) ||
+    !finiteNonNegativeInteger(properties.max_weight) ||
+    properties.min_weight > properties.max_weight ||
+    request.parcel.weightGrams < properties.min_weight ||
+    request.parcel.weightGrams > properties.max_weight ||
+    !record(properties.max_dimensions)) return false;
+  const maximum = properties.max_dimensions;
+  const maximumLength = dimensionInMillimeters(maximum.length, maximum.unit);
+  const maximumWidth = dimensionInMillimeters(maximum.width, maximum.unit);
+  const maximumHeight = dimensionInMillimeters(maximum.height, maximum.unit);
+  return maximumLength !== null && maximumWidth !== null && maximumHeight !== null &&
+    // Sendcloud uses 0 for an axis whose limit is not expressed independently
+    // (for example Mondial Relay exposes only max length here). The request was
+    // already filtered by all three parcel dimensions at the provider; never
+    // reinterpret a positive bound, and reject a completely unbounded record.
+    [maximumLength, maximumWidth, maximumHeight].some((bound) => bound > 0) &&
+    (maximumLength === 0 || request.parcel.lengthMm <= maximumLength) &&
+    (maximumWidth === 0 || request.parcel.widthMm <= maximumWidth) &&
+    (maximumHeight === 0 || request.parcel.heightMm <= maximumHeight);
+}
+
+function exactShippingMethodId(
+  value: unknown,
+  option: SendcloudUnpricedOption,
+  request: DeliveryQuoteRequest,
+): number | null {
+  if (!Array.isArray(value) || value.length > 100) {
+    throw new DeliveryProviderError("MALFORMED_RESPONSE", "Shipping products response is invalid.");
+  }
+  const expectedMode = expectedLastMile(option.deliveryMode);
+  const matches: number[] = [];
+  for (const product of value) {
+    if (!record(product) || !safeString(product.name) ||
+      !safeString(product.code) || !SAFE_SHIPPING_OPTION_CODE.test(product.code) ||
+      !safeString(product.carrier, 80) || !SAFE_CODE.test(product.carrier) ||
+      !record(product.weight_range) ||
+      !finiteNonNegativeInteger(product.weight_range.min_weight) ||
+      !finiteNonNegativeInteger(product.weight_range.max_weight) ||
+      product.weight_range.min_weight > product.weight_range.max_weight ||
+      !record(product.available_functionalities) ||
+      !Array.isArray(product.methods) || product.methods.length > 100) {
+      throw new DeliveryProviderError("MALFORMED_RESPONSE", "Shipping product is invalid.");
+    }
+    if (product.carrier !== option.carrierCode ||
+      !exactProductCodeMatch(option, product.code) ||
+      request.parcel.weightGrams < product.weight_range.min_weight ||
+      request.parcel.weightGrams > product.weight_range.max_weight) continue;
+    const availableLastMiles = productLastMiles(product.available_functionalities.last_mile);
+    if (!availableLastMiles || !availableLastMiles.includes(expectedMode)) continue;
+    for (const method of product.methods) {
+      if (!record(method) || !Number.isSafeInteger(method.id) || (method.id as number) < 1 ||
+        !safeString(method.name) || !safeString(method.shipping_product_code) ||
+        method.shipping_product_code !== product.code || !record(method.functionalities)) {
+        throw new DeliveryProviderError("MALFORMED_RESPONSE", "Shipping product method is invalid.");
+      }
+      const methodLastMile = method.functionalities.last_mile;
+      if (methodLastMile !== undefined && methodLastMile !== expectedMode) continue;
+      // If the method omits last_mile, the product must expose one unambiguous mode.
+      if (methodLastMile === undefined &&
+        (availableLastMiles.length !== 1 || availableLastMiles[0] !== expectedMode)) continue;
+      if (!methodMatchesParcel(method.properties, request)) continue;
+      matches.push(method.id as number);
+    }
+  }
+  return matches.length === 1 ? matches[0] : null;
+}
+
+function exactShippingPrice(
+  value: unknown,
+  destinationCountryCode: string,
+): Readonly<{ amountCents: number; canonical: string }> | null {
+  if (!Array.isArray(value) || value.length !== 1 || !record(value[0])) {
+    return null;
+  }
+  const candidate = value[0];
+  if (!safeString(candidate.to_country, 2) || candidate.to_country !== destinationCountryCode ||
+    !Array.isArray(candidate.breakdown)) return null;
+  if (candidate.price === null && candidate.currency === null) return null;
+  if (candidate.currency !== "EUR") return null;
+  const amountCents = centsFromDecimal(candidate.price);
+  // A real zero price is not silently converted into a free checkout option.
+  if (amountCents <= 0) return null;
+  return Object.freeze({
+    amountCents,
+    canonical: JSON.stringify({
+      breakdown: candidate.breakdown,
+      currency: candidate.currency,
+      price: candidate.price,
+      toCountry: candidate.to_country,
+    }),
+  });
+}
+
+function validFallbackRequest(request: DeliveryQuoteRequest): boolean {
+  return /^[A-Z]{2}$/.test(request.originCountryCode) &&
+    /^[A-Z]{2}$/.test(request.destination.countryCode) &&
+    safeString(request.destination.postalCode, 12) &&
+    Number.isSafeInteger(request.parcel.weightGrams) && request.parcel.weightGrams > 0 &&
+    Number.isSafeInteger(request.parcel.lengthMm) && request.parcel.lengthMm > 0 &&
+    Number.isSafeInteger(request.parcel.widthMm) && request.parcel.widthMm > 0 &&
+    Number.isSafeInteger(request.parcel.heightMm) && request.parcel.heightMm > 0;
+}
+
+async function resolveV2FallbackPrice(
+  fetchImpl: FetchLike,
+  auth: Readonly<{ publicKey: string; secretKey: string }>,
+  request: DeliveryQuoteRequest,
+  option: SendcloudUnpricedOption,
+): Promise<SendcloudFallbackPrice | null> {
+  if (!validFallbackRequest(request)) {
+    throw new DeliveryProviderError("REJECTED", "Shipping fallback request is invalid.");
+  }
+  const productsUrl = new URL(`${PANEL_ORIGIN}/api/v2/shipping-products`);
+  productsUrl.searchParams.set("from_country", request.originCountryCode);
+  productsUrl.searchParams.set("to_country", request.destination.countryCode);
+  productsUrl.searchParams.set("carrier", option.carrierCode);
+  productsUrl.searchParams.set("weight", String(request.parcel.weightGrams));
+  productsUrl.searchParams.set("weight_unit", "gram");
+  productsUrl.searchParams.set("length", String(request.parcel.lengthMm));
+  productsUrl.searchParams.set("length_unit", "millimeter");
+  productsUrl.searchParams.set("width", String(request.parcel.widthMm));
+  productsUrl.searchParams.set("width_unit", "millimeter");
+  productsUrl.searchParams.set("height", String(request.parcel.heightMm));
+  productsUrl.searchParams.set("height_unit", "millimeter");
+  productsUrl.searchParams.set("to_postal_code", request.destination.postalCode);
+  productsUrl.searchParams.set("last_mile", expectedLastMile(option.deliveryMode));
+  const methodId = exactShippingMethodId(await providerJson(
+    fetchImpl,
+    auth,
+    productsUrl.href,
+    { method: "GET" },
+  ), option, request);
+  if (methodId === null) return null;
+
+  const priceUrl = new URL(`${PANEL_ORIGIN}/api/v2/shipping-price`);
+  priceUrl.searchParams.set("shipping_method_id", String(methodId));
+  priceUrl.searchParams.set("from_country", request.originCountryCode);
+  priceUrl.searchParams.set("to_country", request.destination.countryCode);
+  priceUrl.searchParams.set("weight", String(request.parcel.weightGrams));
+  priceUrl.searchParams.set("weight_unit", "gram");
+  priceUrl.searchParams.set("to_postal_code", request.destination.postalCode);
+  const price = exactShippingPrice(await providerJson(
+    fetchImpl,
+    auth,
+    priceUrl.href,
+    { method: "GET" },
+  ), request.destination.countryCode);
+  if (!price) return null;
+  return Object.freeze({
+    amountCents: price.amountCents,
+    sourceFingerprint: await sha256Hex(JSON.stringify({
+      methodId,
+      price: price.canonical,
+      productCode: option.shippingOptionCode,
+    })),
+  });
 }
 
 const WEEKDAYS = Object.freeze([
@@ -552,6 +822,19 @@ export function createSendcloudProviderPorts(
           now: request.now,
           ttlSeconds: request.ttlSeconds,
           dutiesTerms: request.dutiesTerms,
+          // France keeps its published Dynamic Checkout V3 prices unchanged.
+          // The V2 lookup is a real-price fallback only for the other EU zones
+          // whose published V3 options currently omit shipping_rate.value.
+          ...(request.originCountryCode === "FR" &&
+            request.destination.countryCode !== "FR" &&
+            EU_COUNTRY_CODES.includes(
+              request.destination.countryCode as typeof EU_COUNTRY_CODES[number],
+            )
+            ? {
+              resolveFallbackPrice: (option: SendcloudUnpricedOption) =>
+                resolveV2FallbackPrice(fetchImpl, auth, request, option),
+            }
+            : {}),
         });
       },
     }),

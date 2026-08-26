@@ -4,6 +4,7 @@ import {
   LEGAL_CONTACT,
   LEGAL_VERSION_DISPLAY,
   SELLER_IDENTITY,
+  SELLER_TAX_STATUS,
 } from "@/lib/legal";
 import { T } from "@/lib/i18n/TranslatedText";
 
@@ -17,13 +18,12 @@ export default function LegalNoticePage() {
       status={<T id="info.legal.status" />}
       officialFrenchOnly
     >
-      <InfoNotice warning>
+      <InfoNotice>
         <p>
-          <strong>Ouverture à finaliser.</strong> L’identité du vendeur, son
-          immatriculation, son siège et le directeur de publication sont
-          publiés. Le téléphone professionnel et le régime de TVA doivent encore
-          être confirmés. La boutique ne doit pas accepter de paiement public
-          avant leur publication exacte.
+          <strong>Informations légales.</strong> L’identité du vendeur, son
+          immatriculation, son siège et le directeur de publication figurent
+          ci-dessous. Le vendeur ne collecte pas de TVA au titre de la franchise
+          en base.
         </p>
       </InfoNotice>
 
@@ -56,6 +56,10 @@ export default function LegalNoticePage() {
               <dd>{SELLER_IDENTITY.vatNumber}</dd>
             </div>
           ) : null}
+          <div>
+            <dt>TVA</dt>
+            <dd>{SELLER_TAX_STATUS.invoiceMention}</dd>
+          </div>
           <div>
             <dt>E-mail</dt>
             <dd>

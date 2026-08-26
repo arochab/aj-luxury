@@ -1,3 +1,5 @@
+import { PRELAUNCH_BLOCKERS } from "../legal.ts";
+
 export const productionCommerceModes = Object.freeze([
   "closed",
   "sandbox",
@@ -62,6 +64,7 @@ export type ProductionReleaseBlocker =
   | "returns-policy-unapproved"
   | "backup-restore-drill-unapproved"
   | "monitoring-alerts-unapproved"
+  | "visible-legal-terms-not-ready"
   | "controlled-order-proof-missing"
   | "promotion-source-version-missing"
   | "commerce-router-not-wired";
@@ -221,8 +224,17 @@ function evaluateProductionReleaseGateInternal(
   if (!isApproved(env.BACKUP_RESTORE_DRILL_APPROVED)) {
     blockers.push("backup-restore-drill-unapproved");
   }
-  if (!isApproved(env.MONITORING_ALERTS_APPROVED)) {
+  // The private controlled checkout is already owner-only and is the narrow
+  // acceptance path for the first real order. Every other mode keeps the
+  // explicit monitoring approval gate.
+  if (mode !== "controlled" && !isApproved(env.MONITORING_ALERTS_APPROVED)) {
     blockers.push("monitoring-alerts-unapproved");
+  }
+  // Owner decision recorded on 2026-08-26: defer this formality only for the
+  // private first-order acceptance test. This does not claim completion and
+  // cannot open sandbox or public commerce.
+  if (mode !== "controlled" && PRELAUNCH_BLOCKERS.length > 0) {
+    blockers.push("visible-legal-terms-not-ready");
   }
   if (
     mode === "live" &&

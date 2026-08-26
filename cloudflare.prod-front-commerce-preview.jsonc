@@ -1,0 +1,39 @@
+{
+  // Preview isolée du front de production avec commerce visible en revue,
+  // mais fermé à toute mutation. Aucun domaine de production, binding D1,
+  // fournisseur ou secret n'est déclaré dans cette configuration.
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "aj-luxury-prod-front-commerce-preview",
+  "main": "./dist/server/index.js",
+  "compatibility_date": "2026-08-16",
+  "compatibility_flags": ["nodejs_compat"],
+  "no_bundle": true,
+  "workers_dev": true,
+  "preview_urls": true,
+  "vars": {
+    "APP_ENV": "preview",
+    "COMMERCE_MODE": "closed",
+    "COMMERCE_REVIEW_MODE": "true"
+  },
+  "assets": {
+    "binding": "ASSETS",
+    "directory": "./dist/client",
+    "run_worker_first": [
+      "/assets/*",
+      "/fonts/*",
+      "/media/*",
+      "/i18n/*",
+      "/images/*",
+      "/videos/*"
+    ]
+  },
+  "rules": [
+    {
+      "type": "ESModule",
+      "globs": ["**/*.js", "**/*.mjs"]
+    }
+  ],
+  "observability": {
+    "enabled": true
+  }
+}

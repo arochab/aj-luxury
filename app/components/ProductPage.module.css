@@ -1,85 +1,48 @@
-/* ==========================================================================
-   Fiche produit — /products/[slug]
-   --------------------------------------------------------------------------
-   Le langage de _design-reference/claude-design-accueil.html : fond #08080a,
-   encre blanche, gouttière --gut, filets de 2px, lettrage métallique sur le
-   nom du coloris. Le chrome du site (StoreHeader / StoreFooter) est déjà
-   sombre : la fiche cesse d'être un îlot crème entre deux bandeaux noirs.
-
-   Plancher typographique : aucun texte visible sous 15px (--t0). Toutes les
-   valeurs en rem de la version précédente descendaient jusqu'à 0,58rem —
-   9,3px. Elles ont été remontées sur l'échelle --t0…--t7, ce qui change les
-   densités : la grille des tailles passe en 2×2 pour que la disponibilité
-   reste lisible à 15px sans être tronquée.
-
-   Aucun token n'est redéfini ici. --pdp-accent est local et reçoit le swatch
-   du coloris, posé en style inline par la page.
-   ========================================================================== */
-
 .page {
-  --pdp-accent: var(--aj-encre);
+  --pdp-ink: #111114;
+  --pdp-muted: #68686d;
+  --pdp-line: rgba(17, 17, 20, 0.16);
   min-height: 100svh;
-  /* clip et non hidden : clip ne crée pas de conteneur de défilement et ne
-     peut donc pas fausser une mesure de ScrollTrigger. */
   overflow: clip;
-  background: var(--aj-noir);
-  color: var(--aj-encre);
-  font-family: var(--disp);
-  font-size: var(--t1);
-  line-height: 1.5;
+  background: #f3f2ef;
+  color: var(--pdp-ink);
+  font-family: var(--font-manrope), Arial, sans-serif;
 }
-
-/* La scène GSAP ne doit rien changer au flux. */
-.scene {
-  display: contents;
-}
-
-/* --- Fil d'Ariane -------------------------------------------------------- */
 
 .breadcrumb {
   display: flex;
-  flex-wrap: wrap;
+  max-width: 100rem;
+  min-height: 3.25rem;
   align-items: center;
-  gap: 0.6rem;
-  padding: clamp(10px, 1.6vh, 18px) var(--gut);
-  color: var(--aj-encre-72);
-  font-size: var(--t0);
-  font-weight: var(--aj-w-moyen);
-  letter-spacing: var(--aj-ls-nav);
-  text-transform: uppercase;
+  gap: 0.62rem;
+  margin: 0 auto;
+  padding: 0.25rem clamp(1rem, 3vw, 3.5rem);
+  color: var(--pdp-muted);
+  font-size: 0.65rem;
 }
 
 .breadcrumb a {
   display: inline-flex;
-  min-height: 44px;
+  min-width: 2.75rem;
+  min-height: 2.75rem;
   align-items: center;
+  justify-content: center;
   color: inherit;
   text-decoration: none;
-  transition: color var(--aj-d-court) var(--e1);
 }
-
-.breadcrumb a:hover {
-  color: var(--aj-encre);
-}
-
-.breadcrumb [aria-current="page"] {
-  color: var(--aj-encre);
-}
-
-/* --- Le bloc haut : galerie + panneau d'achat ---------------------------- */
 
 .hero {
   display: grid;
-  grid-template-columns: minmax(0, 1.42fr) minmax(24rem, 0.58fr);
+  max-width: 100rem;
+  grid-template-columns: minmax(0, 1.38fr) minmax(22rem, 0.62fr);
   align-items: start;
-  gap: clamp(24px, 3.4vw, 68px);
-  padding: 0 var(--gut) clamp(60px, 9vh, 120px);
+  gap: clamp(2rem, 4vw, 4.5rem);
+  margin: 0 auto;
+  padding: 0 clamp(1rem, 3vw, 3.5rem) clamp(4rem, 8vw, 7.5rem);
 }
 
-/* --- Galerie ------------------------------------------------------------- */
-
 .gallery {
-  --gallery-gap: 2px;
+  --gallery-gap: clamp(0.38rem, 0.55vw, 0.58rem);
   display: flex;
   min-width: 0;
   flex-direction: column;
@@ -102,17 +65,12 @@
   margin: 0;
   align-self: stretch;
   overflow: hidden;
-  background: var(--aj-noir-media);
+  background: #17171a;
 }
 
 .galleryMain {
   height: auto;
-  /* Le grand plan produit était CARRÉ pour des sources 1731x2600 : `cover`
-     n'y montrait que 67 % de la photo et `center 30%` plaçait ce hublot de
-     10 % à 76,6 %. Résultat : mannequin décapité ET boxer tranché sous
-     l'entrejambe, sur l'image principale de la fiche. Le ratio natif rend la
-     tête, la ceinture, le logo et le bas du boxer. */
-  aspect-ratio: 2 / 3;
+  aspect-ratio: 1;
 }
 
 .galleryLandscape {
@@ -120,36 +78,6 @@
   aspect-ratio: 3 / 2;
 }
 
-/* Les vignettes secondaires vont par deux sur une même ligne, et l'AGENTS
-   impose que deux médias appariés partagent le même cadre et finissent à la
-   même hauteur. Le cadre de la paire est donc UNIQUE, et c'est 2/3 : le ratio
-   natif de treize des quinze sources de galerie (1731x2600 = 0,6658).
-
-   DEUX SOURCES Y FONT EXCEPTION, mesurées le 19/08, et l'exception est
-   volontaire faute de pouvoir satisfaire les deux règles à la fois :
-     • product-rose-front.webp — 2000x2571 (0,7779), vue 3 de /products/
-       rose-pale. `cover` en retire 7,15 % de chaque côté. Contrôle pixel de
-       la source : le vêtement rose occupe x 18,85 %..80 % et la bande perdue
-       de gauche (0..7,15 %) ne contient AUCUN pixel de vêtement (2 pixels sur
-       1 094 223, bruit de seuil). La ceinture et son logo sont au centre,
-       intacts, et cette source n'a pas de visage : c'est un plan de buste.
-       Ce qui disparaît est du fond et l'extrémité des mains.
-     • editorial-pourpre-chair.webp — 1864x2600 (0,7169), dernière vue de
-       /products/pourpre et bloc éditorial de l'accueil. 3,5 % de chaque côté,
-       du fond uniquement : corps x 15..90 %, boxer x 35..75 %, logo
-       x 52..58 %, tous à l'intérieur de la bande visible.
-
-   Ce qu'il ne faut PAS faire pour « corriger » cela :
-     • poser un `object-position` — le cadre serait toujours faux et la marge
-       n'existe pas ;
-     • donner son ratio natif à une seule des deux vignettes d'une ligne — les
-       deux cesseraient de finir à la même hauteur ;
-     • rendre le cadre commun moins vertical — les treize sources en 2/3 se
-       feraient alors rogner en haut, où se trouvent les visages (crâne à 3 %
-       sur product-card-pourpre).
-   La seule correction propre est en amont : recadrer ces deux sources en 2/3
-   à la photo, pour que la décision de cadrage soit prise par un humain et non
-   par le navigateur. Arbitrage d'Adam. */
 .galleryPortrait {
   aspect-ratio: 2 / 3;
 }
@@ -162,7 +90,7 @@
   overflow: hidden;
   border: 0;
   background: transparent;
-  color: var(--aj-encre);
+  color: #fff;
   cursor: zoom-in;
 }
 
@@ -179,7 +107,7 @@
   height: 100%;
   object-fit: cover;
   object-position: center;
-  transition: transform 0.42s var(--e1);
+  transition: transform 700ms cubic-bezier(0.22, 0.8, 0.22, 1);
 }
 
 .galleryPlaceholder {
@@ -192,149 +120,88 @@
   z-index: 1;
 }
 
-/* Le cadre étant au ratio de la source, la hauteur est entièrement visible :
-   ce décalage n'a plus lieu d'être et coupait auparavant le bas du boxer.
-   `objectPosition: "center 30%"` reste porté par lib/products.ts pour les
-   cadres qui, eux, recadrent réellement. */
 .galleryMain .zoomTrigger img {
-  object-position: center;
+  object-position: center 30%;
 }
 
 .zoomLabel {
   position: absolute;
   z-index: 2;
-  right: clamp(12px, 1.2vw, 20px);
-  bottom: clamp(12px, 1.2vw, 20px);
+  right: 0.85rem;
+  bottom: 0.85rem;
   display: inline-flex;
-  min-height: 44px;
+  min-height: 2.75rem;
   align-items: center;
-  padding: 0 18px;
-  border: 1px solid var(--aj-filet-fort);
-  background: rgba(8, 8, 10, 0.52);
-  backdrop-filter: blur(10px);
-  font-size: var(--t0);
-  font-weight: var(--aj-w-gras);
-  letter-spacing: var(--aj-ls-label);
+  padding: 0 0.9rem;
+  border: 1px solid rgba(255, 255, 255, 0.68);
+  background: rgba(10, 10, 12, 0.48);
+  backdrop-filter: blur(0.65rem);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.13em;
   text-transform: uppercase;
-  opacity: 0;
-  transform: translate3d(0, 8px, 0);
-  transition:
-    opacity var(--aj-d-court) var(--e1),
-    transform var(--aj-d-court) var(--e1);
 }
-
-.zoomTrigger:focus-visible .zoomLabel {
-  opacity: 1;
-  transform: translate3d(0, 0, 0);
-}
-
-/* Sans survol — tactile — l'affordance doit rester affichée, sinon plus
-   personne ne sait que l'image s'agrandit. */
-@media (hover: none) {
-  .zoomLabel {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-/* --- Panneau d'achat ----------------------------------------------------- */
 
 .purchasePanel {
   position: sticky;
-  top: clamp(16px, 2.4vh, 30px);
+  top: 1.25rem;
   min-width: 0;
-  padding-top: clamp(6px, 1vh, 16px);
-}
-
-.identity {
-  display: grid;
-  gap: clamp(10px, 1.2vh, 16px);
+  padding-top: 0;
 }
 
 .eyebrow {
-  margin: 0;
-  color: var(--aj-encre-72);
-  font-size: var(--t0);
-  font-weight: var(--aj-w-gras);
-  letter-spacing: var(--aj-ls-label);
+  margin: 0 0 0.8rem;
+  color: var(--pdp-muted);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
 }
 
 .purchasePanel h1 {
   margin: 0;
-  font-family: var(--disp);
-  font-optical-sizing: auto;
-  font-size: var(--t6);
-  font-weight: var(--aj-w-fin);
-  letter-spacing: var(--aj-ls-titre);
-  line-height: 0.9;
+  font-size: clamp(3.2rem, 5.2vw, 5.6rem);
+  font-weight: 380;
+  letter-spacing: -0.075em;
+  line-height: 0.88;
 }
 
-/* Le nom du coloris portait le métal jusqu'au 20/08. Il ne le porte plus :
-   l'arrêt le plus sombre du dégradé plafonne à 4,79:1 sur le meilleur fond
-   possible, donc sous le plancher de 5,0:1 — démonstration dans
-   app/design-system.css, section « Lettrage métallique ». Encre pleine. */
 .colorName {
-  margin: 0;
-  color: var(--aj-encre);
-  font-family: var(--disp);
-  font-optical-sizing: auto;
-  font-size: var(--t4);
-  font-weight: var(--aj-w-fin);
-  letter-spacing: var(--aj-ls-titre);
-  line-height: 0.98;
+  margin: 0.85rem 0 1.35rem;
+  color: var(--pdp-muted);
+  font-size: 0.9rem;
 }
 
-.tone {
-  margin: 0;
-  color: var(--aj-encre-84);
-  font-size: var(--t0);
-  font-weight: var(--aj-w-moyen);
-  letter-spacing: var(--aj-ls-label);
-  text-transform: uppercase;
-}
-
-/* Le prix, seul entre deux filets : c'est le premier chiffre de la page. */
 .price {
   display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
-  gap: 14px;
-  margin-top: clamp(24px, 3.2vh, 40px);
-  padding: clamp(16px, 2vh, 24px) 0;
-  border-top: 1px solid var(--aj-filet);
-  border-bottom: 1px solid var(--aj-filet);
+  gap: 1rem;
+  padding: 1rem 0;
+  border-top: 1px solid var(--pdp-line);
+  border-bottom: 1px solid var(--pdp-line);
 }
 
 .price strong {
-  font-family: var(--disp);
-  font-optical-sizing: auto;
-  font-size: var(--t4);
-  font-weight: var(--aj-w-fin);
-  letter-spacing: var(--aj-ls-grand);
-  line-height: 1;
+  font-size: 1.35rem;
+  font-weight: 650;
+  letter-spacing: -0.025em;
 }
 
 .price span {
-  color: var(--aj-encre-72);
-  font-size: var(--t0);
-  letter-spacing: var(--aj-ls-sous);
+  color: var(--pdp-muted);
+  font-size: 0.65rem;
 }
 
 .description {
-  margin: clamp(20px, 2.6vh, 30px) 0 clamp(26px, 3.4vh, 40px);
-  max-width: 42ch;
-  color: var(--aj-encre-90);
-  font-size: var(--t1);
-  font-weight: var(--aj-w-livre);
-  line-height: 1.6;
+  margin: 1.25rem 0 1.5rem;
+  color: #505055;
+  font-size: 0.82rem;
+  line-height: 1.7;
 }
 
-/* --- Sélecteurs ---------------------------------------------------------- */
-
 .selector {
-  margin: 0 0 clamp(22px, 3vh, 34px);
+  margin: 0 0 1.35rem;
   padding: 0;
   border: 0;
 }
@@ -344,269 +211,176 @@
   width: 100%;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  margin: 0 0 12px;
+  gap: 1rem;
+  margin: 0 0 0.65rem;
   padding: 0;
-  color: var(--aj-encre-84);
-  font-size: var(--t0);
-  font-weight: var(--aj-w-gras);
-  letter-spacing: var(--aj-ls-label);
-  text-transform: uppercase;
+  font-size: 0.66rem;
 }
 
 .selectorHeading strong {
-  color: var(--aj-encre);
-  font-weight: var(--aj-w-gras);
+  font-weight: 650;
+}
+
+.selectorHeading a,
+.sizeGuideTrigger {
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
+  padding: 0.45rem 0;
+  border-bottom: 1px solid currentColor;
+  color: inherit;
 }
 
 .sizeGuideTrigger {
-  display: inline-flex;
-  min-height: 44px;
-  align-items: center;
-  padding: 6px 0;
-  border: 0;
-  border-bottom: 1px solid currentColor;
+  border-top: 0;
+  border-right: 0;
+  border-left: 0;
   background: transparent;
-  color: inherit;
   cursor: pointer;
   font: inherit;
-  letter-spacing: inherit;
-  text-transform: inherit;
-  transition: color var(--aj-d-court) var(--e1);
-}
-
-.sizeGuideTrigger:hover {
-  color: var(--aj-encre);
 }
 
 .variantOptions {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 2px;
+  gap: 0.38rem;
 }
 
-/* Les trois coloris restent nommés en toutes lettres : une pastille seule
-   n'apprend rien à qui découvre la marque. */
 .variant {
-  position: relative;
   display: grid;
-  min-height: 5.5rem;
-  align-content: center;
-  justify-items: center;
-  gap: 10px;
-  padding: 14px 8px;
-  border: 1px solid var(--aj-filet-bouton);
-  color: var(--aj-encre-84);
-  font-size: var(--t0);
-  font-weight: var(--aj-w-moyen);
-  letter-spacing: 0.04em;
+  min-height: 3.5rem;
+  place-items: center;
+  gap: 0.28rem;
+  padding: 0.45rem 0.35rem;
+  border: 1px solid var(--pdp-line);
+  color: inherit;
+  font-size: 0.58rem;
   text-align: center;
   text-decoration: none;
-  transition:
-    border-color var(--aj-d-court) var(--e1),
-    color var(--aj-d-court) var(--e1);
-}
-
-/* Les trois cartes doivent être CONSTRUITES pareil, pas seulement mesurer
-   pareil. « Pourpre Impérial » passe sur deux lignes quand « Rose Velours » et
-   « Lilas Céleste » tiennent sur une : à hauteur de carte égale et contenu
-   centré, la ligne de base des textes décrochait et la pastille du troisième
-   coloris remontait par rapport aux deux autres — le premier geste d'achat
-   paraissait de travers. On réserve donc deux lignes à tous les libellés et on
-   les cale en haut : la pastille est au même y sur les trois, quel que soit le
-   nom, et rien ne bouge quand un coloris est renommé. */
-.variantName {
-  display: flex;
-  min-height: calc(2 * 1.3em);
-  align-items: flex-start;
-  justify-content: center;
-  line-height: 1.3;
-  text-wrap: balance;
-}
-
-.variant:hover {
-  border-color: var(--aj-filet-fort);
-  color: var(--aj-encre);
 }
 
 .variantActive {
-  border-color: var(--aj-encre);
-  color: var(--aj-encre);
-}
-
-/* Le filet d'accent sous le coloris courant : la seule tache de couleur du
-   panneau, et c'est exactement la couleur du tissu. */
-.variantActive::after {
-  position: absolute;
-  right: -1px;
-  bottom: -1px;
-  left: -1px;
-  height: 2px;
-  background: var(--pdp-accent);
-  content: "";
+  border-color: var(--pdp-ink);
+  box-shadow: inset 0 0 0 1px var(--pdp-ink);
 }
 
 .swatch {
-  width: 1.5rem;
-  height: 1.5rem;
-  border: 1px solid var(--aj-filet-bouton);
+  width: 1.25rem;
+  height: 1.25rem;
+  border: 1px solid rgba(17, 17, 20, 0.15);
   border-radius: 50%;
 }
 
-/* 2 × 2 et non 4 × 1 : à 15px, « Disponibilité limitée simulée » ne tient pas
-   dans un quart de colonne sans être tronquée. */
 .sizeOptions {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 2px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.38rem;
 }
 
 .sizeButton {
   display: grid;
-  min-height: 5rem;
+  min-height: 3.75rem;
   align-content: center;
-  justify-items: center;
-  gap: 6px;
-  padding: 12px 10px;
-  border: 1px solid var(--aj-filet-bouton);
+  gap: 0.2rem;
+  place-items: center;
+  border: 1px solid var(--pdp-line);
   background: transparent;
-  color: var(--aj-encre);
+  color: inherit;
   cursor: pointer;
   font: inherit;
-  text-align: center;
-  transition:
-    border-color var(--aj-d-court) var(--e1),
-    background-color var(--aj-d-court) var(--e1),
-    color var(--aj-d-court) var(--e1);
-}
-
-.sizeLetter {
-  font-size: var(--t2);
-  font-weight: var(--aj-w-livre);
-  letter-spacing: var(--aj-ls-sous);
-  line-height: 1;
+  font-size: 0.72rem;
 }
 
 .sizeAvailability {
-  color: var(--aj-encre-72);
-  font-size: var(--t0);
-  font-weight: var(--aj-w-moyen);
-  letter-spacing: 0.02em;
-  line-height: 1.25;
+  color: var(--pdp-muted);
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
 }
 
-.sizeButton:hover:not(:disabled):not([aria-disabled="true"]) {
-  border-color: var(--aj-filet-fort);
-}
-
-/* L'état choisi est l'inverse exact de la page — le geste de la maquette. */
 .sizeButton[aria-pressed="true"] {
-  border-color: var(--aj-encre);
-  background: var(--aj-encre);
-  color: var(--aj-noir);
+  border-color: var(--pdp-ink);
+  background: var(--pdp-ink);
+  color: #fff;
 }
 
 .sizeButton[aria-pressed="true"] .sizeAvailability {
-  color: rgba(8, 8, 10, 0.66);
+  color: inherit;
 }
 
-/* La rupture se lit dès l'affichage. aria-disabled porte le même traitement
-   visuel que :disabled, sans retirer la taille du parcours clavier. */
-.sizeButton:disabled,
-.sizeButton[aria-disabled="true"] {
-  border-color: rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.38);
+.sizeButton:disabled {
+  border-color: #dadad7;
+  color: #8c8c90;
   cursor: not-allowed;
-}
-
-.sizeButton:disabled .sizeLetter,
-.sizeButton[aria-disabled="true"] .sizeLetter {
   text-decoration: line-through;
 }
 
-.sizeButton:disabled .sizeAvailability,
-.sizeButton[aria-disabled="true"] .sizeAvailability {
-  color: rgba(255, 255, 255, 0.38);
-}
-
-/* --- Achat --------------------------------------------------------------- */
-
 .purchaseButton {
   width: 100%;
-  min-height: 3.75rem;
-  border: 1px solid var(--aj-encre);
-  background: var(--aj-encre);
-  color: var(--aj-noir);
+  min-height: 3.5rem;
+  border: 1px solid var(--pdp-ink);
+  background: var(--pdp-ink);
+  color: #fff;
   cursor: pointer;
   font: inherit;
-  font-size: var(--t1);
-  font-weight: var(--aj-w-lourd);
-  letter-spacing: 0.06em;
-  transition:
-    background-color var(--aj-d-court) var(--e1),
-    color var(--aj-d-court) var(--e1);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }
 
-/* `aria-disabled` remplace `disabled` sur ce bouton (voir ProductPurchase.tsx) :
-   il reste focusable et annonçable, donc l'apparence d'indisponibilité doit
-   suivre l'attribut ARIA et non plus l'état natif. Le sélecteur `:disabled` est
-   conservé au cas où un autre bouton de la fiche l'utiliserait. */
-.purchaseButton:disabled,
-.purchaseButton[aria-disabled="true"] {
-  border-color: var(--aj-filet-bouton);
-  background: transparent;
-  color: var(--aj-encre-72);
+.purchaseButton:disabled {
+  border-color: #cececb;
+  background: #cececb;
+  color: #66666a;
   cursor: not-allowed;
 }
 
 .notice {
-  min-height: 1.6em;
-  margin: 14px 0 0;
-  color: var(--aj-encre-72);
-  font-size: var(--t0);
-  line-height: 1.5;
+  min-height: 1.5rem;
+  margin: 0.65rem 0 0;
+  color: var(--pdp-muted);
+  font-size: 0.63rem;
+  line-height: 1.45;
 }
 
 .purchaseError {
-  color: #f0b6c2;
+  color: #8b3138;
 }
 
 .cartLink {
   display: inline-flex;
-  min-height: 44px;
+  min-height: 2.75rem;
   align-items: center;
-  margin-top: 6px;
+  margin-bottom: 0.5rem;
   border-bottom: 1px solid currentColor;
-  color: var(--aj-encre);
-  font-size: var(--t0);
-  font-weight: var(--aj-w-gras);
-  letter-spacing: var(--aj-ls-label);
+  color: inherit;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
 }
 
-/* --- Détails ------------------------------------------------------------- */
-
 .details {
-  margin-top: clamp(26px, 3.4vh, 40px);
-  border-top: 1px solid var(--aj-filet);
+  margin-top: 1rem;
+  border-top: 1px solid var(--pdp-line);
 }
 
 .details details {
-  border-bottom: 1px solid var(--aj-filet);
+  border-bottom: 1px solid var(--pdp-line);
 }
 
 .details summary {
   display: flex;
-  min-height: 3.5rem;
+  min-height: 3rem;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 1rem;
   cursor: pointer;
-  font-size: var(--t0);
-  font-weight: var(--aj-w-gras);
-  letter-spacing: var(--aj-ls-label);
+  font-size: 0.72rem;
+  font-weight: 650;
   list-style: none;
-  text-transform: uppercase;
 }
 
 .details summary::-webkit-details-marker {
@@ -614,9 +388,9 @@
 }
 
 .details summary::after {
-  font-size: var(--t2);
-  font-weight: var(--aj-w-fin);
   content: "+";
+  font-size: 1rem;
+  font-weight: 350;
 }
 
 .details details[open] summary::after {
@@ -624,24 +398,24 @@
 }
 
 .detailsContent {
-  padding: 2px 0 22px;
-  color: var(--aj-encre-84);
-  font-size: var(--t1);
-  font-weight: var(--aj-w-livre);
-  line-height: 1.65;
+  padding: 0.1rem 0 1rem;
+  color: #55555a;
+  font-size: 0.72rem;
+  line-height: 1.62;
 }
 
 .detailsContent p {
-  margin: 0 0 0.9em;
+  margin: 0 0 0.7rem;
 }
 
 .detailsContent p:last-child {
   margin-bottom: 0;
 }
 
-.featureList {
+.featureList,
+.stockList {
   display: grid;
-  gap: 10px;
+  gap: 0.45rem;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -649,97 +423,116 @@
 
 .featureList li {
   position: relative;
-  padding-left: 18px;
+  padding-left: 0.8rem;
 }
 
 .featureList li::before {
   position: absolute;
-  top: 0.72em;
+  top: 0.65em;
   left: 0;
-  width: 5px;
-  height: 1px;
-  background: var(--aj-encre-72);
+  width: 0.22rem;
+  height: 0.22rem;
+  border-radius: 50%;
+  background: #83848a;
   content: "";
+}
+
+.stockList {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.stockList li {
+  display: grid;
+  min-height: 3.25rem;
+  place-items: center;
+  border: 1px solid var(--pdp-line);
+  text-align: center;
+}
+
+.stockList strong {
+  font-size: 0.72rem;
+}
+
+.stockList span {
+  color: var(--pdp-muted);
+  font-size: 0.58rem;
 }
 
 .service {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: clamp(22px, 3vh, 32px);
-  color: var(--aj-encre-72);
-  font-size: var(--t0);
-  line-height: 1.5;
+  flex-wrap: wrap;
+  gap: 0.4rem 1rem;
+  margin-top: 1rem;
+  color: var(--pdp-muted);
+  font-size: 0.62rem;
 }
-
-/* --- Guide des tailles --------------------------------------------------- */
 
 .sizeGuideOverlay {
   position: fixed;
   z-index: 120;
   inset: 0;
   display: grid;
-  padding: clamp(12px, 2vw, 28px);
+  padding: 1rem;
   overflow: auto;
   place-items: center;
-  background: rgba(6, 6, 8, 0.86);
-  backdrop-filter: blur(8px);
+  background: rgba(7, 7, 9, 0.78);
+  backdrop-filter: blur(0.35rem);
 }
 
 .sizeGuideDialog {
-  width: min(calc(100vw - 2rem), 44rem);
+  width: min(calc(100vw - 2rem), 42rem);
   max-height: min(90svh, 48rem);
-  padding: clamp(24px, 4vw, 48px);
+  padding: clamp(1.5rem, 4vw, 3rem);
   overflow: auto;
-  border: 1px solid var(--aj-filet);
-  background: var(--aj-noir-media);
-  color: var(--aj-encre);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background:
+    radial-gradient(circle at 85% 0%, rgba(220, 222, 227, 0.12), transparent 18rem),
+    #111114;
+  color: #f7f7f5;
+  box-shadow: 0 2rem 6rem rgba(0, 0, 0, 0.44);
 }
 
 .sizeGuideHeader {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 24px;
+  gap: 2rem;
 }
 
 .sizeGuideHeader h2 {
-  margin: 12px 0 0;
-  font-family: var(--disp);
-  font-optical-sizing: auto;
-  font-size: var(--t4);
-  font-weight: var(--aj-w-fin);
-  letter-spacing: var(--aj-ls-titre);
-  line-height: 0.96;
+  margin: 0.55rem 0 0;
+  font-size: clamp(2.25rem, 6vw, 4.5rem);
+  font-weight: 350;
+  letter-spacing: -0.06em;
+  line-height: 0.95;
 }
 
 .sizeGuideClose {
   display: grid;
-  min-width: 44px;
-  min-height: 44px;
+  min-width: 2.75rem;
+  min-height: 2.75rem;
   place-items: center;
-  border: 1px solid var(--aj-filet-bouton);
+  border: 1px solid rgba(255, 255, 255, 0.4);
   background: transparent;
   color: inherit;
   cursor: pointer;
-  font: var(--aj-w-fin) var(--t2) / 1 var(--disp);
+  font: 300 1.5rem/1 var(--font-manrope), Arial, sans-serif;
 }
 
 .sizeGuideIntro,
 .sizeGuideNote {
-  max-width: 46ch;
-  color: var(--aj-encre-84);
-  font-size: var(--t1);
-  font-weight: var(--aj-w-livre);
-  line-height: 1.6;
+  max-width: 34rem;
+  color: #c3c4c8;
+  font-size: 0.78rem;
+  line-height: 1.65;
 }
 
 .sizeGuideIntro {
-  margin: clamp(20px, 3vh, 30px) 0 clamp(24px, 3.6vh, 36px);
+  margin: 1.5rem 0 2rem;
 }
 
 .sizeGuideNote {
-  margin: clamp(18px, 2.6vh, 26px) 0 0;
+  margin: 1.25rem 0 0;
 }
 
 .sizeGuideTableWrap {
@@ -749,61 +542,56 @@
 .sizeGuideTable {
   width: 100%;
   border-collapse: collapse;
-  font-size: var(--t1);
+  font-size: 0.78rem;
 }
 
 .sizeGuideTable th,
 .sizeGuideTable td {
-  padding: 16px 12px;
-  border-top: 1px solid var(--aj-filet);
+  padding: 0.9rem 0.75rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.18);
   text-align: left;
 }
 
 .sizeGuideTable thead th {
-  color: var(--aj-encre-72);
-  font-size: var(--t0);
-  font-weight: var(--aj-w-gras);
-  letter-spacing: var(--aj-ls-label);
+  color: #a9adb5;
+  font-size: 0.65rem;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 
 .sizeGuideTable tbody th {
-  font-size: var(--t2);
-  font-weight: var(--aj-w-livre);
+  font-size: 1rem;
 }
-
-.sizeGuideTable tbody td {
-  color: var(--aj-encre-84);
-}
-
-/* --- Les autres coloris -------------------------------------------------- */
 
 .otherColors {
-  padding: clamp(56px, 8vh, 110px) var(--gut) clamp(64px, 9vh, 120px);
-  border-top: 1px solid var(--aj-filet);
-  background: var(--aj-noir);
+  padding: clamp(4rem, 7vw, 7rem) clamp(1rem, 3vw, 3.5rem);
+  border-top: 1px solid var(--pdp-line);
+  background: #e7e6e3;
 }
 
 .otherColorsHeader {
-  display: grid;
-  gap: 14px;
-  margin: 0 0 clamp(26px, 3.6vh, 44px);
+  display: flex;
+  max-width: 93rem;
+  align-items: end;
+  justify-content: space-between;
+  gap: 2rem;
+  margin: 0 auto clamp(2rem, 3vw, 3rem);
 }
 
 .otherColorsHeader h2 {
-  margin: 0;
-  font-family: var(--disp);
-  font-optical-sizing: auto;
-  font-size: var(--t6);
-  font-weight: var(--aj-w-fin);
-  letter-spacing: var(--aj-ls-titre);
-  line-height: 0.92;
+  margin: 0.45rem 0 0;
+  font-size: clamp(2.8rem, 5.5vw, 5.8rem);
+  font-weight: 380;
+  letter-spacing: -0.065em;
+  line-height: 0.9;
 }
 
 .otherColorsGrid {
   display: grid;
+  max-width: 93rem;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 2px;
+  gap: 0.45rem;
+  margin: 0 auto;
 }
 
 .otherColor {
@@ -813,75 +601,28 @@
 
 .otherColorImage {
   position: relative;
-  display: block;
-  /* Les autres coloris : à 4/5 avec `center 62%`, le hublot allait de 10,4 %
-     à 93,6 % et coupait le crâne des deux mannequins. Ratio natif. */
-  aspect-ratio: 2 / 3;
+  aspect-ratio: 4 / 5;
   overflow: hidden;
-  background: var(--aj-noir-media);
+  border: 1px solid var(--pdp-line);
+  background: #d4d3d0;
 }
 
-.otherColorMedia {
+.otherColorImage img {
   position: absolute;
   inset: 0;
-  display: block;
-  transform: scale(1);
-  transition: transform 0.42s var(--e1);
-  will-change: transform;
-}
-
-.otherColorMedia img {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  object-position: center;
+  object-position: center 62%;
+  transition: transform 700ms cubic-bezier(0.22, 0.8, 0.22, 1);
 }
 
-.otherColorFilet {
-  position: absolute;
-  z-index: 2;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  height: 2px;
-  background: var(--pdp-accent);
-  transform: scaleX(0);
-  transform-origin: left;
-  transition: transform 0.24s var(--e1);
+.otherColor > span {
+  display: block;
+  padding: 0.9rem 0.1rem 0;
+  font-size: 0.78rem;
+  font-weight: 650;
 }
-
-.otherColorLine {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 14px;
-  flex-wrap: wrap;
-  padding: 18px 2px 0;
-}
-
-/* Encre pleine depuis le 20/08, pour la raison donnée sur .colorName. */
-.otherColorName {
-  color: var(--aj-encre);
-  font-family: var(--disp);
-  font-optical-sizing: auto;
-  font-size: var(--t2);
-  font-weight: var(--aj-w-normal);
-  letter-spacing: var(--aj-ls-sous);
-}
-
-.otherColorPrice {
-  font-size: var(--t0);
-  font-weight: var(--aj-w-moyen);
-  letter-spacing: 0.1em;
-  white-space: nowrap;
-}
-
-.otherColor:hover .otherColorFilet,
-.otherColor:focus-visible .otherColorFilet {
-  transform: scaleX(1);
-}
-
-/* --- Vue agrandie -------------------------------------------------------- */
 
 .zoomOverlay {
   position: fixed;
@@ -890,21 +631,13 @@
   display: grid;
   overflow: hidden;
   place-items: center;
-  /* Les 2 % résiduels de l'ancien 0.98 suffisaient à laisser transparaître en
-     fantôme, derrière la photo, la barre de navigation (z-index 50), « FR »,
-     « COMPTE » et le titre de la fiche. Une visionneuse plein écran doit
-     couper le fond, pas le teinter : fond opaque, plus un flou de sécurité
-     pour les navigateurs qui composent la couche en transparence. */
-  backdrop-filter: blur(18px) saturate(0.6);
-  background: rgb(8, 8, 10);
-  color: var(--aj-encre);
+  background: rgba(8, 8, 10, 0.98);
+  color: #fff;
 }
 
 .zoomImage {
   position: absolute;
-  inset: 5rem clamp(12px, 3vw, 60px) 6rem;
-  overflow: hidden;
-  cursor: zoom-in;
+  inset: 4.5rem;
 }
 
 .zoomImage img {
@@ -914,62 +647,57 @@
   height: 100%;
   object-fit: contain;
   object-position: center;
-  will-change: transform;
 }
 
 .zoomClose {
   position: absolute;
   z-index: 2;
-  top: clamp(12px, 2vh, 22px);
-  right: clamp(12px, 2vw, 26px);
-  min-width: 6rem;
-  min-height: 44px;
-  border: 1px solid var(--aj-filet-fort);
-  background: rgba(8, 8, 10, 0.52);
+  top: 1rem;
+  right: 1rem;
+  min-width: 4.75rem;
+  min-height: 2.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  background: rgba(10, 10, 12, 0.48);
   color: inherit;
   cursor: pointer;
   font: inherit;
-  font-size: var(--t0);
-  font-weight: var(--aj-w-gras);
-  letter-spacing: var(--aj-ls-label);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 
 .zoomControls {
   position: absolute;
   z-index: 2;
-  bottom: clamp(12px, 2vh, 24px);
+  bottom: 1rem;
   left: 50%;
   display: flex;
   align-items: center;
-  gap: 18px;
+  gap: 1rem;
   transform: translateX(-50%);
 }
 
 .zoomControls button {
   display: grid;
-  width: 44px;
-  height: 44px;
+  width: 3rem;
+  height: 3rem;
   place-items: center;
-  border: 1px solid var(--aj-filet-fort);
-  background: rgba(8, 8, 10, 0.52);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  background: rgba(10, 10, 12, 0.48);
   color: inherit;
   cursor: pointer;
   font: inherit;
-  font-size: var(--t2);
-  font-weight: var(--aj-w-fin);
+  font-size: 1.1rem;
 }
 
 .zoomControls span {
-  min-width: 5rem;
-  font-size: var(--t0);
-  font-weight: var(--aj-w-gras);
-  letter-spacing: var(--aj-ls-prix);
+  min-width: 3.75rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.13em;
   text-align: center;
 }
-
-/* --- Focus ---------------------------------------------------------------
-   Le trait blanc de la maquette : outline: 1px solid #fff; offset 4px. */
 
 .zoomTrigger:focus-visible,
 .variant:focus-visible,
@@ -979,40 +707,25 @@
 .details summary:focus-visible,
 .otherColor:focus-visible,
 .zoomClose:focus-visible,
-.zoomControls button:focus-visible,
-.sizeGuideTrigger:focus-visible,
-.sizeGuideClose:focus-visible,
-.breadcrumb a:focus-visible,
-.purchaseError:focus-visible {
-  outline: 1px solid var(--aj-encre);
-  outline-offset: 4px;
+.zoomControls button:focus-visible {
+  outline: 2px solid #7f8187;
+  outline-offset: 3px;
 }
 
-.zoomTrigger:focus-visible {
-  outline-offset: -5px;
+.sizeGuideTrigger:focus-visible,
+.sizeGuideClose:focus-visible,
+.purchaseError:focus-visible {
+  outline: 2px solid #d9dadd;
+  outline-offset: 3px;
 }
 
 @media (hover: hover) {
-  .zoomTrigger:hover .galleryMedia,
-  .zoomTrigger:hover .galleryPlaceholder {
-    transform: scale(1.03);
+  .zoomTrigger:hover .galleryMedia {
+    transform: scale(1.012);
   }
 
-  .zoomTrigger:hover .zoomLabel {
-    opacity: 1;
-    transform: translate3d(0, 0, 0);
-  }
-
-  .otherColor:hover .otherColorMedia {
-    transform: scale(1.04);
-  }
-}
-
-/* --- Adaptations --------------------------------------------------------- */
-
-@media (max-width: 1100px) {
-  .hero {
-    grid-template-columns: minmax(0, 1.2fr) minmax(20rem, 0.8fr);
+  .otherColor:hover img {
+    transform: scale(1.015);
   }
 }
 
@@ -1020,12 +733,9 @@
   .hero {
     grid-template-columns: 1fr;
     gap: 0;
-    padding-bottom: clamp(48px, 7vh, 80px);
+    padding-bottom: 4.5rem;
   }
 
-  /* La galerie se dissout dans la grille du hero pour que le panneau d'achat
-     puisse s'intercaler entre l'image principale et les vues secondaires :
-     le prix et les tailles arrivent avant le défilement des détails. */
   .gallery {
     display: contents;
   }
@@ -1038,31 +748,24 @@
   .galleryMain {
     order: 1;
     height: auto;
-    /* Même raison qu'en large : 4/5 rognait 17 % de la hauteur de la source
-       et décapitait deux des trois coloris. */
-    aspect-ratio: 2 / 3;
+    aspect-ratio: 4 / 5;
     margin-top: 0;
   }
 
   .purchasePanel {
+    order: 2;
     position: relative;
     top: auto;
-    order: 2;
-    padding: clamp(30px, 4.5vh, 46px) 0 clamp(34px, 5vh, 52px);
+    padding: 2.25rem 0 3rem;
   }
 
   .otherColorsGrid {
-    /* 78vw ne laissait apparaître la carte suivante qu'à 20,7 % (63 px sur 370
-       à 390x844), barre de défilement masquée et aucune autre amorce : le
-       troisième coloris se manquait au doigt. 70vw porte l'amorce à ~35 %,
-       assez franche pour se lire comme « ça continue ». On ne rétablit pas la
-       barre système, qui jurerait avec le reste. */
-    grid-auto-columns: min(70vw, 32rem);
+    grid-auto-columns: min(78vw, 32rem);
     grid-auto-flow: column;
     grid-template-columns: none;
     overflow-x: auto;
-    margin-right: calc(var(--gut) * -1);
-    padding-right: var(--gut);
+    margin-right: -1rem;
+    padding-right: 1rem;
     scroll-snap-type: x mandatory;
     scrollbar-width: none;
   }
@@ -1078,96 +781,221 @@
 
 @media (max-width: 560px) {
   .breadcrumb {
-    gap: 0.5rem;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+
+  .galleryItem:not(.galleryMain):not(.galleryLandscape) {
+    aspect-ratio: 2 / 3;
   }
 
   .gallerySecondary {
     grid-template-columns: 1fr;
   }
 
-  /* Une seule colonne : aucune vignette n'a plus de jumelle sur sa ligne,
-     donc plus de cadre commun à respecter. Chacune peut enfin porter le ratio
-     de SA source — c'est la règle « un cadre porte le ratio de sa source »
-     appliquée partout où elle n'entre en conflit avec rien.
-     `--frame-ratio` n'est posé que sur les deux sources hors famille
-     (product-rose-front 2000/2571, editorial-pourpre-chair 1864/2600) ; les
-     treize autres retombent sur 2/3, qui est déjà leur ratio natif. */
-  .galleryItem.galleryPortrait {
-    aspect-ratio: var(--frame-ratio, 2 / 3);
-  }
-
   .galleryItem.galleryLandscape {
     aspect-ratio: 3 / 2;
   }
 
-  .variantOptions {
-    grid-template-columns: 1fr;
+  .purchasePanel h1 {
+    font-size: 15vw;
   }
 
   .variant {
     min-height: 4rem;
-    grid-auto-flow: column;
-    justify-content: start;
-    justify-items: start;
-    align-items: center;
-    gap: 14px;
+  }
+
+  .otherColorsHeader {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .zoomImage {
-    inset: 4.5rem 8px 5.5rem;
+    inset: 4.5rem 0.75rem 5rem;
   }
 }
 
-/* Panneau plus haut que l'écran : il défile d'abord, puis son bas reste
-   visible. Évite à la fois une barre de défilement imbriquée et une colonne
-   morte.
-
-   Réécrit le 19/08. L'intention était juste, le déclenchement non. L'ancienne
-   règle supposait un panneau de 55rem (880 px) et ne s'armait qu'en dessous de
-   cette hauteur de fenêtre. Or le panneau mesure 1 219,89 px : à 1440x900 la
-   règle ne se déclenchait pas, et c'est exactement là que le défaut se produit.
-   Collé par le haut à 21,6 px, le bouton « Ajouter au panier » se trouvait à
-   867..927 px — 26,99 px de ses 60 px coupés — et la phrase qui explique le
-   refus de vente à 941..986 px, hors écran de scrollY 200 à 1550, soit un écran
-   et demi de défilement pendant lequel l'acheteur voyait un bouton inerte sans
-   sa raison. À 1920x1080 la même page est saine, le seuil ne doit donc pas y
-   toucher.
-
-   On ancre le collage en BAS tant que la fenêtre est trop courte pour exposer
-   le bas du panneau : il suit la page jusqu'à ce que son bas affleure la
-   fenêtre, puis s'y fixe. La décision d'achat et sa raison restent à l'écran,
-   sans barre de défilement imbriquée et sans dépendre d'une hauteur de panneau
-   codée en dur. */
-@media (max-height: 63rem) and (min-width: 901px) {
+@media (max-height: 55rem) and (min-width: 901px) {
   .purchasePanel {
-    top: auto;
-    bottom: clamp(16px, 2.4vh, 30px);
+    /*
+     * Tall sticky pattern: the panel first scrolls naturally, then its bottom
+     * remains visible. This avoids both a nested scrollbar and a dead column.
+     */
+    top: calc(100svh - 55rem);
   }
 }
-
-/* --- Mouvement réduit -----------------------------------------------------
-   Variante statique lisible : les transitions tombent, l'étiquette d'agrandis-
-   sement reste affichée puisqu'elle ne peut plus apparaître au survol. */
 
 @media (prefers-reduced-motion: reduce) {
-  .zoomTrigger img,
-  .otherColorMedia,
-  .otherColorFilet,
-  .zoomLabel,
-  .sizeButton,
-  .variant,
-  .purchaseButton,
-  .breadcrumb a,
-  .sizeGuideTrigger {
+  .galleryMedia,
+  .otherColorImage img {
     transition: none;
   }
+}
 
-  .zoomLabel {
-    opacity: 1;
-    transform: none;
+/* Ajout commerce : les offres restent dans le langage clair et retenu de la
+   fiche publiée, sans modifier sa structure visuelle. */
+.scene {
+  display: contents;
+}
+
+.identity {
+  display: block;
+}
+
+.tone {
+  display: none;
+}
+
+.packSelector {
+  margin-bottom: 1.35rem;
+  padding: 1rem 0;
+  border-top: 1px solid var(--pdp-line);
+  border-bottom: 1px solid var(--pdp-line);
+}
+
+.packOptions {
+  display: grid;
+  gap: 0.38rem;
+}
+
+.packOption {
+  display: grid;
+  min-height: 4.5rem;
+  gap: 0.45rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--pdp-line);
+  background: transparent;
+  color: var(--pdp-ink);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.packOption:hover {
+  border-color: var(--pdp-ink);
+}
+
+.packOption[aria-pressed="true"] {
+  border-color: var(--pdp-ink);
+  background: #fff;
+  box-shadow: inset 0 0 0 1px var(--pdp-ink);
+}
+
+.packOptionTopline,
+.packOptionBottomline {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.packOptionName,
+.packOptionTopline strong {
+  font-size: 0.82rem;
+  font-weight: 650;
+}
+
+.packOptionTopline strong,
+.packSaving {
+  white-space: nowrap;
+}
+
+.packOptionBottomline {
+  color: var(--pdp-muted);
+  font-size: 0.63rem;
+  line-height: 1.35;
+}
+
+.packSaving {
+  color: var(--pdp-ink);
+  font-weight: 650;
+}
+
+.packExplanation {
+  margin: 0.8rem 0 0;
+  color: var(--pdp-muted);
+  font-size: 0.65rem;
+  line-height: 1.55;
+}
+
+.packExplanation strong {
+  color: var(--pdp-ink);
+  font-weight: 650;
+}
+
+.variantName {
+  line-height: 1.25;
+}
+
+.sizeLetter {
+  line-height: 1;
+}
+
+.sizeButton[aria-disabled="true"] {
+  border-color: #dadad7;
+  color: #8c8c90;
+  cursor: not-allowed;
+}
+
+.sizeButton[aria-disabled="true"] .sizeLetter {
+  text-decoration: line-through;
+}
+
+.sizeButton[aria-disabled="true"] .sizeAvailability {
+  color: #8c8c90;
+}
+
+.purchaseButton[aria-disabled="true"] {
+  border-color: #cececb;
+  background: #cececb;
+  color: #66666a;
+  cursor: not-allowed;
+}
+
+.otherColorMedia {
+  position: absolute;
+  inset: 0;
+}
+
+.otherColorMedia img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 62%;
+  transition: transform 700ms cubic-bezier(0.22, 0.8, 0.22, 1);
+}
+
+.otherColorFilet {
+  display: none;
+}
+
+.otherColorLine {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.9rem 0.1rem 0;
+}
+
+.otherColorName,
+.otherColorPrice {
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+
+@media (max-width: 560px) {
+  .packOptionTopline,
+  .packOptionBottomline {
+    align-items: flex-start;
   }
 
-  .otherColorFilet {
-    transform: scaleX(1);
+  .packOptionBottomline {
+    flex-wrap: wrap;
+  }
+
+  .sizeOptions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

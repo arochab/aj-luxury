@@ -1,0 +1,75 @@
+.home {
+  min-width: 0;
+}
+
+/* The deployed storefront keeps the header in the normal flow. The hero then
+   receives the exact remaining viewport height, so its native 16:9 poster is
+   not zoomed or horizontally cropped at 1440 × 900. */
+.home :global(.aj-film) {
+  min-height: calc(100svh - var(--aj-tete-h));
+  margin-top: 0;
+}
+
+.home :global(.aj-film__hero-poster img) {
+  object-fit: contain;
+  object-position: center;
+}
+
+.home :global(.aj-moodboard__item img) {
+  object-fit: cover;
+}
+
+/* On compact screens the header stays in normal flow. The poster stage stops
+   above the signature and uses contain, reproducing production's full-subject
+   framing: both faces and both boxers stay visible, with the CTA still inside
+   the first viewport. */
+@media (max-width: 900px) {
+  .home :global(.aj-film__hero-stage) {
+    right: 0;
+    bottom: 70px;
+    left: 0;
+    height: auto;
+  }
+
+  .home :global(.aj-film__hero-poster img) {
+    object-fit: contain;
+    object-position: center;
+  }
+}
+
+/* StoreHeader still occupies two rows at phone width. Its measured height is
+   138.6 px; the shared global token predates the current two-row chrome. */
+@media (max-width: 560px) {
+  .home {
+    --aj-tete-h: 8.7rem;
+  }
+
+  /* Mesure du live à 390 × 844 : la photo commence 22 px sous le hero et
+     22 px après son bord gauche, puis s'arrête 22 px avant la signature.
+     Ce cadre plus étroit emploie cover, comme la production, pour rendre les
+     deux modèles à la même échelle sans couper visage ni boxer. */
+  .home :global(.aj-film__hero-stage) {
+    top: 22px;
+    right: 0;
+    bottom: 92px;
+    left: 22px;
+    height: auto;
+  }
+
+  .home :global(.aj-film__hero-poster img) {
+    object-fit: cover;
+    object-position: 0 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home :global(.aj-featured__image),
+  .home :global(.aj-featured__image img),
+  .home :global(.aj-product-card),
+  .home :global(.aj-product-card img),
+  .home :global(.aj-moodboard__item img) {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+  }
+}

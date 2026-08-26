@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
   isHeroVideoReady,
@@ -216,6 +217,35 @@ test("reduced-motion freezes every metallic animation", () => {
     }),
     false,
   );
+});
+
+test("reference metallic shader is periodic without changing legacy variants", async () => {
+  const source = await readFile(
+    new URL("../app/components/MetallicField.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(source, /% loopSeconds\) \* \(\(Math\.PI \* 2\) \/ loopSeconds\)/);
+  const retainedLegacyCoefficients = [
+    ...source.matchAll(/(?:u_phase|\bphase)\s*\*\s*(0\.\d+)/g),
+  ]
+    .map((match) => match[1])
+    .sort();
+  assert.deepEqual(
+    retainedLegacyCoefficients,
+    ["0.1", "0.12", "0.18", "0.24", "0.34"],
+    "normal, silver and dusk must retain their validated phase coefficients",
+  );
+  assert.doesNotMatch(source, /phase \* 0\.(?:72|14|11)/);
+  assert.match(source, /material = referenceBase;/);
+  assert.match(source, /finalDepth = referenceDepth;/);
+  assert.match(source, /mix\(0\.76 \+ flowingLight \* 0\.34, 1\.0, referenceVariant\)/);
+
+  const epsilon = 1e-6;
+  const before = Math.PI * 2 - epsilon;
+  const after = epsilon;
+  assert.ok(Math.abs(Math.sin(before) - Math.sin(after)) < epsilon * 2.1);
+  assert.ok(Math.abs(Math.cos(before) - Math.cos(after)) < epsilon * 2.1);
 });
 
 test("lazy WebGL mounting starts on first intersection and stays mounted", () => {

@@ -75,9 +75,22 @@
 }
 
 .heroPanelLeft {
+  position: relative;
   min-width: 0;
   height: 100%;
   overflow: hidden;
+  background: #171724;
+}
+
+.heroPanelLeft::before {
+  position: absolute;
+  inset: -5%;
+  background:
+    linear-gradient(rgba(7, 7, 9, 0.26), rgba(7, 7, 9, 0.26)),
+    url("/images/client/hero-v4-tablet-1440x810-poster.webp") center / cover;
+  content: "";
+  filter: blur(24px);
+  transform: scale(1.08);
 }
 
 .heroPanelLeft picture,
@@ -87,6 +100,8 @@
 }
 
 .heroPanelLeft picture {
+  position: relative;
+  z-index: 1;
   display: block;
 }
 
@@ -97,7 +112,7 @@
 
 .heroPanelLeft img {
   object-fit: cover;
-  object-position: center 15%;
+  object-position: center;
 }
 
 .heroGrade {
@@ -190,7 +205,7 @@
   width: min(1320px, calc(100% - (2 * var(--gutter))));
   grid-template-columns: minmax(0, 0.88fr) minmax(0, 1.12fr) minmax(0, 0.88fr);
   align-items: center;
-  gap: clamp(12px, 1.7vw, 26px);
+  gap: clamp(20px, 2.2vw, 34px);
 }
 
 .featuredCard {
@@ -269,7 +284,7 @@
   z-index: 1;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: clamp(12px, 1.7vw, 28px);
+  gap: clamp(18px, 2vw, 32px);
   padding: 0 var(--gutter) clamp(62px, 7vw, 102px);
 }
 
@@ -412,7 +427,7 @@
   min-height: 80svh;
   grid-template-columns: minmax(0, 0.72fr) minmax(0, 1.18fr) minmax(0, 0.72fr);
   align-items: center;
-  gap: clamp(12px, 1.5vw, 24px);
+  gap: clamp(20px, 2.2vw, 36px);
   margin: 0 auto;
   padding: 0 var(--gutter);
 }
@@ -423,30 +438,24 @@
   background: #cac9c7;
 }
 
-.moodboardportrait-left {
-  aspect-ratio: 1864 / 2600;
-}
-
-.moodboardduo {
-  aspect-ratio: 2000 / 1882;
-}
-
+.moodboardportrait-left,
+.moodboardduo,
 .moodboardportrait-right {
-  aspect-ratio: 1731 / 2600;
+  aspect-ratio: 1200 / 1803;
 }
 
 .moodboardItem img {
   position: absolute;
-  inset: -3%;
-  width: 106%;
-  height: 106%;
-  object-fit: cover;
-  transform: scale(1.001);
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  transform: none;
   transition: transform 140ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .moodboardduo img {
-  object-position: 50% 22%;
+  object-position: center;
 }
 
 .story {
@@ -600,8 +609,7 @@
   .featuredCard:hover img,
   .featuredCard:focus-within img,
   .productImage:hover img,
-  .productImage:focus-visible img,
-  .moodboardItem:hover img {
+  .productImage:focus-visible img {
     transform: scale(1.018);
   }
 
@@ -624,9 +632,15 @@
     --gutter: 16px;
   }
 
+  .heroPanelLeft::before {
+    background-image:
+      linear-gradient(rgba(7, 7, 9, 0.3), rgba(7, 7, 9, 0.3)),
+      url("/images/client/hero-v4-portrait-720x934-poster.webp");
+  }
+
   .heroPanelLeft img {
-    object-fit: cover;
-    object-position: center top;
+    object-fit: contain;
+    object-position: center;
   }
 
   .heroMedia,
@@ -775,7 +789,7 @@
   .moodboardportrait-right {
     flex: 0 0 78vw;
     width: 78vw;
-    aspect-ratio: 2 / 3;
+    aspect-ratio: 1200 / 1803;
     scroll-snap-align: start;
   }
 
