@@ -69,6 +69,15 @@ export function clearCsrfCookie(kind: SessionCookieKind): string {
   return `${identityCookieContract[kind].csrfName}=; Path=/; Max-Age=0; Secure; SameSite=Strict`;
 }
 
+export function buildPendingCustomerCookie(token: string): string {
+  if (!isOpaqueAccessToken(token)) throw new Error("Invalid pending customer token.");
+  return `__Host-aj_pending_customer=${token}; Path=/; Max-Age=3600; Secure; HttpOnly; SameSite=Strict`;
+}
+
+export function clearPendingCustomerCookie(): string {
+  return "__Host-aj_pending_customer=; Path=/; Max-Age=0; Secure; HttpOnly; SameSite=Strict";
+}
+
 function normalizeOrigin(origin: string): string | null {
   try {
     const parsed = new URL(origin);

@@ -38,7 +38,7 @@ export function generateMetadata() {
   const runtimeMode = getServerCommerceRuntimeMode();
   return {
     title: runtimeMode === "production"
-      ? "Votre commande | AJ Luxury"
+      ? "Mon compte | AJ Luxury"
       : runtimeMode === "preproduction"
         ? "Espace client de test | AJ Luxury"
         : "Espace client fermé | AJ Luxury",

@@ -501,7 +501,7 @@ test("0011 fails closed for a missing, foreign, expired or unsealed service poin
   assert.doesNotMatch(migration, /provider_reference` text|raw_reference|api[_-]?key|secret[_-]?key/i);
 });
 
-test("0011-0021 remain additive and the journal ends at paid-order confirmations", () => {
+test("0011-0022 remain additive and the journal ends at customer password accounts", () => {
   const previous = JSON.parse(readFileSync(`${drizzle}meta/0010_snapshot.json`, "utf8"));
   const snapshot = JSON.parse(readFileSync(`${drizzle}meta/0011_snapshot.json`, "utf8"));
   const pricingSnapshot = JSON.parse(readFileSync(`${drizzle}meta/0012_snapshot.json`, "utf8"));
@@ -586,10 +586,10 @@ test("0011-0021 remain additive and the journal ends at paid-order confirmations
     false,
   );
   assert.deepEqual(journal.entries.at(-1), {
-    idx: 21,
+    idx: 22,
     version: "6",
-    when: 1787788800000,
-    tag: "0021_paid_order_confirmations",
+    when: 1787875200000,
+    tag: "0022_customer_password_accounts",
     breakpoints: true,
   });
 });

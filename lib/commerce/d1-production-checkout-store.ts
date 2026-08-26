@@ -56,7 +56,7 @@ type OrderRow = Readonly<{
   order_number: string;
   cart_id: string;
   customer_id: string | null;
-  status: "pending_payment" | "paid";
+  status: "pending_payment" | "paid" | "preparing" | "shipped" | "cancelled" | "refunded";
   currency: "EUR";
   email: string;
   subtotal_cents: number;
@@ -111,7 +111,7 @@ type PaymentRow = Readonly<{
 
 export type ProductionOrderSnapshot = Readonly<{
   orderNumber: string;
-  status: "pending_payment" | "paid";
+  status: "pending_payment" | "paid" | "preparing" | "shipped" | "cancelled" | "refunded";
   currency: "EUR";
   subtotalCents: number;
   shippingCents: number;
@@ -217,6 +217,14 @@ export class D1ProductionCheckoutStore {
     return order ? this.#snapshot(order) : null;
   }
 
+  async currentOrderById(orderId: string): Promise<ProductionOrderSnapshot | null> {
+    assertFulfillmentIdentifier(orderId, "orderId");
+    const order = await this.#database.prepare(
+      `SELECT ${orderColumns} FROM orders WHERE id = ?`,
+    ).bind(orderId).first<OrderRow>();
+    return order ? this.#snapshot(order) : null;
+  }
+
   async createOrder(
     input: CreateProductionOrderInput,
   ): Promise<ProductionOrderSnapshot> {
@@ -303,6 +311,7 @@ export class D1ProductionCheckoutStore {
 
     const checkoutFingerprint = await sha256Hex(JSON.stringify({
       addressFingerprint: address.fingerprint,
+      customerId: input.customerId ?? null,
       email,
       lines,
       pricing,
@@ -323,6 +332,7 @@ export class D1ProductionCheckoutStore {
         existing.shipping_address_fingerprint !== address.fingerprint ||
         existing.email !== email || existing.total_cents !== subtotalCents + quote.amount_cents ||
         existing.discount_cents !== pricing.discountCents ||
+        existing.customer_id !== (input.customerId ?? null) ||
         option.selected_service_point_id !== (input.servicePointId ?? null)
       ) {
         throw new ProductionCheckoutError(
@@ -359,6 +369,10 @@ export class D1ProductionCheckoutStore {
         WHERE id = ? AND cart_id = ? AND selected_at IS NULL AND expires_at > ?`,
       ).bind(input.now, input.quoteId, input.cartId, input.now),
       preparedDelivery.statement,
+      ...(input.customerId ? [this.#database.prepare(
+        `UPDATE carts SET customer_id = ?, email = ?, updated_at = ?
+        WHERE id = ? AND (customer_id IS NULL OR customer_id = ?)`,
+      ).bind(input.customerId, email, input.now, input.cartId, input.customerId)] : []),
       this.#database.prepare(
         `INSERT INTO orders (
           id, order_number, cart_id, customer_id, email, status, currency,

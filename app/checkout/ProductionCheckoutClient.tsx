@@ -26,6 +26,10 @@ import {
 } from "../../lib/commerce/production-order-client";
 import { useI18n } from "../../lib/i18n/I18nProvider";
 import LocalizedPrice from "../components/LocalizedPrice";
+import {
+  CustomerAccountApiError,
+  registerCustomerAccount,
+} from "../../lib/commerce/customer-account-client.ts";
 import styles from "../cart/CommerceShell.module.css";
 
 const launchCountries = Object.freeze([
@@ -89,6 +93,11 @@ export default function ProductionCheckoutClient() {
   const [selectedPoint, setSelectedPoint] = useState<PublicProductionServicePoint | null>(null);
   const [order, setOrder] = useState<PublicProductionOrder | null>(null);
   const [legalAccepted, setLegalAccepted] = useState(false);
+  const [createAccount, setCreateAccount] = useState(false);
+  const [accountPassword, setAccountPassword] = useState("");
+  const [accountPasswordConfirmation, setAccountPasswordConfirmation] = useState("");
+  const [acceptsMarketing, setAcceptsMarketing] = useState(false);
+  const [accountPrepared, setAccountPrepared] = useState(false);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [errorCode, setErrorCode] = useState<string | null>(null);
@@ -248,6 +257,19 @@ export default function ProductionCheckoutClient() {
     setSubmitting(true);
     setErrorCode(null);
     try {
+      if (createAccount && !accountPrepared) {
+        if (accountPassword !== accountPasswordConfirmation || accountPassword.length < 12) {
+          setErrorCode("ACCOUNT_PASSWORD_INVALID");
+          return;
+        }
+        await registerCustomerAccount({
+          email,
+          password: accountPassword,
+          acceptsMarketing,
+          source: "checkout",
+        });
+        setAccountPrepared(true);
+      }
       const key = orderAttempt.current ?? crypto.randomUUID();
       orderAttempt.current = key;
       setOrder(await createProductionOrder({
@@ -259,7 +281,7 @@ export default function ProductionCheckoutClient() {
         ...(selectedPoint ? { servicePointId: selectedPoint.servicePointId } : {}),
       }));
     } catch (error) {
-      setErrorCode(error instanceof ProductionOrderApiError
+      setErrorCode(error instanceof ProductionOrderApiError || error instanceof CustomerAccountApiError
         ? error.code
         : "CHECKOUT_UNAVAILABLE");
     } finally {
@@ -295,7 +317,11 @@ export default function ProductionCheckoutClient() {
         ? t("checkout.outOfStock")
         : errorCode === "CART_CHANGED" || errorCode === "CART_EXPIRED"
           ? t("checkout.cartChanged")
-          : t("checkout.unavailable");
+          : errorCode === "ACCOUNT_PASSWORD_INVALID"
+            ? "Choisissez deux mots de passe identiques d’au moins 12 caractères."
+            : errorCode === "INVALID_ACCOUNT_INPUT"
+              ? "Vérifiez votre e-mail et votre mot de passe."
+              : t("checkout.unavailable");
 
   if (!loading && cart && cart.lines.length === 0) {
     return (
@@ -375,8 +401,17 @@ export default function ProductionCheckoutClient() {
           {selected && !order ? (
             <div className={styles.testCheckout}>
               <label>{t("checkout.email")}<input type="email" inputMode="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.currentTarget.value)} /></label>
+              <label className={styles.checkbox}><input type="checkbox" checked={createAccount} onChange={(e) => { setCreateAccount(e.currentTarget.checked); setAccountPrepared(false); }} /><span>Créer mon compte AJ Luxury pour retrouver cette commande.</span></label>
+              {createAccount ? (
+                <div className={styles.accountCheckoutFields}>
+                  <label>Mot de passe<input type="password" minLength={12} maxLength={128} autoComplete="new-password" required value={accountPassword} onChange={(e) => { setAccountPassword(e.currentTarget.value); setAccountPrepared(false); }} /></label>
+                  <label>Confirmer le mot de passe<input type="password" minLength={12} maxLength={128} autoComplete="new-password" required value={accountPasswordConfirmation} onChange={(e) => { setAccountPasswordConfirmation(e.currentTarget.value); setAccountPrepared(false); }} /></label>
+                  <label className={styles.checkbox}><input type="checkbox" checked={acceptsMarketing} onChange={(e) => { setAcceptsMarketing(e.currentTarget.checked); setAccountPrepared(false); }} /><span>Recevoir les nouveautés AJ Luxury. Facultatif et révocable.</span></label>
+                  <p className={styles.muted}>Un e-mail vous permettra de confirmer le compte. La commande reste possible sans accepter les messages marketing.</p>
+                </div>
+              ) : <p className={styles.muted}>Déjà client ? <Link href="/account">Se connecter</Link> avant de confirmer la commande.</p>}
               <label className={styles.checkbox}><input type="checkbox" checked={legalAccepted} onChange={(e) => setLegalAccepted(e.currentTarget.checked)} /><span>J’accepte les <Link href="/terms">conditions de vente</Link> et la <Link href="/privacy">politique de confidentialité</Link>.</span></label>
-              <button className={styles.button} type="button" disabled={submitting || !legalAccepted || !email} onClick={() => void confirmOrder()}>Confirmer la commande</button>
+              <button className={styles.button} type="button" disabled={submitting || !legalAccepted || !email || (createAccount && (!accountPassword || !accountPasswordConfirmation))} onClick={() => void confirmOrder()}>Confirmer la commande</button>
             </div>
           ) : null}
 

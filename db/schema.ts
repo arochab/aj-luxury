@@ -569,6 +569,145 @@ export const customerSessions = sqliteTable(
   ],
 );
 
+export const customerPasswordCredentials = sqliteTable(
+  "customer_password_credentials",
+  {
+    customerId: text("customer_id")
+      .primaryKey()
+      .references(() => customers.id, { onDelete: "cascade" }),
+    algorithm: text("algorithm", { enum: ["pbkdf2-sha256"] }).notNull(),
+    iterations: integer("iterations").notNull(),
+    saltBase64url: text("salt_base64url").notNull(),
+    hashBase64url: text("hash_base64url").notNull(),
+    failedAttempts: integer("failed_attempts").notNull().default(0),
+    lockedUntil: text("locked_until"),
+    passwordChangedAt: text("password_changed_at").notNull(),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    check(
+      "ck_customer_password_hash",
+      sql`${table.algorithm} = 'pbkdf2-sha256'
+        AND ${table.iterations} = 600000
+        AND length(${table.saltBase64url}) = 22
+        AND ${table.saltBase64url} NOT GLOB '*[^A-Za-z0-9_-]*'
+        AND length(${table.hashBase64url}) = 43
+        AND ${table.hashBase64url} NOT GLOB '*[^A-Za-z0-9_-]*'`,
+    ),
+    check(
+      "ck_customer_password_failures",
+      sql`${table.failedAttempts} >= 0 AND ${table.failedAttempts} <= 100`,
+    ),
+  ],
+);
+
+export const customerAccountChallenges = sqliteTable(
+  "customer_account_challenges",
+  {
+    id: text("id").primaryKey(),
+    purpose: text("purpose", {
+      enum: ["email_verification", "password_reset"],
+    }).notNull(),
+    customerId: text("customer_id")
+      .notNull()
+      .references(() => customers.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull(),
+    expiresAt: text("expires_at").notNull(),
+    consumedAt: text("consumed_at"),
+    revokedAt: text("revoked_at"),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("ux_customer_account_challenges_token_hash").on(table.tokenHash),
+    index("idx_customer_account_challenges_active").on(
+      table.customerId,
+      table.purpose,
+      table.expiresAt,
+    ),
+    check(
+      "ck_customer_account_challenge_purpose",
+      sql`${table.purpose} IN ('email_verification', 'password_reset')`,
+    ),
+    check(
+      "ck_customer_account_challenge_hash",
+      sql`length(${table.tokenHash}) = 64
+        AND ${table.tokenHash} = lower(${table.tokenHash})
+        AND ${table.tokenHash} NOT GLOB '*[^0-9a-f]*'`,
+    ),
+    check(
+      "ck_customer_account_challenge_ttl",
+      sql`${table.expiresAt} > ${table.createdAt}
+        AND CAST(strftime('%s', ${table.expiresAt}) AS integer)
+          - CAST(strftime('%s', ${table.createdAt}) AS integer)
+          <= CASE WHEN ${table.purpose} = 'email_verification' THEN 86400 ELSE 3600 END`,
+    ),
+  ],
+);
+
+export const customerCheckoutLinks = sqliteTable(
+  "customer_checkout_links",
+  {
+    id: text("id").primaryKey(),
+    customerId: text("customer_id")
+      .notNull()
+      .references(() => customers.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull(),
+    expiresAt: text("expires_at").notNull(),
+    revokedAt: text("revoked_at"),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("ux_customer_checkout_links_token_hash").on(table.tokenHash),
+    index("idx_customer_checkout_links_customer_expires").on(
+      table.customerId,
+      table.expiresAt,
+    ),
+    check(
+      "ck_customer_checkout_link_hash",
+      sql`length(${table.tokenHash}) = 64
+        AND ${table.tokenHash} = lower(${table.tokenHash})
+        AND ${table.tokenHash} NOT GLOB '*[^0-9a-f]*'`,
+    ),
+    check(
+      "ck_customer_checkout_link_ttl",
+      sql`${table.expiresAt} > ${table.createdAt}
+        AND CAST(strftime('%s', ${table.expiresAt}) AS integer)
+          - CAST(strftime('%s', ${table.createdAt}) AS integer) <= 3600`,
+    ),
+  ],
+);
+
+export const customerMarketingConsents = sqliteTable(
+  "customer_marketing_consents",
+  {
+    id: text("id").primaryKey(),
+    customerId: text("customer_id")
+      .notNull()
+      .references(() => customers.id, { onDelete: "cascade" }),
+    decision: text("decision", { enum: ["granted", "withdrawn"] }).notNull(),
+    source: text("source", {
+      enum: ["account_registration", "checkout", "account_settings"],
+    }).notNull(),
+    privacyVersion: text("privacy_version").notNull(),
+    occurredAt: text("occurred_at").notNull(),
+  },
+  (table) => [
+    index("idx_customer_marketing_consents_customer_time").on(
+      table.customerId,
+      table.occurredAt,
+    ),
+    check(
+      "ck_customer_marketing_consent_decision",
+      sql`${table.decision} IN ('granted', 'withdrawn')`,
+    ),
+    check(
+      "ck_customer_marketing_consent_source",
+      sql`${table.source} IN ('account_registration', 'checkout', 'account_settings')`,
+    ),
+  ],
+);
+
 export const guestOrderSessions = sqliteTable(
   "guest_order_sessions",
   {

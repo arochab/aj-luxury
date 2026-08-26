@@ -2,6 +2,11 @@ import { accessTokenHashContexts, hashOneTimeAccessToken, isOpaqueAccessToken } 
 import { CommerceError } from "../lib/commerce/backend-domain.ts";
 import { D1CommerceStore } from "../lib/commerce/d1-commerce-store.ts";
 import type { CommerceD1Database } from "../lib/commerce/d1-port.ts";
+import {
+  CustomerAccountError,
+  D1CustomerPasswordAccountStore,
+  type CustomerAccountEmailPort,
+} from "../lib/commerce/customer-password-account-store.ts";
 import { D1ProductionCheckoutStore, ProductionCheckoutError } from "../lib/commerce/d1-production-checkout-store.ts";
 import { D1ProductionDeliveryActivationStore } from "../lib/commerce/d1-production-delivery-activation-store.ts";
 import { D1LatePaymentRefundDispatcher } from "../lib/commerce/d1-late-payment-refunds.ts";
@@ -14,7 +19,7 @@ import {
 } from "../lib/commerce/d1-production-stock-import.ts";
 import type { DeliveryProviderPorts } from "../lib/commerce/delivery-provider.ts";
 import { DeliveryReferenceVault } from "../lib/commerce/delivery-reference-vault.ts";
-import { authorizeBrowserMutation, buildCsrfCookie, buildSessionCookie, clearCsrfCookie, clearSessionCookie, isTrustedMutationOrigin } from "../lib/commerce/identity-access-policy.ts";
+import { authorizeBrowserMutation, buildCsrfCookie, buildPendingCustomerCookie, buildSessionCookie, clearCsrfCookie, clearPendingCustomerCookie, clearSessionCookie, isTrustedMutationOrigin } from "../lib/commerce/identity-access-policy.ts";
 import { PaymentProviderError, verifyAndDeliverPaymentWebhook, type PaymentProviderPorts, type PaymentWebhookEffectsPort } from "../lib/commerce/payment-provider.ts";
 import { validateLaunchStockImport } from "../lib/commerce/launch-stock-import.ts";
 import {
@@ -28,6 +33,7 @@ import {
 } from "../lib/commerce/production-schema-contract.ts";
 import { evaluateWiredProductionReleaseGate, productionEvidenceVersionId, type ProductionCommerceEnvironment } from "../lib/commerce/production-release-gate.ts";
 import { recordVerifiedResendWebhook, ResendWebhookError } from "../lib/commerce/resend-webhook.ts";
+import { ResendIdentityDelivery } from "../lib/commerce/resend-identity-delivery.ts";
 import { createSendcloudProviderPorts } from "../lib/commerce/sendcloud-provider.ts";
 import { createStripePaymentProviderPorts } from "../lib/commerce/stripe-payment-provider.ts";
 import { LEGAL_VERSION } from "../lib/legal.ts";
@@ -59,6 +65,13 @@ const routes = Object.freeze({
   currentOrder: `${PREFIX}orders/current`,
   refundDispatch: `${PREFIX}admin/late-payment-refunds/dispatch`,
   account: `${PREFIX}account/current`, adminHealth: `${PREFIX}admin/health`,
+  accountRegister: `${PREFIX}account/register`,
+  accountVerify: `${PREFIX}account/verify`,
+  accountLogin: `${PREFIX}account/login`,
+  accountLogout: `${PREFIX}account/logout`,
+  accountForgot: `${PREFIX}account/password/forgot`,
+  accountReset: `${PREFIX}account/password/reset`,
+  accountMarketing: `${PREFIX}account/marketing`,
   stockImport: `${PREFIX}admin/launch-stock-import`,
 } as const);
 const lineRoute = /^\/api\/commerce\/cart\/lines\/([^/]+)$/;
@@ -87,6 +100,10 @@ export type ProductionCommerceRuntimeEnvironment = ProductionCommerceEnvironment
   TRANSACTIONAL_EMAIL_DISPATCH_ENABLED?: string;
   TRANSACTIONAL_EMAIL_DISPATCH_MODE?: string;
   TRANSACTIONAL_FROM_NAME?: string;
+  TRANSACTIONAL_FROM_EMAIL?: string;
+  TRANSACTIONAL_REPLY_TO?: string;
+  EMAIL_PROVIDER?: string;
+  RESEND_API_KEY?: string;
   RESEND_DOMAIN?: string;
   RETURNS_WORKFLOW_ENABLED?: string;
   SHIPMENT_HANDOVER_ENABLED?: string;
@@ -102,6 +119,7 @@ export type ProductionCommerceRuntimeEnvironment = ProductionCommerceEnvironment
 }>;
 export type ProductionCommerceRouterDependencies = Readonly<{
   trustedStorefrontOrigin?: string;
+  accountEmail?: CustomerAccountEmailPort;
   deliveryProvider?: DeliveryProviderPorts;
   paymentProvider?: PaymentProviderPorts;
   paymentEffects?: PaymentWebhookEffectsPort;
@@ -121,6 +139,7 @@ export type ProductionCommerceRouterDependencies = Readonly<{
   ) => Promise<boolean>;
 }>;
 type CartSession = Readonly<{ cartId: string; csrf: string }>;
+type CustomerBrowserSession = Readonly<{ token: string; csrf: string }>;
 
 function json(value: unknown, status = 200, extra?: HeadersInit): Response {
   const headers = new Headers(extra);
@@ -138,6 +157,29 @@ function cookie(request: Request, name: string): string[] {
     const at = part.indexOf("=");
     return at >= 0 && part.slice(0, at).trim() === name ? [part.slice(at + 1).trim()] : [];
   });
+}
+function customerBrowserSession(request: Request): CustomerBrowserSession | null {
+  const tokens = cookie(request, "__Host-aj_customer");
+  const csrf = cookie(request, "__Host-aj_customer_csrf");
+  if (tokens.length !== 1 || csrf.length !== 1 ||
+    !isOpaqueAccessToken(tokens[0]) || !isOpaqueAccessToken(csrf[0])) return null;
+  return Object.freeze({ token: tokens[0], csrf: csrf[0] });
+}
+function singleCookie(request: Request, name: string): string | null {
+  const values = cookie(request, name);
+  return values.length === 1 && isOpaqueAccessToken(values[0]) ? values[0] : null;
+}
+function sessionCookies(sessionResult: Readonly<{
+  token: string;
+  csrfToken: string;
+  expiresAt: string;
+}>, now: string): Headers {
+  const maxAge = Math.max(60, Math.floor((Date.parse(sessionResult.expiresAt) - Date.parse(now)) / 1_000));
+  const headers = new Headers();
+  headers.append("Set-Cookie", buildSessionCookie("customer", sessionResult.token, maxAge));
+  headers.append("Set-Cookie", buildCsrfCookie("customer", sessionResult.csrfToken, maxAge));
+  headers.append("Set-Cookie", clearPendingCustomerCookie());
+  return headers;
 }
 async function session(request: Request): Promise<CartSession | null> {
   const tokens = cookie(request, "__Host-aj_cart");
@@ -297,6 +339,24 @@ function deliveryVault(env: ProductionCommerceRuntimeEnvironment): DeliveryRefer
       encryptionKeyBase64: env.DELIVERY_REFERENCE_ENCRYPTION_KEY_BASE64,
       keyVersion: env.DELIVERY_REFERENCE_KEY_VERSION,
       decryptionKeysBase64: parsed as Record<string, string>,
+    });
+  } catch {
+    return null;
+  }
+}
+function customerAccountEmail(
+  env: ProductionCommerceRuntimeEnvironment,
+  origin: string,
+): CustomerAccountEmailPort | null {
+  if (env.EMAIL_PROVIDER !== "resend" || !env.RESEND_API_KEY ||
+    !env.TRANSACTIONAL_FROM_EMAIL || !env.TRANSACTIONAL_FROM_NAME) return null;
+  try {
+    return new ResendIdentityDelivery({
+      apiKey: env.RESEND_API_KEY,
+      fromEmail: env.TRANSACTIONAL_FROM_EMAIL,
+      fromName: env.TRANSACTIONAL_FROM_NAME,
+      ...(env.TRANSACTIONAL_REPLY_TO ? { replyTo: env.TRANSACTIONAL_REPLY_TO } : {}),
+      storefrontOrigin: origin,
     });
   } catch {
     return null;
@@ -535,6 +595,24 @@ export async function productionLatePaymentRefundSchemaInstalled(
       return false;
     }
     return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function productionCustomerAccountRuntimeInstalled(
+  database: CommerceD1Database | undefined,
+): Promise<boolean> {
+  if (!database) return false;
+  try {
+    const result = await database.prepare(
+      `SELECT COUNT(*) AS count FROM sqlite_master
+      WHERE type='table' AND name IN (
+        'customer_password_credentials','customer_account_challenges',
+        'customer_checkout_links','customer_marketing_consents'
+      )`,
+    ).first<{ count: number }>();
+    return result?.count === 4;
   } catch {
     return false;
   }
@@ -906,6 +984,9 @@ export async function productionCommerceApiResponse(
       !await productionResendRuntimeInstalled(env.DB)) {
       blockers.push("resend-email-schema-0018-not-installed");
     }
+    if (gate.mode !== "closed" && !await productionCustomerAccountRuntimeInstalled(env.DB)) {
+      blockers.push("customer-account-schema-0022-not-installed");
+    }
     if (["controlled", "live"].includes(gate.mode) &&
       !await productionStockManifestRuntimeAttested(env)) {
       blockers.push("stock-manifest-runtime-not-attested");
@@ -942,6 +1023,9 @@ export async function productionCommerceApiResponse(
   if (["controlled", "live"].includes(gate.mode) &&
     !await productionResendRuntimeInstalled(env.DB)) {
     blockers.push("resend-email-schema-0018-not-installed");
+  }
+  if (gate.mode !== "closed" && !await productionCustomerAccountRuntimeInstalled(env.DB)) {
+    blockers.push("customer-account-schema-0022-not-installed");
   }
   if (["controlled", "live"].includes(gate.mode) &&
     !await productionStockManifestRuntimeAttested(env)) {
@@ -983,13 +1067,177 @@ export async function productionCommerceApiResponse(
       return fail("LATE_PAYMENT_REFUND_DISPATCH_UNAVAILABLE", 503);
     }
   }
+  const now = () => new Date().toISOString();
+  const isAccountRoute = [
+    routes.account, routes.accountRegister, routes.accountVerify,
+    routes.accountLogin, routes.accountLogout, routes.accountForgot,
+    routes.accountReset, routes.accountMarketing,
+  ].includes(url.pathname as never);
+  if (isAccountRoute) {
+    if (!await productionCustomerAccountRuntimeInstalled(env.DB)) {
+      return fail("ACCOUNT_RUNTIME_NOT_READY", 503);
+    }
+    const accountStore = new D1CustomerPasswordAccountStore(env.DB);
+    const sessionToken = singleCookie(request, "__Host-aj_customer");
+    const accountNow = now();
+    if (url.pathname === routes.account) {
+      if (request.method !== "GET") return fail("METHOD_NOT_ALLOWED", 405);
+      const account = await accountStore.currentAccount(sessionToken, accountNow);
+      if (!account) return json({ data: null });
+      const checkout = new D1ProductionCheckoutStore(env.DB);
+      const orders = (await Promise.all(
+        account.orderIds.map((orderId) => checkout.currentOrderById(orderId)),
+      )).filter((order) => order !== null);
+      return json({
+        data: {
+          email: account.email,
+          acceptsMarketing: account.acceptsMarketing,
+          orders,
+        },
+      });
+    }
+    if (url.pathname === routes.accountVerify) {
+      if (request.method !== "GET") return fail("METHOD_NOT_ALLOWED", 405);
+      if ([...url.searchParams.keys()].some((name) => name !== "token")) {
+        return fail("INVALID_TOKEN", 400);
+      }
+      const verified = await accountStore.verifyEmail(url.searchParams.get("token"), accountNow);
+      const destination = new URL("/account", gate.origin);
+      destination.searchParams.set("verification", verified ? "confirmed" : "invalid");
+      const headers = verified ? sessionCookies(verified, accountNow) : new Headers();
+      headers.set("Location", destination.toString());
+      headers.set("Cache-Control", "no-store");
+      return new Response(null, { status: 303, headers });
+    }
+    if (!originOk(request, gate.origin)) return fail("ORIGIN_REJECTED", 403);
+    if (url.pathname === routes.accountRegister) {
+      if (request.method !== "POST") return fail("METHOD_NOT_ALLOWED", 405);
+      const parsed = await body(request);
+      if (!parsed || !exact(parsed, ["acceptsMarketing", "email", "password", "source"]) ||
+        !["account_registration", "checkout"].includes(String(parsed.source))) {
+        return fail("INVALID_BODY", 400);
+      }
+      const emailProvider = dependencies.accountEmail ?? customerAccountEmail(env, gate.origin);
+      if (!emailProvider) return fail("EMAIL_DELIVERY_UNAVAILABLE", 503);
+      try {
+        const registration = await accountStore.register({
+          email: parsed.email,
+          password: parsed.password,
+          acceptsMarketing: parsed.acceptsMarketing,
+          source: parsed.source as "account_registration" | "checkout",
+          privacyVersion: LEGAL_VERSION,
+          now: accountNow,
+        });
+        if (registration.emailDelivery) await emailProvider.deliver(registration.emailDelivery);
+        const headers = new Headers();
+        if (registration.checkoutToken) {
+          headers.append("Set-Cookie", buildPendingCustomerCookie(registration.checkoutToken));
+        }
+        return json({ data: { accepted: true, verificationRequired: true } }, 202, headers);
+      } catch (cause) {
+        if (cause instanceof CustomerAccountError && cause.code === "INVALID_INPUT") {
+          return fail("INVALID_ACCOUNT_INPUT", 400);
+        }
+        return fail("ACCOUNT_REGISTRATION_UNAVAILABLE", 503);
+      }
+    }
+    if (url.pathname === routes.accountLogin) {
+      if (request.method !== "POST") return fail("METHOD_NOT_ALLOWED", 405);
+      const parsed = await body(request);
+      if (!parsed || !exact(parsed, ["email", "password"])) return fail("INVALID_BODY", 400);
+      try {
+        const authenticated = await accountStore.login({
+          email: parsed.email,
+          password: parsed.password,
+          now: accountNow,
+        });
+        if (!authenticated) return fail("INVALID_CREDENTIALS", 401);
+        return json({ data: { authenticated: true } }, 200, sessionCookies(authenticated, accountNow));
+      } catch (cause) {
+        if (cause instanceof CustomerAccountError && cause.code === "INVALID_INPUT") {
+          return fail("INVALID_CREDENTIALS", 401);
+        }
+        return fail("ACCOUNT_LOGIN_UNAVAILABLE", 503);
+      }
+    }
+    if (url.pathname === routes.accountForgot) {
+      if (request.method !== "POST") return fail("METHOD_NOT_ALLOWED", 405);
+      const parsed = await body(request);
+      if (!parsed || !exact(parsed, ["email"])) return fail("INVALID_BODY", 400);
+      const emailProvider = dependencies.accountEmail ?? customerAccountEmail(env, gate.origin);
+      if (!emailProvider) return fail("EMAIL_DELIVERY_UNAVAILABLE", 503);
+      try {
+        const delivery = await accountStore.requestPasswordReset({
+          email: parsed.email,
+          now: accountNow,
+        });
+        if (delivery) {
+          try { await emailProvider.deliver(delivery); } catch { /* generic response */ }
+        }
+        return json({ data: { accepted: true } }, 202);
+      } catch (cause) {
+        if (cause instanceof CustomerAccountError && cause.code === "INVALID_INPUT") {
+          return fail("INVALID_ACCOUNT_INPUT", 400);
+        }
+        return fail("PASSWORD_RESET_UNAVAILABLE", 503);
+      }
+    }
+    if (url.pathname === routes.accountReset) {
+      if (request.method !== "POST") return fail("METHOD_NOT_ALLOWED", 405);
+      const parsed = await body(request);
+      if (!parsed || !exact(parsed, ["password", "token"])) return fail("INVALID_BODY", 400);
+      const reset = await accountStore.resetPassword({
+        rawToken: parsed.token,
+        password: parsed.password,
+        now: accountNow,
+      });
+      if (!reset) return fail("INVALID_TOKEN", 400);
+      return json({ data: { authenticated: true } }, 200, sessionCookies(reset, accountNow));
+    }
+    const browserSession = customerBrowserSession(request);
+    if (!browserSession || !authorizeBrowserMutation({
+      method: request.method,
+      origin: request.headers.get("Origin"),
+      secFetchSite: request.headers.get("Sec-Fetch-Site"),
+      allowedOrigins: [gate.origin],
+      csrfCookieToken: browserSession.csrf,
+      csrfHeaderToken: request.headers.get("X-CSRF-Token"),
+    }) || !await accountStore.authorizeMutation(
+      browserSession.token,
+      browserSession.csrf,
+      accountNow,
+    )) return fail("CSRF_REJECTED", 403);
+    if (url.pathname === routes.accountLogout) {
+      if (request.method !== "POST") return fail("METHOD_NOT_ALLOWED", 405);
+      await accountStore.logout(browserSession.token, accountNow);
+      const headers = new Headers();
+      headers.append("Set-Cookie", clearSessionCookie("customer"));
+      headers.append("Set-Cookie", clearCsrfCookie("customer"));
+      headers.append("Set-Cookie", clearPendingCustomerCookie());
+      return json({ data: { authenticated: false } }, 200, headers);
+    }
+    if (url.pathname === routes.accountMarketing) {
+      if (request.method !== "POST") return fail("METHOD_NOT_ALLOWED", 405);
+      const parsed = await body(request);
+      if (!parsed || !exact(parsed, ["acceptsMarketing"]) ||
+        typeof parsed.acceptsMarketing !== "boolean") return fail("INVALID_BODY", 400);
+      const changed = await accountStore.setMarketingPreference({
+        rawSessionToken: browserSession.token,
+        acceptsMarketing: parsed.acceptsMarketing,
+        privacyVersion: LEGAL_VERSION,
+        now: accountNow,
+      });
+      return changed
+        ? json({ data: { acceptsMarketing: parsed.acceptsMarketing } })
+        : fail("ACCOUNT_UPDATE_UNAVAILABLE", 503);
+    }
+  }
   let current: CartSession | null;
   try { current = await session(request); } catch {
     const headers = new Headers(); headers.append("Set-Cookie", clearSessionCookie("cart")); headers.append("Set-Cookie", clearCsrfCookie("cart"));
     return fail("CART_SESSION_INVALID", 401, headers);
   }
   const commerce = new D1CommerceStore(env.DB);
-  const now = () => new Date().toISOString();
   if (url.pathname === routes.cart && request.method === "GET") {
     if (!current) return json({ data: { status: "empty", currency: "EUR", expiresAt: null, itemCount: 0, subtotalCents: 0, lines: [] } });
     try { return json({ data: await commerce.getPublicCartSnapshot(current.cartId, now()) }); } catch (cause) { return map(cause); }
@@ -1090,7 +1338,29 @@ export async function productionCommerceApiResponse(
     const parsed = await body(request); const wanted = parsed && Object.hasOwn(parsed, "servicePointId") ? ["address", "email", "optionId", "privacyAccepted", "quoteId", "servicePointId", "termsAccepted"] : ["address", "email", "optionId", "privacyAccepted", "quoteId", "termsAccepted"];
     if (!parsed || !exact(parsed, wanted) || typeof parsed.email !== "string" || typeof parsed.optionId !== "string" || typeof parsed.quoteId !== "string" || parsed.termsAccepted !== true || parsed.privacyAccepted !== true) return fail("INVALID_BODY", 400);
     if (Object.hasOwn(parsed, "servicePointId") && typeof parsed.servicePointId !== "string") return fail("INVALID_BODY", 400);
-    try { return json({ data: await new D1ProductionCheckoutStore(env.DB).createOrder({ cartId: current.cartId, quoteId: parsed.quoteId, optionId: parsed.optionId, servicePointId: typeof parsed.servicePointId === "string" ? parsed.servicePointId : null, address: parsed.address as never, email: parsed.email, idempotencyKey: key(request)!, termsVersion: LEGAL_VERSION, privacyVersion: LEGAL_VERSION, now: now() }) }, 201); } catch (cause) { return map(cause); }
+    try {
+      const orderNow = now();
+      const customerId = await new D1CustomerPasswordAccountStore(env.DB)
+        .resolveCheckoutCustomer({
+          email: parsed.email,
+          customerSessionToken: singleCookie(request, "__Host-aj_customer"),
+          checkoutToken: singleCookie(request, "__Host-aj_pending_customer"),
+          now: orderNow,
+        });
+      return json({ data: await new D1ProductionCheckoutStore(env.DB).createOrder({
+        cartId: current.cartId,
+        quoteId: parsed.quoteId,
+        optionId: parsed.optionId,
+        servicePointId: typeof parsed.servicePointId === "string" ? parsed.servicePointId : null,
+        address: parsed.address as never,
+        email: parsed.email,
+        customerId,
+        idempotencyKey: key(request)!,
+        termsVersion: LEGAL_VERSION,
+        privacyVersion: LEGAL_VERSION,
+        now: orderNow,
+      }) }, 201);
+    } catch (cause) { return map(cause); }
   }
   if (url.pathname === routes.payment) {
     if (!["sandbox", "controlled", "live"].includes(gate.mode)) {
@@ -1121,6 +1391,6 @@ export async function productionCommerceApiResponse(
       return map(cause);
     }
   }
-  if (url.pathname === routes.account || url.pathname === routes.adminHealth) return fail("IDENTITY_ROUTE_NOT_ACTIVATED", 503);
+  if (url.pathname === routes.adminHealth) return fail("IDENTITY_ROUTE_NOT_ACTIVATED", 503);
   return fail("METHOD_NOT_ALLOWED", 405);
 }

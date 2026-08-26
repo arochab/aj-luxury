@@ -13,7 +13,7 @@ const PAYMENT_SESSION_PATH = commerceApiPath(
 
 export type PublicProductionOrder = Readonly<{
   orderNumber: string;
-  status: "pending_payment" | "paid";
+  status: "pending_payment" | "paid" | "preparing" | "shipped" | "cancelled" | "refunded";
   currency: "EUR";
   subtotalCents: number;
   shippingCents: number;
@@ -75,7 +75,7 @@ export function parseProductionOrder(value: unknown): PublicProductionOrder {
   if (
     typeof value.orderNumber !== "string" ||
     !/^AJ-[0-9A-F]{20}$/.test(value.orderNumber) ||
-    !["pending_payment", "paid"].includes(String(value.status)) ||
+    !["pending_payment", "paid", "preparing", "shipped", "cancelled", "refunded"].includes(String(value.status)) ||
     value.currency !== "EUR" ||
     !validAmount(value.subtotalCents) ||
     !validAmount(value.shippingCents) ||

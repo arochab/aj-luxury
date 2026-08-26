@@ -18,6 +18,9 @@ export const accessTokenHashContexts = Object.freeze({
   customerRateLimit: "rate-limit:customer-sign-in",
   guestOrderRateLimit: "rate-limit:guest-order-access",
   adminRateLimit: "rate-limit:admin-sign-in",
+  customerEmailVerification: "challenge:customer-email-verification",
+  customerPasswordReset: "challenge:customer-password-reset",
+  customerCheckoutLink: "session:customer-checkout-link",
 } as const);
 
 export type AccessTokenHashContext =

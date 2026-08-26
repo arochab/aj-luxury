@@ -62,7 +62,7 @@ const syntheticMigration = journal.entries.find(
 assert.ok(syntheticMigration);
 assert.equal(syntheticMigration.when, releaseBuildEpoch);
 const terminalMigration = journal.entries.at(-1);
-assert.equal(terminalMigration.tag, "0021_paid_order_confirmations");
+assert.equal(terminalMigration.tag, "0022_customer_password_accounts");
 assert.ok(
   terminalMigration.when > releaseBuildEpoch,
   "additive launch migrations must follow the frozen synthetic release",

@@ -824,6 +824,35 @@ export class D1IdentityAccessStore {
       : Object.freeze({ id: row.id, orderNumber: row.order_number, status: row.status });
   }
 
+  async currentGuestOrder(
+    rawSessionToken: string,
+    now: string,
+  ): Promise<AccessibleOrder | null> {
+    if (!isOpaqueAccessToken(rawSessionToken)) return null;
+    assertTimestamp(now, "Now");
+    const tokenHash = await hashOneTimeAccessToken(
+      rawSessionToken,
+      accessTokenHashContexts.guestOrderSession,
+    );
+    const row = await this.database.prepare(
+      `SELECT customer_order.id, customer_order.order_number, customer_order.status
+      FROM orders AS customer_order
+      INNER JOIN guest_order_sessions AS session
+        ON session.order_id = customer_order.id
+      WHERE customer_order.customer_id IS NULL AND session.token_hash = ?
+        AND session.revoked_at IS NULL AND session.expires_at > ?
+        AND session.idle_expires_at > ?
+      LIMIT 1`,
+    ).bind(tokenHash, now, now).first<{
+      id: string;
+      order_number: string;
+      status: string;
+    }>();
+    return row === null
+      ? null
+      : Object.freeze({ id: row.id, orderNumber: row.order_number, status: row.status });
+  }
+
   async logout(
     kind: "customer" | "guest-order" | "admin",
     rawSessionToken: string,

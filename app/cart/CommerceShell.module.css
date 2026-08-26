@@ -141,6 +141,66 @@
   white-space: nowrap;
 }
 
+.accountProfile {
+  display: grid;
+  gap: 24px;
+  max-width: 540px;
+  padding: 28px;
+  border: 1px solid rgba(9, 9, 9, 0.14);
+  background: #fff;
+}
+
+.accountProfile p {
+  margin: 0;
+  color: #555;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.accountOrder {
+  display: grid;
+  gap: 4px;
+  padding: 22px 0;
+  border-top: 1px solid rgba(9, 9, 9, 0.16);
+}
+
+.accountOrder > strong {
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+
+.accountOrder > small {
+  margin-bottom: 8px;
+  color: #686868;
+  font-size: 10px;
+}
+
+.secondaryButton {
+  min-height: 48px;
+  width: 100%;
+  margin: 0 0 12px;
+  padding: 0 16px;
+  border: 1px solid rgba(9, 9, 9, 0.35);
+  background: transparent;
+  color: #090909;
+  cursor: pointer;
+  font: inherit;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.success {
+  margin: 24px 0 0;
+  padding: 16px;
+  border: 1px solid rgba(32, 94, 58, 0.3);
+  background: #edf5ee;
+  color: #205e3a;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
 .row {
   display: flex;
   justify-content: space-between;
@@ -363,12 +423,31 @@ button.button {
   text-transform: uppercase;
 }
 
-.testCheckout input[type="email"] {
+.testCheckout input[type="email"],
+.testCheckout input[type="password"] {
   min-height: 48px;
   padding: 0 14px;
   border: 1px solid rgba(9, 9, 9, 0.18);
   background: #fff;
   font: inherit;
+}
+
+.accountCheckoutFields {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid rgba(9, 9, 9, 0.14);
+  background: #fff;
+}
+
+.accountCheckoutFields > label:not(.checkbox) {
+  display: grid;
+  gap: 8px;
+  color: #555;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
 }
 
 .checkbox {
