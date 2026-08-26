@@ -20,6 +20,107 @@
   object-fit: cover;
 }
 
+/* The exact colour hand-off is sampled from Isabelle's film rather than
+   guessed: its final bottom band averages #402127, then the campaign images
+   open between #29273a and #3b384a. The bridge moves through those hues into
+   the site's #08080a without the former cream flash. */
+.chromaticBridge {
+  position: relative;
+  z-index: 1;
+  height: clamp(48px, 6svh, 68px);
+  overflow: hidden;
+  border: 0;
+  background: #08080a;
+  isolation: isolate;
+}
+
+.bridgeField,
+.bridgeHalo {
+  position: absolute;
+  pointer-events: none;
+}
+
+.bridgeField {
+  z-index: -3;
+  inset: -18% 0 -2px;
+  background: linear-gradient(
+    180deg,
+    #402127 0%,
+    #2b1822 28%,
+    #17121a 62%,
+    #08080a 100%
+  );
+}
+
+.bridgeHalo {
+  z-index: -2;
+  top: -104%;
+  right: 2%;
+  left: 2%;
+  height: 176%;
+  background: radial-gradient(
+    ellipse at 50% 48%,
+    rgba(130, 91, 116, 0.34) 0%,
+    rgba(79, 43, 66, 0.15) 36%,
+    transparent 72%
+  );
+  transform-origin: 50% 0;
+}
+
+.home :global(.aj-featured__glow) {
+  background:
+    linear-gradient(
+      180deg,
+      #08080a 0%,
+      rgba(8, 8, 10, 0.96) 9%,
+      rgba(18, 12, 17, 0.72) 24%,
+      rgba(8, 8, 10, 0.18) 44%,
+      transparent 62%
+    ),
+    radial-gradient(
+      ellipse 76% 34% at 50% -7%,
+      rgba(64, 33, 39, 0.5),
+      rgba(42, 38, 57, 0.18) 42%,
+      transparent 72%
+    ),
+    radial-gradient(
+      circle at var(--aj-spot-x, 52%) var(--aj-spot-y, 44%),
+      rgba(255, 255, 255, 0.24),
+      transparent 30%
+    ),
+    linear-gradient(
+      0deg,
+      rgba(5, 5, 7, 0.72),
+      transparent 48%,
+      rgba(5, 5, 7, 0.3)
+    );
+}
+
+/* This route owns the hand-off with GSAP. The older generic view-timeline
+   translated the whole second section by 12px and exposed a visible seam
+   between it and the new threshold. */
+.home :global(.aj-featured) {
+  animation: none;
+}
+
+/* The scroll scene is the sole owner of the cards' transform and opacity.
+   The legacy 650–800ms CSS transitions used to keep moving after the hand
+   stopped scrolling, which made this threshold feel elastic rather than
+   exact. Image zoom on hover remains independently animated on the img. */
+.home
+  :global(
+    .aj-featured[data-bridge-motion="scroll"] .aj-featured__image
+  ) {
+  transition: none;
+}
+
+.home
+  :global(
+    .aj-featured[data-bridge-motion="scroll"] .aj-featured__image:hover
+  ) {
+  transform: none;
+}
+
 /* On compact screens the header stays in normal flow. The poster stage stops
    above the signature and uses contain, reproducing production's full-subject
    framing: both faces and both boxers stay visible, with the CTA still inside
@@ -39,6 +140,53 @@
   }
 }
 
+/* 768px was previously the worst seam: it kept the centred desktop grid and
+   exposed almost 300px of empty metallic field before the campaign. This
+   compact rail starts the images immediately after the chromatic hand-off. */
+@media (min-width: 761px) and (max-width: 900px) {
+  .home :global(.aj-featured) {
+    display: block;
+    min-height: 0;
+  }
+
+  .home :global(.aj-featured__editorial) {
+    display: flex;
+    width: 100%;
+    gap: 18px;
+    padding: 34px 18px 38px;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-padding-inline: 18px;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-x pan-y;
+  }
+
+  .home :global(.aj-featured__editorial::-webkit-scrollbar) {
+    display: none;
+  }
+
+  .home :global(.aj-featured__image) {
+    flex: 0 0 min(56vw, 430px);
+    width: min(56vw, 430px);
+    min-width: min(56vw, 430px);
+    scroll-snap-align: center;
+  }
+}
+
+/* The portrait rendition has a protected 60 px horizontal margin around the
+   complete landscape film. It can therefore fill every portrait viewport
+   without clipping either model, while its own animated background removes
+   the letterbox bands that `contain` would otherwise expose on tablets. */
+@media (max-aspect-ratio: 4 / 5) {
+  .home :global(.aj-film__hero-poster img),
+  .home :global(.aj-film__hero-video) {
+    object-fit: cover;
+    object-position: center;
+  }
+}
+
 /* StoreHeader still occupies two rows at phone width. Its measured height is
    138.6 px; the shared global token predates the current two-row chrome. */
 @media (max-width: 560px) {
@@ -48,8 +196,9 @@
 
   /* Le cadre repart du bord gauche et remplit toute la hauteur disponible,
      comme le visuel mobile de production : aucun vide latéral ou inférieur.
-     L'ancrage à gauche conserve le bras, les deux visages et les boxers ; le
-     rognage résiduel ne porte que sur le décor à droite. */
+     La dérivée portrait conserve le film horizontal au centre d'un fond animé
+     issu du même asset. Le centrage garde ainsi les deux visages et les deux
+     boxers dans la zone sûre, sans bande latérale. */
   .home :global(.aj-film__hero-stage) {
     top: 22px;
     right: 0;
@@ -61,7 +210,11 @@
   .home :global(.aj-film__hero-poster img),
   .home :global(.aj-film__hero-video) {
     object-fit: cover;
-    object-position: left top;
+    object-position: center;
+  }
+
+  .chromaticBridge {
+    height: 44px;
   }
 }
 
@@ -73,6 +226,12 @@
   .home :global(.aj-moodboard__item img) {
     animation: none !important;
     transition: none !important;
+    transform: none !important;
+  }
+
+  .bridgeField,
+  .bridgeHalo {
+    opacity: 1 !important;
     transform: none !important;
   }
 }

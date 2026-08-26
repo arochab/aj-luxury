@@ -3,6 +3,7 @@
 import Link from "next/link";
 import ClientCopyText from "./components/ClientCopyText";
 import DeferredMetallicField from "./components/DeferredMetallicField";
+import HomeChromaticBridge from "./components/HomeChromaticBridge";
 import StaticProductionHero from "./components/StaticProductionHero";
 import StoreFooter from "./components/StoreFooter";
 import StoreHeader from "./components/StoreHeader";
@@ -107,9 +108,13 @@ export default function Home() {
         </div>
       </section>
 
-      <div className="aj-section-break" aria-hidden="true" />
+      <HomeChromaticBridge />
 
-      <section className="aj-featured" id="apollon">
+      <section
+        className="aj-featured"
+        id="apollon"
+        data-bridge-motion="scroll"
+      >
         <div className="aj-featured__metal" aria-hidden="true">
           <DeferredMetallicField motion="still" variant="silver" />
         </div>
