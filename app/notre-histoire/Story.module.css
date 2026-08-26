@@ -91,8 +91,8 @@
 }
 
 .heroImage img {
-  object-fit: contain;
-  object-position: center;
+  object-fit: cover;
+  object-position: 50% 25%;
 }
 
 .origin {
@@ -354,7 +354,7 @@
   }
 
   .heroImage img {
-    object-position: center;
+    object-position: 50% 25%;
   }
 
   .heroCopy {

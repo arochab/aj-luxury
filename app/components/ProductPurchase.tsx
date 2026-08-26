@@ -390,17 +390,11 @@ export default function ProductPurchase({
       aria-label={t("product.purchaseInfoLabel")}
       aria-busy={cartBusy}
     >
-      {/*
-        L'identité tient en trois lignes : le modèle, le coloris en lettrage
-        métallique — comme sur l'accueil — puis le ton. Le prix vient juste
-        après, seul sur sa ligne, entre deux filets : c'est le premier chiffre
-        que l'œil rencontre.
-      */}
+      {/* Le modèle et le coloris reprennent l'identité sobre de la fiche publiée. */}
       <div className={styles.identity} data-aj-reveal>
         <p className={styles.eyebrow}>{t("product.status")}</p>
         <h1>{product.model}</h1>
         <p className={styles.colorName}>{product.name}</p>
-        <p className={styles.tone}>{localizedProduct.tone}</p>
       </div>
 
       {/* ── LE PRIX NE S'AFFICHE JAMAIS NU TANT QUE LA VENTE EST FERMEE ──

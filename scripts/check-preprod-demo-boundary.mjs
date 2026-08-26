@@ -62,10 +62,10 @@ const syntheticMigration = journal.entries.find(
 assert.ok(syntheticMigration);
 assert.equal(syntheticMigration.when, releaseBuildEpoch);
 const terminalMigration = journal.entries.at(-1);
-assert.equal(terminalMigration.tag, "0020_launch_stock_current_grid");
+assert.equal(terminalMigration.tag, "0021_paid_order_confirmations");
 assert.ok(
   terminalMigration.when > releaseBuildEpoch,
-  "the additive current-stock migration must follow the frozen synthetic release",
+  "additive launch migrations must follow the frozen synthetic release",
 );
 
 const preproductionBuild = process.env.APP_ENV === "preproduction" &&

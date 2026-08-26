@@ -131,9 +131,6 @@ export const MEDIATOR: Readonly<{
 
 export const PRELAUNCH_BLOCKERS = [
   "médiateur de la consommation conventionné",
-  "zones, transporteurs, tarifs et délais de livraison",
-  "prestataire de paiement et moyens de paiement",
-  "prestataires réellement utilisés pour les comptes, e-mails et la mesure d’audience",
 ] as const;
 
 export const POSTLAUNCH_FORMALITIES = [

@@ -62,7 +62,7 @@ export default function CartPage() {
   const runtimeMode = getServerCommerceRuntimeMode();
   const reviewMode = isServerCommerceReview();
   return (
-    <main className={`${styles.shell} ${tunnel.sol}`}>
+    <main className={styles.shell}>
       <StoreHeader />
       <div className={tunnel.tunnel}>
         {/* Commerce fermé : AUCUN fil d'étapes. Dessiner 01/02/03 promettrait
@@ -121,7 +121,7 @@ export default function CartPage() {
             </div>
           </section>
         ) : (
-          <div className={tunnel.commerce}>
+          <div>
             <CartClient runtimeMode={runtimeMode} />
           </div>
         )}

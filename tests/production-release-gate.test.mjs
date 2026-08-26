@@ -52,8 +52,8 @@ test("an empty environment is closed and exposes no capability", () => {
 test("complete sandbox evidence remains closed until the router is wired", () => {
   const gate = evaluateProductionReleaseGate(base);
   assert.equal(gate.ready, false);
-  assert.equal(gate.evidenceComplete, true);
-  assert.deepEqual(gate.blockers, ["commerce-router-not-wired"]);
+  assert.equal(gate.evidenceComplete, false);
+  assert.deepEqual(gate.blockers, ["visible-legal-terms-not-ready", "commerce-router-not-wired"]);
   assert.deepEqual(gate.launchZones, ["EU"]);
   assert.equal(gate.capabilities.sandboxCheckout, false);
   assert.equal(gate.capabilities.realPayment, false);
@@ -68,8 +68,8 @@ test("controlled live evidence cannot enable an absent router", () => {
     STRIPE_SECRET_KEY: "sk_live_redacted",
   });
   assert.equal(gate.ready, false);
-  assert.equal(gate.evidenceComplete, true);
-  assert.deepEqual(gate.blockers, ["commerce-router-not-wired"]);
+  assert.equal(gate.evidenceComplete, false);
+  assert.deepEqual(gate.blockers, ["visible-legal-terms-not-ready", "commerce-router-not-wired"]);
   assert.equal(gate.capabilities.realPayment, false);
   assert.equal(gate.capabilities.realDelivery, false);
   assert.equal(gate.capabilities.controlledOrder, false);
@@ -96,8 +96,8 @@ test("public live remains closed until a controlled order proof is recorded", ()
     CF_VERSION_METADATA: { ...base.CF_VERSION_METADATA, id: liveVersionId },
   });
   assert.equal(configured.ready, false);
-  assert.equal(configured.evidenceComplete, true);
-  assert.deepEqual(configured.blockers, ["commerce-router-not-wired"]);
+  assert.equal(configured.evidenceComplete, false);
+  assert.deepEqual(configured.blockers, ["visible-legal-terms-not-ready", "commerce-router-not-wired"]);
   assert.equal(configured.capabilities.publicCommerce, false);
 
   const selfPromotion = evaluateProductionReleaseGate({

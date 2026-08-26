@@ -20,20 +20,23 @@ import styles from "./components/ProductionHome.module.css";
  */
 const featuredEditorialImages = [
   {
-    src: "/images/client/editorial-pourpre-chair.webp",
-    alt: "AJ Luxury — Jérémy — Apollon Pourpre Impérial",
-    width: 1864,
-    height: 2600,
-  },
-  {
     src: "/images/client/product-rose-model.webp",
     alt: "AJ Luxury — Alex — Apollon Rose Velours",
+    crop: "portrait-left",
     width: 1731,
     height: 2600,
   },
   {
+    src: "/images/client/campaign-duo-pourpre.webp",
+    alt: "AJ Luxury — Jérémy et Alex — Apollon Pourpre Impérial",
+    crop: "duo",
+    width: 2000,
+    height: 1882,
+  },
+  {
     src: "/images/client/editorial-lilas-chair.webp",
     alt: "AJ Luxury — Jérémy — Apollon Lilas Céleste",
+    crop: "portrait-right",
     width: 1731,
     height: 2600,
   },
@@ -59,20 +62,23 @@ const productPresentation = [
 
 const productDetails = [
   {
-    src: "/images/client/raw/product-pourpre-detail.webp",
-    alt: "Détail de la ceinture Apollon Pourpre Impérial",
-    width: 1731,
+    src: "/images/client/editorial-pourpre-chair.webp",
+    alt: "AJ Luxury — Jérémy — Apollon Pourpre Impérial",
+    crop: "portrait-left",
+    width: 1864,
     height: 2600,
   },
   {
-    src: "/images/client/raw/product-rose-front.webp",
-    alt: "Détail de la coupe Apollon Rose Velours",
-    width: 2000,
-    height: 2571,
+    src: "/images/client/campaign-duo-lilas-seated.webp",
+    alt: "AJ Luxury — Alex et Jérémy — Apollon Lilas Céleste",
+    crop: "duo",
+    width: 1484,
+    height: 2229,
   },
   {
-    src: "/images/client/raw/product-lilas-detail.webp",
-    alt: "Détail de la coupe Apollon Lilas Céleste",
+    src: "/images/client/editorial-rose-profile.webp",
+    alt: "AJ Luxury — Alex — Apollon Rose Velours",
+    crop: "portrait-right",
     width: 1731,
     height: 2600,
   },
@@ -109,11 +115,16 @@ export default function Home() {
         </div>
         <div className="aj-featured__glow" aria-hidden="true" />
         <div
-          className={`aj-featured__editorial ${styles.parityEditorial}`}
-          aria-label="AJ Luxury — Jérémy, Alex, Jérémy — Apollon"
+          className="aj-featured__editorial"
+          aria-label="AJ Luxury — Alex, Jérémy et Alex — Apollon"
         >
-          {featuredEditorialImages.map((image) => (
-            <figure className="aj-featured__image" key={image.src}>
+          {featuredEditorialImages.map((image, index) => (
+            <figure
+              className={`aj-featured__image aj-featured__image--${image.crop}${
+                index === 1 ? " aj-featured__image--lead" : ""
+              }`}
+              key={image.src}
+            >
               <img
                 src={image.src}
                 alt={image.alt}
@@ -137,7 +148,7 @@ export default function Home() {
           </Link>
         </div>
 
-        <div className={`aj-shop__rail ${styles.parityProductRail}`}>
+        <div className="aj-shop__rail">
           {displayedProducts.map(({ product, image, alt }) => (
             <article className="aj-product-card" key={product.slug}>
               <Link
@@ -169,11 +180,11 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="aj-moodboard" aria-label="Détails Apollon">
-        <div className={`aj-moodboard__track ${styles.productDetailTrack}`}>
+      <section className="aj-moodboard" aria-label="AJ Luxury — Jérémy et Alex">
+        <div className="aj-moodboard__track">
           {productDetails.map((image) => (
             <figure
-              className={`aj-moodboard__item ${styles.productDetail}`}
+              className={`aj-moodboard__item aj-moodboard__item--${image.crop}`}
               key={image.src}
             >
               <img

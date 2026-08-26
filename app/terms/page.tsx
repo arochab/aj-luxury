@@ -7,6 +7,7 @@ import {
   SELLER_TAX_STATUS,
 } from "@/lib/legal";
 import { T } from "@/lib/i18n/TranslatedText";
+import { DURABLE_TERMS_SHA256 } from "@/lib/legal-terms-snapshot";
 
 export const metadata = {
   title: "Conditions générales de vente | AJ Luxury",
@@ -22,11 +23,9 @@ export default function TermsPage() {
     >
       <InfoNotice warning>
         <p>
-          <strong>Prévisualisation sans vente.</strong> Aucun paiement ni aucune
-          commande réelle ne sont actuellement acceptés sur ce site. Les
-          présentes CGV définissent le cadre prévu pour l’ouverture de la
-          boutique, sous réserve de compléter l’identité du vendeur, la
-          logistique, le paiement et le médiateur.
+          <strong>Conditions de vente — version {LEGAL_VERSION_DISPLAY}.</strong>{" "}
+          Les ventes restent désactivées tant que les coordonnées du médiateur
+          de la consommation conventionné ne sont pas publiées.
         </p>
       </InfoNotice>
 
@@ -44,6 +43,11 @@ export default function TermsPage() {
           au moment de sa validation. Elles peuvent être conservées ou
           imprimées et seront jointes à la confirmation de commande sur un
           support durable.
+        </p>
+        <p>
+          Le snapshot contractuel de cette version est identifié par l’empreinte
+          SHA‑256 <code>{DURABLE_TERMS_SHA256}</code>. Son texte est intégré à la
+          confirmation de commande afin de ne pas dépendre d’une page web mutable.
         </p>
       </section>
 

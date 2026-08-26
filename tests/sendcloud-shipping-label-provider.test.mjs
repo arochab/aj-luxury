@@ -6,7 +6,10 @@ import {
   normalizeShippingAddress,
 } from "../lib/commerce/fulfillment-domain.ts";
 import { createSendcloudShippingLabelProvider } from "../lib/commerce/sendcloud-shipping-label-provider.ts";
-import { productionShippingLabelAdminResponse } from "../worker/production-shipping-label-admin-api.ts";
+import {
+  productionShippingLabelAdminReleaseCoreResponse,
+  productionShippingLabelAdminResponse,
+} from "../worker/production-shipping-label-admin-api.ts";
 import { productionOutboundShippingRuntimeConfigured } from "../worker/production-shipping-runtime.ts";
 import { controlledRequestAuthorization } from "../worker/production-commerce-api.ts";
 
@@ -321,6 +324,19 @@ test("health and label routing share the exact outbound Sendcloud runtime", () =
   assert.equal(productionOutboundShippingRuntimeConfigured({ ...adminEnv, DELIVERY_REFERENCE_ENCRYPTION_KEY_BASE64: "invalid" }), false);
 });
 
+test("public shipping-label route stays closed while visible legal terms are not ready", async () => {
+  const DB = {
+    prepare() { throw new Error("D1 must not be touched behind the legal gate"); },
+    batch() { throw new Error("D1 must not be touched behind the legal gate"); },
+  };
+  const response = await productionShippingLabelAdminResponse(
+    await adminRequest(),
+    { ...adminEnv, DB },
+  );
+  assert.equal(response.status, 503);
+  assert.equal((await response.json()).error.code, "COMMERCE_CLOSED");
+});
+
 async function adminRequest(headers = {}) {
   const pathname = "/api/commerce/admin/orders/order_test_1/shipping-label";
   const timestamp = Math.floor(Date.now() / 1000);
@@ -346,18 +362,20 @@ async function adminRequest(headers = {}) {
 
 test("operator route is owner-only and never touches D1 for an unauthenticated caller", async () => {
   const DB = { prepare() { throw new Error("D1 must not be touched"); }, batch() { throw new Error("D1 must not be touched"); } };
-  const response = await productionShippingLabelAdminResponse(
+  const response = await productionShippingLabelAdminReleaseCoreResponse(
     await adminRequest({ "oai-authenticated-user-email": "intruder@example.com" }),
     { ...adminEnv, DB },
+    "https://ajluxurystore.com",
   );
   assert.equal(response.status, 403);
 });
 
 test("platform owner headers alone cannot bypass the durable owner session and CSRF gate", async () => {
   const DB = { prepare() { throw new Error("D1 must not be touched without cookies"); }, batch() { throw new Error("D1 must not be touched"); } };
-  const response = await productionShippingLabelAdminResponse(
+  const response = await productionShippingLabelAdminReleaseCoreResponse(
     await adminRequest(),
     { ...adminEnv, DB },
+    "https://ajluxurystore.com",
   );
   assert.equal(response.status, 403);
   assert.equal((await response.json()).error.code, "OWNER_SESSION_REQUIRED");
@@ -368,9 +386,10 @@ test("release health and the operator route share the exact outbound enablement 
     prepare() { throw new Error("D1 must not be touched while outbound is disabled"); },
     batch() { throw new Error("D1 must not be touched while outbound is disabled"); },
   };
-  const response = await productionShippingLabelAdminResponse(
+  const response = await productionShippingLabelAdminReleaseCoreResponse(
     await adminRequest(),
     { ...adminEnv, OUTBOUND_SHIPMENT_CREATION_ENABLED: "false", DB },
+    "https://ajluxurystore.com",
   );
   assert.equal(response.status, 503);
   assert.equal((await response.json()).error.code, "OUTBOUND_SHIPPING_NOT_ENABLED");
@@ -387,9 +406,10 @@ test("operator route hard-stops an already claimed shipment for manual reconcili
     tracking_reference: null,
   };
   let providerCalls = 0;
-  const response = await productionShippingLabelAdminResponse(
+  const response = await productionShippingLabelAdminReleaseCoreResponse(
     await adminRequest(),
     { ...adminEnv, DB },
+    "https://ajluxurystore.com",
     {
       authorizeOwner: async () => true,
       shippingLabelProvider: { async createLabel() { providerCalls += 1; throw new Error("must not call"); } },
@@ -414,9 +434,10 @@ test("an idempotent label-ready replay returns the exact printable A6 PDF", asyn
     type: "application/pdf",
   });
   let requestInput;
-  const response = await productionShippingLabelAdminResponse(
+  const response = await productionShippingLabelAdminReleaseCoreResponse(
     await adminRequest(),
     { ...adminEnv, DB },
+    "https://ajluxurystore.com",
     {
       authorizeOwner: async () => true,
       shippingDocuments: {

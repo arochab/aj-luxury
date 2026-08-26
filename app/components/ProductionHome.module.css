@@ -2,64 +2,21 @@
   min-width: 0;
 }
 
-/* Three equal solo frames: no visual hierarchy between Jérémy and Alex. */
-.home .parityEditorial {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  align-items: center;
+/* The deployed storefront keeps the header in the normal flow. The hero then
+   receives the exact remaining viewport height, so its native 16:9 poster is
+   not zoomed or horizontally cropped at 1440 × 900. */
+.home :global(.aj-film) {
+  min-height: calc(100svh - var(--aj-tete-h));
+  margin-top: 0;
 }
 
-.home .parityEditorial :global(.aj-featured__image) {
-  aspect-ratio: 2 / 3;
-}
-
-.home .parityEditorial :global(.aj-featured__image img) {
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: center top;
-}
-
-/* Keep all three commerce cards at the exact same visual weight on desktop. */
-.home .parityProductRail {
-  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
-  transition: none !important;
-}
-
-.home .productDetailTrack {
-  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
-  align-items: center;
-}
-
-.home .productDetail {
-  aspect-ratio: 2 / 3;
-}
-
-.home .productDetail img {
+.home :global(.aj-film__hero-poster img) {
   object-fit: contain;
   object-position: center;
 }
 
-@media (max-width: 760px) {
-  .home .parityEditorial,
-  .home .parityProductRail,
-  .home .productDetailTrack {
-    grid-template-columns: none !important;
-  }
-
-  .home .productDetail {
-    flex: 0 0 78vw;
-    width: 78vw;
-    min-width: 78vw;
-  }
-
-  .home .productDetailTrack {
-    display: flex !important;
-    width: max-content;
-    min-width: 100%;
-    gap: 16px;
-    padding-inline: 16px;
-  }
+.home :global(.aj-moodboard__item img) {
+  object-fit: cover;
 }
 
 /* On compact screens the header stays in normal flow. The poster stage stops
@@ -67,11 +24,6 @@
    framing: both faces and both boxers stay visible, with the CTA still inside
    the first viewport. */
 @media (max-width: 900px) {
-  .home :global(.aj-film) {
-    min-height: calc(100svh - var(--aj-tete-h));
-    margin-top: 0;
-  }
-
   .home :global(.aj-film__hero-stage) {
     right: 0;
     bottom: 70px;
@@ -90,6 +42,23 @@
 @media (max-width: 560px) {
   .home {
     --aj-tete-h: 8.7rem;
+  }
+
+  /* Mesure du live à 390 × 844 : la photo commence 22 px sous le hero et
+     22 px après son bord gauche, puis s'arrête 22 px avant la signature.
+     Ce cadre plus étroit emploie cover, comme la production, pour rendre les
+     deux modèles à la même échelle sans couper visage ni boxer. */
+  .home :global(.aj-film__hero-stage) {
+    top: 22px;
+    right: 0;
+    bottom: 92px;
+    left: 22px;
+    height: auto;
+  }
+
+  .home :global(.aj-film__hero-poster img) {
+    object-fit: cover;
+    object-position: 0 0;
   }
 }
 

@@ -57,18 +57,18 @@ test("secondary media reflows from paired tablet rows to one mobile column", () 
   );
 });
 
-/* Retour client du 18/08 : « il y a encore des moments où c'est cropped sur
-   les images des mannequins ». Ce test épinglait justement les deux ratios
-   fautifs du grand plan produit — 1/1 en large, 4/5 en petit — pour des
-   sources 1731x2600. `cover` n'y montrait que 67 % puis 83 % de la hauteur :
-   tête coupée et bas du boxer tranché sur l'image principale de la fiche.
-   Le contrat n'est plus « un ratio stable » mais « le ratio de la source »,
-   seul cadrage qui garantisse tête, ceinture, logo AJ et boxer entiers. */
-test("the lead media keeps the source ratio at every breakpoint", () => {
-  assert.match(css, /\.galleryMain\s*\{[^}]*aspect-ratio:\s*2\s*\/\s*3/s);
+/* Le live validé emploie un cadre carré sur desktop et 4:5 sur mobile. Le
+   point de fuite reste ancré à 30 % depuis le haut : les captures de recette
+   contrôlent en plus que le visage et le boxer restent tous deux visibles. */
+test("the lead media keeps the live frame at every breakpoint", () => {
+  assert.match(css, /\.galleryMain\s*\{[^}]*aspect-ratio:\s*1\s*;/s);
   assert.match(
     css,
-    /@media \(max-width:\s*900px\)[\s\S]*?\.galleryMain\s*\{[^}]*aspect-ratio:\s*2\s*\/\s*3/s,
+    /@media \(max-width:\s*900px\)[\s\S]*?\.galleryMain\s*\{[^}]*aspect-ratio:\s*4\s*\/\s*5/s,
+  );
+  assert.match(
+    css,
+    /\.galleryMain \.zoomTrigger img\s*\{[^}]*object-position:\s*center 30%/s,
   );
 });
 
@@ -80,10 +80,8 @@ test("gallery layout is driven by product media metadata, not filenames", () => 
 });
 
 test("recommendations exclude the product currently viewed", () => {
-  assert.match(
-    productPage,
-    /products\.filter\(\(item\) => item\.slug !== product\.slug\)/,
-  );
+  assert.match(productPage, /productionOrder\.flatMap/);
+  assert.match(productPage, /item\.slug !== product\.slug/);
 });
 
 /* CE TEST VISAIT UNE CLASSE MORTE, ET IL ETAIT ROUGE DEPUIS LE 16/08.

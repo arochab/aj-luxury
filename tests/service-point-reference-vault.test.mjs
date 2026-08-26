@@ -501,7 +501,7 @@ test("0011 fails closed for a missing, foreign, expired or unsealed service poin
   assert.doesNotMatch(migration, /provider_reference` text|raw_reference|api[_-]?key|secret[_-]?key/i);
 });
 
-test("0011-0020 remain additive and the journal ends at the current launch stock contract", () => {
+test("0011-0021 remain additive and the journal ends at paid-order confirmations", () => {
   const previous = JSON.parse(readFileSync(`${drizzle}meta/0010_snapshot.json`, "utf8"));
   const snapshot = JSON.parse(readFileSync(`${drizzle}meta/0011_snapshot.json`, "utf8"));
   const pricingSnapshot = JSON.parse(readFileSync(`${drizzle}meta/0012_snapshot.json`, "utf8"));
@@ -586,10 +586,10 @@ test("0011-0020 remain additive and the journal ends at the current launch stock
     false,
   );
   assert.deepEqual(journal.entries.at(-1), {
-    idx: 20,
+    idx: 21,
     version: "6",
-    when: 1787702400000,
-    tag: "0020_launch_stock_current_grid",
+    when: 1787788800000,
+    tag: "0021_paid_order_confirmations",
     breakpoints: true,
   });
 });

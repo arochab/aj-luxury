@@ -46,7 +46,18 @@ function escapeHtml(value: string): string {
 
 function brandedHtml(content: EmailContent): string {
   const title = escapeHtml(content.subject);
-  const body = escapeHtml(content.text).replaceAll("\n", "<br>");
+  const termsUrl = /https:\/\/ajluxurystore\.com\/terms\?version=[A-Za-z0-9._%+-]{1,80}/g;
+  let cursor = 0;
+  const linked: string[] = [];
+  for (const match of content.text.matchAll(termsUrl)) {
+    const index = match.index ?? 0;
+    linked.push(escapeHtml(content.text.slice(cursor, index)));
+    const url = escapeHtml(match[0]);
+    linked.push(`<a href="${url}" style="color:#282828;text-decoration:underline">${url}</a>`);
+    cursor = index + match[0].length;
+  }
+  linked.push(escapeHtml(content.text.slice(cursor)));
+  const body = linked.join("").replaceAll("\n", "<br>");
   return `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title></head><body style="margin:0;background:#f1eee8;color:#111"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f1eee8;padding:32px 16px"><tr><td align="center"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:620px;background:#fff"><tr><td style="background:#0a0a0a;color:#f4eee4;padding:28px 32px;font:600 18px Arial,sans-serif;letter-spacing:.18em">AJ LUXURY</td></tr><tr><td style="padding:40px 32px 24px"><h1 style="margin:0 0 24px;font:500 28px Georgia,serif;line-height:1.2">${title}</h1><p style="margin:0;font:16px Arial,sans-serif;line-height:1.65;color:#282828">${body}</p></td></tr><tr><td style="padding:24px 32px 32px;border-top:1px solid #e8e3db;font:12px Arial,sans-serif;line-height:1.5;color:#6b665e">AJ Luxury · ajluxurystore.com</td></tr></table></td></tr></table></body></html>`;
 }
 

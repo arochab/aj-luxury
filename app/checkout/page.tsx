@@ -56,7 +56,7 @@ export default function CheckoutPage() {
   const commerceOuvert = runtimeMode !== "closed";
 
   return (
-    <main className={`${styles.shell} ${tunnel.sol}`}>
+    <main className={styles.shell}>
       <StoreHeader />
       <div className={tunnel.tunnel}>
         {/* Commerce fermé : aucun fil d'étapes — même règle que /cart, un
@@ -94,11 +94,11 @@ export default function CheckoutPage() {
         )}
 
         {runtimeMode === "preproduction" ? (
-          <div className={tunnel.commerce}>
+          <div>
             <CheckoutClient />
           </div>
         ) : runtimeMode === "production" ? (
-          <div className={tunnel.commerce}>
+          <div>
             <ProductionCheckoutClient />
           </div>
         ) : (

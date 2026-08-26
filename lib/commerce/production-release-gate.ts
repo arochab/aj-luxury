@@ -1,3 +1,5 @@
+import { PRELAUNCH_BLOCKERS } from "../legal.ts";
+
 export const productionCommerceModes = Object.freeze([
   "closed",
   "sandbox",
@@ -62,6 +64,7 @@ export type ProductionReleaseBlocker =
   | "returns-policy-unapproved"
   | "backup-restore-drill-unapproved"
   | "monitoring-alerts-unapproved"
+  | "visible-legal-terms-not-ready"
   | "controlled-order-proof-missing"
   | "promotion-source-version-missing"
   | "commerce-router-not-wired";
@@ -223,6 +226,9 @@ function evaluateProductionReleaseGateInternal(
   }
   if (!isApproved(env.MONITORING_ALERTS_APPROVED)) {
     blockers.push("monitoring-alerts-unapproved");
+  }
+  if (PRELAUNCH_BLOCKERS.length > 0) {
+    blockers.push("visible-legal-terms-not-ready");
   }
   if (
     mode === "live" &&

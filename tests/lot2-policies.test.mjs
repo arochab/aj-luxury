@@ -59,7 +59,7 @@ function assertDeeplyFrozen(value, seen = new Set()) {
 }
 
 test("generates twelve stable internal references without EAN input", () => {
-  const colors = ["pourpre", "rose-pale", "lilas-bleu-clair"];
+  const colors = ["rose-pale", "lilas-bleu-clair", "pourpre"];
   const sizes = ["S", "M", "L", "XL"];
   const references = colors.flatMap((color) =>
     sizes.map((size) => buildInternalVariantReference(color, size)),
@@ -67,10 +67,10 @@ test("generates twelve stable internal references without EAN input", () => {
 
   assert.equal(new Set(references).size, 12);
   assert.deepEqual(references.slice(0, 4), [
-    "AJ-APO-POU-S",
-    "AJ-APO-POU-M",
-    "AJ-APO-POU-L",
-    "AJ-APO-POU-XL",
+    "AJ-APO-ROS-S",
+    "AJ-APO-ROS-M",
+    "AJ-APO-ROS-L",
+    "AJ-APO-ROS-XL",
   ]);
   assert.deepEqual(parseInternalVariantReference("AJ-APO-LIL-M"), {
     colorSlug: "lilas-bleu-clair",
@@ -873,17 +873,29 @@ test("builds deterministic transactional messages and rejects incomplete input",
     returnEmail.deduplicationKey,
     /^return-acknowledgement:evt_return_1:AJ-2026-0001:[0-9a-f]{64}$/,
   );
+  const shipmentEmail = await buildTransactionalEmail({
+    kind: "shipment-confirmation",
+    eventId: "evt_shipment_1",
+    locale: "fr",
+    recipientEmail: "client@example.com",
+    orderNumber: "AJ-2026-0001",
+    trackingReference: "TRACKING-0001",
+  });
+  assert.match(shipmentEmail.text, /TRACKING-0001/);
+  assert.deepEqual(transactionalEmailKindAvailability["shipment-confirmation"], {
+    available: true,
+  });
   await assert.rejects(
-    () =>
-      buildTransactionalEmail({
-        kind: "shipment-confirmation",
-        eventId: "evt_shipment_1",
-        locale: "fr",
-        recipientEmail: "client@example.com",
-        orderNumber: "AJ-2026-0001",
-        trackingUrl: "javascript:alert(1)",
-      }),
-    /server-owned carrier policy/,
+    () => buildTransactionalEmail({
+      kind: "shipment-confirmation",
+      eventId: "evt_shipment_2",
+      locale: "fr",
+      recipientEmail: "client@example.com",
+      orderNumber: "AJ-2026-0001",
+      trackingReference: "TRACKING-0001",
+      trackingUrl: "javascript:alert(1)",
+    }),
+    /trackingUrl/,
   );
   await assert.rejects(
     () =>

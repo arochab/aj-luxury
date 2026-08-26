@@ -23,8 +23,7 @@ export default function LegalNoticePage() {
           <strong>Informations légales.</strong> L’identité du vendeur, son
           immatriculation, son siège et le directeur de publication figurent
           ci-dessous. Le vendeur ne collecte pas de TVA au titre de la franchise
-          en base. Aucun numéro de téléphone n’est publié tant qu’aucune ligne
-          professionnelle n’est disponible.
+          en base.
         </p>
       </InfoNotice>
 

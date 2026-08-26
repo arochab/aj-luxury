@@ -1,0 +1,91 @@
+{
+  // Isolated owner-only release candidate. It has no route or custom domain;
+  // the private Sites storefront is the sole browser-facing origin.
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "aj-luxury-controlled-20260826",
+  "main": "./dist/server/index.js",
+  "compatibility_date": "2026-08-16",
+  "compatibility_flags": ["nodejs_compat"],
+  "no_bundle": true,
+
+  "version_metadata": {
+    "binding": "CF_VERSION_METADATA"
+  },
+
+  "ratelimits": [
+    {
+      "name": "COMMERCE_RATE_LIMITER",
+      "namespace_id": "8262601",
+      "simple": { "limit": 90, "period": 60 }
+    },
+    {
+      "name": "PROVIDER_RATE_LIMITER",
+      "namespace_id": "8262602",
+      "simple": { "limit": 30, "period": 60 }
+    },
+    {
+      "name": "WEBHOOK_RATE_LIMITER",
+      "namespace_id": "8262603",
+      "simple": { "limit": 180, "period": 60 }
+    },
+    {
+      "name": "OPERATOR_RATE_LIMITER",
+      "namespace_id": "8262604",
+      "simple": { "limit": 30, "period": 60 }
+    }
+  ],
+
+  "triggers": {
+    "crons": ["*/2 * * * *"]
+  },
+
+  "workers_dev": true,
+  "preview_urls": false,
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "aj-luxury-controlled-20260826",
+      "database_id": "97ec3a4c-6299-41a0-bffd-cf9f010fa7c6"
+    }
+  ],
+
+  "vars": {
+    "APP_ENV": "production",
+    "COMMERCE_MODE": "controlled",
+    "COMMERCE_ORIGIN": "https://aj-luxury-awwwards-private.arochab.chatgpt.site",
+    "COMMERCE_BACKEND_ONLY": "true",
+    "COMMERCE_CONTROLLED_STOREFRONT_ORIGIN": "https://aj-luxury-awwwards-private.arochab.chatgpt.site",
+    "PAYMENT_PROVIDER": "stripe",
+    "DELIVERY_PROVIDER": "sendcloud",
+    "SENDCLOUD_API_VERSION": "3",
+    "EMAIL_PROVIDER": "resend",
+    "TRANSACTIONAL_FROM_EMAIL": "commandes@ajluxurystore.com",
+    "TRANSACTIONAL_FROM_NAME": "AJ Luxury"
+  },
+
+  // Secrets, release attestations and human approvals are deliberately
+  // supplied only at release time and are never committed here.
+  "assets": {
+    "binding": "ASSETS",
+    "directory": "./dist/client",
+    "run_worker_first": [
+      "/api/*",
+      "/assets/*",
+      "/fonts/*",
+      "/media/*",
+      "/i18n/*",
+      "/images/*",
+      "/videos/*"
+    ]
+  },
+  "rules": [
+    {
+      "type": "ESModule",
+      "globs": ["**/*.js", "**/*.mjs"]
+    }
+  ],
+  "observability": {
+    "enabled": true
+  }
+}

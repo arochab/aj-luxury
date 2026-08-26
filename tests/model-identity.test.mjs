@@ -23,12 +23,11 @@ import test from "node:test";
 
 const lire = (chemin) => readFile(new URL(chemin, import.meta.url), "utf8");
 
-const [produits, sequence, accueil, moodboard, recit, boutique, fiche] =
+const [produits, sequence, accueil, recit, boutique, fiche] =
   await Promise.all([
     lire("../lib/products.ts"),
     lire("../app/components/ApollonGuidedSequence.tsx"),
     lire("../app/page.tsx"),
-    lire("../lib/editorial-moodboard.ts"),
     lire("../app/notre-histoire/page.tsx"),
     lire("../app/shop/page.tsx"),
     lire("../app/products/[slug]/page.tsx"),
@@ -95,13 +94,13 @@ const blocsProduits = () => produits.split(/\n {4}slug: "/).slice(1);
 
 /* ── 1 · Un coloris, un homme ─────────────────────────────────────────── */
 
-test("chaque coloris déclare son porteur et n'en montre aucun autre", () => {
+test("chaque coloris déclare le porteur visible sur sa photo principale", () => {
   const blocs = blocsProduits();
   assert.equal(blocs.length, 3, "trois coloris attendus");
 
   const attendu = {
-    "rose-pale": "alex",
-    "lilas-bleu-clair": "jeremy",
+    "rose-pale": "jeremy",
+    "lilas-bleu-clair": "alex",
     pourpre: "alex",
   };
 
@@ -111,13 +110,13 @@ test("chaque coloris déclare son porteur et n'en montre aucun autre", () => {
     const declare = bloc.match(/wearer:\s*"(alex|jeremy)"/)?.[1];
     assert.equal(declare, attendu[slug], `porteur déclaré de ${slug}`);
 
-    for (const { src, qui } of personnes(bloc)) {
-      assert.equal(
-        qui,
-        declare,
-        `${slug} : ${src} montre ${qui}, pas ${declare}`,
-      );
-    }
+    const principale = bloc.match(/\n\s*image:\s*"([^"]+)"/)?.[1];
+    assert.ok(principale, `photo principale absente : ${slug}`);
+    assert.equal(
+      porteur(principale),
+      declare,
+      `${slug} : ${principale} ne montre pas ${declare}`,
+    );
   }
 });
 
@@ -131,17 +130,10 @@ test("la carte d'un coloris est le plan de tête de sa fiche", () => {
   }
 });
 
-test("les recommandations de bas de fiche ne portent aucun corps", () => {
-  // Deux coloris sur trois reviennent à Alex : une paire de plans portés y
-  // serait fatalement deux fois le même homme. Elle montre donc les plateaux.
-  assert.match(fiche, /src=\{item\.still\}/);
-  assert.doesNotMatch(fiche, /src=\{item\.image\}/);
-  for (const teinte of ["rose", "lilas", "pourpre"]) {
-    assert.match(
-      produits,
-      new RegExp(`still:\\s*"[^"]*apollon-${teinte}-lyre-v1\\.webp"`),
-    );
-  }
+test("les recommandations de bas de fiche reprennent les cartes du live", () => {
+  assert.match(fiche, /src=\{item\.image\}/);
+  assert.doesNotMatch(fiche, /src=\{item\.still\}/);
+  assert.doesNotMatch(fiche, /editorial\/isabelle-apollon/);
 });
 
 /* ── 2 · Jamais deux fois le même homme à la suite ────────────────────── */
@@ -156,21 +148,16 @@ test("la séquence guidée de l'accueil alterne", () => {
 });
 
 test("les cartes de /shop alternent", () => {
-  /* L'accueil ne rend plus de grille de coloris depuis le 20/08 : elle
-     rejouait en vignettes ce que la séquence guidée étale sur neuf écrans, et
-     elle a été retirée. Son ordre de lecture reste néanmoins contraint ici,
-     parce que `ORDRE_COLORIS` alimente toujours les trois panneaux de la
-     séquence — c'est lui qui décide de la suite Alex / Jérémy / Alex sur
-     l'accueil, et la séquence a son propre test juste au-dessus.
-     La parité des cartes reste vérifiée là où des cartes existent : /shop. */
+  /* Le live présente les trois cartes dans cet ordre. Les deux actifs
+     principaux imposés par la production (Rose profil et Lilas modèle) sont
+     conservés, tout en maintenant Alex / Jérémy / Alex dans la grille. */
   assert.match(
-    accueil,
-    /ORDRE_COLORIS = \["rose-pale", "lilas-bleu-clair", "pourpre"\]/,
+    boutique,
+    /PRODUCTION_ORDER = \["pourpre", "rose-pale", "lilas-bleu-clair"\]/,
   );
-  assert.doesNotMatch(accueil, /src=\{item\.image\}/);
-  assert.match(boutique, /src=\{[a-zA-Z]+\.image\}/);
+  assert.match(boutique, /src=\{product\.image\}/);
 
-  const suite = ["rose-pale", "lilas-bleu-clair", "pourpre"].map((slug) => {
+  const suite = ["pourpre", "rose-pale", "lilas-bleu-clair"].map((slug) => {
     const bloc = blocsProduits().find((part) => part.startsWith(`${slug}"`));
     const src = bloc.match(/\n\s*image:\s*"([^"]+)"/)[1];
     return { src, qui: porteur(src) };
@@ -182,53 +169,54 @@ test("les cartes de /shop alternent", () => {
   exigerAlternance(suite, "cartes de /shop");
 });
 
-test("la bande éditoriale de l'accueil alterne", () => {
-  exigerAlternance(personnes(moodboard), "bande éditoriale");
+test("les neuf images portées de l'accueil suivent l'ordre du live", () => {
+  const suite = personnes(accueil);
+  assert.deepEqual(
+    suite.map((entree) => entree.qui),
+    ["alex", "duo", "jeremy", "alex", "jeremy", "alex", "jeremy", "duo", "alex"],
+  );
+  exigerAlternance(suite, "accueil live");
 });
 
-test("/notre-histoire alterne, et nomme chacun dans SON coloris", () => {
+test("/notre-histoire alterne et nomme chaque portrait", () => {
   exigerAlternance(personnes(recit), "notre-histoire");
 
-  // La seule page qui écrit un prénom sous un visage : elle doit dire la même
-  // chose que les cartes et les fiches, sinon c'est elle qu'on croit.
+  // La seule page qui écrit un prénom sous chaque visage doit conserver
+  // l'identité visible dans les deux photographies du live.
   assert.match(
     recit,
-    /alt="AJ Luxury — Jérémy — Apollon Lilas Céleste"[\s\S]{0,320}editorial-lilas-chair\.webp/,
+    /alt="AJ Luxury — Alex — collection Apollon"[\s\S]{0,180}product-lilas-model\.webp/,
   );
   assert.match(
     recit,
-    /alt="AJ Luxury — Alex — Apollon Pourpre Impérial"[\s\S]{0,320}hero-pourpre-model\.webp/,
+    /alt="AJ Luxury — Jérémy — collection Apollon"[\s\S]{0,180}story-jeremy-retouched\.jpeg/,
   );
 });
 
 /* ── 3 · Les photos qui contredisent l'attribution sortent du tunnel ──── */
 
-test("aucune photo contredisant l'attribution ne reste dans le commerce", () => {
-  const bannies = [
-    "product-rose-profile.webp", // Jérémy en Rose
-    "product-lilas-model.webp", // Alex en Lilas
-    "editorial-pourpre-chair.webp", // Jérémy en Pourpre
-    "story-jeremy-retouched.jpeg", // Jérémy en Rose
-  ];
-  // La bande éditoriale de l'accueil (lib/editorial-moodboard.ts) n'est PAS
-  // dans cette liste : c'est une campagne, pas un catalogue — aucun prix,
-  // aucun lien, aucun nom de coloris affiché. Elle garde le seul solo de
-  // Jérémy que le dépôt possède hors du Lilas. Le jour où une prise « Jérémy
-  // seul, Lilas Céleste, second angle » existera, elle pourra y entrer et
-  // cette exception tombera.
-  // La table `wearerByAsset` cite ces fichiers, et c'est son rôle : elle dit
-  // qui figure dessus. On ne regarde donc que le catalogue lui-même.
-  // Les commentaires les citent aussi, pour dire pourquoi elles sont sorties.
-  const catalogue = produits
-    .slice(produits.indexOf("export const products"))
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/\/\/[^\n]*/g, "");
-  for (const source of [catalogue, boutique, fiche, recit]) {
-    for (const bannie of bannies) {
-      assert.ok(
-        !source.includes(bannie),
-        `${bannie} reste lue par le tunnel commercial`,
-      );
-    }
+test("le commerce conserve exactement les trois photos principales du live", () => {
+  const attendues = new Map([
+    ["pourpre", "/images/client/raw/product-card-pourpre.webp"],
+    ["rose-pale", "/images/client/raw/product-rose-profile.webp"],
+    ["lilas-bleu-clair", "/images/client/raw/product-lilas-model.webp"],
+  ]);
+
+  for (const [slug, src] of attendues) {
+    const bloc = blocsProduits().find((part) => part.startsWith(`${slug}"`));
+    assert.ok(bloc, `fiche absente : ${slug}`);
+    assert.equal(
+      bloc.match(/\n\s*image:\s*"([^"]+)"/)?.[1],
+      src,
+      `photo principale de ${slug}`,
+    );
+    assert.equal(
+      bloc.match(/gallery:\s*\[\s*\{\s*src:\s*"([^"]+)"/)?.[1],
+      src,
+      `première galerie de ${slug}`,
+    );
   }
+
+  assert.match(boutique, /PRODUCTION_IMAGES/);
+  assert.match(fiche, /product\.gallery/);
 });

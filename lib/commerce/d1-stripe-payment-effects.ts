@@ -6,7 +6,7 @@ import type {
   VerifiedRefundProviderEvent,
 } from "./payment-provider.ts";
 import { assertFulfillmentTimestamp, sha256Hex } from "./fulfillment-domain.ts";
-import { buildTransactionalEmail } from "./transactional-email.ts";
+import { buildPaidOrderEmail } from "./paid-order-email.ts";
 
 export class StripePaymentEffectsError extends Error {
   readonly code: "MISMATCH" | "PERSISTENCE_FAILURE";
@@ -24,7 +24,15 @@ type OrderPaymentRow = Readonly<{
   email: string;
   status: string;
   currency: string;
+  subtotal_cents: number;
+  discount_cents: number;
+  shipping_cents: number;
+  tax_cents: number;
   total_cents: number;
+  terms_version: string;
+  shipping_address_json: string;
+  delivery_display_name: string | null;
+  delivery_mode: "home" | "service_point" | null;
   checkout_session_id: string | null;
   checkout_status: string | null;
   checkout_amount: number | null;
@@ -102,15 +110,71 @@ export class D1StripePaymentEffectsStore implements PaymentWebhookEffectsPort {
     const semanticHash = await sha256Hex(event.semanticKey);
     const eventHash = await sha256Hex(event.providerEventId);
     const eventKey = `webhook:stripe:${event.providerEventId}`;
-    const email = await buildTransactionalEmail({
-      kind: "payment-confirmation",
-      eventId: event.providerEventId,
-      locale: "fr",
-      recipientEmail: order.email,
+    const lineRows = await this.#database.prepare(
+      `SELECT product_name, color_name, size, quantity, line_total_cents
+      FROM order_lines WHERE order_id=? ORDER BY id`,
+    ).bind(order.id).all<{
+      product_name: string;
+      color_name: string;
+      size: string;
+      quantity: number;
+      line_total_cents: number;
+    }>();
+    if (!order.delivery_display_name || !order.delivery_mode || lineRows.results.length < 1) {
+      throw new StripePaymentEffectsError("MISMATCH", "Paid order email snapshot is incomplete.");
+    }
+    let deliveryAddressLines: string[];
+    try {
+      const address = JSON.parse(order.shipping_address_json) as Record<string, unknown>;
+      if (
+        !address || typeof address !== "object" || Array.isArray(address) ||
+        typeof address.recipient !== "string" || typeof address.line1 !== "string" ||
+        typeof address.postalCode !== "string" || typeof address.city !== "string" ||
+        typeof address.countryCode !== "string" ||
+        (address.line2 !== undefined && address.line2 !== null && typeof address.line2 !== "string")
+      ) throw new Error("invalid address");
+      deliveryAddressLines = [
+        address.recipient,
+        address.line1,
+        ...(typeof address.line2 === "string" && address.line2.trim() ? [address.line2] : []),
+        `${address.postalCode} ${address.city}`,
+        address.countryCode,
+      ];
+    } catch (cause) {
+      throw new StripePaymentEffectsError("MISMATCH", "Paid order delivery address is invalid.", { cause });
+    }
+    const emailSnapshot = {
       orderNumber: order.order_number,
-    });
-    const payloadJson = JSON.stringify({ subject: email.subject, text: email.text });
-    if (payloadJson.length > 12_500) throw new StripePaymentEffectsError("MISMATCH", "Email payload is too large.");
+      lines: lineRows.results.map((line) => ({
+        productName: line.product_name,
+        colorName: line.color_name,
+        size: line.size,
+        quantity: line.quantity,
+        lineTotalCents: line.line_total_cents,
+      })),
+      subtotalCents: order.subtotal_cents,
+      discountCents: order.discount_cents,
+      shippingCents: order.shipping_cents,
+      taxCents: order.tax_cents,
+      totalCents: order.total_cents,
+      deliveryName: order.delivery_display_name,
+      deliveryMode: order.delivery_mode,
+      deliveryAddressLines,
+      termsVersion: order.terms_version,
+    } as const;
+    let orderEmail;
+    let paymentEmail;
+    try {
+      orderEmail = buildPaidOrderEmail("order-confirmation", emailSnapshot);
+      paymentEmail = buildPaidOrderEmail("payment-confirmation", emailSnapshot);
+    } catch (cause) {
+      throw new StripePaymentEffectsError("MISMATCH", "Paid order email snapshot is incoherent.", { cause });
+    }
+    const orderPayloadJson = JSON.stringify(orderEmail);
+    const paymentPayloadJson = JSON.stringify(paymentEmail);
+    if (orderPayloadJson.length > 12_500 || paymentPayloadJson.length > 12_500) {
+      throw new StripePaymentEffectsError("MISMATCH", "Email payload is too large.");
+    }
     try {
       await this.#database.batch([
         this.#database.prepare(
@@ -161,10 +225,22 @@ export class D1StripePaymentEffectsStore implements PaymentWebhookEffectsPort {
             lease_token_hash, leased_at, lease_expires_at, last_error_code,
             idempotency_key, provider_idempotency_key, created_at, updated_at,
             sent_at, terminal_at, purged_at
+          ) VALUES (?, 'order_confirmation', 'payment_succeeded', ?, ?, ?,
+            NULL, 'fr', 'order-confirmation-v2', ?, 'pending', 0, 5, ?,
+            NULL, NULL, NULL, NULL, ?, ?, ?, ?, NULL, NULL, NULL)`,
+        ).bind(`outbox_order_${eventHash}`, event.providerEventId, order.email, order.id, orderPayloadJson, verifiedAt, `email:order-confirmation:${order.id}`, `order_confirmation:${order.id}`, verifiedAt, verifiedAt),
+        this.#database.prepare(
+          `INSERT INTO email_outbox (
+            id, kind, transaction_intent, source_event_id, recipient_email,
+            order_id, access_challenge_id, locale, template_version,
+            payload_json, status, attempts, max_attempts, next_attempt_at,
+            lease_token_hash, leased_at, lease_expires_at, last_error_code,
+            idempotency_key, provider_idempotency_key, created_at, updated_at,
+            sent_at, terminal_at, purged_at
           ) VALUES (?, 'payment_confirmation', 'payment_succeeded', ?, ?, ?,
             NULL, 'fr', 'payment-confirmation-v1', ?, 'pending', 0, 5, ?,
             NULL, NULL, NULL, NULL, ?, ?, ?, ?, NULL, NULL, NULL)`,
-        ).bind(`outbox_stripe_${eventHash}`, event.providerEventId, order.email, order.id, payloadJson, verifiedAt, `email:payment-confirmation:${order.id}`, `payment_confirmation:${order.id}`, verifiedAt, verifiedAt),
+        ).bind(`outbox_stripe_${eventHash}`, event.providerEventId, order.email, order.id, paymentPayloadJson, verifiedAt, `email:payment-confirmation:${order.id}`, `payment_confirmation:${order.id}`, verifiedAt, verifiedAt),
         this.#database.prepare(
           `INSERT INTO audit_log (
             id, actor_type, actor_id, action, entity_type, entity_id,
@@ -195,7 +271,13 @@ export class D1StripePaymentEffectsStore implements PaymentWebhookEffectsPort {
     return this.#database.prepare(
       `SELECT customer_order.id, customer_order.order_number,
         customer_order.cart_id, customer_order.email, customer_order.status,
-        customer_order.currency, customer_order.total_cents,
+        customer_order.currency, customer_order.subtotal_cents,
+        customer_order.discount_cents, customer_order.shipping_cents,
+        customer_order.tax_cents, customer_order.total_cents,
+        customer_order.terms_version,
+        customer_order.shipping_address_json,
+        delivery_option.display_name AS delivery_display_name,
+        delivery_option.delivery_mode AS delivery_mode,
         checkout.provider_session_id AS checkout_session_id,
         checkout.status AS checkout_status,
         checkout.amount_cents AS checkout_amount,
@@ -208,6 +290,8 @@ export class D1StripePaymentEffectsStore implements PaymentWebhookEffectsPort {
         AND checkout.status IN ('created','requires_action')
       LEFT JOIN payments AS succeeded ON succeeded.order_id=customer_order.id
         AND succeeded.provider='stripe' AND succeeded.status='succeeded'
+      LEFT JOIN delivery_option_snapshots AS delivery_option
+        ON delivery_option.shipping_quote_id=customer_order.shipping_quote_id
       WHERE customer_order.id=? LIMIT 1`,
     ).bind(providerCheckoutSessionId, orderId).first<OrderPaymentRow>();
   }
@@ -368,8 +452,10 @@ export class D1StripePaymentEffectsStore implements PaymentWebhookEffectsPort {
         AND webhook_events.provider_payment_id=? AND webhook_events.status='processed'
       INNER JOIN audit_log ON audit_log.entity_id=orders.id
         AND audit_log.idempotency_key=?
-      INNER JOIN email_outbox ON email_outbox.order_id=orders.id
-        AND email_outbox.kind='payment_confirmation' AND email_outbox.status='pending'
+      INNER JOIN email_outbox AS payment_email ON payment_email.order_id=orders.id
+        AND payment_email.kind='payment_confirmation' AND payment_email.status='pending'
+      INNER JOIN email_outbox AS order_email ON order_email.order_id=orders.id
+        AND order_email.kind='order_confirmation' AND order_email.status='pending'
       WHERE orders.id=? AND orders.status='paid' AND carts.status='converted'
         AND orders.total_cents=? AND orders.currency='EUR'
         AND EXISTS (SELECT 1 FROM stock_reservations WHERE cart_id=orders.cart_id
@@ -389,8 +475,10 @@ export class D1StripePaymentEffectsStore implements PaymentWebhookEffectsPort {
         AND payments.currency=orders.currency
       INNER JOIN audit_log ON audit_log.entity_id=orders.id
         AND audit_log.idempotency_key=?
-      INNER JOIN email_outbox ON email_outbox.order_id=orders.id
-        AND email_outbox.kind='payment_confirmation'
+      INNER JOIN email_outbox AS payment_email ON payment_email.order_id=orders.id
+        AND payment_email.kind='payment_confirmation'
+      INNER JOIN email_outbox AS order_email ON order_email.order_id=orders.id
+        AND order_email.kind='order_confirmation'
       WHERE orders.id=? AND orders.status='paid' AND carts.status='converted'
         AND orders.total_cents=? AND orders.currency='EUR'
         AND EXISTS (SELECT 1 FROM webhook_events WHERE order_id=orders.id

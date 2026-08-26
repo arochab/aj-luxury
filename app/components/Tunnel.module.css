@@ -191,6 +191,45 @@
   text-transform: uppercase;
 }
 
+/* Le tunnel fonctionnel reste dans le thème clair publié. Ces règles ne
+   touchent que le fil d'étapes ajouté au-dessus des composants commerce. */
+.tunnel .filListe {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(10px, 2vw, 28px);
+}
+
+.tunnel .filEtape {
+  min-width: 0;
+  color: #77777c;
+}
+
+.tunnel .filFaite {
+  color: #3d3d41;
+}
+
+.tunnel .filEtape[aria-current="step"] {
+  color: #090909;
+}
+
+.tunnel .filPiste {
+  background: rgba(9, 9, 9, 0.16);
+}
+
+.tunnel .filJauge {
+  background: #090909;
+}
+
+.tunnel .avis {
+  border-color: rgba(9, 9, 9, 0.16);
+  background: #efefeb;
+  color: #4e4e53;
+}
+
+.tunnel .avisMarque {
+  color: #090909;
+}
+
 /* ==========================================================================
    4. MES PROPRES SCÈNES
    Commerce fermé, retour de paiement fermé, cadre de la confirmation. Les
@@ -1131,6 +1170,26 @@
    ========================================================================== */
 
 @media (max-width: 800px) {
+  .fil {
+    padding: 22px var(--gut) 0;
+  }
+
+  .tunnel .filListe {
+    gap: 8px;
+  }
+
+  .tunnel .filEtape {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .tunnel .filNom {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    line-height: 1.25;
+  }
+
   .commerce.commerce > div {
     grid-template-columns: minmax(0, 1fr);
     padding: clamp(34px, 6vh, 60px) var(--gut) clamp(72px, 11vh, 120px);
@@ -1162,4 +1221,60 @@
     width: 100%;
     justify-content: center;
   }
+}
+
+/* Le shell publié est clair. Les scènes de repli (commerce fermé ou retour
+   impossible) doivent donc retrouver une encre pleine au lieu d'hériter des
+   couleurs du tunnel sombre historique. */
+.tunnel .scene {
+  color: #090909;
+}
+
+.tunnel .oeil.oeil,
+.tunnel .lede.lede,
+.tunnel .etat,
+.tunnel .lien.lien {
+  color: #55555a;
+}
+
+.tunnel .geste.geste {
+  background-image: none;
+  color: #090909;
+  -webkit-text-fill-color: #090909;
+}
+
+.tunnel .gages.gages {
+  border-color: rgba(9, 9, 9, 0.16);
+  background: rgba(9, 9, 9, 0.16);
+}
+
+.tunnel .gages li {
+  background: #efefeb;
+}
+
+.tunnel .gages li > span {
+  color: #59595e;
+}
+
+.tunnel .gages li > strong {
+  color: #090909;
+}
+
+.tunnel .action.action {
+  border-color: #090909;
+  background: #090909;
+  color: #fff;
+}
+
+.tunnel .action.action:hover {
+  color: #fff;
+}
+
+.tunnel .barre {
+  border-color: rgba(9, 9, 9, 0.16);
+}
+
+.tunnel .lien.lien:hover,
+.tunnel .lien.lien:focus-visible {
+  color: #090909;
 }

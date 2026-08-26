@@ -78,7 +78,7 @@ export default function NotreHistoirePage() {
             <Image
               unoptimized
               alt="AJ Luxury — Alex — collection Apollon"
-              src="/images/client/hero-pourpre-model.webp"
+              src="/images/client/raw/product-lilas-model.webp"
               fill
               sizes="(max-width: 760px) 50vw, 44vw"
             />

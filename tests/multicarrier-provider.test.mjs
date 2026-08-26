@@ -67,6 +67,75 @@ function servicePointEnvelope(results) {
   };
 }
 
+function shippingProduct({
+  carrier = "colissimo",
+  code = "colissimo:international/home_delivery,signature",
+  lastMile = "home_delivery",
+  methodIds = [8101],
+  methodLastMile,
+  maxDimensions = { length: 100, width: 70, height: 58, unit: "centimeter" },
+} = {}) {
+  return {
+    name: `${carrier} product`,
+    code,
+    carrier,
+    service_points_carrier: carrier,
+    weight_range: { min_weight: 1, max_weight: 30_000 },
+    available_functionalities: { last_mile: [lastMile] },
+    methods: methodIds.map((id) => ({
+      id,
+      name: `${carrier} method ${id}`,
+      functionalities: methodLastMile === undefined ? {} : { last_mile: methodLastMile },
+      shipping_product_code: code,
+      properties: {
+        min_weight: 1,
+        max_weight: 30_000,
+        max_dimensions: maxDimensions,
+      },
+      lead_time_hours: { FR: { DE: 48 } },
+    })),
+  };
+}
+
+function quoteRequest(overrides = {}) {
+  return {
+    requestId: "quote-attempt-eu-fallback",
+    now: "2099-08-14T12:00:00.000Z",
+    ttlSeconds: 1800,
+    originCountryCode: "FR",
+    dutiesTerms: "EU_INCLUDED",
+    subtotalCents: 5998,
+    destination: { countryCode: "DE", postalCode: "10115", city: "Berlin" },
+    parcel: {
+      profileCode: "AJL_ENVELOPE_2_ITEMS_V1",
+      sourceVersion: "client-validated-2026-08-13",
+      itemCount: 2,
+      weightGrams: 250,
+      lengthMm: 400,
+      widthMm: 320,
+      heightMm: 40,
+    },
+    ...overrides,
+  };
+}
+
+function nullRateOffer({
+  id,
+  carrierCode,
+  carrierName,
+  shippingOptionCode,
+  deliveryMethodType,
+}) {
+  return offer({
+    id,
+    carrier: { code: carrierCode, logo_url: `https://example.test/${carrierCode}.svg`, name: carrierName },
+    checkout_identifier: { type: "shipping_option_code", value: shippingOptionCode },
+    delivery_method_type: deliveryMethodType,
+    cut_off_time: null,
+    shipping_rate: { value: null, currency: "EUR" },
+  });
+}
+
 test("Sendcloud delivery parser accepts only the documented V3 option shape", async () => {
   const parsed = await parseSendcloudDeliveryOptions({
     configuration_id: "configuration_1",
@@ -275,6 +344,320 @@ test("Sendcloud quote request matches the documented V3 request contract", async
     parcel_dimensions: { length: "40", width: "32", height: "4", unit: "cm" },
   });
   assert.equal(call.init.headers["Idempotency-Key"], undefined);
+});
+
+test("Sendcloud resolves null EU V3 rates from exact V2 products and EUR prices", async () => {
+  const calls = [];
+  const ports = createSendcloudProviderPorts(
+    { publicKey: "public_key", secretKey: "x".repeat(32) },
+    async (input, init) => {
+      const url = new URL(String(input));
+      calls.push({ url, init });
+      if (url.pathname === "/api/v3/checkout/delivery-options") {
+        return Response.json({
+          configuration_id: "configuration_eu",
+          delivery_options: [
+            nullRateOffer({
+              id: "colissimo-home",
+              carrierCode: "colissimo",
+              carrierName: "Colissimo",
+              shippingOptionCode: "colissimo:international/home_delivery,signature",
+              deliveryMethodType: "standard_delivery",
+            }),
+            nullRateOffer({
+              id: "mondial-point",
+              carrierCode: "mondial_relay",
+              carrierName: "Mondial Relay",
+              shippingOptionCode: "mondial_relay:service_point,international_dualapi/c2c",
+              deliveryMethodType: "service_point_delivery",
+            }),
+          ],
+        });
+      }
+      if (url.pathname === "/api/v2/shipping-products") {
+        const carrier = url.searchParams.get("carrier");
+        const lastMile = url.searchParams.get("last_mile");
+        if (carrier === "colissimo" && lastMile === "home_delivery") {
+          return Response.json([shippingProduct({ methodIds: [8101] })]);
+        }
+        if (carrier === "mondial_relay" && lastMile === "service_point") {
+          return Response.json([shippingProduct({
+            carrier: "mondial_relay",
+            code: "mondial_relay:service_point,international_dualapi",
+            lastMile: "service_point",
+            methodIds: [8202],
+            maxDimensions: { length: 120, width: 0, height: 0, unit: "centimeter" },
+          })]);
+        }
+      }
+      if (url.pathname === "/api/v2/shipping-price") {
+        const methodId = url.searchParams.get("shipping_method_id");
+        return Response.json([{
+          price: methodId === "8101" ? "10.27" : "5.33",
+          currency: "EUR",
+          to_country: "DE",
+          breakdown: [{ type: "price_without_insurance", label: "Label", value: 10.27 }],
+        }]);
+      }
+      return Response.json({}, { status: 404 });
+    },
+  );
+
+  const quotes = await ports.quotes.quote(quoteRequest());
+  assert.deepEqual(quotes.map((quote) => ({
+    amountCents: quote.amountCents,
+    carrierCode: quote.carrierCode,
+    deliveryMode: quote.deliveryMode,
+  })), [
+    { amountCents: 1027, carrierCode: "colissimo", deliveryMode: "home" },
+    { amountCents: 533, carrierCode: "mondial_relay", deliveryMode: "service_point" },
+  ]);
+  assert.equal(calls.length, 5);
+  const productCalls = calls.filter(({ url }) => url.pathname === "/api/v2/shipping-products");
+  assert.equal(productCalls.length, 2);
+  for (const { url, init } of productCalls) {
+    assert.equal(url.searchParams.get("from_country"), "FR");
+    assert.equal(url.searchParams.get("to_country"), "DE");
+    assert.equal(url.searchParams.get("to_postal_code"), "10115");
+    assert.equal(url.searchParams.get("weight"), "250");
+    assert.equal(url.searchParams.get("weight_unit"), "gram");
+    assert.equal(url.searchParams.get("length"), "400");
+    assert.equal(url.searchParams.get("length_unit"), "millimeter");
+    assert.equal(url.searchParams.get("width"), "320");
+    assert.equal(url.searchParams.get("height"), "40");
+    assert.equal(init.method, "GET");
+    assert.equal(init.redirect, "error");
+  }
+  const priceCalls = calls.filter(({ url }) => url.pathname === "/api/v2/shipping-price");
+  assert.deepEqual(
+    priceCalls.map(({ url }) => url.searchParams.get("shipping_method_id")).sort(),
+    ["8101", "8202"],
+  );
+  for (const { url } of priceCalls) {
+    assert.equal(url.searchParams.get("from_country"), "FR");
+    assert.equal(url.searchParams.get("to_country"), "DE");
+    assert.equal(url.searchParams.get("to_postal_code"), "10115");
+    assert.equal(url.searchParams.get("weight"), "250");
+    assert.equal(url.searchParams.get("weight_unit"), "gram");
+  }
+});
+
+test("Sendcloud keeps France on V3 and never invokes the EU fallback", async () => {
+  let calls = 0;
+  const ports = createSendcloudProviderPorts(
+    { publicKey: "public_key", secretKey: "x".repeat(32) },
+    async () => {
+      calls += 1;
+      return Response.json({
+        configuration_id: "configuration_fr",
+        delivery_options: [nullRateOffer({
+          id: "fr-null-rate",
+          carrierCode: "colissimo",
+          carrierName: "Colissimo",
+          shippingOptionCode: "colissimo:domestic/home",
+          deliveryMethodType: "standard_delivery",
+        })],
+      });
+    },
+  );
+  const quotes = await ports.quotes.quote(quoteRequest({
+    destination: { countryCode: "FR", postalCode: "75001", city: "Paris" },
+  }));
+  assert.deepEqual(quotes, []);
+  assert.equal(calls, 1);
+});
+
+test("Sendcloud prefers a real EU V3 rate and keeps non-EU null rates closed", async (t) => {
+  await t.test("priced EU option", async () => {
+    let calls = 0;
+    const ports = createSendcloudProviderPorts(
+      { publicKey: "public_key", secretKey: "x".repeat(32) },
+      async () => {
+        calls += 1;
+        return Response.json({
+          configuration_id: "configuration_de",
+          delivery_options: [offer({
+            cut_off_time: null,
+            carrier: {
+              code: "colissimo", logo_url: "https://example.test/colissimo.svg", name: "Colissimo",
+            },
+            checkout_identifier: {
+              type: "shipping_option_code",
+              value: "colissimo:international/home_delivery,signature",
+            },
+            shipping_rate: { value: "10.27", currency: "EUR" },
+          })],
+        });
+      },
+    );
+    const quotes = await ports.quotes.quote(quoteRequest());
+    assert.equal(quotes[0].amountCents, 1027);
+    assert.equal(calls, 1);
+  });
+
+  await t.test("non-EU null option", async () => {
+    let calls = 0;
+    const ports = createSendcloudProviderPorts(
+      { publicKey: "public_key", secretKey: "x".repeat(32) },
+      async () => {
+        calls += 1;
+        return Response.json({
+          configuration_id: "configuration_gb",
+          delivery_options: [nullRateOffer({
+            id: "gb-null-rate",
+            carrierCode: "colissimo",
+            carrierName: "Colissimo",
+            shippingOptionCode: "colissimo:international/home_delivery,signature",
+            deliveryMethodType: "standard_delivery",
+          })],
+        });
+      },
+    );
+    const quotes = await ports.quotes.quote(quoteRequest({
+      dutiesTerms: "DAP",
+      destination: { countryCode: "GB", postalCode: "SW1A 1AA", city: "London" },
+    }));
+    assert.deepEqual(quotes, []);
+    assert.equal(calls, 1);
+  });
+});
+
+test("Sendcloud EU fallback refuses ambiguous, inexact and cross-mode products", async (t) => {
+  const cases = [
+    {
+      name: "ambiguous matching methods",
+      products: [shippingProduct({ methodIds: [8101, 8102] })],
+    },
+    {
+      name: "inexact product prefix",
+      products: [shippingProduct({ code: "colissimo:international/home_delivery" })],
+    },
+    {
+      name: "c2c normalization on a non-Mondial-Relay carrier",
+      products: [shippingProduct({ code: "colissimo:international/home_delivery,signature/c2c" })],
+    },
+    {
+      name: "cross-mode product",
+      products: [shippingProduct({ lastMile: "service_point" })],
+    },
+    {
+      name: "cross-mode method override",
+      products: [shippingProduct({ methodLastMile: "service_point" })],
+    },
+  ];
+  for (const scenario of cases) {
+    await t.test(scenario.name, async () => {
+      let priceCalls = 0;
+      const ports = createSendcloudProviderPorts(
+        { publicKey: "public_key", secretKey: "x".repeat(32) },
+        async (input) => {
+          const url = new URL(String(input));
+          if (url.pathname === "/api/v3/checkout/delivery-options") {
+            return Response.json({
+              configuration_id: "configuration_eu",
+              delivery_options: [nullRateOffer({
+                id: "colissimo-home",
+                carrierCode: "colissimo",
+                carrierName: "Colissimo",
+                shippingOptionCode: "colissimo:international/home_delivery,signature",
+                deliveryMethodType: "standard_delivery",
+              })],
+            });
+          }
+          if (url.pathname === "/api/v2/shipping-products") {
+            return Response.json(scenario.products);
+          }
+          priceCalls += 1;
+          return Response.json([{
+            price: "10.27", currency: "EUR", to_country: "DE", breakdown: [],
+          }]);
+        },
+      );
+      assert.deepEqual(await ports.quotes.quote(quoteRequest()), []);
+      assert.equal(priceCalls, 0);
+    });
+  }
+});
+
+test("Sendcloud EU fallback refuses null, free, non-EUR and ambiguous prices", async (t) => {
+  const cases = [
+    {
+      name: "null provider price",
+      prices: [{ price: null, currency: null, to_country: "DE", breakdown: [] }],
+    },
+    {
+      name: "zero provider price",
+      prices: [{ price: "0.00", currency: "EUR", to_country: "DE", breakdown: [] }],
+    },
+    {
+      name: "unsupported currency",
+      prices: [{ price: "10.27", currency: "USD", to_country: "DE", breakdown: [] }],
+    },
+    {
+      name: "multiple destination prices",
+      prices: [
+        { price: "10.27", currency: "EUR", to_country: "DE", breakdown: [] },
+        { price: "9.00", currency: "EUR", to_country: "DE", breakdown: [] },
+      ],
+    },
+    {
+      name: "wrong destination",
+      prices: [{ price: "10.27", currency: "EUR", to_country: "BE", breakdown: [] }],
+    },
+  ];
+  for (const scenario of cases) {
+    await t.test(scenario.name, async () => {
+      const ports = createSendcloudProviderPorts(
+        { publicKey: "public_key", secretKey: "x".repeat(32) },
+        async (input) => {
+          const url = new URL(String(input));
+          if (url.pathname === "/api/v3/checkout/delivery-options") {
+            return Response.json({
+              configuration_id: "configuration_eu",
+              delivery_options: [nullRateOffer({
+                id: "colissimo-home",
+                carrierCode: "colissimo",
+                carrierName: "Colissimo",
+                shippingOptionCode: "colissimo:international/home_delivery,signature",
+                deliveryMethodType: "standard_delivery",
+              })],
+            });
+          }
+          if (url.pathname === "/api/v2/shipping-products") {
+            return Response.json([shippingProduct()]);
+          }
+          return Response.json(scenario.prices);
+        },
+      );
+      assert.deepEqual(await ports.quotes.quote(quoteRequest()), []);
+    });
+  }
+});
+
+test("Sendcloud EU fallback rejects malformed product responses instead of guessing", async () => {
+  const ports = createSendcloudProviderPorts(
+    { publicKey: "public_key", secretKey: "x".repeat(32) },
+    async (input) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/api/v3/checkout/delivery-options") {
+        return Response.json({
+          configuration_id: "configuration_eu",
+          delivery_options: [nullRateOffer({
+            id: "colissimo-home",
+            carrierCode: "colissimo",
+            carrierName: "Colissimo",
+            shippingOptionCode: "colissimo:international/home_delivery,signature",
+            deliveryMethodType: "standard_delivery",
+          })],
+        });
+      }
+      return Response.json([{ carrier: "colissimo", code: "colissimo:international" }]);
+    },
+  );
+  await assert.rejects(
+    () => ports.quotes.quote(quoteRequest()),
+    (error) => error instanceof DeliveryProviderError && error.code === "MALFORMED_RESPONSE",
+  );
 });
 
 test("Sendcloud response streaming cancels above the byte limit without Content-Length", async () => {

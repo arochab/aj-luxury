@@ -47,6 +47,7 @@ const migrationNames = [
   "0018_volatile_blob.sql",
   "0019_provider_configuration_attestation.sql",
   "0020_launch_stock_current_grid.sql",
+  "0021_paid_order_confirmations.sql",
 ];
 const legacyMigrationNames = migrationNames.slice(0, 8);
 // Hosted D1 bootstrap version 1 succeeded with exactly these LF-normalized
@@ -78,7 +79,7 @@ test("the exact Drizzle D1 splitter emits no blank statements", () => {
   assert.equal(migrations.length, migrationNames.length);
   assert.equal(
     migrations.reduce((total, migration) => total + migration.sql.length, 0),
-    524,
+    532,
   );
   for (const [migrationIndex, migration] of migrations.entries()) {
     for (const [statementIndex, statement] of migration.sql.entries()) {
@@ -533,7 +534,10 @@ test("real local D1 applies the governed chain, upgrades populated 0004 and repl
     "ux_email_outbox_intent_source",
     "ux_email_outbox_payment_confirmation_order",
     "ux_email_outbox_provider_idempotency_key",
-  ]) assert.ok(outboxIndexes.includes(indexName));
+  ]) assert.ok(
+    outboxIndexes.includes(indexName),
+    `${indexName} missing from email_outbox indexes: ${outboxIndexes.join(", ")}`,
+  );
   const outboxTriggers = query(
     upgradeRoot,
     upgradeConfig,

@@ -50,7 +50,7 @@ const controlled = Object.freeze({
   SENDCLOUD_PUBLIC_KEY: "public-redacted",
   SENDCLOUD_SECRET_KEY: "secret-redacted-secret",
   SENDCLOUD_INTEGRATION_ID: "612109",
-  SENDCLOUD_SENDER_ADDRESS_ID: "sender_ajl_001",
+  SENDCLOUD_SENDER_ADDRESS_ID: "884432",
   EMAIL_PROVIDER: "resend",
   RESEND_API_KEY: "re_redacted",
   RESEND_WEBHOOK_SECRET: "whsec_resend_redacted",
@@ -187,13 +187,13 @@ test("health rejects non-GET methods", async () => {
   assert.equal(response.status, 405);
 });
 
-test("controlled routes require the authenticated owner before touching D1", async () => {
+test("Worker keeps controlled routes closed while visible legal terms are not ready", async () => {
   const response = await productionCommerceApiResponse(
     new Request("https://ajluxurystore.com/api/commerce/cart"),
     controlled,
   );
-  assert.equal(response.status, 403);
-  assert.equal((await response.json()).error.code, "CONTROLLED_ACCESS_REQUIRED");
+  assert.equal(response.status, 503);
+  assert.equal((await response.json()).error.code, "COMMERCE_CLOSED");
 });
 
 test("the one-shot stock importer is wired before the stock gate but bound to owner, SHA and exact manifest", async () => {
@@ -308,7 +308,7 @@ test("live runtime opens only after the manual returns label and refund process 
   }, "live").includes("returns-label-and-refund-process-unapproved"), false);
 });
 
-test("cart creation rejects a missing exact origin before touching D1", async () => {
+test("legal release blocker closes cart creation before origin or D1 evaluation", async () => {
   const headers = await authenticatedOwnerHeaders("POST", "/api/commerce/cart");
   const response = await productionCommerceApiResponse(
     new Request("https://ajluxurystore.com/api/commerce/cart", {
@@ -317,11 +317,11 @@ test("cart creation rejects a missing exact origin before touching D1", async ()
     }),
     controlled,
   );
-  assert.equal(response.status, 403);
-  assert.equal((await response.json()).error.code, "ORIGIN_REJECTED");
+  assert.equal(response.status, 503);
+  assert.equal((await response.json()).error.code, "COMMERCE_CLOSED");
 });
 
-test("service-point purchase remains 503 until exact 0013 schema is installed", async () => {
+test("service-point purchase remains closed while legal terms are not ready", async () => {
   const cartToken = "A".repeat(43);
   const csrfToken = "B".repeat(43);
   const headers = await authenticatedOwnerHeaders("POST", "/api/commerce/checkout/service-points");
@@ -340,7 +340,7 @@ test("service-point purchase remains 503 until exact 0013 schema is installed", 
     controlled,
   );
   assert.equal(response.status, 503);
-  assert.equal((await response.json()).error.code, "DELIVERY_SCHEMA_NOT_READY");
+  assert.equal((await response.json()).error.code, "COMMERCE_CLOSED");
 });
 
 test("delivery runtime proof rejects missing and prefix-colliding 0013 objects", async () => {
@@ -498,7 +498,7 @@ test("live stock attestation recomputes the exact 12-line manifest and controlle
   assert.equal(await productionStockRuntimeAttested({ ...env, STRIPE_ACCOUNT_ID: "acct_DIFFERENT123456" }), false);
 });
 
-test("controlled payment session stays closed until refund schema and dispatcher are ready", async () => {
+test("controlled payment session stays closed while legal terms are not ready", async () => {
   const cartToken = "A".repeat(43);
   const csrfToken = "B".repeat(43);
   const headers = await authenticatedOwnerHeaders("POST", "/api/commerce/checkout/payment-session");
@@ -517,7 +517,7 @@ test("controlled payment session stays closed until refund schema and dispatcher
     controlled,
   );
   assert.equal(response.status, 503);
-  assert.equal((await response.json()).error.code, "CONTROLLED_PAYMENT_RUNTIME_NOT_READY");
+  assert.equal((await response.json()).error.code, "COMMERCE_CLOSED");
 });
 
 test("late-refund runtime proof rejects terminal debt and prefix-colliding 0014 objects", async () => {

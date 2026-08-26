@@ -8,6 +8,7 @@ export const transactionalEmailProviderClosed = Object.freeze({
 } as const);
 
 export type EmailOutboxKind =
+  | "order_confirmation"
   | "payment_confirmation"
   | "payment_failed"
   | "shipment_confirmation"
@@ -109,6 +110,9 @@ function providerIdempotencyKey(input: Readonly<{
 }>): string {
   if (input.kind === "payment_confirmation") {
     return `payment_confirmation:${input.orderId}`;
+  }
+  if (input.kind === "order_confirmation") {
+    return `order_confirmation:${input.orderId}`;
   }
   return `${input.kind}:${input.sourceEventId}`;
 }
@@ -222,6 +226,7 @@ export class D1EmailOutbox {
       throw new EmailOutboxError("INVALID_INPUT", "Unexpected access challenge.");
     }
     const intents: Record<EmailOutboxKind, string> = {
+      order_confirmation: "payment_succeeded",
       payment_confirmation: "payment_succeeded",
       payment_failed: "payment_failed",
       shipment_confirmation: "shipment_created",
@@ -265,13 +270,13 @@ export class D1EmailOutbox {
       )
       .run();
     let selection: Readonly<{ sql: string; value: string }>;
-    if (input.kind === "payment_confirmation") {
+    if (input.kind === "payment_confirmation" || input.kind === "order_confirmation") {
       assertId(orderId, "Order id");
       selection = Object.freeze({
         sql: `SELECT id, kind, source_event_id, recipient_email, order_id,
           access_challenge_id, locale, template_version, payload_json,
           idempotency_key, provider_idempotency_key FROM email_outbox
-          WHERE kind = 'payment_confirmation' AND order_id = ?`,
+          WHERE kind = '${input.kind}' AND order_id = ?`,
         value: orderId,
       });
     } else {

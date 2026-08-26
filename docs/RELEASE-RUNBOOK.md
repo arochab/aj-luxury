@@ -2,6 +2,53 @@
 
 ## Release gate
 
+### Canonical launch inventory
+
+The launch gate uses the verified current physical stock, not the historical
+initial purchase quantity:
+
+- 756 units initially recorded;
+- 4 units already sold and 3 gifts already given, leaving 749 physical units;
+- 23 additional units reserved for gifts at launch, for 26 gifts in total;
+- 726 units sellable now, exactly 242 per colour.
+
+| Colour | S | M | L | XL | Sellable |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Pourpre | 24 | 100 | 85 | 33 | 242 |
+| Lilas | 24 | 99 | 86 | 33 | 242 |
+| Rose | 24 | 100 | 85 | 33 | 242 |
+| **Total** | **72** | **299** | **256** | **99** | **726** |
+
+This launch allocation comes from Adam's instruction applied to the verified
+stock sheet; it is not presented as a supplier fact. The remaining 23-gift
+reserve is Pourpre 2/2/2/2, Lilas 2/1/2/2 and Rose 2/2/2/2 for S/M/L/XL.
+Together with the three M gifts already given (Pourpre 1, Lilas 1, Rose 1), all
+variants have two total gift units except Pourpre M and Rose M, which have three.
+Dynamic packs continue to draw from these sellable variants, including packs
+whose pieces share the same colour.
+
+The controlled stock import must be executed once, through its owner-only and
+idempotent route, from the exact controlled Worker version that is recorded by
+the stock attestation. Keep `PRODUCTION_STOCK_IMPORT_ENABLED=true` on that
+single controlled version: publishing a second controlled version merely to
+turn the flag off would change the Worker version ID and invalidate the
+attestation. Close the import when promoting the separate `live` version, and
+set `COMMERCE_PROMOTED_FROM_VERSION_ID` there to the recorded controlled Worker
+version ID. The unresolved mediator blocker still keeps both controlled payment
+and public commerce closed until the visible legal terms are finalized.
+
+### Provider identity attestation
+
+The release evidence must bind the runtime to these verified public identities;
+credentials remain secret and are never copied into this runbook:
+
+- Stripe account `acct_1U4iFTC0NIklfc9C`;
+- Sendcloud integration `612109` (`AJ Luxury Site officiel`);
+- Sendcloud sender address `884432` (`AJ Luxury`, Belmont 67130, France);
+- verified Resend domain `ajluxurystore.com`.
+
+Any different identity closes the release gate pending a new dated verification.
+
 A production release is anchored by both:
 
 1. an immutable Git commit SHA containing only the approved AJ Luxury scope;

@@ -377,6 +377,7 @@ test("detached Sites build keeps migrations out of the frontend while Wrangler a
       "0018_volatile_blob.sql",
       "0019_provider_configuration_attestation.sql",
       "0020_launch_stock_current_grid.sql",
+      "0021_paid_order_confirmations.sql",
     ],
   );
 

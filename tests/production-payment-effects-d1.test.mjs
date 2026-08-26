@@ -15,7 +15,7 @@ import { productionReleaseSchemaInstalled } from "../worker/production-commerce-
 
 const directory = fileURLToPath(new URL("../drizzle/", import.meta.url));
 const migrations = readdirSync(directory)
-  .filter((name) => /^(?:000[0-7]|0009|001[0-9])_.+\.sql$/.test(name))
+  .filter((name) => /^(?:000[0-7]|0009|001[0-9]|002[01])_.+\.sql$/.test(name))
   .sort();
 class Statement {
   constructor(database, query, values = []) { this.database = database; this.query = query; this.values = values; }
@@ -68,7 +68,7 @@ async function fixture(
   const delivery = new D1ProductionDeliveryActivationStore(d1, { quotes: { async quote() { return [{ providerCode: "sendcloud", providerQuoteReference: "provider-ref-home", carrierCode: "colissimo", serviceCode: "home", displayName: "Livraison domicile", deliveryMode: "home", amountCents: 900, currency: "EUR", estimatedDaysMin: 2, estimatedDaysMax: 5, dutiesTerms: "EU_INCLUDED", expiresAt: expiry, responseFingerprint: "c".repeat(64) }]; } }, servicePoints: { async servicePoints() { return []; } }, documents: { async document() { throw new Error("closed"); } }, returns: { async validate() { throw new Error("closed"); }, async create() { throw new Error("closed"); } } }, new DeliveryReferenceVault({ encryptionKeyBase64: Buffer.alloc(32, 7).toString("base64"), keyVersion: 1 }));
   const [option] = await delivery.quoteOptions({ cartId: "cart_prod", address, idempotencyKey: "delivery-idem-0001", now: iso(base, 50) });
   const checkout = new D1ProductionCheckoutStore(d1);
-  await checkout.createOrder({ cartId: "cart_prod", quoteId: option.quoteId, optionId: option.optionId, address, email: "ada@example.com", idempotencyKey: "order-idem-0001", termsVersion: "2026-07-30", privacyVersion: "2026-07-30", now: iso(base, 60) });
+  await checkout.createOrder({ cartId: "cart_prod", quoteId: option.quoteId, optionId: option.optionId, address, email: "ada@example.com", idempotencyKey: "order-idem-0001", termsVersion: "2026-08-26", privacyVersion: "2026-07-30", now: iso(base, 60) });
   const request = await checkout.prepareCheckoutSession({ cartId: "cart_prod", idempotencyKey: "payment-idem-0001", origin: "https://ajluxurystore.com", locale: "fr", now: iso(base, 70) });
   const sessionId = livemode ? "cs_live_fixture_001" : "cs_test_fixture_001";
   const totalCents = ({ 1: 2999, 2: 4999, 3: 6999 })[quantity] + 900;
@@ -125,8 +125,28 @@ test("paid Checkout event atomically pays, sells stock, closes cart and enqueues
   assert.equal(sqlite.prepare("SELECT status FROM carts WHERE id='cart_prod'").get().status, "converted");
   assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM stock_reservations WHERE status='converted'").get().n, 1);
   assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM inventory_movements WHERE kind='sale'").get().n, 1);
-  const outbox = sqlite.prepare("SELECT payload_json,status FROM email_outbox WHERE order_id=?").get(event.orderId);
-  assert.equal(outbox.status, "pending"); assert.deepEqual(Object.keys(JSON.parse(outbox.payload_json)).sort(), ["subject", "text"]);
+  const outbox = sqlite.prepare("SELECT kind,payload_json,status FROM email_outbox WHERE order_id=? ORDER BY kind").all(event.orderId);
+  assert.deepEqual(outbox.map(({ kind, status }) => ({ kind, status })), [
+    { kind: "order_confirmation", status: "pending" },
+    { kind: "payment_confirmation", status: "pending" },
+  ]);
+  for (const message of outbox) {
+    const payload = JSON.parse(message.payload_json);
+    assert.deepEqual(Object.keys(payload).sort(), ["subject", "text"]);
+    assert.match(payload.text, /TVA : 0,00 €/);
+    assert.match(payload.text, /article 293 B du Code général des impôts/);
+    if (message.kind === "order_confirmation") {
+      assert.match(payload.text, /Apollon · Pourpre Impérial · Taille M × 1/);
+      assert.match(payload.text, /Livraison \(Livraison domicile · À domicile\) : 9,00 €/);
+      assert.match(payload.text, /Adresse de livraison : Ada Test, 1 rue du Test, 75001 Paris, FR/);
+      assert.match(payload.text, /version 2026-08-26 : https:\/\/ajluxurystore\.com\/terms\?version=2026-08-26/);
+      assert.match(payload.text, /Empreinte SHA-256 du snapshot contractuel : [0-9a-f]{64}/);
+      assert.match(payload.text, /CONDITIONS GÉNÉRALES DE VENTE AJ LUXURY/);
+    } else {
+      assert.match(payload.text, /Montant payé : 38,99 €/);
+      assert.doesNotMatch(payload.text, /SNAPSHOT CONTRACTUEL/);
+    }
+  }
   assert.equal(await effects.applyVerified(event), "duplicate");
   assert.equal(await effects.applyVerified({ ...event, providerEventId: "evt_fixture_paid_002" }), "duplicate");
   assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM webhook_events").get().n, 1);

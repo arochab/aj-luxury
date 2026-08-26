@@ -47,7 +47,7 @@ export default function CheckoutSuccessPage() {
   const runtimeMode = getServerCommerceRuntimeMode();
   const commerceOuvert = runtimeMode !== "closed";
   return (
-    <main className={`${styles.shell} ${tunnel.sol}`}>
+    <main className={styles.shell}>
       <StoreHeader />
       {/*
         `.moment` : la classe qui fait de cet écran une arrivée et non un
@@ -92,7 +92,7 @@ export default function CheckoutSuccessPage() {
         <span className={tunnel.sceau} aria-hidden="true" />
 
         {runtimeMode === "production" ? (
-          <div className={tunnel.commerce}>
+          <div>
             <ProductionCheckoutSuccessClient />
           </div>
         ) : (

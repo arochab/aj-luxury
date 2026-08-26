@@ -438,6 +438,15 @@ async function render(pathname = "/", headers = {}) {
   });
 }
 
+function assertDomAssetOrder(html, paths, label) {
+  let cursor = -1;
+  for (const path of paths) {
+    const next = html.indexOf(`src="${path}`, cursor + 1);
+    assert.ok(next > cursor, `${label} : actif absent ou hors ordre : ${path}`);
+    cursor = next;
+  }
+}
+
 test("public HTML advertises shared caching without using the forbidden Cache API", async () => {
   let cacheAccesses = 0;
   const originalCaches = Object.getOwnPropertyDescriptor(globalThis, "caches");
@@ -639,33 +648,31 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
   assert.match(html, /Pourpre Impérial/);
   assert.match(html, /Rose Velours/);
   assert.match(html, /Lilas Céleste/);
-  /* ── LE CONTRAT DE L'ACCUEIL v10 ──────────────────────────────────────
-     Le document garde l'ordre production et les vrais assets AJ, puis ajoute
-     sa mise en scène uniquement au client. Le HTML initial reste achetable,
-     lisible et complet sans attendre GSAP. */
-  assert.match(html, /<main class="aj-home aj-home-v10">/);
-  assert.match(html, /id="home10-title"/);
+  /* Le contrat du live est volontairement statique : le poster client est le
+     seul hero, présent dès le HTML initial, sans lecteur vidéo ni asset tiers. */
+  assert.match(html, /<main class="aj-home [^"]+">/);
+  assert.match(html, /data-hero-version="poster-v4-static"/);
   assert.match(html, /Reveal Your[\s\S]*Inner Beauty/);
   assert.match(
     html,
     /hero-v4-tablet-1440x810-poster\.webp"[^>]*fetchPriority="high"[^>]*decoding="async"/,
   );
   assert.match(html, /hero-v4-portrait-480x623-poster\.webp/);
+  assert.match(html, /hero-v4-portrait-720x934-poster\.webp/);
   assert.match(html, /product-rose-model\.webp/);
+  assert.match(html, /campaign-duo-pourpre\.webp/);
   assert.match(html, /editorial-lilas-chair\.webp/);
-  assert.match(html, /shoot\/pourpre-seated\.webp/);
-  assert.match(html, /shoot\/lilas-seated\.webp/);
-  assert.match(html, /shoot\/rose-standing-jeremy\.webp/);
+  assert.match(html, /editorial-pourpre-chair\.webp/);
+  assert.match(html, /campaign-duo-lilas-seated\.webp/);
+  assert.match(html, /editorial-rose-profile\.webp/);
 
   /* Les trois produits canoniques et leurs routes PDP existent au premier
      rendu. La motion ne porte jamais la responsabilité du contenu commerce. */
-  assert.equal((html.match(/data-motion="collection-card"/g) ?? []).length, 3);
+  assert.equal((html.match(/class="aj-product-card"/g) ?? []).length, 3);
   assert.match(html, /product-rose-profile\.webp"[^>]*loading="lazy"[^>]*fetchPriority="low"/);
   assert.match(html, /product-lilas-model\.webp"[^>]*loading="lazy"[^>]*fetchPriority="low"/);
   assert.match(html, /product-card-pourpre\.webp"[^>]*loading="lazy"[^>]*fetchPriority="low"/);
-  assert.match(html, /href="#apollon"[^>]*>Aller au contenu principal<\/a>/);
-  assert.equal((html.match(/data-motion="collection-step"/g) ?? []).length, 3);
-  assert.equal((html.match(/aria-pressed="(?:true|false)"/g) ?? []).length, 3);
+  assert.match(html, /href="#apollon"[^>]*>[\s\S]*Découvrir/);
   assert.match(html, /href="\/products\/rose-pale"/);
   assert.match(html, /href="\/products\/lilas-bleu-clair"/);
   assert.match(html, /href="\/products\/pourpre"/);
@@ -676,6 +683,22 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
     html,
     /product-card-pourpre\.webp[\s\S]*product-rose-profile\.webp[\s\S]*product-lilas-model\.webp/,
   );
+  assertDomAssetOrder(
+    html,
+    [
+      "/images/client/hero-v4-tablet-1440x810-poster.webp",
+      "/images/client/product-rose-model.webp",
+      "/images/client/campaign-duo-pourpre.webp",
+      "/images/client/editorial-lilas-chair.webp",
+      "/images/client/raw/product-card-pourpre.webp",
+      "/images/client/raw/product-rose-profile.webp",
+      "/images/client/raw/product-lilas-model.webp",
+      "/images/client/editorial-pourpre-chair.webp",
+      "/images/client/campaign-duo-lilas-seated.webp",
+      "/images/client/editorial-rose-profile.webp",
+    ],
+    "accueil live",
+  );
   assert.match(
     html,
     /Chez AJ Luxury,[\s\S]*le véritable luxe commence[\s\S]*au plus près de soi/,
@@ -683,7 +706,8 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
 
   /* Aucun film, rendu métallique, asset généré ni classe CSS invalide ne doit
      réapparaître dans le document réellement servi. */
-  assert.doesNotMatch(html, /<video|data-metallic-mounted|metallic-field__canvas|Figer le métal/);
+  assert.doesNotMatch(html, /<video|<iframe|data-metallic-mounted="true"|metallic-field__canvas|Figer le métal/);
+  assert.doesNotMatch(html, /https?:\/\/(?!ajluxurystore\.com)/i);
   assert.doesNotMatch(html, /generated_images|hero-figures|identity-overlay|hero-v[67]-|apollon-world/);
   assert.doesNotMatch(html, /class="[^"]*\bundefined\b/);
 
@@ -699,18 +723,57 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
   assert.doesNotMatch(html, /pika|Signature 01|Contour 02|Ligne 03|Motion 04|Libre 05|iStock|Getty/i);
 });
 
-/* Tailles de galerie depuis la reprise des fiches du 19/08 (natures mortes) :
-   pourpre 5, rose 4, lilas 3. L'ancienne garde « >= 4 placeholders » était un
-   proxy calibré sur le catalogue d'avant ; l'invariant exact est plus fort —
-   chaque cadre porte son placeholder, la vue principale portant EN PLUS la
-   seule image pleine résolution : n placeholders, 1 full. */
+/* Chaque cadre porte son placeholder, la vue principale portant en plus la
+   seule image pleine résolution. Les recommandations suivent ensuite l'ordre
+   exact observé sur le DOM public. */
 const productCases = [
-  ["/products/pourpre", "Pourpre Impérial", 5],
-  ["/products/rose-pale", "Rose Velours", 4],
-  ["/products/lilas-bleu-clair", "Lilas Céleste", 3],
+  [
+    "/products/pourpre",
+    "Pourpre Impérial",
+    5,
+    [
+      "/images/client/raw/product-card-pourpre.webp",
+      "/images/client/raw/product-card-pourpre-placeholder-v1.webp?v=v1",
+      "/images/client/raw/product-pourpre-detail-placeholder-v1.webp?v=v1",
+      "/images/client/raw/product-pourpre-back-placeholder-v1.webp?v=v1",
+      "/images/client/raw/product-pourpre-alt-placeholder-v1.webp?v=v1",
+      "/images/client/editorial-pourpre-chair-placeholder-v1.webp?v=v1",
+      "/images/client/raw/product-rose-profile.webp",
+      "/images/client/raw/product-lilas-model.webp",
+    ],
+  ],
+  [
+    "/products/rose-pale",
+    "Rose Velours",
+    4,
+    [
+      "/images/client/raw/product-rose-profile.webp",
+      "/images/client/raw/product-rose-profile-placeholder-v1.webp?v=v1",
+      "/images/client/raw/product-card-rose-placeholder-v1.webp?v=v1",
+      "/images/client/raw/product-rose-front-placeholder-v1.webp?v=v1",
+      "/images/client/raw/product-rose-detail-placeholder-v1.webp?v=v1",
+      "/images/client/raw/product-card-pourpre.webp",
+      "/images/client/raw/product-lilas-model.webp",
+    ],
+  ],
+  [
+    "/products/lilas-bleu-clair",
+    "Lilas Céleste",
+    5,
+    [
+      "/images/client/raw/product-lilas-model.webp",
+      "/images/client/raw/product-lilas-model-placeholder-v1.webp?v=v1",
+      "/images/client/editorial-lilas-chair-placeholder-v1.webp?v=v1",
+      "/images/client/raw/product-lilas-detail-placeholder-v1.webp?v=v1",
+      "/images/client/raw/product-lilas-back-placeholder-v1.webp?v=v1",
+      "/images/client/raw/product-lilas-front-placeholder-v1.webp?v=v1",
+      "/images/client/raw/product-card-pourpre.webp",
+      "/images/client/raw/product-rose-profile.webp",
+    ],
+  ],
 ];
 
-for (const [pathname, colorName, galerie] of productCases) {
+for (const [pathname, colorName, galerie, assetOrder] of productCases) {
   test(`server-renders ${pathname}`, async () => {
     const response = await render(pathname);
     assert.equal(response.status, 200);
@@ -718,13 +781,11 @@ for (const [pathname, colorName, galerie] of productCases) {
     const html = await response.text();
     assert.match(html, /Apollon/);
     assert.match(html, new RegExp(colorName));
-    /* Libelle corrige le 22/08 : quatre documents internes disent que
-       29,99 EUR est le prix VALIDE par le client, donc l'annoncer fictif etait
-       faux. Le garde-fou reste le meme — un montant nu se lirait comme une
-       offre active alors que la vente n'est pas ouverte. */
-    assert.match(html, /Vente non encore ouverte/);
+    /* En production, le prix valide et le moteur de packs sont commandables.
+       L'ancien libelle de fermeture ne doit plus contredire ce parcours. */
+    assert.doesNotMatch(html, /Vente non encore ouverte/);
     assert.match(html, /29,99(?:\s|&nbsp;|&#xA0;)*€/);
-    assert.match(html, /Sélectionnez une taille/);
+    assert.match(html, /Choisir une taille/);
     assert.match(
       html,
       /94\s*%\s*modal\s*(?:,|–|-|et)\s*6\s*%\s*élasthanne/,
@@ -744,7 +805,9 @@ for (const [pathname, colorName, galerie] of productCases) {
       galerie,
       "every gallery frame keeps a lightweight visual placeholder",
     );
-    assert.match(html, /Disponibilité simulée/);
+    assertDomAssetOrder(html, assetOrder, `${pathname} live`);
+    assert.doesNotMatch(html, /images\/editorial\/isabelle-apollon/);
+    assert.match(html, /Disponibilité vérifiée lors de l’ajout au panier/);
     assert.match(html, />Accueil</);
     assert.match(
       html,
@@ -779,18 +842,17 @@ test("server-renders the real boutique and its complete navigation", async () =>
   assert.equal(response.status, 200);
   const html = await response.text();
   assert.match(html, /<h1[^>]*>Apollon<\/h1>/);
-  /* Depuis la reprise du 19/08, la boutique NOMME les coloris au lieu de les
-     compter — « Coloris : Rose Velours · Lilas Céleste · Pourpre Impérial ». */
-  assert.match(
-    html,
-    /Coloris[\s\S]*Rose Velours[\s\S]*Lilas Céleste[\s\S]*Pourpre Impérial/,
-  );
+  assert.match(html, />3 coloris</);
   assert.match(html, /Pourpre Impérial/);
   assert.match(html, /Rose Velours/);
   assert.match(html, /Lilas Céleste/);
   assert.match(html, /href="\/products\/pourpre"/);
   assert.match(html, /href="\/products\/rose-pale"/);
   assert.match(html, /href="\/products\/lilas-bleu-clair"/);
+  assert.match(
+    html,
+    /product-card-pourpre\.webp[\s\S]*product-rose-profile\.webp[\s\S]*product-lilas-model\.webp/,
+  );
   assert.match(html, />Accueil</);
   assert.match(
     html,
@@ -823,37 +885,22 @@ test("server-renders the complete AJ Luxury story", async () => {
   assert.equal(response.status, 200);
   const html = await response.text();
   assert.match(html, /Notre histoire/);
-  // Les trois mouvements sont nommés, plus jamais numérotés (retour du 19/08).
+  // Le runtime publié est la version courte en trois actes numérotés.
   assert.doesNotMatch(html, /Le marbre|La lyre|Le laurier/);
-  assert.doesNotMatch(html, /<p[^>]*>0[123]<\/p>/);
-  assert.match(html, /Le vêtement que personne ne voit/);
-  assert.match(html, /Jérémy et Alex/);
-  // La seule prise de parole signée du site, et le seul endroit où le double
-  // rôle fondateurs/mannequins est explicité.
-  assert.match(html, /Apollon est notre premier modèle\. Il ne sera pas le dernier\./);
-  assert.match(html, /et les deux corps de toutes ces images/);
+  assert.equal((html.match(/<p[^>]*>0[123]<\/p>/g) ?? []).length, 3);
+  assert.match(html, /Le point de départ/);
+  assert.match(html, /Alex (?:&amp;|&#x26;) Jérémy/);
   assert.match(html, /Pas d’excès\. Simplement la justesse des détails\./);
-  // Retour n°4, 19/08. Les deux portraits sont la seule référence NOMINATIVE
-  // du site : un prénom écrit sous un visage. Ils portaient Jérémy en Rose et
-  // Alex en Lilas, soit l'inverse de ce que montrent l'accueil, /shop et les
-  // fiches. Chacun porte désormais son coloris, et cette page ne peut plus
-  // dériver sans casser ce test.
-  assert.match(html, /editorial-lilas-chair\.webp/); // Jérémy — Lilas Céleste
-  assert.match(html, /hero-pourpre-model\.webp/); // Alex — Pourpre Impérial
-  assert.doesNotMatch(html, /story-jeremy-retouched\.jpeg/);
-  assert.doesNotMatch(html, /product-lilas-model\.webp/);
-  assert.match(html, /campaign-duo-pourpre\.webp/);
+  assert.match(html, /campaign-duo-lilas-seated\.webp/);
+  assert.match(html, /product-lilas-model\.webp/);
+  assert.match(html, /story-jeremy-retouched\.jpeg/);
   assert.match(html, /product-pourpre-detail\.webp/);
   assert.match(html, />Accueil</);
   assert.match(
     html,
     /href="\/notre-histoire"[^>]*aria-current="page"[^>]*>Notre histoire</,
   );
-  assert.doesNotMatch(html, /Le premier chapitre/);
-  /* L'interdit « pas de fiche technique dans le recit » est tombe avec la
-     section Le Laurier (reprise du recit, 19-20/08) : la matiere y est
-     presentee en composition — 94 MODAL · 6 ELASTHANNE — et cette section
-     fait partie du design courant, verifie par captures le 21/08. */
+  assert.doesNotMatch(html, /Le premier chapitre|94\s*%\s*modal|6\s*%\s*élasthanne/i);
   assert.doesNotMatch(
     html,
     /intention d’image|casting|futurs? shootings?|compte officiel à confirmer/i,
@@ -916,12 +963,15 @@ test("legal notice publishes the sourced seller identity and never the closed es
   assert.doesNotMatch(html, /\bTTC\b/);
   assert.match(html, /TVA non applicable, article 293 B/);
 
-  /* AUCUN TEXTE D'ATTENTE NE RESTE VISIBLE. Adam confirme le 22/08 qu'aucune
-     ligne telephonique n'est ouverte. La ligne « Telephone » est donc omise
-     plutot que remplie d'un « a completer » : le placeholder ne satisfaisait
-     pas la LCEN et signalait en plus une marque non prete. Le manque est
-     porte par PRELAUNCH_BLOCKERS, pas par la page publique. */
+  /* La ligne editeur reste omise quand le telephone est null, sans attirer
+     l'attention du client sur cette decision temporaire. Le seul gate legal
+     visible et runtime est la publication du mediateur de la consommation. */
   assert.doesNotMatch(html, /À compléter/);
+  assert.doesNotMatch(html, /Aucun numéro de téléphone|ligne professionnelle/i);
+  assert.match(
+    html,
+    /vente en ligne activée après publication du médiateur de la consommation désigné/i,
+  );
 
   /* Attention au faux positif : l'hebergeur AFFICHE un telephone, celui de
      Cloudflare France. Interdire la chaine « Telephone » ferait echouer le
@@ -1008,9 +1058,8 @@ test("cart renders a secure loading state and ignores legacy URL variants", asyn
   );
   assert.equal(response.status, 200);
   const html = await response.text();
-  assert.match(html, /prix et stocks simulés, non commerciaux/i);
+  assert.match(html, /Votre panier/i);
   assert.match(html, /Chargement du panier/i);
-  assert.match(html, /aria-busy="true"/);
   assert.doesNotMatch(html, /Rose Velours|Taille[\s\S]*XL|29,99/);
   assert.doesNotMatch(html, /href="\/checkout|cart\?variant/);
 });
@@ -1020,20 +1069,20 @@ test("checkout uses the cookie-backed cart and ignores legacy URL variants", asy
     "/checkout?variant=variant_boxer_rose-pale_xl",
   );
   const checkoutHtml = await checkout.text();
-  assert.match(checkoutHtml, /Préproduction privée/i);
+  assert.match(checkoutHtml, /Paiement sécurisé/i);
   assert.match(checkoutHtml, /Chargement du panier/i);
-  assert.match(checkoutHtml, /aria-busy="true"/);
   assert.doesNotMatch(checkoutHtml, /Rose Velours|29,99|cart\?variant/);
+  assert.doesNotMatch(checkoutHtml, /<input[^>]+(?:card|carte|cvc)/i);
 });
 
 const commerceCases = [
-  ["/cart", /prix et stocks simulés, non commerciaux/i],
-  ["/checkout", /aucun débit, e-mail ou transporteur réel/i],
-  ["/account", /espace client privé de préproduction[^<]*aucune commande réelle/i],
+  ["/cart", /Chargement du panier/i],
+  ["/checkout", /Chargement du panier/i],
+  ["/account", /Chargement sécurisé de votre espace/i],
 ];
 
 for (const [pathname, marker] of commerceCases) {
-  test(`server-renders the simulated commerce route ${pathname}`, async () => {
+  test(`server-renders the production commerce route ${pathname}`, async () => {
     const response = await render(pathname);
     assert.equal(response.status, 200);
     assert.doesNotMatch(response.headers.get("cache-control") ?? "", /s-maxage/i);

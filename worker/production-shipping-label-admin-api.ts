@@ -238,6 +238,28 @@ export async function productionShippingLabelAdminResponse(
   ) {
     return fail("COMMERCE_CLOSED", 503);
   }
+  return productionShippingLabelAdminReleaseCoreResponse(
+    request,
+    env,
+    gate.origin,
+    dependencies,
+  );
+}
+
+/**
+ * Operator implementation below the public release gate. It is exported so
+ * its fulfillment/security contract can be tested while the real public gate
+ * remains closed by unresolved legal terms. Network routers must call the
+ * gated function above, never this core directly.
+ */
+export async function productionShippingLabelAdminReleaseCoreResponse(
+  request: Request,
+  env: ProductionShippingLabelEnvironment,
+  origin: string,
+  dependencies: ProductionShippingLabelDependencies = {},
+): Promise<Response> {
+  const match = ROUTE.exec(new URL(request.url).pathname);
+  if (!match || request.method !== "POST") return fail("NOT_FOUND", 404);
   if (!ownerAuthenticated(request, env)) return fail("OWNER_ACCESS_REQUIRED", 403);
   if (!await controlledOwnerRequestAuthenticated(request, env)) {
     return fail("CONTROLLED_ACCESS_REQUIRED", 403);
@@ -256,7 +278,7 @@ export async function productionShippingLabelAdminResponse(
       request,
       env.DB,
       now,
-      gate.origin,
+      origin,
     );
     if (!authorized) return fail("OWNER_SESSION_REQUIRED", 403);
   } catch {

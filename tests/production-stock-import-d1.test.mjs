@@ -125,7 +125,7 @@ function input(stockManifest) {
     providerIdentities: {
       stripeAccountId: "acct_1U4iFTC0NIklfc9C",
       sendcloudIntegrationId: "612109",
-      sendcloudSenderAddressId: "sender_ajl_001",
+      sendcloudSenderAddressId: "884432",
       resendDomain: "ajluxurystore.com",
       commerceOrigin: "https://ajluxurystore.com",
       transactionalFromEmail: "orders@ajluxurystore.com",

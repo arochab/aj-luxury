@@ -22,9 +22,6 @@ export const metadata: Metadata = {
       "Chez AJ Luxury, nous sommes convaincus que le véritable luxe commence par ce que l’on porte au plus près de soi.",
     images: ["/og.png"],
   },
-  icons: {
-    icon: "/favicon.svg",
-  },
 };
 
 export default function RootLayout({
@@ -40,6 +37,9 @@ export default function RootLayout({
 
   return (
     <html lang="fr" suppressHydrationWarning>
+      <head>
+        <link rel="icon" href="/favicon.svg" />
+      </head>
       <body className="antialiased">
         <I18nProvider>{children}</I18nProvider>
       </body>
