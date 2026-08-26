@@ -115,6 +115,7 @@ export default function Home() {
         id="apollon"
         data-bridge-motion="scroll"
       >
+        <div className="aj-featured__chromatic-flow" aria-hidden="true" />
         <div className="aj-featured__metal" aria-hidden="true">
           <DeferredMetallicField motion="still" variant="silver" />
         </div>

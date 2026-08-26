@@ -86,7 +86,7 @@ export default function ProductionHeroMotion() {
         <>
           <source
             media="(max-aspect-ratio: 4 / 5)"
-            src="/videos/aj-luxury-hero-isabelle-v2-portrait-720x934.mp4?v=2"
+            src="/videos/aj-luxury-hero-isabelle-v2-portrait-720x934.mp4?v=5"
             type="video/mp4"
           />
           <source

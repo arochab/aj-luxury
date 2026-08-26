@@ -40,6 +40,7 @@ test("the welcome film uses only the supplied Isabelle V2 asset and its responsi
     "the supplied landscape master must remain byte-exact",
   );
   assert.match(hero, /data-hero-version="isabelle-welcome-v2"/);
+  assert.match(hero, /className="aj-film__hero-backdrop"/);
   assert.match(hero, /aj-luxury-hero-isabelle-v2-portrait-poster\.webp/);
   assert.match(hero, /aj-luxury-hero-isabelle-v2-landscape-1920x1080-poster\.webp/);
   assert.match(motion, /prefers-reduced-motion: reduce/);
@@ -48,7 +49,7 @@ test("the welcome film uses only the supplied Isabelle V2 asset and its responsi
   assert.match(motion, /visibilitychange/);
   assert.match(motion, /preload="none"/);
   assert.match(motion, /\sloop(?:\s|=)/);
-  assert.match(motion, /aj-luxury-hero-isabelle-v2-portrait-720x934\.mp4\?v=2/);
+  assert.match(motion, /aj-luxury-hero-isabelle-v2-portrait-720x934\.mp4\?v=5/);
   assert.match(motion, /aj-luxury-hero-isabelle-v2-landscape-1920x1080-realesrgan\.mp4\?v=2/);
   assert.doesNotMatch(`${hero}\n${motion}`, /https?:\/\//i);
   assert.doesNotMatch(motion, /aj-luxury-hero-v4-motion/);
@@ -99,14 +100,23 @@ test("the hero hands its measured plum floor to the editorial screen through scr
   ]);
 
   assert.match(page, /<HomeChromaticBridge\s*\/>/);
+  assert.match(page, /className="aj-featured__chromatic-flow"/);
+  assert.doesNotMatch(page, /className="aj-featured__rules"/);
   assert.doesNotMatch(page, /className="aj-section-break"/);
   assert.match(bridge, /data-motion="hero-to-editorial"/);
+  assert.match(bridge, /className=\{styles\.scrollJunction\}/);
   assert.match(bridge, /prefers-reduced-motion: no-preference/);
   assert.match(bridge, /scrub:\s*0\.1/);
   assert.match(bridge, /scrub:\s*0\.12/);
-  assert.doesNotMatch(bridge, /bridgeChrome/);
+  assert.doesNotMatch(bridge, /bridgeField|bridgeHalo|bridgeChrome/);
   assert.doesNotMatch(bridge, /filter\s*:/);
-  assert.match(css, /#402127/);
+  assert.match(css, /#261019/);
+  assert.match(css, /#120a10/);
+  assert.match(css, /#77767e/);
+  assert.match(css, /blur\(clamp\(26px, 3vw, 46px\)\)/);
   assert.match(css, /#08080a/);
-  assert.match(css, /\.home\s+:global\(\.aj-featured\)\s*\{\s*animation:\s*none;/s);
+  assert.match(css, /border:\s*1px solid rgba\(255, 255, 255, 0\.68\)/);
+  assert.doesNotMatch(css, /aj-featured__rules/);
+  assert.doesNotMatch(css, /\.chromaticBridge/);
+  assert.match(css, /\.home\s+:global\(\.aj-featured\)\s*\{[^}]*min-height:\s*116svh;\s*animation:\s*none;/s);
 });

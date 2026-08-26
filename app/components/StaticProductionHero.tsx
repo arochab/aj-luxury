@@ -7,11 +7,26 @@ export default function StaticProductionHero() {
       data-hero-version="isabelle-welcome-v2"
     >
       <div className="aj-film__hero-media">
+        <picture className="aj-film__hero-backdrop">
+          <source
+            media="(max-aspect-ratio: 4 / 5)"
+            srcSet="/images/client/aj-luxury-hero-isabelle-v2-portrait-poster.webp?v=5"
+          />
+          <img
+            src="/images/client/aj-luxury-hero-isabelle-v2-landscape-1920x1080-poster.webp"
+            alt=""
+            width={1920}
+            height={1080}
+            loading="eager"
+            fetchPriority="high"
+            decoding="async"
+          />
+        </picture>
         <div className="aj-film__hero-stage">
           <picture className="aj-film__hero-poster">
             <source
               media="(max-aspect-ratio: 4 / 5)"
-              srcSet="/images/client/aj-luxury-hero-isabelle-v2-portrait-poster.webp"
+              srcSet="/images/client/aj-luxury-hero-isabelle-v2-portrait-poster.webp?v=5"
             />
             <img
               src="/images/client/aj-luxury-hero-isabelle-v2-landscape-1920x1080-poster.webp"

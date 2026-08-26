@@ -16,83 +16,136 @@
   object-position: center;
 }
 
+/* The supplied film keeps its complete composition in front. A cached copy of
+   its own poster extends the same plum light beyond the native ratio, so no
+   neutral letterbox can make the film look pasted into the page. */
+.home :global(.aj-film__hero-scene),
+.home :global(.aj-film__hero-media) {
+  background: #120a10;
+}
+
+.home :global(.aj-film__hero-media)::after {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  background:
+    radial-gradient(
+      ellipse 76% 64% at 50% 50%,
+      transparent 38%,
+      rgba(8, 4, 8, 0.2) 76%,
+      rgba(8, 4, 8, 0.52) 100%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(8, 4, 8, 0.08),
+      transparent 34%,
+      rgba(38, 16, 25, 0.72)
+    );
+  content: "";
+  pointer-events: none;
+}
+
+.home :global(.aj-film__hero-backdrop) {
+  opacity: 1;
+}
+
+.home :global(.aj-film__hero-backdrop img) {
+  object-fit: cover;
+  object-position: center;
+  filter: blur(clamp(26px, 3vw, 46px)) saturate(1.08) brightness(0.48)
+    contrast(1.04);
+  transform: scale(1.16);
+}
+
+.home :global(.aj-film__hero-stage),
+.home :global(.aj-film__hero-poster) {
+  background: transparent;
+}
+
+.home :global(.aj-film__signature) {
+  background: linear-gradient(
+    180deg,
+    rgba(38, 16, 25, 0.08),
+    rgba(38, 16, 25, 0.78)
+  );
+}
+
 .home :global(.aj-moodboard__item img) {
   object-fit: cover;
 }
 
-/* The exact colour hand-off is sampled from Isabelle's film rather than
-   guessed: its final bottom band averages #402127, then the campaign images
-   open between #29273a and #3b384a. The bridge moves through those hues into
-   the site's #08080a without the former cream flash. */
-.chromaticBridge {
+/* The junction carries no visual height. The film's plum-black signature
+   hands #261019 directly to the full-height editorial colour field. */
+.scrollJunction {
   position: relative;
-  z-index: 1;
-  height: clamp(48px, 6svh, 68px);
-  overflow: hidden;
+  height: 0;
   border: 0;
-  background: #08080a;
-  isolation: isolate;
 }
 
-.bridgeField,
-.bridgeHalo {
+/* One uninterrupted field follows the physical reading direction: plum at
+   entry, a controlled silver/chrome centre, then the site's black at exit. */
+.home :global(.aj-featured__chromatic-flow) {
   position: absolute;
+  z-index: -4;
+  inset: 0;
+  background:
+    radial-gradient(
+      ellipse 78% 30% at 50% 22%,
+      rgba(132, 82, 111, 0.2),
+      transparent 72%
+    ),
+    linear-gradient(
+      180deg,
+      #261019 0%,
+      #421d31 18%,
+      #4a394d 35%,
+      #77767e 54%,
+      #57565f 66%,
+      #303038 76%,
+      #1b1b20 87%,
+      #08080a 100%
+    );
   pointer-events: none;
 }
 
-.bridgeField {
+.home :global(.aj-featured__metal) {
   z-index: -3;
-  inset: -18% 0 -2px;
-  background: linear-gradient(
+  opacity: 0.3;
+  mix-blend-mode: soft-light;
+  -webkit-mask-image: linear-gradient(
     180deg,
-    #402127 0%,
-    #2b1822 28%,
-    #17121a 62%,
-    #08080a 100%
+    transparent 0%,
+    rgba(0, 0, 0, 0.15) 28%,
+    #000 45%,
+    #000 66%,
+    rgba(0, 0, 0, 0.2) 78%,
+    transparent 94%
   );
-}
-
-.bridgeHalo {
-  z-index: -2;
-  top: -104%;
-  right: 2%;
-  left: 2%;
-  height: 176%;
-  background: radial-gradient(
-    ellipse at 50% 48%,
-    rgba(130, 91, 116, 0.34) 0%,
-    rgba(79, 43, 66, 0.15) 36%,
-    transparent 72%
+  mask-image: linear-gradient(
+    180deg,
+    transparent 0%,
+    rgba(0, 0, 0, 0.15) 28%,
+    #000 45%,
+    #000 66%,
+    rgba(0, 0, 0, 0.2) 78%,
+    transparent 94%
   );
-  transform-origin: 50% 0;
 }
 
 .home :global(.aj-featured__glow) {
   background:
-    linear-gradient(
-      180deg,
-      #08080a 0%,
-      rgba(8, 8, 10, 0.96) 9%,
-      rgba(18, 12, 17, 0.72) 24%,
-      rgba(8, 8, 10, 0.18) 44%,
-      transparent 62%
-    ),
     radial-gradient(
-      ellipse 76% 34% at 50% -7%,
-      rgba(64, 33, 39, 0.5),
-      rgba(42, 38, 57, 0.18) 42%,
+      ellipse 70% 32% at 50% 54%,
+      rgba(255, 255, 255, 0.2),
+      rgba(211, 207, 218, 0.07) 38%,
       transparent 72%
     ),
-    radial-gradient(
-      circle at var(--aj-spot-x, 52%) var(--aj-spot-y, 44%),
-      rgba(255, 255, 255, 0.24),
-      transparent 30%
-    ),
     linear-gradient(
-      0deg,
-      rgba(5, 5, 7, 0.72),
-      transparent 48%,
-      rgba(5, 5, 7, 0.3)
+      180deg,
+      transparent 0%,
+      transparent 62%,
+      rgba(5, 5, 7, 0.16) 76%,
+      rgba(5, 5, 7, 0.72) 100%
     );
 }
 
@@ -100,7 +153,27 @@
    translated the whole second section by 12px and exposed a visible seam
    between it and the new threshold. */
 .home :global(.aj-featured) {
+  --aj-editorial-width: min(
+    1480px,
+    calc(100% - clamp(80px, 10vw, 220px))
+  );
+  --aj-editorial-gap: clamp(20px, 2.2vw, 34px);
+  min-height: 116svh;
   animation: none;
+}
+
+.home :global(.aj-featured__editorial) {
+  position: relative;
+  z-index: 1;
+  width: var(--aj-editorial-width);
+  gap: var(--aj-editorial-gap);
+}
+
+/* The white rules belong to the photographs, not the colour field. They keep
+   a clean editorial rhythm without slicing or recolouring the gradient. */
+.home :global(.aj-featured__image) {
+  border: 1px solid rgba(255, 255, 255, 0.68);
+  box-shadow: none;
 }
 
 /* The scroll scene is the sole owner of the cards' transform and opacity.
@@ -126,6 +199,14 @@
    framing: both faces and both boxers stay visible, with the CTA still inside
    the first viewport. */
 @media (max-width: 900px) {
+  .home :global(.aj-featured) {
+    min-height: 0;
+  }
+
+  .home :global(.aj-featured__editorial) {
+    width: 100%;
+  }
+
   .home :global(.aj-film__hero-stage) {
     right: 0;
     bottom: 70px;
@@ -175,6 +256,105 @@
   }
 }
 
+/* The foreground film feathers only inside the native letterbox axis. The
+   backdrop remains untouched, so the fade reveals the same image language
+   rather than tinting or softening the models themselves. */
+@media (min-aspect-ratio: 4 / 5) and (max-aspect-ratio: 23 / 20) {
+  .home :global(.aj-film__hero-poster img),
+  .home :global(.aj-film__hero-video) {
+    -webkit-mask-image: linear-gradient(
+      180deg,
+      transparent 0%,
+      transparent 18%,
+      #000 25%,
+      #000 75%,
+      transparent 82%,
+      transparent 100%
+    );
+    mask-image: linear-gradient(
+      180deg,
+      transparent 0%,
+      transparent 18%,
+      #000 25%,
+      #000 75%,
+      transparent 82%,
+      transparent 100%
+    );
+  }
+}
+
+@media (min-aspect-ratio: 23 / 20) and (max-aspect-ratio: 31 / 20) {
+  .home :global(.aj-film__hero-poster img),
+  .home :global(.aj-film__hero-video) {
+    -webkit-mask-image: linear-gradient(
+      180deg,
+      transparent 0%,
+      rgba(0, 0, 0, 0.35) 7%,
+      #000 15%,
+      #000 85%,
+      rgba(0, 0, 0, 0.35) 93%,
+      transparent 100%
+    );
+    mask-image: linear-gradient(
+      180deg,
+      transparent 0%,
+      rgba(0, 0, 0, 0.35) 7%,
+      #000 15%,
+      #000 85%,
+      rgba(0, 0, 0, 0.35) 93%,
+      transparent 100%
+    );
+  }
+}
+
+@media (min-aspect-ratio: 31 / 20) and (max-aspect-ratio: 16 / 9) {
+  .home :global(.aj-film__hero-poster img),
+  .home :global(.aj-film__hero-video) {
+    -webkit-mask-image: linear-gradient(
+      180deg,
+      transparent 0%,
+      rgba(0, 0, 0, 0.4) 3%,
+      #000 8%,
+      #000 92%,
+      rgba(0, 0, 0, 0.4) 97%,
+      transparent 100%
+    );
+    mask-image: linear-gradient(
+      180deg,
+      transparent 0%,
+      rgba(0, 0, 0, 0.4) 3%,
+      #000 8%,
+      #000 92%,
+      rgba(0, 0, 0, 0.4) 97%,
+      transparent 100%
+    );
+  }
+}
+
+@media (min-aspect-ratio: 16 / 9) {
+  .home :global(.aj-film__hero-poster img),
+  .home :global(.aj-film__hero-video) {
+    -webkit-mask-image: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(0, 0, 0, 0.4) 2.5%,
+      #000 7%,
+      #000 93%,
+      rgba(0, 0, 0, 0.4) 97.5%,
+      transparent 100%
+    );
+    mask-image: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(0, 0, 0, 0.4) 2.5%,
+      #000 7%,
+      #000 93%,
+      rgba(0, 0, 0, 0.4) 97.5%,
+      transparent 100%
+    );
+  }
+}
+
 /* The portrait rendition has a protected 60 px horizontal margin around the
    complete landscape film. It can therefore fill every portrait viewport
    without clipping either model, while its own animated background removes
@@ -182,8 +362,22 @@
 @media (max-aspect-ratio: 4 / 5) {
   .home :global(.aj-film__hero-poster img),
   .home :global(.aj-film__hero-video) {
-    object-fit: cover;
+    object-fit: contain;
     object-position: center;
+    -webkit-mask-image: linear-gradient(
+      180deg,
+      transparent 0%,
+      #000 12%,
+      #000 88%,
+      transparent 100%
+    );
+    mask-image: linear-gradient(
+      180deg,
+      transparent 0%,
+      #000 12%,
+      #000 88%,
+      transparent 100%
+    );
   }
 }
 
@@ -209,13 +403,14 @@
 
   .home :global(.aj-film__hero-poster img),
   .home :global(.aj-film__hero-video) {
-    object-fit: cover;
+    object-fit: contain;
     object-position: center;
   }
 
-  .chromaticBridge {
-    height: 44px;
+  .home :global(.aj-featured__editorial) {
+    gap: 16px;
   }
+
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -226,12 +421,6 @@
   .home :global(.aj-moodboard__item img) {
     animation: none !important;
     transition: none !important;
-    transform: none !important;
-  }
-
-  .bridgeField,
-  .bridgeHalo {
-    opacity: 1 !important;
     transform: none !important;
   }
 }
