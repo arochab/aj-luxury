@@ -88,6 +88,7 @@ export type ProductionCommerceRuntimeEnvironment = ProductionCommerceEnvironment
   TRANSACTIONAL_FROM_NAME?: string;
   RESEND_DOMAIN?: string;
   RETURNS_WORKFLOW_ENABLED?: string;
+  SHIPMENT_HANDOVER_ENABLED?: string;
   RETURNS_LABEL_AND_REFUND_PROCESS_APPROVED?: string;
   RESERVATION_EXPIRY_ENABLED?: string;
   DELIVERY_REFERENCE_ENCRYPTION_KEY_BASE64?: string;
@@ -339,6 +340,9 @@ export function productionCommerceRuntimeBlockers(
         ...(env.RETURNS_WORKFLOW_ENABLED === "true"
           ? []
           : ["returns-workflow-not-activated"]),
+        ...(env.SHIPMENT_HANDOVER_ENABLED === "true"
+          ? []
+          : ["shipment-handover-not-enabled"]),
         ...(mode === "live" && env.RETURNS_LABEL_AND_REFUND_PROCESS_APPROVED !== "true"
           ? ["returns-label-and-refund-process-unapproved"] : []),
         ...(env.RESERVATION_EXPIRY_ENABLED === "true"

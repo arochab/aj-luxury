@@ -208,6 +208,7 @@ function controlledEnv(db = database()) {
     RESERVATION_EXPIRY_ENABLED: "true",
     COMMERCE_REPORTING_ENABLED: "true",
     OPERATOR_ADMIN_MFA_ENABLED: "true",
+    SHIPMENT_HANDOVER_ENABLED: "true",
     OPERATOR_RATE_LIMITER: {
       async limit() { return { success: true }; },
     },
@@ -523,6 +524,91 @@ test("owner approval and inspection require HMAC plus D1 owner session and creat
   );
   assert.equal(wrongHmac.status, 403);
   assert.equal(wrongHmacDatabase.queries.length, 0);
+});
+
+test("owner handover route records one real handover and queues confirmation idempotently", async () => {
+  const shipmentId = "shipment_paid_1";
+  const eventId = "handover_receipt_1";
+  const path = `/api/commerce/admin/shipments/${shipmentId}/handover`;
+  const calls = [];
+  const shipments = {
+    async handoverShipment(input) {
+      calls.push(input);
+      return { created: calls.length === 1 };
+    },
+  };
+  const makeRequest = async () => new Request(`${origin}${path}`, {
+    method: "POST",
+    headers: {
+      ...(await ownerHeaders("POST", path)),
+      ...adminHeaders(),
+      "Content-Type": "application/json",
+      "Idempotency-Key": `shipment-handover:${eventId}`,
+    },
+    body: JSON.stringify({ eventId, locale: "fr" }),
+  });
+  const first = await productionOperationsApiResponse(
+    await makeRequest(),
+    controlledEnv(),
+    {
+      now: () => "2026-08-15T09:00:00.000Z",
+      authorizeOwner: async () => true,
+      shipments,
+    },
+  );
+  assert.equal(first.status, 200);
+  assert.deepEqual(await first.json(), {
+    data: {
+      shipmentId,
+      status: "handed_over",
+      confirmationQueued: true,
+      replayed: false,
+    },
+  });
+  const replay = await productionOperationsApiResponse(
+    await makeRequest(),
+    controlledEnv(),
+    {
+      now: () => "2026-08-15T09:01:00.000Z",
+      authorizeOwner: async () => true,
+      shipments,
+    },
+  );
+  assert.deepEqual((await replay.json()).data, {
+    shipmentId,
+    status: "handed_over",
+    confirmationQueued: true,
+    replayed: true,
+  });
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].shipmentId, shipmentId);
+  assert.equal(calls[0].eventId, eventId);
+  assert.equal(calls[0].actor.kind, "admin");
+
+  const disabledDatabase = database();
+  const disabled = await productionOperationsApiResponse(
+    await makeRequest(),
+    { ...controlledEnv(disabledDatabase), SHIPMENT_HANDOVER_ENABLED: "false" },
+  );
+  assert.equal(disabled.status, 503);
+  assert.equal((await disabled.json()).error.code, "SHIPMENT_HANDOVER_NOT_ACTIVATED");
+  assert.equal(disabledDatabase.queries.length, 0);
+
+  const unauthenticatedDatabase = database();
+  const unauthenticated = await productionOperationsApiResponse(
+    new Request(`${origin}${path}`, {
+      method: "POST",
+      headers: {
+        ...adminHeaders(),
+        "Content-Type": "application/json",
+        "Idempotency-Key": `shipment-handover:${eventId}`,
+      },
+      body: JSON.stringify({ eventId, locale: "fr" }),
+    }),
+    controlledEnv(unauthenticatedDatabase),
+  );
+  assert.equal(unauthenticated.status, 403);
+  assert.equal(unauthenticatedDatabase.queries.length, 0);
 });
 
 test("reporting is owner-only, aggregate-only and period-bounded", async () => {

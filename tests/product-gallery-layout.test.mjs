@@ -33,6 +33,10 @@ const accueilStyles = await readFile(
   new URL("../app/components/Accueil.module.css", import.meta.url),
   "utf8",
 );
+const shopStyles = await readFile(
+  new URL("../app/shop/Shop.module.css", import.meta.url),
+  "utf8",
+);
 
 test("paired portrait media share one 2:3 frame", () => {
   assert.match(css, /\.galleryPortrait\s*\{[^}]*aspect-ratio:\s*2\s*\/\s*3/s);
@@ -137,5 +141,16 @@ test("the mobile story removes the empty definition visual spacer", () => {
   assert.match(
     storyStyles,
     /@media \(max-width: 760px\)[\s\S]*?\.definitionVisual\s*\{[^}]*display:\s*none;/s,
+  );
+});
+
+test("shop cards keep the live desktop and mobile crops", () => {
+  assert.match(
+    shopStyles,
+    /\.productVisual img\s*\{[^}]*object-position:\s*50% 0;/s,
+  );
+  assert.match(
+    shopStyles,
+    /@media \(max-width:\s*860px\)[\s\S]*?\.productVisual img\s*\{[^}]*object-position:\s*50% 16%;/s,
   );
 });

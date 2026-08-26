@@ -101,8 +101,16 @@ function backendStorefrontConfiguration(
   env: CommerceBackendBridgeEnvironment,
 ): Readonly<{ controlled: string; public: readonly string[] }> | null {
   const controlled = exactOrigin(env.COMMERCE_CONTROLLED_STOREFRONT_ORIGIN);
+  if (!controlled) return null;
+  if (["sandbox", "controlled"].includes(env.COMMERCE_MODE ?? "")) {
+    // A controlled Worker has one private browser origin. Requiring the public
+    // allowlist here both couples the candidate to production and prevents an
+    // intentionally isolated config from starting. Public origins remain a
+    // mandatory, separate proof for live/closed backends below.
+    return Object.freeze({ controlled, public: Object.freeze([]) });
+  }
   const publicOrigins = parsedOriginArray(env.COMMERCE_PUBLIC_STOREFRONT_ORIGINS_JSON);
-  if (!controlled || !publicOrigins || publicOrigins.includes(controlled)) return null;
+  if (!publicOrigins || publicOrigins.includes(controlled)) return null;
   return Object.freeze({ controlled, public: publicOrigins });
 }
 

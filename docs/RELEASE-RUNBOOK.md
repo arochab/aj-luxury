@@ -49,6 +49,87 @@ credentials remain secret and are never copied into this runbook:
 
 Any different identity closes the release gate pending a new dated verification.
 
+### Controlled runtime matrix
+
+`cloudflare.controlled.jsonc` is the reproducible Worker base. It binds only the
+isolated controlled D1, exposes only a `workers.dev` endpoint, and accepts the
+private Sites origin as `COMMERCE_ORIGIN` and
+`COMMERCE_CONTROLLED_STOREFRONT_ORIGIN`. Controlled mode deliberately has no
+public storefront allowlist; the backend bridge must accept exactly that private
+origin, while live mode continues to require its separate public allowlist.
+
+The private Sites environment supplies `COMMERCE_BACKEND_ORIGIN`, an exact
+`COMMERCE_STOREFRONT_ORIGINS_JSON` containing only the private Sites origin,
+`COMMERCE_SITES_OWNER_AUTH_ENABLED=true`, its exact owner-auth origin, and the
+approved owner identity. The Sites bridge and Worker share the proxy and
+controlled-HMAC secrets through their secret stores. No secret is copied into a
+config file, release note or evidence bundle.
+
+Before the controlled order, the release owner records and verifies these
+runtime-only groups against the exact release SHA and Worker version:
+
+- release, Adam/Jérémy, stock-manifest and public provider identity attestations;
+- Stripe live settlement, webhook verification and controlled payment-session
+  enablement;
+- Sendcloud outbound shipment creation, sender attestation and delivery-reference
+  vault key version;
+- Resend webhook verification plus transactional dispatch enabled in
+  `controlled` mode;
+- operator MFA, late-payment refund dispatch, reservation expiry, returns,
+  shipment handover and reporting activation;
+- the four controlled rate-limit bindings and the exact private bridge origin.
+
+Flags such as `PRODUCTION_STOCK_IMPORT_ENABLED`,
+`CONTROLLED_PAYMENT_SESSION_ENABLED`, `OUTBOUND_SHIPMENT_CREATION_ENABLED`,
+`TRANSACTIONAL_EMAIL_DISPATCH_ENABLED`, `TRANSACTIONAL_EMAIL_DISPATCH_MODE`,
+`LATE_PAYMENT_REFUND_DISPATCH_ENABLED`, `RESERVATION_EXPIRY_ENABLED`,
+`RETURNS_WORKFLOW_ENABLED`, `SHIPMENT_HANDOVER_ENABLED`,
+`COMMERCE_REPORTING_ENABLED` and `OPERATOR_ADMIN_MFA_ENABLED` are runtime release
+decisions, not claims pre-signed in the committed config. The health response
+must remain closed if any required flag, schema proof, identity or legal term is
+missing. In particular, the unresolved mediator entry keeps controlled and live
+commerce closed.
+
+### First controlled order evidence
+
+After the legal gate is resolved and before any public promotion, retain one
+redacted, timestamped evidence packet for the owner-only controlled order. It
+must prove all of the following against one order ID without storing credentials
+or card data:
+
+1. health is ready on the exact SHA/version and the private Sites bridge reaches
+   only the controlled Worker and D1;
+2. the 12-line stock manifest is attested at 749 physical, 23 remaining gift
+   reserve and 726 sellable, and the chosen unit or same-colour/mixed-colour pack
+   decrements only its real variants;
+3. the selected Sendcloud offer has a positive EUR price from V3, or an exact
+   country/weight/dimensions/carrier/mode V2 fallback receipt;
+4. Stripe records the expected EUR amount once, the webhook becomes processed,
+   the order becomes paid and the stock movement is committed atomically;
+5. exactly one `order_confirmation` and one `payment_confirmation` outbox row
+   reach `sent`; the detailed order message contains lines, discounts, delivery,
+   total, tax zero, article 293 B and the immutable CGV version/hash snapshot;
+6. label creation is performed only for the real parcel. `label_ready` creates
+   no shipment email. After the parcel is physically handed to the carrier, the
+   owner-only handover route records the real tracking event and queues exactly
+   one shipment confirmation; replaying the same event queues no second email;
+7. provider receipts, D1 rows and audit events reconcile to the same order,
+   payment, shipment and idempotency references.
+
+### Controlled rollback and reconciliation
+
+If any step is ambiguous, close new checkout traffic and preserve the controlled
+D1 and provider receipts. Never delete or recreate a paid order to obtain a
+clean retry. Reconcile Stripe payment/refund state first, then D1 order and stock
+movements, then the two paid-order emails, then Sendcloud label/tracking state.
+Unknown Stripe or Sendcloud outcomes require provider lookup and manual review;
+they must never trigger a blind second charge, refund or label. Email retries use
+the retained provider idempotency key. Restore the previous Worker and private
+Sites versions together only after recording which D1 state they continue to
+serve. A future live Worker must retain
+`COMMERCE_PROMOTED_FROM_VERSION_ID` for the controlled version that produced the
+stock and first-order evidence.
+
 A production release is anchored by both:
 
 1. an immutable Git commit SHA containing only the approved AJ Luxury scope;

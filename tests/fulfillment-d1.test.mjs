@@ -1433,6 +1433,8 @@ test("full fulfillment flow is leased, append-only, mixed-unit safe and keeps pa
     now: "2026-08-11T12:11:01.000Z",
   });
   assert.equal(shipment.status, "label_ready");
+  assert.equal(context.database.prepare(`SELECT COUNT(*) AS count FROM email_outbox
+    WHERE order_id = ? AND kind = 'shipment_confirmation'`).get(order.orderId).count, 0);
   assert.equal(new Set(labelCalls.filter((call) => call.shipmentId === shipment.id)
     .map((call) => call.idempotencyKey)).size, 1);
   const collisionOrder = await createPaidOrder(context, {
@@ -1476,6 +1478,8 @@ test("full fulfillment flow is leased, append-only, mixed-unit safe and keeps pa
     locale: "fr",
     now: "2026-08-11T12:12:20.000Z",
   }), { created: true });
+  assert.equal(context.database.prepare(`SELECT COUNT(*) AS count FROM email_outbox
+    WHERE order_id = ? AND kind = 'shipment_confirmation'`).get(order.orderId).count, 1);
   assert.deepEqual(await context.fulfillment.handoverShipment({
     shipmentId: shipment.id,
     eventId: "handover_flow",
@@ -1483,6 +1487,8 @@ test("full fulfillment flow is leased, append-only, mixed-unit safe and keeps pa
     locale: "fr",
     now: "2026-08-11T12:13:20.000Z",
   }), { created: false });
+  assert.equal(context.database.prepare(`SELECT COUNT(*) AS count FROM email_outbox
+    WHERE order_id = ? AND kind = 'shipment_confirmation'`).get(order.orderId).count, 1);
   assert.throws(() => context.database.prepare(`INSERT INTO shipment_tracking_events (
     id, shipment_id, provider_code, provider_event_id, event_type,
     tracking_reference, event_fingerprint, occurred_at, received_at

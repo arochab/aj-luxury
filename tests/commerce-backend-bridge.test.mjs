@@ -323,6 +323,13 @@ test("controlled backend accepts only the private storefront while live partitio
     privateOrigin,
   );
   assert.equal(
+    prepareBackendOnlyCommerceRequest(
+      browserRequest(privateOrigin),
+      backendEnv({ COMMERCE_PUBLIC_STOREFRONT_ORIGINS_JSON: undefined }),
+    ).storefrontOrigin,
+    privateOrigin,
+  );
+  assert.equal(
     prepareBackendOnlyCommerceRequest(browserRequest(publicOrigin), backendEnv()).response?.status,
     403,
   );

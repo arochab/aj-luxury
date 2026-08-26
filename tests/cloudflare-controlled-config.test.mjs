@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import JSON5 from "json5";
+import { prepareBackendOnlyCommerceRequest } from "../worker/commerce-backend-bridge.ts";
 
 const projectRoot = new URL("../", import.meta.url);
 const privateOrigin = "https://aj-luxury-awwwards-private.arochab.chatgpt.site";
@@ -61,4 +62,31 @@ test("controlled Worker config is isolated from every public production resource
     /SECRET|APPROVAL|RELEASE_SHA|PROMOTED_FROM|MANIFEST|ACCOUNT_ID|INTEGRATION_ID|SENDER_ADDRESS_ID|RESEND_DOMAIN|LEGAL_IDENTITY|POLICY_APPROVED|DRILL_APPROVED|ALERTS_APPROVED|CONTROLLED_OWNER|STOCK_IMPORT_ENABLED/.test(key),
   );
   assert.deepEqual(forbiddenReleaseVariables, []);
+
+  const proxySecret = "controlled-proxy-secret-at-least-thirty-two-bytes";
+  const prepared = prepareBackendOnlyCommerceRequest(new Request(
+    "https://worker-controlled.example/api/commerce/cart",
+    {
+      method: "POST",
+      headers: {
+        Origin: privateOrigin,
+        "Sec-Fetch-Site": "same-origin",
+        "X-AJ-Commerce-Proxy-Secret": proxySecret,
+        "X-AJ-Storefront-Origin": privateOrigin,
+        "X-AJ-Proxy-Actor": "a".repeat(64),
+        "X-AJ-Controlled-Authorization": `t=1000000000,v1=${"b".repeat(64)}`,
+        "oai-authenticated-user-email": "owner@example.com",
+        "oai-authenticated-user-id": "owner-controlled-1",
+      },
+      body: "{}",
+      duplex: "half",
+    },
+  ), {
+    ...config.vars,
+    COMMERCE_PROXY_SECRET: proxySecret,
+  });
+  assert.equal(prepared.response, undefined);
+  assert.equal(prepared.storefrontOrigin, privateOrigin);
+  assert.equal(prepared.request.headers.get("X-AJ-Controlled-Authorization"), `t=1000000000,v1=${"b".repeat(64)}`);
+  assert.equal(prepared.request.headers.get("oai-authenticated-user-id"), "owner-controlled-1");
 });

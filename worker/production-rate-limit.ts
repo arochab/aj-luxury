@@ -34,11 +34,13 @@ const exactRoutes = new Map<string, LimitClass>([
 
 const cartLine = /^\/api\/commerce\/cart\/lines\/[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/;
 const shippingLabel = /^\/api\/commerce\/admin\/orders\/[A-Za-z0-9][A-Za-z0-9_.:-]{0,191}\/shipping-label$/;
+const shipmentHandover = /^\/api\/commerce\/admin\/shipments\/[A-Za-z0-9][A-Za-z0-9_.:-]{0,191}\/handover$/;
 const returnOperator = /^\/api\/commerce\/admin\/returns\/[A-Za-z0-9][A-Za-z0-9_.:-]{0,191}\/(?:approve|inspect)$/;
 
 function routeClass(pathname: string): LimitClass | null {
   if (cartLine.test(pathname)) return "commerce";
   if (shippingLabel.test(pathname)) return "operator";
+  if (shipmentHandover.test(pathname)) return "operator";
   if (returnOperator.test(pathname)) return "operator";
   return exactRoutes.get(pathname) ?? null;
 }

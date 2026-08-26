@@ -42,6 +42,7 @@ import {
 const RETURN_ROUTE = "/api/commerce/returns";
 const APPROVE_ROUTE = /^\/api\/commerce\/admin\/returns\/([^/]+)\/approve$/;
 const INSPECT_ROUTE = /^\/api\/commerce\/admin\/returns\/([^/]+)\/inspect$/;
+const HANDOVER_ROUTE = /^\/api\/commerce\/admin\/shipments\/([^/]+)\/handover$/;
 const REPORT_ROUTE = "/api/commerce/admin/reporting";
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,191}$/;
 const IDEMPOTENCY = /^[A-Za-z0-9][A-Za-z0-9_.:-]{7,127}$/;
@@ -58,6 +59,7 @@ export type ProductionOperationsEnvironment = ProductionCommerceEnvironment &
   RESERVATION_EXPIRY_ENABLED?: string;
   COMMERCE_REPORTING_ENABLED?: string;
   OPERATOR_ADMIN_MFA_ENABLED?: string;
+  SHIPMENT_HANDOVER_ENABLED?: string;
   TRANSACTIONAL_EMAIL_DISPATCH_ENABLED?: string;
   TRANSACTIONAL_EMAIL_DISPATCH_MODE?: string;
   TRANSACTIONAL_FROM_NAME?: string;
@@ -102,8 +104,19 @@ type ReturnOperationsPort = Readonly<{
   }>): Promise<void>;
 }>;
 
+type ShipmentOperationsPort = Readonly<{
+  handoverShipment(input: Readonly<{
+    shipmentId: string;
+    eventId: string;
+    actor: D1MutationActor;
+    locale: "fr" | "en";
+    now: string;
+  }>): Promise<{ created: boolean }>;
+}>;
+
 export type ProductionOperationsDependencies = Readonly<{
   returns?: ReturnOperationsPort;
+  shipments?: ShipmentOperationsPort;
   authorizeOwner?: (
     actor: D1MutationActor,
     database: CommerceD1Database,
@@ -468,7 +481,10 @@ function mapFulfillmentError(cause: unknown): Response {
   if (!(cause instanceof FulfillmentError)) return fail("OPERATIONS_UNAVAILABLE", 503);
   if (cause.code === "SESSION_REQUIRED") return fail("SESSION_REQUIRED", 403);
   if (cause.code === "RETURN_WINDOW_CLOSED") return fail("RETURN_WINDOW_CLOSED", 409);
-  if (["RETURN_QUANTITY_EXCEEDED", "INVALID_TRANSITION", "INSPECTION_INCOMPLETE"].includes(cause.code)) {
+  if ([
+    "RETURN_QUANTITY_EXCEEDED", "INVALID_TRANSITION", "INSPECTION_INCOMPLETE",
+    "TRACKING_EVENT_CONFLICT", "CUSTOMS_NOT_READY",
+  ].includes(cause.code)) {
     return fail(cause.code, 409);
   }
   if (cause.code === "INVALID_INPUT") return fail("INVALID_INPUT", 400);
@@ -486,8 +502,9 @@ async function authorizedOperatorActor(
 }
 
 /**
- * Return, operator and reporting routes. No endpoint in this router creates a
- * provider return label or a refund.
+ * Return, shipment-handover and reporting routes. Handover records a physical
+ * carrier transfer only after a label already supplied the tracking reference;
+ * it never creates a provider label or synthesizes a carrier receipt.
  */
 export async function productionOperationsApiResponse(
   request: Request,
@@ -497,8 +514,9 @@ export async function productionOperationsApiResponse(
   const url = new URL(request.url);
   const approveMatch = APPROVE_ROUTE.exec(url.pathname);
   const inspectMatch = INSPECT_ROUTE.exec(url.pathname);
+  const handoverMatch = HANDOVER_ROUTE.exec(url.pathname);
   const recognized = url.pathname === RETURN_ROUTE || url.pathname === REPORT_ROUTE ||
-    Boolean(approveMatch) || Boolean(inspectMatch);
+    Boolean(approveMatch) || Boolean(inspectMatch) || Boolean(handoverMatch);
   if (!recognized) return null;
   if (env?.APP_ENV !== "production") return fail("NOT_FOUND", 404);
   const configuration = exactProductionOperationsConfiguration(env);
@@ -512,10 +530,15 @@ export async function productionOperationsApiResponse(
     (isReporting && request.method !== "GET") ||
     (!isCustomerReturn && !isReporting && request.method !== "POST")
   ) return fail("METHOD_NOT_ALLOWED", 405);
-  if (
-    (!isReporting && env.RETURNS_WORKFLOW_ENABLED !== "true") ||
-    (isReporting && env.COMMERCE_REPORTING_ENABLED !== "true")
-  ) return fail("OPERATIONS_NOT_ACTIVATED", 503);
+  if (isReporting && env.COMMERCE_REPORTING_ENABLED !== "true") {
+    return fail("OPERATIONS_NOT_ACTIVATED", 503);
+  }
+  if (handoverMatch && env.SHIPMENT_HANDOVER_ENABLED !== "true") {
+    return fail("SHIPMENT_HANDOVER_NOT_ACTIVATED", 503);
+  }
+  if (!isReporting && !handoverMatch && env.RETURNS_WORKFLOW_ENABLED !== "true") {
+    return fail("OPERATIONS_NOT_ACTIVATED", 503);
+  }
   if (!isCustomerReturn && env.OPERATOR_ADMIN_MFA_ENABLED !== "true") {
     return fail("OPERATOR_MFA_NOT_ACTIVATED", 503);
   }
@@ -626,6 +649,45 @@ export async function productionOperationsApiResponse(
         return fail("INVALID_PERIOD", 400);
       }
       return fail("REPORT_UNAVAILABLE", 503);
+    }
+  }
+
+  if (handoverMatch) {
+    const shipmentId = decodeIdentifier(handoverMatch[1]);
+    const idem = idempotencyKey(request);
+    const parsed = await boundedJsonBody(request);
+    if (!shipmentId) return fail("INVALID_SHIPMENT", 400);
+    if (!parsed || !exactObject(parsed, ["eventId", "locale"])) {
+      return fail("INVALID_BODY", 400);
+    }
+    const eventId = parsed.eventId;
+    const locale = parsed.locale;
+    if (
+      typeof eventId !== "string" || !SAFE_ID.test(eventId) ||
+      (locale !== "fr" && locale !== "en")
+    ) return fail("INVALID_BODY", 400);
+    if (!idem || idem !== `shipment-handover:${eventId}`) {
+      return fail("IDEMPOTENCY_KEY_REQUIRED", 400);
+    }
+    try {
+      const shipments = dependencies.shipments ?? new D1FulfillmentStore(env.DB);
+      const result = await shipments.handoverShipment({
+        shipmentId,
+        eventId,
+        actor,
+        locale,
+        now,
+      });
+      return json({
+        data: {
+          shipmentId,
+          status: "handed_over",
+          confirmationQueued: true,
+          replayed: !result.created,
+        },
+      });
+    } catch (cause) {
+      return mapFulfillmentError(cause);
     }
   }
 

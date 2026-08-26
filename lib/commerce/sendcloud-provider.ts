@@ -20,6 +20,7 @@ const PANEL_ORIGIN = "https://panel.sendcloud.sc";
 const MAX_RESPONSE_BYTES = 256 * 1024;
 const MAX_DOCUMENT_BYTES = 8 * 1024 * 1024;
 const REQUEST_TIMEOUT_MS = 8_000;
+const MAX_FALLBACK_PRICE_CONCURRENCY = 4;
 const SAFE_CODE = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/;
 const SAFE_SHIPPING_OPTION_CODE = /^[A-Za-z0-9][A-Za-z0-9_.:,\/-]{0,159}$/;
 const SAFE_PARCEL_ID = /^[1-9]\d{0,18}$/;
@@ -159,6 +160,35 @@ export async function parseSendcloudDeliveryOptions(
     value.delivery_options.length > 100
   ) throw new DeliveryProviderError("MALFORMED_RESPONSE", "Delivery options envelope is invalid.");
   internalExpiry(context.now, context.ttlSeconds);
+  const fallbackCache = new Map<string, Promise<SendcloudFallbackPrice | null>>();
+  const fallbackWaiters: Array<() => void> = [];
+  let activeFallbacks = 0;
+  async function limitedFallback(
+    option: SendcloudUnpricedOption,
+  ): Promise<SendcloudFallbackPrice | null> {
+    if (!context.resolveFallbackPrice) return null;
+    const key = JSON.stringify([
+      option.carrierCode,
+      option.shippingOptionCode,
+      option.deliveryMode,
+    ]);
+    const cached = fallbackCache.get(key);
+    if (cached) return cached;
+    const task = (async () => {
+      if (activeFallbacks >= MAX_FALLBACK_PRICE_CONCURRENCY) {
+        await new Promise<void>((resolve) => fallbackWaiters.push(resolve));
+      }
+      activeFallbacks += 1;
+      try {
+        return await context.resolveFallbackPrice!(option);
+      } finally {
+        activeFallbacks -= 1;
+        fallbackWaiters.shift()?.();
+      }
+    })();
+    fallbackCache.set(key, task);
+    return task;
+  }
   const parsed = await Promise.all(value.delivery_options.map(
     async (candidate): Promise<DeliveryQuoteOffer | null> => {
     const keys = [
@@ -215,7 +245,7 @@ export async function parseSendcloudDeliveryOptions(
     let amountCents: number;
     let fallbackSourceFingerprint: string | null = null;
     if (candidate.shipping_rate.value === null) {
-      const fallback = await context.resolveFallbackPrice?.({
+      const fallback = await limitedFallback({
         carrierCode: candidate.carrier.code,
         shippingOptionCode: candidate.checkout_identifier.value,
         deliveryMode,

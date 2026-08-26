@@ -194,6 +194,48 @@ test("Sendcloud parser omits only options whose documented lead time or rate is 
   assert.equal(parsed[0].deliveryMode, "home");
 });
 
+test("Sendcloud deduplicates V2 price lookups and bounds fallback concurrency", async () => {
+  let active = 0;
+  let peak = 0;
+  let calls = 0;
+  const uniqueOptions = Array.from({ length: 12 }, (_, index) => ({
+    carrierCode: `carrier${index}`,
+    carrierName: `Carrier ${index}`,
+    shippingOptionCode: `carrier${index}:home`,
+  }));
+  const deliveryOptions = uniqueOptions.flatMap((option, index) => [
+    nullRateOffer({
+      ...option,
+      id: `option-${index}-a`,
+      deliveryMethodType: "standard_delivery",
+    }),
+    nullRateOffer({
+      ...option,
+      id: `option-${index}-b`,
+      deliveryMethodType: "standard_delivery",
+    }),
+  ]);
+  const parsed = await parseSendcloudDeliveryOptions({
+    configuration_id: "configuration_bounded_fallback",
+    delivery_options: deliveryOptions,
+  }, {
+    now: "2024-11-27T12:00:00.000Z",
+    ttlSeconds: 1800,
+    dutiesTerms: "EU_INCLUDED",
+    async resolveFallbackPrice() {
+      calls += 1;
+      active += 1;
+      peak = Math.max(peak, active);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      active -= 1;
+      return { amountCents: 500, sourceFingerprint: "a".repeat(64) };
+    },
+  });
+  assert.equal(parsed.length, 24);
+  assert.equal(calls, 12);
+  assert.equal(peak, 4);
+});
+
 test("Sendcloud parser bounds expiry by cut-off and closes unmodelled delivery types", async () => {
   const parsed = await parseSendcloudDeliveryOptions({
     configuration_id: "configuration_1",
