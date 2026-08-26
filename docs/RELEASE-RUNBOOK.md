@@ -27,6 +27,11 @@ variants have two total gift units except Pourpre M and Rose M, which have three
 Dynamic packs continue to draw from these sellable variants, including packs
 whose pieces share the same colour.
 
+The stock-owner approval in the launch manifest records Adam CHABBI's dated
+relay of Jérémy SCHEPPLER's verbal approval. The signer identifier preserves
+that provenance explicitly; it is not presented as a direct electronic
+signature by Jérémy.
+
 The controlled stock import must be executed once, through its owner-only and
 idempotent route, from the exact controlled Worker version that is recorded by
 the stock attestation. Keep `PRODUCTION_STOCK_IMPORT_ENABLED=true` on that
