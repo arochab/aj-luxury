@@ -1,7 +1,13 @@
 import { D1CommerceStore } from "./d1-commerce-store.ts";
+import { launchVariantSeed } from "../../db/seed.ts";
 import type { CommerceD1Database, CommerceD1PreparedStatement } from "./d1-port.ts";
 import { isCanonicalUtcTimestamp } from "./account-security.ts";
 import { validateLaunchStockImport } from "./launch-stock-import.ts";
+import {
+  LAUNCH_CURRENT_PHYSICAL_QUANTITY,
+  LAUNCH_CURRENT_SELLABLE_QUANTITY,
+  LAUNCH_REMAINING_GIFT_RESERVE_QUANTITY,
+} from "./launch-inventory.ts";
 import {
   createProductionProviderConfigurationAttestation,
   type ProductionProviderConfigurationAttestation,
@@ -42,9 +48,9 @@ export type ProductionStockImportReceipt = Readonly<{
   releaseSha: string;
   workerVersionId: string;
   providerConfigurationSha256: string;
-  physicalQuantity: 756;
-  giftingReserveQuantity: 26;
-  sellableQuantity: 730;
+  physicalQuantity: 749;
+  giftingReserveQuantity: 23;
+  sellableQuantity: 726;
 }>;
 
 type CountRow = Readonly<{
@@ -120,9 +126,9 @@ function receipt(
     releaseSha,
     workerVersionId,
     providerConfigurationSha256,
-    physicalQuantity: 756,
-    giftingReserveQuantity: 26,
-    sellableQuantity: 730,
+    physicalQuantity: LAUNCH_CURRENT_PHYSICAL_QUANTITY,
+    giftingReserveQuantity: LAUNCH_REMAINING_GIFT_RESERVE_QUANTITY,
+    sellableQuantity: LAUNCH_CURRENT_SELLABLE_QUANTITY,
   });
 }
 
@@ -207,14 +213,16 @@ async function seedOnlyCatalogMatches(
   return result.success && result.results.length === variants.length &&
     result.results.every((row, index) => {
       const expected = variants[index];
+      const seed = launchVariantSeed[index];
       return expected !== undefined && row.variant_id === expected.variantId &&
+        seed !== undefined && seed.id === expected.variantId &&
         row.product_id === "product_apollon" &&
         row.internal_reference === expected.internalReference &&
-        row.physical_quantity === expected.physicalQuantity &&
+        row.physical_quantity === seed.physicalQuantity &&
         row.gift_reserve_quantity === 0 && row.safety_reserve_quantity === 0 &&
         row.active_reserved_quantity === 0 && row.sold_quantity === 0 &&
         row.reserves_validated === 0 && row.seed_movements === 1 &&
-        row.seed_quantity === expected.physicalQuantity && row.non_seed_movements === 0;
+        row.seed_quantity === seed.physicalQuantity && row.non_seed_movements === 0;
     });
 }
 
@@ -253,13 +261,16 @@ async function verifyProof(
     manifestId, manifestId, manifestId, manifestId, manifestId, manifestId,
     manifestId, payloadSha256,
   ).first<ProofRow>();
-  return proof?.variants === 12 && proof.physical_quantity === 756 &&
-    proof.gifting_reserve_quantity === 26 && proof.safety_reserve_quantity === 0 &&
+  return proof?.variants === 12 &&
+    proof.physical_quantity === LAUNCH_CURRENT_PHYSICAL_QUANTITY &&
+    proof.gifting_reserve_quantity === LAUNCH_REMAINING_GIFT_RESERVE_QUANTITY &&
+    proof.safety_reserve_quantity === 0 &&
     proof.reserves_validated === 12 && proof.gift_movements === 12 &&
-    proof.gift_movement_quantity === 26 && proof.manifest_lines === 12 &&
-    proof.manifest_physical_quantity === 756 &&
-    proof.manifest_gifting_reserve_quantity === 26 &&
-    proof.manifest_sellable_quantity === 730;
+    proof.gift_movement_quantity === LAUNCH_REMAINING_GIFT_RESERVE_QUANTITY &&
+    proof.manifest_lines === 12 &&
+    proof.manifest_physical_quantity === LAUNCH_CURRENT_PHYSICAL_QUANTITY &&
+    proof.manifest_gifting_reserve_quantity === LAUNCH_REMAINING_GIFT_RESERVE_QUANTITY &&
+    proof.manifest_sellable_quantity === LAUNCH_CURRENT_SELLABLE_QUANTITY;
 }
 
 /**
@@ -332,9 +343,53 @@ export async function activateProductionLaunchStock(
     throw new ProductionStockImportError("DATABASE_NOT_EMPTY", "The seed-only catalog contains non-seed stock state or mismatched variants.");
   }
 
-  const validationAt = oneMillisecondAfter(input.activatedAt);
+  const giftAllocationAt = oneMillisecondAfter(input.activatedAt);
+  const validationAt = oneMillisecondAfter(giftAllocationAt);
   const statements: CommerceD1PreparedStatement[] = [];
   validated.variants.forEach((variant, position) => {
+    const seed = launchVariantSeed[position];
+    if (!seed || seed.id !== variant.variantId) {
+      throw new ProductionStockImportError(
+        "IMPORT_PROOF_FAILED",
+        "The initial launch seed cannot be reconciled to the current stock grid.",
+      );
+    }
+    const adjustmentQuantity = Math.abs(
+      variant.physicalQuantity - seed.physicalQuantity,
+    );
+    const adjustmentReferenceType = variant.physicalQuantity > seed.physicalQuantity
+      ? "physical_increase"
+      : "physical_decrease";
+    const adjustmentKey =
+      `launch-stock-current-grid:${validated.payloadSha256.slice(0, 32)}:${String(position).padStart(2, "0")}`;
+    if (adjustmentQuantity > 0) {
+      statements.push(database.prepare(
+        `INSERT INTO inventory_movements (
+          id, variant_id, kind, quantity, reference_type, reference_id,
+          actor_type, actor_id, idempotency_key, created_at
+        ) SELECT ?, stock.variant_id, 'adjustment',
+          CASE WHEN stock.physical_quantity=? AND stock.gift_reserve_quantity=0
+            AND stock.safety_reserve_quantity=0 AND stock.active_reserved_quantity=0
+            AND stock.sold_quantity=0 AND stock.reserves_validated=0
+            AND NOT EXISTS (
+              SELECT 1 FROM inventory_movements
+              WHERE variant_id=stock.variant_id AND kind<>'seed'
+            )
+            THEN ? ELSE 0 END,
+          ?, ?, 'admin', ?, ?, ?
+        FROM inventory AS stock WHERE stock.variant_id=?`,
+      ).bind(
+        `movement_launch_current_grid_${String(position).padStart(2, "0")}`,
+        seed.physicalQuantity,
+        adjustmentQuantity,
+        adjustmentReferenceType,
+        validated.manifestId,
+        validated.approvedBy.stock_owner,
+        adjustmentKey,
+        input.activatedAt,
+        variant.variantId,
+      ));
+    }
     if (variant.giftingReserveQuantity > 0) {
       statements.push(database.prepare(
         `INSERT INTO inventory_movements (
@@ -344,9 +399,16 @@ export async function activateProductionLaunchStock(
           CASE WHEN stock.physical_quantity=? AND stock.gift_reserve_quantity=0
             AND stock.safety_reserve_quantity=0 AND stock.active_reserved_quantity=0
             AND stock.sold_quantity=0 AND stock.reserves_validated=0
-            AND NOT EXISTS (
-              SELECT 1 FROM inventory_movements
-              WHERE variant_id=stock.variant_id AND kind<>'seed'
+            AND (
+              (?=0 AND NOT EXISTS (
+                SELECT 1 FROM inventory_movements
+                WHERE variant_id=stock.variant_id AND kind<>'seed'
+              ))
+              OR (? > 0 AND EXISTS (
+                SELECT 1 FROM inventory_movements
+                WHERE variant_id=stock.variant_id AND kind='adjustment'
+                  AND idempotency_key=?
+              ))
             )
             THEN ? ELSE 0 END,
           'gift_reserve_increase', ?, 'admin', ?, ?, ?
@@ -354,11 +416,14 @@ export async function activateProductionLaunchStock(
       ).bind(
         `movement_launch_gift_${String(position).padStart(2, "0")}`,
         variant.physicalQuantity,
+        adjustmentQuantity,
+        adjustmentQuantity,
+        adjustmentKey,
         variant.giftingReserveQuantity,
         validated.manifestId,
         validated.approvedBy.stock_owner,
         `launch-stock-gift:${validated.payloadSha256.slice(0, 32)}:${String(position).padStart(2, "0")}`,
-        input.activatedAt,
+        giftAllocationAt,
         variant.variantId,
       ));
     }
@@ -381,8 +446,8 @@ export async function activateProductionLaunchStock(
       physical_total, variant_count, gifting_reserve_total, safety_reserve_total,
       sav_reserve_total, sellable_total, stock_owner_id, release_owner_id,
       stock_owner_signed_at, release_owner_signed_at, activated_at
-    ) VALUES (?, 'ajl-launch-stock-import-v1', ?, ?, ?, ?, 756, 12, 26, 0, 0,
-      730, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, 'ajl-launch-stock-import-v2', ?, ?, ?, ?, 749, 12, 23, 0, 0,
+      726, ?, ?, ?, ?, ?)`,
   ).bind(
     validated.manifestId,
     validated.payloadSha256,

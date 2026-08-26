@@ -1,27 +1,27 @@
 {
-  "protocol": "ajl-launch-stock-import-v1",
+  "protocol": "ajl-launch-stock-import-v2",
   "manifestId": "replace-with-unique-import-id",
   "countedAt": "",
   "variants": [
-    { "variantId": "variant_boxer_pourpre_s", "internalReference": "AJ-APO-POU-S", "physicalQuantity": 63, "giftingReserveQuantity": 3, "safetyReserveQuantity": 0, "savReserveQuantity": 0 },
-    { "variantId": "variant_boxer_pourpre_m", "internalReference": "AJ-APO-POU-M", "physicalQuantity": 63, "giftingReserveQuantity": 2, "safetyReserveQuantity": 0, "savReserveQuantity": 0 },
-    { "variantId": "variant_boxer_pourpre_l", "internalReference": "AJ-APO-POU-L", "physicalQuantity": 63, "giftingReserveQuantity": 2, "safetyReserveQuantity": 0, "savReserveQuantity": 0 },
-    { "variantId": "variant_boxer_pourpre_xl", "internalReference": "AJ-APO-POU-XL", "physicalQuantity": 63, "giftingReserveQuantity": 2, "safetyReserveQuantity": 0, "savReserveQuantity": 0 },
-    { "variantId": "variant_boxer_rose-pale_s", "internalReference": "AJ-APO-ROS-S", "physicalQuantity": 63, "giftingReserveQuantity": 2, "safetyReserveQuantity": 0, "savReserveQuantity": 0 },
-    { "variantId": "variant_boxer_rose-pale_m", "internalReference": "AJ-APO-ROS-M", "physicalQuantity": 63, "giftingReserveQuantity": 2, "safetyReserveQuantity": 0, "savReserveQuantity": 0 },
-    { "variantId": "variant_boxer_rose-pale_l", "internalReference": "AJ-APO-ROS-L", "physicalQuantity": 63, "giftingReserveQuantity": 2, "safetyReserveQuantity": 0, "savReserveQuantity": 0 },
-    { "variantId": "variant_boxer_rose-pale_xl", "internalReference": "AJ-APO-ROS-XL", "physicalQuantity": 63, "giftingReserveQuantity": 2, "safetyReserveQuantity": 0, "savReserveQuantity": 0 },
-    { "variantId": "variant_boxer_lilas-bleu-clair_s", "internalReference": "AJ-APO-LIL-S", "physicalQuantity": 63, "giftingReserveQuantity": 2, "safetyReserveQuantity": 0, "savReserveQuantity": 0 },
-    { "variantId": "variant_boxer_lilas-bleu-clair_m", "internalReference": "AJ-APO-LIL-M", "physicalQuantity": 63, "giftingReserveQuantity": 2, "safetyReserveQuantity": 0, "savReserveQuantity": 0 },
-    { "variantId": "variant_boxer_lilas-bleu-clair_l", "internalReference": "AJ-APO-LIL-L", "physicalQuantity": 63, "giftingReserveQuantity": 2, "safetyReserveQuantity": 0, "savReserveQuantity": 0 },
-    { "variantId": "variant_boxer_lilas-bleu-clair_xl", "internalReference": "AJ-APO-LIL-XL", "physicalQuantity": 63, "giftingReserveQuantity": 3, "safetyReserveQuantity": 0, "savReserveQuantity": 0 }
+    { "variantId": "variant_boxer_pourpre_s", "internalReference": "AJ-APO-POU-S", "physicalQuantity": 26, "giftingReserveQuantity": 2, "safetyReserveQuantity": 0, "savReserveQuantity": 0 },
+    { "variantId": "variant_boxer_pourpre_m", "internalReference": "AJ-APO-POU-M", "physicalQuantity": 102, "giftingReserveQuantity": 2, "safetyReserveQuantity": 0, "savReserveQuantity": 0 },
+    { "variantId": "variant_boxer_pourpre_l", "internalReference": "AJ-APO-POU-L", "physicalQuantity": 87, "giftingReserveQuantity": 2, "safetyReserveQuantity": 0, "savReserveQuantity": 0 },
+    { "variantId": "variant_boxer_pourpre_xl", "internalReference": "AJ-APO-POU-XL", "physicalQuantity": 35, "giftingReserveQuantity": 2, "safetyReserveQuantity": 0, "savReserveQuantity": 0 },
+    { "variantId": "variant_boxer_rose-pale_s", "internalReference": "AJ-APO-ROS-S", "physicalQuantity": 26, "giftingReserveQuantity": 2, "safetyReserveQuantity": 0, "savReserveQuantity": 0 },
+    { "variantId": "variant_boxer_rose-pale_m", "internalReference": "AJ-APO-ROS-M", "physicalQuantity": 102, "giftingReserveQuantity": 2, "safetyReserveQuantity": 0, "savReserveQuantity": 0 },
+    { "variantId": "variant_boxer_rose-pale_l", "internalReference": "AJ-APO-ROS-L", "physicalQuantity": 87, "giftingReserveQuantity": 2, "safetyReserveQuantity": 0, "savReserveQuantity": 0 },
+    { "variantId": "variant_boxer_rose-pale_xl", "internalReference": "AJ-APO-ROS-XL", "physicalQuantity": 35, "giftingReserveQuantity": 2, "safetyReserveQuantity": 0, "savReserveQuantity": 0 },
+    { "variantId": "variant_boxer_lilas-bleu-clair_s", "internalReference": "AJ-APO-LIL-S", "physicalQuantity": 26, "giftingReserveQuantity": 2, "safetyReserveQuantity": 0, "savReserveQuantity": 0 },
+    { "variantId": "variant_boxer_lilas-bleu-clair_m", "internalReference": "AJ-APO-LIL-M", "physicalQuantity": 100, "giftingReserveQuantity": 1, "safetyReserveQuantity": 0, "savReserveQuantity": 0 },
+    { "variantId": "variant_boxer_lilas-bleu-clair_l", "internalReference": "AJ-APO-LIL-L", "physicalQuantity": 88, "giftingReserveQuantity": 2, "safetyReserveQuantity": 0, "savReserveQuantity": 0 },
+    { "variantId": "variant_boxer_lilas-bleu-clair_xl", "internalReference": "AJ-APO-LIL-XL", "physicalQuantity": 35, "giftingReserveQuantity": 2, "safetyReserveQuantity": 0, "savReserveQuantity": 0 }
   ],
   "totals": {
-    "physicalQuantity": 756,
-    "giftingReserveQuantity": 26,
+    "physicalQuantity": 749,
+    "giftingReserveQuantity": 23,
     "safetyReserveQuantity": 0,
     "savReserveQuantity": 0,
-    "sellableQuantity": 730
+    "sellableQuantity": 726
   },
   "approvals": [
     { "role": "stock_owner", "signerId": "replace-stock-owner", "signedAt": "", "payloadSha256": "", "attestation": "I_APPROVE_THIS_EXACT_STOCK_IMPORT" },

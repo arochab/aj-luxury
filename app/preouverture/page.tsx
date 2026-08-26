@@ -20,15 +20,15 @@ const construit = [
 ];
 
 const validations = [
-  ["Stock", "730 pièces à vendre + 26 réservées, puis répartition couleur × taille"],
+  ["Stock", "726 pièces à vendre + 23 cadeaux restant réservés, ventilés par couleur × taille"],
   ["Composition", "94 % modal · 6 % élasthanne"],
-  ["TVA", "Factures avec ou sans TVA"],
+  ["TVA", "Aucune TVA collectée · mention article 293 B sur facture"],
   ["Livraison", "France + UE : prix, délais, poids et formats des colis"],
   ["Validation finale", "Photos, textes et prix"],
 ];
 
 const activation = [
-  "Importer les 730 pièces dans le stock de production",
+  "Importer les 726 pièces vendables dans le stock de production",
   "Activer Stripe, Sendcloud et les e-mails sur le domaine public",
   "Passer puis rembourser une vraie commande avant l’ouverture",
 ];
@@ -42,7 +42,7 @@ export default function PreouverturePage() {
         <p className={styles.eyebrow}>Préouverture privée · 25 août 2026</p>
         <h1 id="preouverture-title">Le site est construit.<br />L’ouverture tient à cinq validations.</h1>
         <div className={styles.metrics} aria-label="Chiffres clés">
-          <p><strong>730</strong><span>pièces à vendre</span></p>
+          <p><strong>726</strong><span>pièces à vendre</span></p>
           <p><strong>3 × 4</strong><span>coloris × tailles</span></p>
           <p><strong>1 · 2 · 3</strong><span>unité · duo · trio</span></p>
         </div>

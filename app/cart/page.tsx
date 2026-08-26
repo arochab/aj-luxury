@@ -94,7 +94,7 @@ export default function CartPage() {
             </h1>
             <p className={tunnel.lede}>
               {reviewMode
-                ? "Les 730 pièces vendables, les tailles et les packs sont préparés. Cette adresse publique reste volontairement verrouillée : aucun débit et aucune donnée bancaire."
+                ? "Les 726 pièces vendables, les tailles et les packs sont préparés. Cette adresse publique reste volontairement verrouillée : aucun débit et aucune donnée bancaire."
                 : "La vente en ligne n’est pas encore ouverte : ce site est une démonstration. Rien n’est enregistré, rien n’est débité, et aucune donnée bancaire n’est collectée."}
             </p>
             <ul className={`${tunnel.gages} ${tunnel.montee}`}>
@@ -104,7 +104,7 @@ export default function CartPage() {
               </li>
               <li>
                 <span>{reviewMode ? "Stock" : "Données bancaires"}</span>
-                <strong>{reviewMode ? "730 vendables" : "Aucune collecte"}</strong>
+                <strong>{reviewMode ? "726 vendables" : "Aucune collecte"}</strong>
               </li>
               <li>
                 <span>{reviewMode ? "Packs" : "Ce site"}</span>

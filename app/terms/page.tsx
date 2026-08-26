@@ -4,6 +4,7 @@ import {
   LEGAL_VERSION_DISPLAY,
   MEDIATOR,
   SELLER_IDENTITY,
+  SELLER_TAX_STATUS,
 } from "@/lib/legal";
 import { T } from "@/lib/i18n/TranslatedText";
 
@@ -64,16 +65,15 @@ export default function TermsPage() {
       <section>
         <h2>3. Prix</h2>
         <p>
-          Les prix sont indiqués en euros. La mention fiscale exacte sera
-          publiée après confirmation du régime de TVA du vendeur et, pour les
-          ventes dans l’Union européenne, des règles applicables aux ventes à
-          distance. Les frais de livraison sont indiqués séparément avant la
-          validation de la commande. Le prix total exigible est celui affiché
-          dans le récapitulatif final.
+          Les prix sont indiqués en euros. Le vendeur bénéficie de la franchise
+          en base et ne collecte pas de TVA. Les factures portent la mention{" "}
+          <strong>« {SELLER_TAX_STATUS.invoiceMention} »</strong>. Les frais de
+          livraison sont indiqués séparément avant la validation de la commande.
+          Le prix total exigible est celui affiché dans le récapitulatif final.
         </p>
         <p>
-          Aucun paiement public n’est activé tant que cette qualification
-          fiscale et son traitement dans la commande ne sont pas validés.
+          Le calcul de commande conserve donc une TVA à zéro centime et
+          n’ajoute aucune TVA au montant payé.
         </p>
       </section>
 

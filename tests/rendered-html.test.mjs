@@ -908,20 +908,13 @@ test("legal notice publishes the sourced seller identity and never the closed es
   assert.doesNotMatch(html, /944 996 487 00020|94499648700020/);
   assert.doesNotMatch(html, /944 996 487 00012|94499648700012/);
 
-  /* LE NUMERO DE TVA N'EST PAS PUBLIE. La cle de controle permet de former un
-     candidat, mais VIES le renvoie invalide et l'API Entreprises renvoie
-     tva:null au 25/08/2026. Il ne reapparaitra qu'apres preuve du regime. */
+  /* Aucun numero de TVA n'est invente. La franchise communiquee est exprimee
+     par sa mention de facture canonique, sans transformer un identifiant
+     absent en numero intracommunautaire. */
   assert.doesNotMatch(html, /FR\s?58\s?944\s?996\s?487/);
   assert.doesNotMatch(html, /TVA intracommunautaire/);
-
-  /* MAIS L'ETIQUETTE DU PRIX NE SUIT PAS. Publier le numero ne tranche pas le
-     regime : l'API officielle renvoie encore « tva: null », ce qui est le
-     comportement d'une franchise en base. Le montant affiche est le meme sous
-     les deux regimes, seule sa mention change. Tant que Jeremy n'a pas
-     repondu, aucune des deux n'est affirmee — c'est la seule position vraie
-     dans les deux cas, et ce test empeche de la trancher par inadvertance. */
   assert.doesNotMatch(html, /\bTTC\b/);
-  assert.doesNotMatch(html, /293\s?B/);
+  assert.match(html, /TVA non applicable, article 293 B/);
 
   /* AUCUN TEXTE D'ATTENTE NE RESTE VISIBLE. Adam confirme le 22/08 qu'aucune
      ligne telephonique n'est ouverte. La ligne « Telephone » est donc omise

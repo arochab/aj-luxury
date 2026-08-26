@@ -1,4 +1,4 @@
-export const LEGAL_VERSION = "2026-08-25";
+export const LEGAL_VERSION = "2026-08-26";
 
 /*
   La même date, mais avec des traits d'union INSÉCABLES (U+2011) pour
@@ -27,7 +27,7 @@ export const LEGAL_VERSION_DISPLAY = LEGAL_VERSION.replace(/-/g, "‑");
   Un « à compléter avant l'ouverture des ventes » sur des mentions légales en
   ligne ne satisfait pas davantage la loi ET signale au visiteur que la marque
   n'est pas prête. La ligne est donc omise tant que la valeur est `null`, et le
-  manque est porté là où il peut être traité : PRELAUNCH_BLOCKERS ci-dessous.
+  L'absence est temporairement acceptée par décision d'Adam pour ce candidat.
 
   Dès qu'un numéro existe, il suffit de le poser ici : la ligne réapparaît.
 */
@@ -76,6 +76,13 @@ export const SELLER_IDENTITY = {
   publicationDirector: "Jérémy Scheppler",
 } as const;
 
+/** Statut fiscal communiqué pour le candidat du 26 août 2026. */
+export const SELLER_TAX_STATUS = Object.freeze({
+  vatCollected: false,
+  taxCents: 0,
+  invoiceMention: "TVA non applicable, article 293 B du Code général des impôts",
+} as const);
+
 /** Numéro EORI relevé sur la fiche officielle le 22/08/2026 et déclaré valide
  *  par le validateur EORI officiel de l'Union européenne le 25/08/2026.
  *  Cette validation ne remplace pas la configuration des transporteurs,
@@ -123,8 +130,6 @@ export const MEDIATOR: Readonly<{
 }> | null = null;
 
 export const PRELAUNCH_BLOCKERS = [
-  "régime de TVA du vendeur et mention associée sur les prix",
-  "numéro de téléphone de l’éditeur, exigé par l’article 6 III de la LCEN",
   "médiateur de la consommation conventionné",
   "zones, transporteurs, tarifs et délais de livraison",
   "prestataire de paiement et moyens de paiement",

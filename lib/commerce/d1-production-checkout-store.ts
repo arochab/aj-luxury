@@ -17,6 +17,7 @@ import {
 } from "./fulfillment-domain.ts";
 import { prepareProductionDeliveryOrderSelection } from "./production-delivery-order-selection.ts";
 import { calculateAjPackPricing } from "./pack-pricing.ts";
+import { SELLER_TAX_STATUS } from "../legal.ts";
 
 export type ProductionCheckoutErrorCode =
   | "INVALID_INPUT"
@@ -114,6 +115,8 @@ export type ProductionOrderSnapshot = Readonly<{
   currency: "EUR";
   subtotalCents: number;
   shippingCents: number;
+  taxCents: 0;
+  invoiceTaxMention: string;
   totalCents: number;
   createdAt: string;
   paidAt: string | null;
@@ -595,6 +598,12 @@ export class D1ProductionCheckoutStore {
   }
 
   async #snapshot(order: OrderRow): Promise<ProductionOrderSnapshot> {
+    if (order.tax_cents !== SELLER_TAX_STATUS.taxCents) {
+      throw new ProductionCheckoutError(
+        "CHECKOUT_UNAVAILABLE",
+        "The stored order does not match the approved tax policy.",
+      );
+    }
     const result = await this.#database.prepare(
       `SELECT product_name, color_name, size, quantity, unit_price_cents,
         quantity * unit_price_cents AS line_total_cents
@@ -613,6 +622,8 @@ export class D1ProductionCheckoutStore {
       currency: order.currency,
       subtotalCents: order.subtotal_cents,
       shippingCents: order.shipping_cents,
+      taxCents: SELLER_TAX_STATUS.taxCents,
+      invoiceTaxMention: SELLER_TAX_STATUS.invoiceMention,
       totalCents: order.total_cents,
       createdAt: order.created_at,
       paidAt: order.paid_at,

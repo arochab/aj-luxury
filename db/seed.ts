@@ -52,7 +52,7 @@ const colors: readonly LaunchColor[] = [
     sourceSlug: "pourpre",
     swatch: "#7d0f52",
     imageUrl: "/images/client/raw/product-card-pourpre.webp",
-    stockBySize: { S: 63, M: 63, L: 63, XL: 63 },
+    stockBySize: { S: 26, M: 103, L: 87, XL: 36 },
   },
   {
     colorKey: "rose",
@@ -60,7 +60,7 @@ const colors: readonly LaunchColor[] = [
     sourceSlug: "rose-pale",
     swatch: "#dda9bd",
     imageUrl: "/images/client/raw/product-rose-profile.webp",
-    stockBySize: { S: 63, M: 63, L: 63, XL: 63 },
+    stockBySize: { S: 26, M: 103, L: 87, XL: 36 },
   },
   {
     colorKey: "lilas",
@@ -68,7 +68,7 @@ const colors: readonly LaunchColor[] = [
     sourceSlug: "lilas-bleu-clair",
     swatch: "#a9abd9",
     imageUrl: "/images/client/raw/product-lilas-model.webp",
-    stockBySize: { S: 63, M: 63, L: 63, XL: 63 },
+    stockBySize: { S: 26, M: 102, L: 88, XL: 36 },
   },
 ] as const;
 

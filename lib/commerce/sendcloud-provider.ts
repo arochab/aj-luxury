@@ -209,7 +209,7 @@ export async function parseSendcloudDeliveryOptions(
       ]),
       carrierCode: candidate.carrier.code,
       serviceCode: candidate.checkout_identifier.value,
-      displayName: candidate.title,
+      displayName: candidate.carrier.name,
       deliveryMode: candidate.delivery_method_type === "service_point_delivery"
         ? "service_point" as const
         : "home" as const,

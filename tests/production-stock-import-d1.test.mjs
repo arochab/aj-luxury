@@ -4,6 +4,7 @@ import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 
 import { launchVariantSeed } from "../db/seed.ts";
+import { getLaunchInventoryPosition } from "../lib/commerce/launch-inventory.ts";
 import {
   ProductionStockImportError,
   activateProductionLaunchStock,
@@ -58,7 +59,7 @@ function productionDatabase() {
   const sqlite = new DatabaseSync(":memory:");
   sqlite.exec("PRAGMA foreign_keys=ON");
   const names = readdirSync(new URL("../drizzle/", import.meta.url))
-    .filter((name) => /^00(?:0[0-7]|0[9]|1[0-9])_.+\.sql$/.test(name))
+    .filter((name) => /^00(?:0[0-7]|0[9]|1[0-9]|20)_.+\.sql$/.test(name))
     .sort();
   for (const name of names) {
     const migration = readFileSync(new URL(`../drizzle/${name}`, import.meta.url), "utf8");
@@ -77,17 +78,20 @@ async function manifest() {
     variants: launchVariantSeed.map((variant, index) => ({
       variantId: variant.id,
       internalReference: variant.internalReference,
-      physicalQuantity: variant.physicalQuantity,
-      giftingReserveQuantity: index === 0 || index === 11 ? 3 : 2,
+      physicalQuantity: getLaunchInventoryPosition(
+        variant.sourceSlug,
+        variant.size,
+      ).currentPhysicalQuantity,
+      giftingReserveQuantity: index === 9 ? 1 : 2,
       safetyReserveQuantity: 0,
       savReserveQuantity: 0,
     })),
     totals: {
-      physicalQuantity: 756,
-      giftingReserveQuantity: 26,
+      physicalQuantity: 749,
+      giftingReserveQuantity: 23,
       safetyReserveQuantity: 0,
       savReserveQuantity: 0,
-      sellableQuantity: 730,
+      sellableQuantity: 726,
     },
   };
   const payloadSha256 = await createLaunchStockPayloadSha256(unsigned);
@@ -129,7 +133,7 @@ function input(stockManifest) {
   };
 }
 
-test("production stock activation atomically proves 756 physical, 26 gifts and 730 sellable", async () => {
+test("production stock activation atomically proves 749 current, 23 reserved gifts and 726 sellable", async () => {
   const { sqlite, database } = productionDatabase();
   const stockManifest = await manifest();
   const first = await activateProductionLaunchStock(database, input(stockManifest));
@@ -140,18 +144,23 @@ test("production stock activation atomically proves 756 physical, 26 gifts and 7
       SUM(reserves_validated) validated,
       SUM(physical_quantity-gift_reserve_quantity-safety_reserve_quantity-active_reserved_quantity-sold_quantity) sellable
       FROM inventory`).get() },
-    { variants: 12, physical: 756, gifts: 26, safety: 0, validated: 12, sellable: 730 },
+    { variants: 12, physical: 749, gifts: 23, safety: 0, validated: 12, sellable: 726 },
   );
   assert.deepEqual(
     { ...sqlite.prepare(`SELECT COUNT(*) movements, SUM(quantity) quantity
       FROM inventory_movements WHERE kind='gift_allocation'`).get() },
-    { movements: 12, quantity: 26 },
+    { movements: 12, quantity: 23 },
+  );
+  assert.deepEqual(
+    { ...sqlite.prepare(`SELECT COUNT(*) movements, SUM(quantity) quantity
+      FROM inventory_movements WHERE kind='adjustment'`).get() },
+    { movements: 6, quantity: 7 },
   );
   assert.deepEqual(
     { ...sqlite.prepare(`SELECT COUNT(*) lines, SUM(physical_quantity) physical,
       SUM(gifting_reserve_quantity) gifts, SUM(sellable_quantity) sellable
       FROM production_launch_stock_manifest_lines`).get() },
-    { lines: 12, physical: 756, gifts: 26, sellable: 730 },
+    { lines: 12, physical: 749, gifts: 23, sellable: 726 },
   );
   assert.equal(
     sqlite.prepare("SELECT COUNT(*) count FROM production_provider_configuration_attestations").get().count,

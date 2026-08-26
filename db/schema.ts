@@ -2231,7 +2231,10 @@ export const productionLaunchStockManifests = sqliteTable(
   },
   (table) => [
     uniqueIndex("ux_production_stock_manifest_payload").on(table.payloadSha256),
-    check("ck_production_stock_manifest_protocol", sql`${table.protocol} = 'ajl-launch-stock-import-v1'`),
+    check(
+      "ck_production_stock_manifest_protocol",
+      sql`${table.protocol} IN ('ajl-launch-stock-import-v1', 'ajl-launch-stock-import-v2')`,
+    ),
     check(
       "ck_production_stock_manifest_hashes",
       sql`length(${table.payloadSha256}) = 64
@@ -2243,7 +2246,16 @@ export const productionLaunchStockManifests = sqliteTable(
     ),
     check(
       "ck_production_stock_manifest_totals",
-      sql`${table.physicalTotal} = 756 AND ${table.variantCount} = 12
+      sql`${table.variantCount} = 12
+        AND (
+          (${table.protocol} = 'ajl-launch-stock-import-v1' AND ${table.physicalTotal} = 756)
+          OR (${table.protocol} = 'ajl-launch-stock-import-v2'
+            AND ${table.physicalTotal} = 749
+            AND ${table.giftingReserveTotal} = 23
+            AND ${table.safetyReserveTotal} = 0
+            AND ${table.savReserveTotal} = 0
+            AND ${table.sellableTotal} = 726)
+        )
         AND ${table.giftingReserveTotal} >= 0
         AND ${table.safetyReserveTotal} >= 0
         AND ${table.savReserveTotal} >= 0

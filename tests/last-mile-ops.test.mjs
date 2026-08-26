@@ -3,6 +3,7 @@ import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 
 import { launchVariantSeed } from "../db/seed.ts";
+import { getLaunchInventoryPosition } from "../lib/commerce/launch-inventory.ts";
 import {
   CommerceReportingError,
   readCommerceOperationsReport,
@@ -22,8 +23,11 @@ function stockPayload() {
   const variants = launchVariantSeed.map((variant, index) => ({
     variantId: variant.id,
     internalReference: variant.internalReference,
-    physicalQuantity: variant.physicalQuantity,
-    giftingReserveQuantity: index === 0 || index === 11 ? 3 : 2,
+    physicalQuantity: getLaunchInventoryPosition(
+      variant.sourceSlug,
+      variant.size,
+    ).currentPhysicalQuantity,
+    giftingReserveQuantity: index === 9 ? 1 : 2,
     safetyReserveQuantity: 0,
     savReserveQuantity: 0,
   }));
@@ -33,11 +37,11 @@ function stockPayload() {
     countedAt: "2026-08-15T08:00:00.000Z",
     variants,
     totals: {
-      physicalQuantity: 756,
-      giftingReserveQuantity: 26,
+      physicalQuantity: 749,
+      giftingReserveQuantity: 23,
       safetyReserveQuantity: 0,
       savReserveQuantity: 0,
-      sellableQuantity: 730,
+      sellableQuantity: 726,
     },
   };
 }
@@ -66,15 +70,15 @@ async function approvedStockManifest() {
   };
 }
 
-test("stock import reconciles the exact 12 variants, 756 units and three reserve buckets", async () => {
+test("stock import reconciles the exact 12-variant current grid and reserve buckets", async () => {
   const validated = await validateLaunchStockImport(await approvedStockManifest());
   assert.equal(validated.variants.length, 12);
-  assert.equal(validated.totals.physicalQuantity, 756);
-  assert.equal(validated.totals.giftingReserveQuantity, 26);
-  assert.equal(validated.totals.sellableQuantity, 730);
-  assert.equal(validated.variants[0].sellableQuantity, 60);
-  assert.equal(validated.variants[1].sellableQuantity, 61);
-  assert.equal(validated.variants[11].sellableQuantity, 60);
+  assert.equal(validated.totals.physicalQuantity, 749);
+  assert.equal(validated.totals.giftingReserveQuantity, 23);
+  assert.equal(validated.totals.sellableQuantity, 726);
+  assert.equal(validated.variants[0].sellableQuantity, 24);
+  assert.equal(validated.variants[1].sellableQuantity, 100);
+  assert.equal(validated.variants[11].sellableQuantity, 33);
   assert.equal(validated.variants[1].d1SafetyReserveQuantity, 0);
   assert.deepEqual(validated.approvedBy, {
     stock_owner: "ajl-stock-owner",
@@ -115,8 +119,7 @@ test("stock import fails closed on unsigned, reordered, overallocated or tampere
   });
   await t.test("payload changed after approval", async () => {
     const manifest = await approvedStockManifest();
-    manifest.variants[0].giftingReserveQuantity = 4;
-    manifest.variants[1].giftingReserveQuantity = 1;
+    manifest.manifestId = "ajl-stock-20260815-tampered";
     await assert.rejects(
       () => validateLaunchStockImport(manifest),
       (error) =>
@@ -129,7 +132,7 @@ test("stock import fails closed on unsigned, reordered, overallocated or tampere
       variant.giftingReserveQuantity = 0;
     }
     manifest.totals.giftingReserveQuantity = 0;
-    manifest.totals.sellableQuantity = 756;
+    manifest.totals.sellableQuantity = 749;
     const digest = await createLaunchStockPayloadSha256({
       protocol: manifest.protocol,
       manifestId: manifest.manifestId,
@@ -141,7 +144,7 @@ test("stock import fails closed on unsigned, reordered, overallocated or tampere
     await assert.rejects(
       () => validateLaunchStockImport(manifest),
       (error) =>
-        error instanceof LaunchStockImportError && error.code === "TOTAL_MISMATCH",
+        error instanceof LaunchStockImportError && error.code === "CATALOG_MISMATCH",
     );
   });
   await t.test("one person cannot approve both roles", async () => {

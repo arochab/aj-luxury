@@ -73,9 +73,9 @@ async function render(pathname) {
 
 test("internal stock separates physical, reserved and available-to-sell", () => {
   assert.deepEqual(getInternalStockPosition("pourpre", "M"), {
-    physical: 63,
+    physical: 102,
     reserved: 2,
-    availableToSell: 61,
+    availableToSell: 100,
   });
   assert.deepEqual(getInternalStockPosition("unknown", "S"), {
     physical: 0,

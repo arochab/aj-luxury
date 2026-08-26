@@ -73,6 +73,7 @@ test("Sendcloud delivery parser accepts only the documented V3 option shape", as
     delivery_options: [offer()],
   }, { now: "2024-11-27T12:00:00.000Z", ttlSeconds: 1800, dutiesTerms: "EU_INCLUDED" });
   assert.equal(parsed[0].providerCode, "sendcloud");
+  assert.equal(parsed[0].displayName, "DHL");
   assert.equal(parsed[0].amountCents, 500);
   assert.equal(parsed[0].estimatedDaysMax, 6);
   assert.equal(parsed[0].expiresAt, "2024-11-27T12:30:00.000Z");

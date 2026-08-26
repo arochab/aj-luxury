@@ -1,7 +1,13 @@
 import { launchVariantSeed } from "../../db/seed.ts";
 import { isCanonicalUtcTimestamp } from "./account-security.ts";
+import {
+  getLaunchInventoryPosition,
+  LAUNCH_CURRENT_PHYSICAL_QUANTITY,
+  LAUNCH_CURRENT_SELLABLE_QUANTITY,
+  LAUNCH_REMAINING_GIFT_RESERVE_QUANTITY,
+} from "./launch-inventory.ts";
 
-export const launchStockImportProtocol = "ajl-launch-stock-import-v1" as const;
+export const launchStockImportProtocol = "ajl-launch-stock-import-v2" as const;
 
 export const launchStockApprovalRoles = Object.freeze([
   "stock_owner",
@@ -80,13 +86,16 @@ const safeId = /^[a-z0-9][a-z0-9_.:-]{0,127}$/i;
 const sha256 = /^[0-9a-f]{64}$/;
 
 const expectedVariants = Object.freeze(
-  launchVariantSeed.map((variant) =>
-    Object.freeze({
+  launchVariantSeed.map((variant) => {
+    const position = getLaunchInventoryPosition(variant.sourceSlug, variant.size);
+    if (!position) throw new Error("The launch stock import grid is incomplete.");
+    return Object.freeze({
       variantId: variant.id,
       internalReference: variant.internalReference,
-      physicalQuantity: variant.physicalQuantity,
-    }),
-  ),
+      physicalQuantity: position.currentPhysicalQuantity,
+      giftingReserveQuantity: position.remainingGiftReserveQuantity,
+    });
+  }),
 );
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
@@ -169,7 +178,8 @@ function parseVariant(
   if (
     candidate.variantId !== expected.variantId ||
     candidate.internalReference !== expected.internalReference ||
-    candidate.physicalQuantity !== expected.physicalQuantity
+    candidate.physicalQuantity !== expected.physicalQuantity ||
+    candidate.giftingReserveQuantity !== expected.giftingReserveQuantity
   ) {
     throw new LaunchStockImportError(
       "CATALOG_MISMATCH",
@@ -351,11 +361,11 @@ export async function validateLaunchStockImport(
   const totals = parseTotals(candidate.totals);
   const calculatedTotals = calculateTotals(variants);
   if (
-    calculatedTotals.physicalQuantity !== 756 ||
-    calculatedTotals.giftingReserveQuantity !== 26 ||
+    calculatedTotals.physicalQuantity !== LAUNCH_CURRENT_PHYSICAL_QUANTITY ||
+    calculatedTotals.giftingReserveQuantity !== LAUNCH_REMAINING_GIFT_RESERVE_QUANTITY ||
     calculatedTotals.safetyReserveQuantity !== 0 ||
     calculatedTotals.savReserveQuantity !== 0 ||
-    calculatedTotals.sellableQuantity !== 730 ||
+    calculatedTotals.sellableQuantity !== LAUNCH_CURRENT_SELLABLE_QUANTITY ||
     Object.keys(calculatedTotals).some(
       (key) =>
         calculatedTotals[key as keyof LaunchStockImportTotals] !==
@@ -364,7 +374,7 @@ export async function validateLaunchStockImport(
   ) {
     throw new LaunchStockImportError(
       "TOTAL_MISMATCH",
-      "Manifest totals must reconcile to 756 physical, 26 gifting and 730 sellable units with no additional launch reserve.",
+      "Manifest totals must reconcile to 749 current physical, 23 remaining gifts and 726 sellable units with no additional launch reserve.",
     );
   }
 

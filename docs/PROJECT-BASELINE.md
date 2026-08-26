@@ -18,8 +18,10 @@ Dernière décision stock d’Adam : 25 août 2026.
 - Identité AJ Luxury distincte de la référence ABEL P.
 - Apollon, décliné en Pourpre Impérial, Rose Velours et Lilas Céleste.
 - Tailles S à XL, 94% modal, 6% élasthanne.
-- 756 unités physiques réparties à 63 par variante sur 3 coloris × 4 tailles.
-  26 unités sont isolées pour les cadeaux et 730 restent vendables : 10 variantes
+- 756 unités initiales ; la fiche courante totalise 749 pièces après 4 ventes
+  et 3 cadeaux déjà remis. 23 cadeaux restent réservés et 726 pièces sont
+  vendables, soit 242 par coloris. La grille exacte par variante est dans
+  `docs/internal/STOCK-LAUNCH-RECONCILIATION-2026-08-25.md`.
   à 61 vendables et 2 variantes à 60, selon
   `docs/internal/STOCK-VENTILATION-DECISION-2026-08-25.md`.
 - Prix validé : 29,99 €.

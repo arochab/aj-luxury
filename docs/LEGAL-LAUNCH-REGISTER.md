@@ -1,6 +1,6 @@
 # AJ Luxury — registre juridique de pré-lancement
 
-Date de revue : 25 août 2026
+Date de revue : 26 août 2026
 
 Responsable de l’intégration : Adam CHABBI
 
@@ -10,7 +10,7 @@ Statut : socle rédigé et intégré, ouverture commerciale bloquée jusqu’aux
 
 | Document | Route | Contenu couvert | Statut |
 |---|---|---|---|
-| Conditions générales de vente | `/terms` | Produits, prix, commande, paiement, livraison, rétractation, garanties, responsabilité, médiation | Identité renseignée ; fiscalité, logistique, paiement et médiateur à finaliser |
+| Conditions générales de vente | `/terms` | Produits, prix, commande, paiement, livraison, rétractation, garanties, responsabilité, médiation | Identité et franchise de TVA renseignées ; logistique, paiement et médiateur à finaliser |
 | Politique de confidentialité | `/privacy` | Finalités, bases légales, catégories de données, durées, destinataires, transferts, droits | Stripe, Sendcloud, Resend et Cloudflare nommés ; validation juridique finale requise |
 | Cookies et traceurs | `/cookies` | Stockages réellement utilisés, futur consentement, réglages | Conforme au prototype actuel ; à réviser avant tout nouvel outil |
 | Mentions légales | `/legal-notice` | Éditeur, publication, hébergeur, propriété intellectuelle, responsabilité | Identité et hébergeur documentés ; téléphone public absent |
@@ -55,8 +55,7 @@ Statut : socle rédigé et intégré, ouverture commerciale bloquée jusqu’aux
 
 | Priorité | Information ou action requise | Responsable | Preuve attendue |
 |---|---|---|---|
-| Bloquant | Régime de TVA et mention fiscale appliquée aux prix | AJ Luxury | Réponse oui/non issue d’une facture actuelle ; SIE seulement en cas de doute |
-| Bloquant | Téléphone public et directeur de publication | AJ Luxury | Validation écrite |
+| Accepté pour ce candidat | Téléphone public temporairement absent | Adam | `LEGAL_CONTACT.phone` reste `null` ; aucun numéro fabriqué |
 | Bloquant | Médiateur de la consommation conventionné | AJ Luxury | Convention et coordonnées |
 | Bloquant | Pays, transporteurs, tarifs, délais, douane et responsabilité import | AJ Luxury + Adam | Matrice logistique validée |
 | Bloquant | Compte Stripe, bénéficiaire, moyens activés et webhook | AJ Luxury + Adam | Compte marchand et recette signée |

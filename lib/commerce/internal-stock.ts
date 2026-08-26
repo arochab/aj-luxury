@@ -3,6 +3,7 @@ import type {
   PublicStockBySize,
   PublicStockStatus,
 } from "./public-stock.ts";
+import { getLaunchInventoryPosition } from "./launch-inventory.ts";
 
 export type InternalStockPosition = {
   physical: number;
@@ -27,26 +28,19 @@ type InternalStockLedger = Record<
  * fournir une synchronisation ou une réservation transactionnelle.
  * Ce module ne doit jamais être importé par un composant client.
  */
-const launchStockLedger: InternalStockLedger = {
-  pourpre: {
-    S: { physical: 63, reserved: 3 },
-    M: { physical: 63, reserved: 2 },
-    L: { physical: 63, reserved: 2 },
-    XL: { physical: 63, reserved: 2 },
-  },
-  "rose-pale": {
-    S: { physical: 63, reserved: 2 },
-    M: { physical: 63, reserved: 2 },
-    L: { physical: 63, reserved: 2 },
-    XL: { physical: 63, reserved: 2 },
-  },
-  "lilas-bleu-clair": {
-    S: { physical: 63, reserved: 2 },
-    M: { physical: 63, reserved: 2 },
-    L: { physical: 63, reserved: 2 },
-    XL: { physical: 63, reserved: 3 },
-  },
-};
+const launchStockLedger: InternalStockLedger = Object.fromEntries(
+  ["pourpre", "rose-pale", "lilas-bleu-clair"].map((slug) => [
+    slug,
+    Object.fromEntries(sizes.map((size) => {
+      const position = getLaunchInventoryPosition(slug, size);
+      if (!position) throw new Error(`Missing launch inventory for ${slug}/${size}.`);
+      return [size, {
+        physical: position.currentPhysicalQuantity,
+        reserved: position.remainingGiftReserveQuantity,
+      }];
+    })) as Record<ProductSize, InternalStockInput>,
+  ]),
+) as InternalStockLedger;
 
 export function getInternalStockPosition(
   productSlug: string,

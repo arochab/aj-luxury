@@ -411,12 +411,10 @@ export default function ProductPurchase({
           Un chiffre nu sur une fiche produit se lit comme un prix de vente :
           c'est la lecture qu'un client en fait, et elle serait fausse.
 
-          CE QUI N'EST PAS ECRIT ICI, ET POURQUOI. Aucune mention « TTC ».
-          Le depot ne permet pas de l'affirmer : `lib/legal.ts` porte un numero
-          de TVA « A completer », et le dictionnaire dit lui-meme que « les
-          taxes et droits restent a confirmer avant l'ouverture des ventes ».
-          Ecrire TTC serait inventer un fait fiscal. La mention viendra quand
-          le regime sera arrete — pas avant.
+          CE QUI N'EST PAS ECRIT ICI, ET POURQUOI. Aucune mention « TTC » :
+          le vendeur ne collecte pas de TVA au titre de la franchise en base.
+          La mention fiscale canonique vit dans `lib/legal.ts` et sur les CGV
+          ainsi que les factures, sans surcharger le bloc prix restauré.
 
           `product.priceLabel` existe deja dans les cinq langues : rien n'est
           traduit ici, seule sa condition d'affichage change. */}

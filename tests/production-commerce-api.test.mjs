@@ -9,8 +9,11 @@ import {
   productionStockRuntimeAttested,
 } from "../worker/production-commerce-api.ts";
 import { launchVariantSeed } from "../db/seed.ts";
+import { getLaunchInventoryPosition } from "../lib/commerce/launch-inventory.ts";
 import { createLaunchStockPayloadSha256 } from "../lib/commerce/launch-stock-import.ts";
 import {
+  productionLaunchStockCurrentGridContract,
+  productionLaunchStockCurrentGridContractSha256,
   productionReleaseSchemaContract,
   productionReleaseSchemaContractSha256,
 } from "../lib/commerce/production-schema-contract.ts";
@@ -72,6 +75,8 @@ const ownerHeaders = Object.freeze({
 test("production release schema sentinel is bound to its canonical contract", async () => {
   for (const [contract, expected] of [
     [productionReleaseSchemaContract, productionReleaseSchemaContractSha256],
+    [productionLaunchStockCurrentGridContract,
+      productionLaunchStockCurrentGridContractSha256],
     [productionProviderConfigurationSchemaContract,
       productionProviderConfigurationSchemaContractSha256],
   ]) {
@@ -101,22 +106,25 @@ async function approvedProductionStockManifest() {
   const variants = launchVariantSeed.map((variant, index) => ({
     variantId: variant.id,
     internalReference: variant.internalReference,
-    physicalQuantity: variant.physicalQuantity,
-    giftingReserveQuantity: index === 0 || index === 11 ? 3 : 2,
+    physicalQuantity: getLaunchInventoryPosition(
+      variant.sourceSlug,
+      variant.size,
+    ).currentPhysicalQuantity,
+    giftingReserveQuantity: index === 9 ? 1 : 2,
     safetyReserveQuantity: 0,
     savReserveQuantity: 0,
   }));
   const unsigned = {
-    protocol: "ajl-launch-stock-import-v1",
+    protocol: "ajl-launch-stock-import-v2",
     manifestId: "stock-launch-20260825",
     countedAt: "2026-08-25T08:00:00.000Z",
     variants,
     totals: {
-      physicalQuantity: 756,
-      giftingReserveQuantity: 26,
+      physicalQuantity: 749,
+      giftingReserveQuantity: 23,
       safetyReserveQuantity: 0,
       savReserveQuantity: 0,
-      sellableQuantity: 730,
+      sellableQuantity: 726,
     },
   };
   const payloadSha256 = await createLaunchStockPayloadSha256(unsigned);
@@ -234,7 +242,7 @@ test("the one-shot stock importer is wired before the stock gate but bound to ow
   assert.equal(calls, 0);
 
   const accepted = await productionCommerceApiResponse(
-    request("IMPORT_756_PHYSICAL_26_GIFTS_730_SELLABLE"), env,
+    request("IMPORT_749_CURRENT_23_GIFTS_726_SELLABLE"), env,
     {
       stockImportOwnerAuthenticator: async () => true,
       stockImporter: async (_database, input) => {
@@ -256,15 +264,15 @@ test("the one-shot stock importer is wired before the stock gate but bound to ow
         releaseSha,
         workerVersionId: controlled.CF_VERSION_METADATA.id,
         providerConfigurationSha256: "d".repeat(64),
-        physicalQuantity: 756,
-        giftingReserveQuantity: 26,
-        sellableQuantity: 730,
+        physicalQuantity: 749,
+        giftingReserveQuantity: 23,
+        sellableQuantity: 726,
       };
       },
     },
   );
   assert.equal(accepted.status, 201);
-  assert.equal((await accepted.json()).data.sellableQuantity, 730);
+  assert.equal((await accepted.json()).data.sellableQuantity, 726);
   assert.equal(calls, 1);
 });
 
@@ -397,25 +405,28 @@ test("live stock attestation recomputes the exact 12-line manifest and controlle
   const variants = launchVariantSeed.map((variant, index) => ({
     variantId: variant.id,
     internalReference: variant.internalReference,
-    physicalQuantity: variant.physicalQuantity,
-    giftingReserveQuantity: index === 0 || index === 11 ? 3 : 2,
+    physicalQuantity: getLaunchInventoryPosition(
+      variant.sourceSlug,
+      variant.size,
+    ).currentPhysicalQuantity,
+    giftingReserveQuantity: index === 9 ? 1 : 2,
     safetyReserveQuantity: 0,
     savReserveQuantity: 0,
   }));
   const unsigned = {
-    protocol: "ajl-launch-stock-import-v1",
+    protocol: "ajl-launch-stock-import-v2",
     manifestId: "stock-launch-20260815",
     countedAt,
     variants,
-    totals: { physicalQuantity: 756, giftingReserveQuantity: 26, safetyReserveQuantity: 0, savReserveQuantity: 0, sellableQuantity: 730 },
+    totals: { physicalQuantity: 749, giftingReserveQuantity: 23, safetyReserveQuantity: 0, savReserveQuantity: 0, sellableQuantity: 726 },
   };
   const payload = await createLaunchStockPayloadSha256(unsigned);
   const proof = {
     manifest_id: unsigned.manifestId, protocol: unsigned.protocol, payload_sha256: payload,
     counted_at: countedAt, release_sha: releaseSha,
     worker_version_id: controlled.CF_VERSION_METADATA.id,
-    physical_total: 756, variant_count: 12, gifting_reserve_total: 26,
-    safety_reserve_total: 0, sav_reserve_total: 0, sellable_total: 730,
+    physical_total: 749, variant_count: 12, gifting_reserve_total: 23,
+    safety_reserve_total: 0, sav_reserve_total: 0, sellable_total: 726,
     stock_owner_id: "jeremy", release_owner_id: "adam",
     stock_owner_signed_at: "2026-08-15T01:01:00.000Z",
     release_owner_signed_at: "2026-08-15T01:02:00.000Z",
