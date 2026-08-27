@@ -387,7 +387,13 @@ export default function ProductionCheckoutClient() {
             <button
               type="button"
               disabled={submitting}
-              onClick={() => void (cart?.lines.length && !order ? requestOptions() : load())}
+              onClick={() => void (
+                order && ["pending_payment", "cancelled"].includes(order.status)
+                  ? changeDelivery()
+                  : cart?.lines.length
+                    ? requestOptions()
+                    : load()
+              )}
             >
               {t("cart.retry")}
             </button>

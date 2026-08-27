@@ -467,7 +467,8 @@ test("production checkout retries the failed delivery quote without changing its
     "utf8",
   );
   assert.match(source, /quoteAttempt\.current\?\.fingerprint === fingerprint/);
-  assert.match(source, /cart\?\.lines\.length && !order \? requestOptions\(\) : load\(\)/);
+  assert.match(source, /order && \["pending_payment", "cancelled"\]\.includes\(order\.status\)[\s\S]{0,120}changeDelivery\(\)/);
+  assert.match(source, /cart\?\.lines\.length[\s\S]{0,80}requestOptions\(\)[\s\S]{0,80}load\(\)/);
   assert.match(source, /event\.preventDefault\(\);\s*void requestOptions\(\);/);
   assert.doesNotMatch(source, /onClick=\{\(\) => void load\(\)\}/);
 });

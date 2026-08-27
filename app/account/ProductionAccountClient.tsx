@@ -27,6 +27,36 @@ const orderStatusLabel = Object.freeze({
   refunded: "Commande remboursée",
 });
 
+const orderStatusDetail = Object.freeze({
+  pending_payment: "Votre sélection est réservée dans l’attente du paiement.",
+  paid: "Le paiement est confirmé. La commande va passer en préparation.",
+  preparing: "Votre commande est en cours de préparation.",
+  shipped: "Votre commande a été remise au transporteur.",
+  cancelled: "Cette commande n’est plus active et aucun paiement n’est attendu.",
+  refunded: "Le remboursement de cette commande a été enregistré.",
+});
+
+const progressStatuses = Object.freeze(["Paiement", "Préparation", "Expédition"]);
+
+function orderProgress(status: PublicCustomerAccount["orders"][number]["status"]): number {
+  if (status === "shipped") return 3;
+  if (status === "preparing") return 2;
+  if (status === "paid") return 1;
+  return 0;
+}
+
+function formatOrderDate(value: string): string {
+  return new Intl.DateTimeFormat("fr-FR", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  }).format(new Date(value));
+}
+
+function itemCount(order: PublicCustomerAccount["orders"][number]): number {
+  return order.lines.reduce((total, line) => total + line.quantity, 0);
+}
+
 function errorMessage(error: unknown): string {
   if (error instanceof CustomerAccountApiError && error.code === "INVALID_CREDENTIALS") {
     return "Adresse e-mail ou mot de passe incorrect.";
@@ -161,6 +191,21 @@ export default function ProductionAccountClient() {
     }
   }
 
+  async function requestPasswordChange() {
+    if (!account || submitting) return;
+    setSubmitting(true);
+    setError(null);
+    setMessage(null);
+    try {
+      await requestCustomerPasswordReset(account.email);
+      setMessage("Un lien sécurisé pour modifier votre mot de passe vient d’être envoyé.");
+    } catch (cause) {
+      setError(errorMessage(cause));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   if (loading) {
     return <div className={`${styles.main} ${styles.accountMain}`} aria-busy="true"><p>Chargement sécurisé de votre espace…</p></div>;
   }
@@ -171,37 +216,104 @@ export default function ProductionAccountClient() {
         <section aria-labelledby="account-title">
           <p className={styles.eyebrow}>Votre espace sécurisé</p>
           <h1 className={styles.title} id="account-title">Mon compte</h1>
-          <div className={styles.accountProfile}>
-            <p><strong>Adresse e-mail</strong><br />{account.email}</p>
-            <label className={styles.checkbox}>
-              <input type="checkbox" checked={acceptsMarketing} disabled={submitting} onChange={(event) => void changeMarketing(event.currentTarget.checked)} />
-              <span>Recevoir les nouveautés AJ Luxury. Facultatif et révocable à tout moment.</span>
-            </label>
-            <button className={styles.secondaryButton} type="button" disabled={submitting} onClick={() => void logout()}>Se déconnecter</button>
+          <p className={styles.accountIntro}>Retrouvez vos commandes et gérez vos préférences depuis un seul espace.</p>
+
+          <dl className={styles.accountOverview}>
+            <div><dt>Compte</dt><dd>Actif et vérifié</dd></div>
+            <div><dt>Commandes</dt><dd>{account.orders.length}</dd></div>
+            <div><dt>Adresse e-mail</dt><dd>{account.email}</dd></div>
+          </dl>
+
+          <div className={styles.accountSectionHeading}>
+            <div>
+              <p className={styles.eyebrow}>Historique</p>
+              <h2>Mes commandes</h2>
+            </div>
+            <Link className={styles.accountTextLink} href="/shop">Continuer mes achats</Link>
           </div>
+
+          <div className={styles.accountOrders}>
+            {account.orders.map((order) => {
+              const progress = orderProgress(order.status);
+              return (
+                <article className={styles.accountOrder} key={order.orderNumber}>
+                  <header className={styles.accountOrderHeader}>
+                    <div>
+                      <small>Commande du {formatOrderDate(order.createdAt)}</small>
+                      <strong className={styles.orderNumber}>{order.orderNumber}</strong>
+                    </div>
+                    <span className={styles.accountStatus}>{orderStatusLabel[order.status]}</span>
+                  </header>
+
+                  <p className={styles.accountStatusDetail}>{orderStatusDetail[order.status]}</p>
+
+                  {progress > 0 && (
+                    <ol className={styles.accountProgress} aria-label="Avancement de la commande">
+                      {progressStatuses.map((label, index) => (
+                        <li className={index < progress ? styles.accountProgressDone : ""} key={label}>
+                          <span aria-hidden="true" />{label}
+                        </li>
+                      ))}
+                    </ol>
+                  )}
+
+                  <div className={styles.accountOrderLines}>
+                    {order.lines.map((line, index) => (
+                      <div className={styles.row} key={`${order.orderNumber}-${line.colorName}-${line.size}-${index}`}>
+                        <span>{line.productName}<small>{line.colorName} · Taille {line.size} × {line.quantity}</small></span>
+                        <LocalizedPrice amountCents={line.lineTotalCents} />
+                      </div>
+                    ))}
+                  </div>
+
+                  <footer className={styles.accountOrderFooter}>
+                    <span>{itemCount(order)} article{itemCount(order) > 1 ? "s" : ""}</span>
+                    <strong>Total&nbsp;: <LocalizedPrice amountCents={order.totalCents} /></strong>
+                  </footer>
+                  {order.status === "cancelled" && <Link className={styles.accountTextLink} href="/shop">Passer une nouvelle commande</Link>}
+                </article>
+              );
+            })}
+            {!account.orders.length && (
+              <div className={styles.accountEmptyOrders}>
+                <h2>Votre première commande apparaîtra ici.</h2>
+                <p>Vous pourrez retrouver son détail et son avancement depuis cet espace.</p>
+                <Link className={styles.button} href="/shop">Découvrir la boutique</Link>
+              </div>
+            )}
+          </div>
+
           {message && <p className={styles.success} role="status">{message}</p>}
           {error && <div className={styles.error} role="alert"><p>{error}</p></div>}
         </section>
 
-        <aside className={`${styles.summary} ${styles.accountOrderSummary}`} aria-label="Historique des commandes">
-          <p className={styles.eyebrow}>Historique</p>
-          <h2>{account.orders.length ? `${account.orders.length} commande${account.orders.length > 1 ? "s" : ""}` : "Aucune commande"}</h2>
-          {account.orders.map((order) => (
-            <article className={styles.accountOrder} key={order.orderNumber}>
-              <strong>{order.orderNumber}</strong>
-              <small>{orderStatusLabel[order.status]}</small>
-              {order.lines.map((line, index) => (
-                <div className={styles.row} key={`${order.orderNumber}-${line.colorName}-${line.size}-${index}`}>
-                  <span>{line.colorName} · {line.size} × {line.quantity}</span>
-                  <LocalizedPrice amountCents={line.lineTotalCents} />
-                </div>
-              ))}
-              <div className={`${styles.row} ${styles.total}`}>
-                <span>Total</span><LocalizedPrice amountCents={order.totalCents} />
-              </div>
-            </article>
-          ))}
-          {!account.orders.length && <Link className={styles.button} href="/shop">Découvrir la boutique</Link>}
+        <aside className={`${styles.summary} ${styles.accountProfile}`} aria-label="Informations du compte">
+          <section>
+            <p className={styles.eyebrow}>Mes informations</p>
+            <h2>Profil</h2>
+            <p><strong>Adresse e-mail</strong><br />{account.email}</p>
+            <p className={styles.accountVerified}>Adresse confirmée</p>
+          </section>
+
+          <section>
+            <p className={styles.eyebrow}>Préférences</p>
+            <label className={styles.checkbox}>
+              <input type="checkbox" checked={acceptsMarketing} disabled={submitting} onChange={(event) => void changeMarketing(event.currentTarget.checked)} />
+              <span>Recevoir les nouveautés AJ Luxury. Facultatif et révocable à tout moment.</span>
+            </label>
+          </section>
+
+          <section>
+            <p className={styles.eyebrow}>Sécurité</p>
+            <button className={styles.secondaryButton} type="button" disabled={submitting} onClick={() => void requestPasswordChange()}>Modifier mon mot de passe</button>
+          </section>
+
+          <section>
+            <p className={styles.eyebrow}>Besoin d’aide&nbsp;?</p>
+            <a className={styles.accountTextLink} href="mailto:contact@ajluxurystore.com">Contacter AJ Luxury</a>
+          </section>
+
+          <button className={styles.secondaryButton} type="button" disabled={submitting} onClick={() => void logout()}>Se déconnecter</button>
         </aside>
       </div>
     );

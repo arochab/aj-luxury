@@ -330,6 +330,63 @@ test("delivery change atomically cancels, releases stock and clones an open cart
   sqlite.close();
 });
 
+test("delivery change rebuilds a cart after an unpaid order was already cancelled", async () => {
+  const { sqlite, d1, event } = await fixture();
+  const reservationExpiry = sqlite.prepare(
+    "SELECT expires_at FROM stock_reservations WHERE cart_id='cart_prod'",
+  ).get().expires_at;
+  const cancelledAt = new Date(Date.parse(reservationExpiry) + 1).toISOString();
+  sqlite.prepare(
+    `UPDATE stock_reservations SET status='expired',
+      last_transition_key='controlled-reset:test', updated_at=?
+    WHERE cart_id='cart_prod'`,
+  ).run(cancelledAt);
+  sqlite.prepare(
+    `UPDATE orders SET status='cancelled', updated_at=?
+    WHERE id=? AND paid_at IS NULL`,
+  ).run(new Date(Date.parse(cancelledAt) + 1).toISOString(), event.orderId);
+
+  const checkout = new D1ProductionCheckoutStore(d1);
+  const newCartId = "cart_delivery_change_cancelled_recovery";
+  const plan = await checkout.prepareDeliveryChange({
+    cartId: "cart_prod",
+    newCartId,
+    idempotencyKey: "delivery-change-cancelled-recovery-0001",
+    origin: "https://ajluxurystore.com",
+    locale: "fr",
+    now: new Date(Date.parse(cancelledAt) + 2).toISOString(),
+  });
+  assert.equal(plan.state, "recovery");
+
+  await checkout.cancelPendingOrderForDeliveryChange({
+    cartId: "cart_prod",
+    newCartId,
+    newCartExpiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1_000).toISOString(),
+    now: new Date(Date.parse(cancelledAt) + 3).toISOString(),
+  });
+  assert.equal(
+    sqlite.prepare("SELECT status FROM carts WHERE id=?").get(newCartId).status,
+    "open",
+  );
+  assert.deepEqual(
+    sqlite.prepare("SELECT variant_id,quantity,unit_price_cents FROM cart_lines WHERE cart_id=?").all(newCartId),
+    sqlite.prepare("SELECT variant_id,quantity,unit_price_cents FROM cart_lines WHERE cart_id='cart_prod'").all(),
+  );
+  assert.equal(
+    sqlite.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action='delivery_change_requested'").get().n,
+    1,
+  );
+  assert.equal((await checkout.prepareDeliveryChange({
+    cartId: "cart_prod",
+    newCartId,
+    idempotencyKey: "delivery-change-cancelled-recovery-replay-0001",
+    origin: "https://ajluxurystore.com",
+    locale: "fr",
+    now: new Date(Date.parse(cancelledAt) + 4).toISOString(),
+  })).state, "completed");
+  sqlite.close();
+});
+
 test("delivery change rolls back every local effect when its atomic batch fails", async () => {
   const { sqlite } = await fixture();
   const checkout = new D1ProductionCheckoutStore(new D1(sqlite, 2));

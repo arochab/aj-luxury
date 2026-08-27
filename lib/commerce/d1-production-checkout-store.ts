@@ -155,6 +155,7 @@ export type CreateProductionOrderInput = Readonly<{
 
 export type ProductionDeliveryChangePlan =
   | Readonly<{ state: "completed" }>
+  | Readonly<{ state: "recovery" }>
   | Readonly<{
     state: "pending";
     checkoutRequest: CheckoutSessionRequest;
@@ -269,10 +270,10 @@ export class D1ProductionCheckoutStore {
       if (await this.#deliveryChangeComplete(order.id, input.cartId, input.newCartId)) {
         return Object.freeze({ state: "completed" });
       }
-      throw new ProductionCheckoutError(
-        "ORDER_CONFLICT",
-        "Cancelled order has no recoverable delivery-change cart.",
-      );
+      // A controlled reset can cancel an unpaid order before the shopper asks
+      // to change delivery. Rebuild the replacement cart without touching
+      // Stripe again: there is no active payment session left to expire.
+      return Object.freeze({ state: "recovery" });
     }
     if (order.status !== "pending_payment") {
       throw new ProductionCheckoutError(
@@ -349,12 +350,8 @@ export class D1ProductionCheckoutStore {
     }
     if (order.status === "cancelled") {
       if (await this.#deliveryChangeComplete(order.id, input.cartId, input.newCartId)) return;
-      throw new ProductionCheckoutError(
-        "ORDER_CONFLICT",
-        "Cancelled order has no recoverable delivery-change cart.",
-      );
     }
-    if (order.status !== "pending_payment") {
+    if (!["pending_payment", "cancelled"].includes(order.status)) {
       throw new ProductionCheckoutError(
         "ORDER_CONFLICT",
         "Only a pending payment order can change delivery.",
