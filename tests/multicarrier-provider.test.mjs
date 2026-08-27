@@ -620,7 +620,7 @@ test("Sendcloud maps the live France V3 codes to one exact V2 price band", async
               },
               {
                 id: 7302,
-                name: "Colissimo Home duplicate account method",
+                name: "Colissimo Home Signature 0-0.25kg",
                 functionalities: {},
                 shipping_product_code: "colissimo:home/fr",
                 properties: {
@@ -650,7 +650,7 @@ test("Sendcloud maps the live France V3 codes to one exact V2 price band", async
       if (url.pathname === "/api/v2/shipping-price") {
         const methodId = Number(url.searchParams.get("shipping_method_id"));
         return Response.json([{
-          price: [7301, 7302].includes(methodId) ? "6.61" : "3.50",
+          price: methodId === 7301 ? "6.61" : methodId === 7302 ? "8.65" : "3.50",
           currency: "EUR",
           to_country: "FR",
           breakdown: [],

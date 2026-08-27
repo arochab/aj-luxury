@@ -375,7 +375,12 @@ function exactShippingMethodIds(
     throw new DeliveryProviderError("MALFORMED_RESPONSE", "Shipping products response is invalid.");
   }
   const expectedMode = expectedLastMile(option.deliveryMode);
-  const matches: Array<Readonly<{ id: number; minWeight: number; maxWeight: number }>> = [];
+  const matches: Array<Readonly<{
+    id: number;
+    name: string;
+    minWeight: number;
+    maxWeight: number;
+  }>> = [];
   for (const product of value) {
     if (!record(product) || !safeString(product.name) ||
       !safeString(product.code) || !SAFE_SHIPPING_OPTION_CODE.test(product.code) ||
@@ -408,6 +413,7 @@ function exactShippingMethodIds(
       if (!methodMatchesParcel(method.properties, request)) continue;
       matches.push(Object.freeze({
         id: method.id as number,
+        name: method.name as string,
         minWeight: method.properties.min_weight as number,
         maxWeight: method.properties.max_weight as number,
       }));
@@ -417,11 +423,19 @@ function exactShippingMethodIds(
   // Adjacent Sendcloud bands share the boundary value (for example 0–250 g
   // and 250–500 g). Prefer the most specific interval containing the parcel:
   // the highest lower bound, then the lowest upper bound. Identical remaining
-  // methods are still ambiguous and therefore stay closed.
+  // methods must then be reconciled explicitly or stay closed.
   const highestMinimum = Math.max(...matches.map(({ minWeight }) => minWeight));
   const minimumMatches = matches.filter(({ minWeight }) => minWeight === highestMinimum);
   const lowestMaximum = Math.min(...minimumMatches.map(({ maxWeight }) => maxWeight));
   const exactMatches = minimumMatches.filter(({ maxWeight }) => maxWeight === lowestMaximum);
+  if (option.carrierCode === "colissimo" &&
+    option.shippingOptionCode === "colissimo:home/fr") {
+    const standardHomeMethods = exactMatches.filter(({ name }) =>
+      /^colissimo home(?:\s|$)/i.test(name) && !/\bsignature\b/i.test(name));
+    return standardHomeMethods.length === 1
+      ? Object.freeze([standardHomeMethods[0].id])
+      : Object.freeze([]);
+  }
   return exactMatches.length >= 1 && exactMatches.length <= 4
     ? Object.freeze(exactMatches.map(({ id }) => id).sort((left, right) => left - right))
     : Object.freeze([]);
