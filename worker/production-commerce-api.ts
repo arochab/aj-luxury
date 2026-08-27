@@ -117,6 +117,7 @@ export type ProductionCommerceRuntimeEnvironment = ProductionCommerceEnvironment
   COMMERCE_STOREFRONT_ORIGINS_JSON?: string;
   COMMERCE_CONTROLLED_STOREFRONT_ORIGIN?: string;
   COMMERCE_PUBLIC_STOREFRONT_ORIGINS_JSON?: string;
+  COMMERCE_CONTROLLED_EDGE_ACCESS_ENFORCED?: string;
 }>;
 export type ProductionCommerceRouterDependencies = Readonly<{
   trustedStorefrontOrigin?: string;
@@ -1083,7 +1084,11 @@ export async function productionCommerceApiResponse(
   if (!gate.ready || !gate.origin || url.origin !== gate.origin) return fail("COMMERCE_CLOSED", 503);
   const controlledStorefront = env.COMMERCE_BACKEND_ONLY === "true" &&
     dependencies.trustedStorefrontOrigin === env.COMMERCE_CONTROLLED_STOREFRONT_ORIGIN;
+  const controlledEdgeAccess = gate.mode === "controlled" &&
+    env.COMMERCE_CONTROLLED_EDGE_ACCESS_ENFORCED === "true" &&
+    url.origin === gate.origin;
   if ((gate.mode !== "live" || controlledStorefront) &&
+    !controlledEdgeAccess &&
     !await controlledOwnerRequestAuthenticated(request, env)) {
     return fail("CONTROLLED_ACCESS_REQUIRED", 403);
   }
