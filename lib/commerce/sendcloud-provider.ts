@@ -349,9 +349,7 @@ function methodMatchesParcel(
     !finiteNonNegativeInteger(properties.max_weight) ||
     properties.min_weight > properties.max_weight ||
     request.parcel.weightGrams < properties.min_weight ||
-    // Adjacent Sendcloud bands share their boundary (0–250 g, 250–500 g).
-    // Treat them as half-open intervals so 250 g selects one band, not two.
-    request.parcel.weightGrams >= properties.max_weight ||
+    request.parcel.weightGrams > properties.max_weight ||
     !record(properties.max_dimensions)) return false;
   const maximum = properties.max_dimensions;
   const maximumLength = dimensionInMillimeters(maximum.length, maximum.unit);
@@ -377,7 +375,7 @@ function exactShippingMethodId(
     throw new DeliveryProviderError("MALFORMED_RESPONSE", "Shipping products response is invalid.");
   }
   const expectedMode = expectedLastMile(option.deliveryMode);
-  const matches: number[] = [];
+  const matches: Array<Readonly<{ id: number; minWeight: number; maxWeight: number }>> = [];
   for (const product of value) {
     if (!record(product) || !safeString(product.name) ||
       !safeString(product.code) || !SAFE_SHIPPING_OPTION_CODE.test(product.code) ||
@@ -408,10 +406,23 @@ function exactShippingMethodId(
       if (methodLastMile === undefined &&
         (availableLastMiles.length !== 1 || availableLastMiles[0] !== expectedMode)) continue;
       if (!methodMatchesParcel(method.properties, request)) continue;
-      matches.push(method.id as number);
+      matches.push(Object.freeze({
+        id: method.id as number,
+        minWeight: method.properties.min_weight as number,
+        maxWeight: method.properties.max_weight as number,
+      }));
     }
   }
-  return matches.length === 1 ? matches[0] : null;
+  if (matches.length < 1) return null;
+  // Adjacent Sendcloud bands share the boundary value (for example 0–250 g
+  // and 250–500 g). Prefer the most specific interval containing the parcel:
+  // the highest lower bound, then the lowest upper bound. Identical remaining
+  // methods are still ambiguous and therefore stay closed.
+  const highestMinimum = Math.max(...matches.map(({ minWeight }) => minWeight));
+  const minimumMatches = matches.filter(({ minWeight }) => minWeight === highestMinimum);
+  const lowestMaximum = Math.min(...minimumMatches.map(({ maxWeight }) => maxWeight));
+  const exactMatches = minimumMatches.filter(({ maxWeight }) => maxWeight === lowestMaximum);
+  return exactMatches.length === 1 ? exactMatches[0].id : null;
 }
 
 function exactShippingPrice(
