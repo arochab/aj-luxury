@@ -821,6 +821,28 @@ export function createSendcloudProviderPorts(
             }),
           },
         );
+        const optionShapes = record(response) && Array.isArray(response.delivery_options)
+          ? response.delivery_options.slice(0, 20).map((candidate) => record(candidate)
+            ? Object.freeze({
+              carrierCode: record(candidate.carrier) &&
+                  typeof candidate.carrier.code === "string"
+                ? candidate.carrier.code.slice(0, 80)
+                : "invalid",
+              deliveryMethodType: typeof candidate.delivery_method_type === "string"
+                ? candidate.delivery_method_type.slice(0, 80)
+                : "invalid",
+              leadTimeMissing: candidate.lead_time_hours === null,
+              rateMissing: record(candidate.shipping_rate) &&
+                candidate.shipping_rate.value === null,
+            })
+            : Object.freeze({ invalid: true }))
+          : [];
+        console.info(JSON.stringify({
+          event: "sendcloud_delivery_option_shapes",
+          destinationCountryCode: request.destination.countryCode,
+          optionCount: optionShapes.length,
+          options: optionShapes,
+        }));
         return parseSendcloudDeliveryOptions(response, {
           now: request.now,
           ttlSeconds: request.ttlSeconds,

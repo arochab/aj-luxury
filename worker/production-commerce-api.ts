@@ -17,7 +17,10 @@ import {
   activateProductionLaunchStock,
   type ProductionStockImportReceipt,
 } from "../lib/commerce/d1-production-stock-import.ts";
-import type { DeliveryProviderPorts } from "../lib/commerce/delivery-provider.ts";
+import {
+  DeliveryProviderError,
+  type DeliveryProviderPorts,
+} from "../lib/commerce/delivery-provider.ts";
 import { DeliveryReferenceVault } from "../lib/commerce/delivery-reference-vault.ts";
 import { authorizeBrowserMutation, buildCsrfCookie, buildPendingCustomerCookie, buildSessionCookie, clearCsrfCookie, clearPendingCustomerCookie, clearSessionCookie, isTrustedMutationOrigin } from "../lib/commerce/identity-access-policy.ts";
 import { PaymentProviderError, verifyAndDeliverPaymentWebhook, type PaymentProviderPorts, type PaymentWebhookEffectsPort } from "../lib/commerce/payment-provider.ts";
@@ -1239,6 +1242,11 @@ export async function productionCommerceApiResponse(
         }
         return json({ data: { accepted: true, verificationRequired: true } }, 202, headers);
       } catch (cause) {
+        console.warn(JSON.stringify({
+          event: "customer_account_registration_failed",
+          errorName: cause instanceof Error ? cause.name : "UnknownError",
+          errorCode: cause instanceof CustomerAccountError ? cause.code : "UNEXPECTED",
+        }));
         if (cause instanceof CustomerAccountError && cause.code === "INVALID_INPUT") {
           return fail("INVALID_ACCOUNT_INPUT", 400);
         }
@@ -1417,7 +1425,21 @@ export async function productionCommerceApiResponse(
       const provider = dependencies.deliveryProvider ?? createSendcloudProviderPorts({ publicKey: env.SENDCLOUD_PUBLIC_KEY, secretKey: env.SENDCLOUD_SECRET_KEY });
       const vault = deliveryVault(env); if (!vault) return fail("DELIVERY_REFERENCE_VAULT_UNAVAILABLE", 503);
       return json({ data: await new D1ProductionDeliveryActivationStore(env.DB, provider, vault).quoteOptions({ cartId: current.cartId, address: parsed.address as never, idempotencyKey: key(request)!, now: now() }) });
-    } catch (cause) { return map(cause); }
+    } catch (cause) {
+      console.warn(JSON.stringify({
+        event: "production_delivery_quote_failed",
+        errorName: cause instanceof Error ? cause.name : "UnknownError",
+        errorCode: cause instanceof ProductionDeliveryError ? cause.code : "UNEXPECTED",
+        providerErrorName: cause instanceof Error && cause.cause instanceof Error
+          ? cause.cause.name
+          : null,
+        providerErrorCode: cause instanceof Error &&
+            cause.cause instanceof DeliveryProviderError
+          ? cause.cause.code
+          : null,
+      }));
+      return map(cause);
+    }
   }
   if (url.pathname === routes.points) {
     if (blockers.includes("delivery-schema-0013-not-installed")) return fail("DELIVERY_SCHEMA_NOT_READY", 503);
