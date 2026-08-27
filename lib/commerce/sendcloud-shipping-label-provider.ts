@@ -528,7 +528,7 @@ class D1SendcloudShippingLabelProvider implements ShippingLabelProviderPort {
     try {
       response = await this.#fetch(ANNOUNCE_URL, {
         method: "POST",
-        redirect: "error",
+        redirect: "manual",
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
         headers: {
           Accept: "application/json",

@@ -181,7 +181,7 @@ test("Stripe Checkout Session uses pinned API, form encoding and idempotency", a
   assert.equal(calls.length, 1);
   assert.equal(calls[0].url, "https://api.stripe.com/v1/checkout/sessions");
   assert.equal(calls[0].init.method, "POST");
-  assert.equal(calls[0].init.redirect, "error");
+  assert.equal(calls[0].init.redirect, "manual");
   assert.equal(calls[0].init.headers["Stripe-Version"], STRIPE_API_VERSION);
   assert.equal(calls[0].init.headers["Idempotency-Key"], "checkout-order-aj-00000001");
   const form = new URLSearchParams(calls[0].init.body);

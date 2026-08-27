@@ -606,7 +606,10 @@ async function providerResponse(
   try {
     response = await fetchImpl(url, {
       ...init,
-      redirect: "error",
+      // Cloudflare Workers does not implement `redirect: "error"`.
+      // `manual` preserves the fail-closed contract because the non-2xx
+      // response is rejected below without following its Location header.
+      redirect: "manual",
       headers: {
         Accept: "application/json",
         Authorization: basic(auth.publicKey, auth.secretKey),

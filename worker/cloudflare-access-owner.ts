@@ -121,7 +121,7 @@ async function resolveVerificationKey(issuer: string, kid: string): Promise<Cryp
   try {
     const response = await fetch(`${issuer}/cdn-cgi/access/certs`, {
       headers: { Accept: "application/json" },
-      redirect: "error",
+      redirect: "manual",
     });
     if (!response.ok) {
       await response.body?.cancel();

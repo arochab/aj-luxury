@@ -345,7 +345,7 @@ test("Sendcloud service points use current V3 and never follow redirects", async
   assert.match(call.url, /address_city=Paris/);
   assert.match(call.url, /limit=25/);
   assert.equal(call.init.method, "GET");
-  assert.equal(call.init.redirect, "error");
+  assert.equal(call.init.redirect, "manual");
   assert.equal(call.init.credentials, undefined);
   assert.match(call.init.headers.Authorization, /^Basic /);
 });
@@ -468,7 +468,7 @@ test("Sendcloud resolves null EU V3 rates from exact V2 products and EUR prices"
     assert.equal(url.searchParams.get("width"), "320");
     assert.equal(url.searchParams.get("height"), "40");
     assert.equal(init.method, "GET");
-    assert.equal(init.redirect, "error");
+    assert.equal(init.redirect, "manual");
   }
   const priceCalls = calls.filter(({ url }) => url.pathname === "/api/v2/shipping-price");
   assert.deepEqual(

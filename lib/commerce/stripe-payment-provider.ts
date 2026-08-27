@@ -226,7 +226,7 @@ async function stripePost(
   try {
     response = await fetchImpl(`${STRIPE_ORIGIN}${path}`, {
       method: "POST",
-      redirect: "error",
+      redirect: "manual",
       headers: {
         Accept: "application/json",
         Authorization: `Bearer ${runtime.apiKey}`,
@@ -271,7 +271,7 @@ async function stripeGet(
   try {
     response = await fetchImpl(`${STRIPE_ORIGIN}${path}`, {
       method: "GET",
-      redirect: "error",
+      redirect: "manual",
       headers: {
         Accept: "application/json",
         Authorization: `Bearer ${runtime.apiKey}`,
