@@ -36,6 +36,35 @@ function exactHttpsOrigin(value: string): string | null {
   }
 }
 
+function identityCopy(purpose: CustomerAccountEmailDelivery["purpose"]): Readonly<{
+  subject: string;
+  heading: string;
+  body: string;
+  action: string;
+  note: string;
+}> {
+  return purpose === "email_verification"
+    ? Object.freeze({
+      subject: "Confirmez votre adresse e-mail | AJ Luxury",
+      heading: "Votre espace AJ Luxury",
+      body: "Une dernière étape : confirmez votre adresse e-mail pour activer votre compte.",
+      action: "Confirmer mon adresse",
+      note: "Vous n’avez pas créé ce compte ? Ignorez simplement cet e-mail.",
+    })
+    : Object.freeze({
+      subject: "Nouveau mot de passe | AJ Luxury",
+      heading: "Nouveau mot de passe",
+      body: "Vous avez demandé à modifier le mot de passe de votre espace AJ Luxury.",
+      action: "Choisir un mot de passe",
+      note: "Vous n’êtes pas à l’origine de cette demande ? Ignorez simplement cet e-mail.",
+    });
+}
+
+function identityHtml(copy: ReturnType<typeof identityCopy>, href: string): string {
+  const subject = escapeHtml(copy.subject);
+  return `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${subject}</title></head><body style="margin:0;background:#f2f0eb;color:#111"><div style="display:none;max-height:0;overflow:hidden;opacity:0">${escapeHtml(copy.body)}</div><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f2f0eb;padding:24px 12px"><tr><td align="center"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;background:#fff;border:1px solid #dedbd4"><tr><td style="background:#0a0a0a;color:#fff;padding:24px 28px;font:600 16px Arial,sans-serif;letter-spacing:.2em">AJ LUXURY</td></tr><tr><td style="padding:40px 28px 36px"><p style="margin:0 0 14px;color:#6a665f;font:600 11px Arial,sans-serif;letter-spacing:.18em;text-transform:uppercase">Espace client</p><h1 style="margin:0 0 18px;color:#111;font:400 30px Arial,sans-serif;line-height:1.2">${escapeHtml(copy.heading)}</h1><p style="margin:0 0 28px;color:#333;font:15px Arial,sans-serif;line-height:1.65">${escapeHtml(copy.body)}</p><p style="margin:0 0 30px"><a href="${href}" style="display:inline-block;background:#0a0a0a;color:#fff;padding:15px 22px;font:600 13px Arial,sans-serif;letter-spacing:.08em;text-decoration:none">${escapeHtml(copy.action)}</a></p><p style="margin:0;color:#77726a;font:13px Arial,sans-serif;line-height:1.55">${escapeHtml(copy.note)}</p></td></tr><tr><td style="padding:20px 28px;border-top:1px solid #e8e5df;color:#77726a;font:12px Arial,sans-serif;line-height:1.5">AJ Luxury · ajluxurystore.com</td></tr></table></td></tr></table></body></html>`;
+}
+
 /** Direct, one-time Resend adapter for account verification and recovery. */
 export class ResendIdentityDelivery implements CustomerAccountEmailPort {
   readonly #apiKey: string;
@@ -84,18 +113,18 @@ export class ResendIdentityDelivery implements CustomerAccountEmailPort {
       input.purpose === "email_verification" ? "token" : "reset",
       input.rawToken,
     );
-    const subject = input.purpose === "email_verification"
-      ? "Confirmez votre compte AJ Luxury"
-      : "Réinitialisez votre mot de passe AJ Luxury";
-    const action = input.purpose === "email_verification"
-      ? "Confirmer mon adresse e-mail"
-      : "Choisir un nouveau mot de passe";
+    const copy = identityCopy(input.purpose);
     const text = [
-      subject,
+      "AJ LUXURY",
       "",
-      `${action} : ${accessUrl.toString()}`,
+      copy.heading,
+      copy.body,
       "",
-      "Ce lien est personnel et temporaire. Si vous n’êtes pas à l’origine de cette demande, ignorez cet e-mail.",
+      `${copy.action} : ${accessUrl.toString()}`,
+      "",
+      copy.note,
+      "",
+      "ajluxurystore.com",
     ].join("\n");
     const href = escapeHtml(accessUrl.toString());
     const response = await this.#fetch(RESEND_EMAILS_ENDPOINT, {
@@ -109,9 +138,9 @@ export class ResendIdentityDelivery implements CustomerAccountEmailPort {
         from: `${this.#fromName} <${this.#fromEmail}>`,
         to: [input.destinationEmail],
         ...(this.#replyTo ? { reply_to: this.#replyTo } : {}),
-        subject,
+        subject: copy.subject,
         text,
-        html: `<!doctype html><html lang="fr"><body style="margin:0;background:#f1eee8;color:#111"><main style="max-width:620px;margin:32px auto;background:#fff;padding:40px 32px;font:16px Arial,sans-serif;line-height:1.6"><p style="letter-spacing:.18em">AJ LUXURY</p><h1 style="font:500 28px Georgia,serif">${escapeHtml(subject)}</h1><p>Ce lien personnel est temporaire.</p><p><a href="${href}" style="display:inline-block;background:#111;color:#fff;padding:14px 20px;text-decoration:none">${escapeHtml(action)}</a></p><p style="color:#666">Si vous n’êtes pas à l’origine de cette demande, ignorez cet e-mail.</p></main></body></html>`,
+        html: identityHtml(copy, href),
         tags: [{ name: "kind", value: input.purpose }],
       }),
     });
