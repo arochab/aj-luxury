@@ -614,18 +614,18 @@ test("Sendcloud maps the live France V3 codes to one exact V2 price band", async
                 shipping_product_code: "colissimo:home/fr",
                 properties: {
                   min_weight: 1,
-                  max_weight: 250,
+                  max_weight: 251,
                   max_dimensions: { length: 100, width: 70, height: 58, unit: "centimeter" },
                 },
               },
               {
                 id: 7302,
-                name: "Colissimo Home 0.25-0.5kg",
+                name: "Colissimo Home duplicate account method",
                 functionalities: {},
                 shipping_product_code: "colissimo:home/fr",
                 properties: {
-                  min_weight: 250,
-                  max_weight: 500,
+                  min_weight: 1,
+                  max_weight: 251,
                   max_dimensions: { length: 100, width: 70, height: 58, unit: "centimeter" },
                 },
               },
@@ -650,7 +650,7 @@ test("Sendcloud maps the live France V3 codes to one exact V2 price band", async
       if (url.pathname === "/api/v2/shipping-price") {
         const methodId = Number(url.searchParams.get("shipping_method_id"));
         return Response.json([{
-          price: methodId === 7302 ? "6.61" : "3.50",
+          price: [7301, 7302].includes(methodId) ? "6.61" : "3.50",
           currency: "EUR",
           to_country: "FR",
           breakdown: [],
@@ -732,6 +732,7 @@ test("Sendcloud EU fallback refuses ambiguous, inexact and cross-mode products",
     {
       name: "ambiguous matching methods",
       products: [shippingProduct({ methodIds: [8101, 8102] })],
+      expectedPriceCalls: 2,
     },
     {
       name: "inexact product prefix",
@@ -773,13 +774,15 @@ test("Sendcloud EU fallback refuses ambiguous, inexact and cross-mode products",
             return Response.json(scenario.products);
           }
           priceCalls += 1;
+          const methodId = url.searchParams.get("shipping_method_id");
           return Response.json([{
-            price: "10.27", currency: "EUR", to_country: "DE", breakdown: [],
+            price: methodId === "8101" ? "10.27" : "10.28",
+            currency: "EUR", to_country: "DE", breakdown: [],
           }]);
         },
       );
       assert.deepEqual(await ports.quotes.quote(quoteRequest()), []);
-      assert.equal(priceCalls, 0);
+      assert.equal(priceCalls, scenario.expectedPriceCalls ?? 0);
     });
   }
 });

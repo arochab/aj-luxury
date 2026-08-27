@@ -366,11 +366,11 @@ function methodMatchesParcel(
     (maximumHeight === 0 || request.parcel.heightMm <= maximumHeight);
 }
 
-function exactShippingMethodId(
+function exactShippingMethodIds(
   value: unknown,
   option: SendcloudUnpricedOption,
   request: DeliveryQuoteRequest,
-): number | null {
+): readonly number[] {
   if (!Array.isArray(value) || value.length > 100) {
     throw new DeliveryProviderError("MALFORMED_RESPONSE", "Shipping products response is invalid.");
   }
@@ -413,7 +413,7 @@ function exactShippingMethodId(
       }));
     }
   }
-  if (matches.length < 1) return null;
+  if (matches.length < 1) return Object.freeze([]);
   // Adjacent Sendcloud bands share the boundary value (for example 0–250 g
   // and 250–500 g). Prefer the most specific interval containing the parcel:
   // the highest lower bound, then the lowest upper bound. Identical remaining
@@ -422,7 +422,9 @@ function exactShippingMethodId(
   const minimumMatches = matches.filter(({ minWeight }) => minWeight === highestMinimum);
   const lowestMaximum = Math.min(...minimumMatches.map(({ maxWeight }) => maxWeight));
   const exactMatches = minimumMatches.filter(({ maxWeight }) => maxWeight === lowestMaximum);
-  return exactMatches.length === 1 ? exactMatches[0].id : null;
+  return exactMatches.length >= 1 && exactMatches.length <= 4
+    ? Object.freeze(exactMatches.map(({ id }) => id).sort((left, right) => left - right))
+    : Object.freeze([]);
 }
 
 function exactShippingPrice(
@@ -542,28 +544,31 @@ async function resolveV2FallbackPrice(
     productCount: productShapes.length,
     products: productShapes,
   }));
-  const methodId = exactShippingMethodId(products, option, request);
-  if (methodId === null) return null;
-
-  const priceUrl = new URL(`${PANEL_ORIGIN}/api/v2/shipping-price`);
-  priceUrl.searchParams.set("shipping_method_id", String(methodId));
-  priceUrl.searchParams.set("from_country", request.originCountryCode);
-  priceUrl.searchParams.set("to_country", request.destination.countryCode);
-  priceUrl.searchParams.set("weight", String(request.parcel.weightGrams));
-  priceUrl.searchParams.set("weight_unit", "gram");
-  priceUrl.searchParams.set("to_postal_code", request.destination.postalCode);
-  const price = exactShippingPrice(await providerJson(
-    fetchImpl,
-    auth,
-    priceUrl.href,
-    { method: "GET" },
-  ), request.destination.countryCode);
-  if (!price) return null;
+  const methodIds = exactShippingMethodIds(products, option, request);
+  if (methodIds.length < 1) return null;
+  const prices = await Promise.all(methodIds.map(async (methodId) => {
+    const priceUrl = new URL(`${PANEL_ORIGIN}/api/v2/shipping-price`);
+    priceUrl.searchParams.set("shipping_method_id", String(methodId));
+    priceUrl.searchParams.set("from_country", request.originCountryCode);
+    priceUrl.searchParams.set("to_country", request.destination.countryCode);
+    priceUrl.searchParams.set("weight", String(request.parcel.weightGrams));
+    priceUrl.searchParams.set("weight_unit", "gram");
+    priceUrl.searchParams.set("to_postal_code", request.destination.postalCode);
+    return exactShippingPrice(await providerJson(
+      fetchImpl,
+      auth,
+      priceUrl.href,
+      { method: "GET" },
+    ), request.destination.countryCode);
+  }));
+  if (prices.some((price) => price === null)) return null;
+  const resolvedPrices = prices as Array<Readonly<{ amountCents: number; canonical: string }>>;
+  if (new Set(resolvedPrices.map(({ amountCents }) => amountCents)).size !== 1) return null;
   return Object.freeze({
-    amountCents: price.amountCents,
+    amountCents: resolvedPrices[0].amountCents,
     sourceFingerprint: await sha256Hex(JSON.stringify({
-      methodId,
-      price: price.canonical,
+      methodIds,
+      prices: resolvedPrices.map(({ canonical }) => canonical),
       productCode: option.shippingOptionCode,
     })),
   });
