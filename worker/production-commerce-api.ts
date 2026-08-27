@@ -1202,7 +1202,27 @@ export async function productionCommerceApiResponse(
         const checkoutToken = await createOpaqueAccessToken(
           accessTokenHashContexts.customerCheckoutLink,
         );
-        step = "password-hash";
+        const passwordBytes = new TextEncoder().encode(password);
+        step = "password-import";
+        const passwordKey = await crypto.subtle.importKey(
+          "raw",
+          Uint8Array.from(passwordBytes).buffer,
+          { name: "PBKDF2" },
+          false,
+          ["deriveBits"],
+        );
+        step = "password-derive-minimal";
+        await crypto.subtle.deriveBits(
+          {
+            name: "PBKDF2",
+            hash: { name: "SHA-256" },
+            salt: new Uint8Array(16).buffer,
+            iterations: 1,
+          },
+          passwordKey,
+          256,
+        );
+        step = "password-hash-governed";
         const stored = await hashCustomerPassword(password);
         step = "password-verify";
         const ready = isOpaqueAccessToken(verificationToken.token) &&
