@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   getCart,
   type PublicCartSnapshot,
@@ -151,8 +151,7 @@ export default function ProductionCheckoutClient() {
     pointsAttempt.current = null;
   }
 
-  async function requestOptions(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function requestOptions() {
     if (submitting || !cart?.lines.length) return;
     const address = shippingAddress(form);
     const fingerprint = JSON.stringify(address);
@@ -385,11 +384,20 @@ export default function ProductionCheckoutClient() {
         {errorCode && (
           <div className={styles.error} ref={errorRef} role="alert" tabIndex={-1}>
             <p>{errorMessage}</p>
-            <button type="button" onClick={() => void load()}>{t("cart.retry")}</button>
+            <button
+              type="button"
+              disabled={submitting}
+              onClick={() => void (cart?.lines.length && !order ? requestOptions() : load())}
+            >
+              {t("cart.retry")}
+            </button>
           </div>
         )}
         {!loading && !order && cart?.lines.length ? (
-          <form className={styles.form} onSubmit={(event) => void requestOptions(event)}>
+          <form className={styles.form} onSubmit={(event) => {
+            event.preventDefault();
+            void requestOptions();
+          }}>
             <label>{t("checkout.recipient")}<input required autoComplete="name" value={form.recipient} onChange={(e) => updateField("recipient", e.currentTarget.value)} /></label>
             <label>{t("checkout.companyOptional")}<input autoComplete="organization" value={form.company} onChange={(e) => updateField("company", e.currentTarget.value)} /></label>
             <label>{t("checkout.address")}<input required autoComplete="address-line1" value={form.line1} onChange={(e) => updateField("line1", e.currentTarget.value)} /></label>

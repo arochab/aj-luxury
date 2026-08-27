@@ -97,6 +97,31 @@ test("approved return is validated then created with the exact AJ Luxury return 
   assert.equal(calls[0].init.headers.Authorization.startsWith("Basic "), true);
 });
 
+test("Sendcloud never retries the return-creation mutation", async () => {
+  let calls = 0;
+  const ports = createSendcloudProviderPorts(
+    { publicKey: "public_key", secretKey: "x".repeat(32) },
+    async (url) => {
+      calls += 1;
+      if (String(url).endsWith("/api/v3/returns/validate")) {
+        return Response.json({
+          from_address: {},
+          to_address: {},
+          ship_with: {},
+          weight: 0.15,
+        });
+      }
+      return new Response("temporarily unavailable", { status: 503 });
+    },
+  );
+
+  await assert.rejects(
+    () => createApprovedReturnShipment(approved(), ports.returns),
+    (error) => error instanceof DeliveryProviderError && error.code === "OUTCOME_UNKNOWN",
+  );
+  assert.equal(calls, 2);
+});
+
 test("received or rejected requests never contact Sendcloud or create a label", async () => {
   let calls = 0;
   const ports = createSendcloudProviderPorts(

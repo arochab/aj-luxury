@@ -461,6 +461,17 @@ test("pending production orders expose a delivery-change recovery action", async
   assert.match(source, /\["pending_payment", "cancelled"\]\.includes\(order\.status\)/);
 });
 
+test("production checkout retries the failed delivery quote without changing its semantic attempt", async () => {
+  const source = await readFile(
+    new URL("../app/checkout/ProductionCheckoutClient.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /quoteAttempt\.current\?\.fingerprint === fingerprint/);
+  assert.match(source, /cart\?\.lines\.length && !order \? requestOptions\(\) : load\(\)/);
+  assert.match(source, /event\.preventDefault\(\);\s*void requestOptions\(\);/);
+  assert.doesNotMatch(source, /onClick=\{\(\) => void load\(\)\}/);
+});
+
 test("mock product availability has no authority over production sizes", async () => {
   const source = await readFile(
     new URL("../app/components/ProductPurchase.tsx", import.meta.url),

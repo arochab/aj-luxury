@@ -20,6 +20,8 @@ const PANEL_ORIGIN = "https://panel.sendcloud.sc";
 const MAX_RESPONSE_BYTES = 256 * 1024;
 const MAX_DOCUMENT_BYTES = 8 * 1024 * 1024;
 const REQUEST_TIMEOUT_MS = 8_000;
+const MAX_READ_ATTEMPTS = 2;
+const READ_RETRY_BACKOFF_MS = 80;
 const MAX_FALLBACK_PRICE_CONCURRENCY = 4;
 const SAFE_CODE = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/;
 const SAFE_SHIPPING_OPTION_CODE = /^[A-Za-z0-9][A-Za-z0-9_.:,\/-]{0,159}$/;
@@ -400,9 +402,14 @@ function exactShippingMethodIds(
     const availableLastMiles = productLastMiles(product.available_functionalities.last_mile);
     if (!availableLastMiles || !availableLastMiles.includes(expectedMode)) continue;
     for (const method of product.methods) {
-      if (!record(method) || !Number.isSafeInteger(method.id) || (method.id as number) < 1 ||
+      if (!record(method)) {
+        throw new DeliveryProviderError("MALFORMED_RESPONSE", "Shipping product method is invalid.");
+      }
+      const properties = method.properties;
+      if (!Number.isSafeInteger(method.id) || (method.id as number) < 1 ||
         !safeString(method.name) || !safeString(method.shipping_product_code) ||
-        method.shipping_product_code !== product.code || !record(method.functionalities)) {
+        method.shipping_product_code !== product.code || !record(method.functionalities) ||
+        !record(properties)) {
         throw new DeliveryProviderError("MALFORMED_RESPONSE", "Shipping product method is invalid.");
       }
       const methodLastMile = method.functionalities.last_mile;
@@ -410,12 +417,12 @@ function exactShippingMethodIds(
       // If the method omits last_mile, the product must expose one unambiguous mode.
       if (methodLastMile === undefined &&
         (availableLastMiles.length !== 1 || availableLastMiles[0] !== expectedMode)) continue;
-      if (!methodMatchesParcel(method.properties, request)) continue;
+      if (!methodMatchesParcel(properties, request)) continue;
       matches.push(Object.freeze({
         id: method.id as number,
         name: method.name as string,
-        minWeight: method.properties.min_weight as number,
-        maxWeight: method.properties.max_weight as number,
+        minWeight: properties.min_weight as number,
+        maxWeight: properties.max_weight as number,
       }));
     }
   }
@@ -701,35 +708,47 @@ async function providerResponse(
   init: RequestInit,
   mutation = false,
 ): Promise<Response> {
-  let response: Response;
-  try {
-    response = await fetchImpl(url, {
-      ...init,
-      // Cloudflare Workers does not implement `redirect: "error"`.
-      // `manual` preserves the fail-closed contract because the non-2xx
-      // response is rejected below without following its Location header.
-      redirect: "manual",
-      headers: {
-        Accept: "application/json",
-        Authorization: basic(auth.publicKey, auth.secretKey),
-        ...(init.headers ?? {}),
-      },
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    });
-  } catch (error) {
-    const timeout = error instanceof DOMException && error.name === "TimeoutError";
-    // Never attach the transport error: custom clients may include request
-    // bodies, credentials or customer PII in their error messages.
-    throw new DeliveryProviderError(timeout ? "TIMEOUT" : "OUTCOME_UNKNOWN", "Provider call failed.");
-  }
-  if (!response.ok) {
+  const attempts = mutation ? 1 : MAX_READ_ATTEMPTS;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    let response: Response;
+    try {
+      response = await fetchImpl(url, {
+        ...init,
+        // Cloudflare Workers does not implement `redirect: "error"`.
+        // `manual` preserves the fail-closed contract because the non-2xx
+        // response is rejected below without following its Location header.
+        redirect: "manual",
+        headers: {
+          Accept: "application/json",
+          Authorization: basic(auth.publicKey, auth.secretKey),
+          ...(init.headers ?? {}),
+        },
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+    } catch (error) {
+      const timeout = error instanceof DOMException && error.name === "TimeoutError";
+      if (!mutation && attempt < attempts) {
+        await new Promise((resolve) => setTimeout(resolve, READ_RETRY_BACKOFF_MS));
+        continue;
+      }
+      // Never attach the transport error: custom clients may include request
+      // bodies, credentials or customer PII in their error messages.
+      throw new DeliveryProviderError(timeout ? "TIMEOUT" : "OUTCOME_UNKNOWN", "Provider call failed.");
+    }
+    if (response.ok) return response;
+
+    const transient = [408, 425, 429].includes(response.status) || response.status >= 500;
     await response.body?.cancel();
+    if (!mutation && transient && attempt < attempts) {
+      await new Promise((resolve) => setTimeout(resolve, READ_RETRY_BACKOFF_MS));
+      continue;
+    }
     throw new DeliveryProviderError(
-      mutation || response.status >= 500 ? "OUTCOME_UNKNOWN" : "REJECTED",
+      mutation || transient ? "OUTCOME_UNKNOWN" : "REJECTED",
       "Provider rejected request.",
     );
   }
-  return response;
+  throw new DeliveryProviderError("OUTCOME_UNKNOWN", "Provider call failed.");
 }
 
 async function providerJson(

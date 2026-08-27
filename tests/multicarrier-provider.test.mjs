@@ -350,6 +350,78 @@ test("Sendcloud service points use current V3 and never follow redirects", async
   assert.match(call.init.headers.Authorization, /^Basic /);
 });
 
+test("Sendcloud retries one transient read failure and only the failing provider call", async (t) => {
+  const request = {
+    requestId: "service-point-retry-0001",
+    providerQuoteReference: "rate_123",
+    countryCode: "FR",
+    postalCode: "75001",
+    city: "Paris",
+    carrierCode: "colissimo",
+  };
+
+  await t.test("network failure then success", async () => {
+    let calls = 0;
+    const ports = createSendcloudProviderPorts(
+      { publicKey: "public_key", secretKey: "x".repeat(32) },
+      async () => {
+        calls += 1;
+        if (calls === 1) throw new TypeError("transient network failure");
+        return Response.json(servicePointEnvelope([]));
+      },
+    );
+    assert.deepEqual(await ports.servicePoints.servicePoints(request), []);
+    assert.equal(calls, 2);
+  });
+
+  await t.test("503 then success", async () => {
+    let calls = 0;
+    const ports = createSendcloudProviderPorts(
+      { publicKey: "public_key", secretKey: "x".repeat(32) },
+      async () => {
+        calls += 1;
+        return calls === 1
+          ? new Response("temporarily unavailable", { status: 503 })
+          : Response.json(servicePointEnvelope([]));
+      },
+    );
+    assert.deepEqual(await ports.servicePoints.servicePoints(request), []);
+    assert.equal(calls, 2);
+  });
+
+  await t.test("400 stays fail-closed without retry", async () => {
+    let calls = 0;
+    const ports = createSendcloudProviderPorts(
+      { publicKey: "public_key", secretKey: "x".repeat(32) },
+      async () => {
+        calls += 1;
+        return new Response("invalid request", { status: 400 });
+      },
+    );
+    await assert.rejects(
+      () => ports.servicePoints.servicePoints(request),
+      (error) => error instanceof DeliveryProviderError && error.code === "REJECTED",
+    );
+    assert.equal(calls, 1);
+  });
+
+  await t.test("two transient failures remain bounded", async () => {
+    let calls = 0;
+    const ports = createSendcloudProviderPorts(
+      { publicKey: "public_key", secretKey: "x".repeat(32) },
+      async () => {
+        calls += 1;
+        return new Response("temporarily unavailable", { status: 503 });
+      },
+    );
+    await assert.rejects(
+      () => ports.servicePoints.servicePoints(request),
+      (error) => error instanceof DeliveryProviderError && error.code === "OUTCOME_UNKNOWN",
+    );
+    assert.equal(calls, 2);
+  });
+});
+
 test("Sendcloud quote request matches the documented V3 request contract", async () => {
   let call;
   const ports = createSendcloudProviderPorts(
