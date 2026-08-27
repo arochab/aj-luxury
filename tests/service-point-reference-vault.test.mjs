@@ -501,7 +501,7 @@ test("0011 fails closed for a missing, foreign, expired or unsealed service poin
   assert.doesNotMatch(migration, /provider_reference` text|raw_reference|api[_-]?key|secret[_-]?key/i);
 });
 
-test("0011-0023 remain additive and the journal ends at controlled-order provenance", () => {
+test("0011-0024 remain additive and the journal ends at the password runtime profile", () => {
   const previous = JSON.parse(readFileSync(`${drizzle}meta/0010_snapshot.json`, "utf8"));
   const snapshot = JSON.parse(readFileSync(`${drizzle}meta/0011_snapshot.json`, "utf8"));
   const pricingSnapshot = JSON.parse(readFileSync(`${drizzle}meta/0012_snapshot.json`, "utf8"));
@@ -586,10 +586,10 @@ test("0011-0023 remain additive and the journal ends at controlled-order provena
     false,
   );
   assert.deepEqual(journal.entries.at(-1), {
-    idx: 23,
+    idx: 24,
     version: "6",
-    when: 1787961600000,
-    tag: "0023_controlled_order_runtime_provenance",
+    when: 1788048000000,
+    tag: "0024_customer_password_runtime_profile",
     breakpoints: true,
   });
 });

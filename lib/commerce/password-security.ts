@@ -1,5 +1,5 @@
-const PASSWORD_ALGORITHM = "pbkdf2-sha256" as const;
-const PASSWORD_ITERATIONS = 600_000;
+const PASSWORD_ALGORITHM = "pbkdf2-sha512" as const;
+const PASSWORD_ITERATIONS = 220_000;
 const PASSWORD_SALT_BYTES = 16;
 const PASSWORD_HASH_BYTES = 32;
 const MIN_PASSWORD_CHARACTERS = 12;
@@ -68,7 +68,7 @@ async function derive(
   return new Uint8Array(await crypto.subtle.deriveBits(
     {
       name: "PBKDF2",
-      hash: { name: "SHA-256" },
+      hash: { name: "SHA-512" },
       salt: saltSource,
       iterations,
     },

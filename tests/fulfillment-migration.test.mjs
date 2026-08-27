@@ -50,6 +50,7 @@ const migrationNames = [
   "0021_paid_order_confirmations.sql",
   "0022_customer_password_accounts.sql",
   "0023_controlled_order_runtime_provenance.sql",
+  "0024_customer_password_runtime_profile.sql",
 ];
 const legacyMigrationNames = migrationNames.slice(0, 8);
 // Hosted D1 bootstrap version 1 succeeded with exactly these LF-normalized

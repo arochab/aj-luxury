@@ -18,6 +18,7 @@ const migrations = [
   "0002_lock_order_line_snapshots.sql",
   "0003_identity_access.sql",
   "0022_customer_password_accounts.sql",
+  "0024_customer_password_runtime_profile.sql",
 ];
 
 class Statement {
@@ -75,8 +76,8 @@ function fixture() {
 }
 
 test("passwords use the governed slow one-way format", async () => {
-  assert.equal(customerPasswordPolicy.algorithm, "pbkdf2-sha256");
-  assert.equal(customerPasswordPolicy.iterations, 600_000);
+  assert.equal(customerPasswordPolicy.algorithm, "pbkdf2-sha512");
+  assert.equal(customerPasswordPolicy.iterations, 220_000);
   const password = "Satin-Pourpre-2026!";
   const stored = await hashCustomerPassword(password);
   assert.equal(await verifyCustomerPassword(password, stored), true);
