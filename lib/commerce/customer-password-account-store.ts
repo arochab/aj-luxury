@@ -408,7 +408,7 @@ export class D1CustomerPasswordAccountStore {
       LIMIT 1`,
     ).bind(tokenHash, now).first<{ id: string; customer_id: string }>();
     if (!challenge) return null;
-    const results = await this.#database.batch([
+    await this.#database.batch([
       this.#database.prepare(
         `UPDATE customer_account_challenges SET consumed_at = ?
         WHERE id = ? AND consumed_at IS NULL AND revoked_at IS NULL AND expires_at > ?`,
@@ -428,7 +428,18 @@ export class D1CustomerPasswordAccountStore {
         WHERE customer_id = ? AND revoked_at IS NULL`,
       ).bind(now, challenge.customer_id),
     ]);
-    if (changed(results[0]) !== 1 || changed(results[1]) !== 1) return null;
+    const persisted = await this.#database.prepare(
+      `SELECT 1 AS ready
+      FROM customer_account_challenges AS challenge
+      INNER JOIN customers AS customer ON customer.id = challenge.customer_id
+      WHERE challenge.id = ? AND challenge.customer_id = ?
+        AND challenge.purpose = 'email_verification'
+        AND challenge.consumed_at = ? AND challenge.revoked_at IS NULL
+        AND customer.account_enabled_at IS NOT NULL
+        AND customer.deleted_at IS NULL
+      LIMIT 1`,
+    ).bind(challenge.id, challenge.customer_id, now).first<{ ready: number }>();
+    if (persisted?.ready !== 1) return null;
     return this.#createSession(challenge.customer_id, now);
   }
 

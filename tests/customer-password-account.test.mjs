@@ -120,6 +120,11 @@ test("registration, verification, sessions, consent and recovery form one tracea
     "2026-08-27T01:06:00.000Z",
   );
   assert.ok(verified);
+  assert.equal(sqlite.prepare(`SELECT COUNT(*) AS count
+    FROM customer_account_challenges
+    WHERE purpose = 'email_verification'
+      AND consumed_at = '2026-08-27T01:06:00.000Z'
+      AND revoked_at IS NULL`).get().count, 1);
   const account = await store.currentAccount(verified.token, "2026-08-27T01:07:00.000Z");
   assert.equal(account.email, email);
   assert.equal(account.acceptsMarketing, true);
