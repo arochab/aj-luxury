@@ -561,6 +561,14 @@ async function resolveV2FallbackPrice(
       { method: "GET" },
     ), request.destination.countryCode);
   }));
+  console.info(JSON.stringify({
+    event: "sendcloud_fallback_price_shapes",
+    carrierCode: option.carrierCode,
+    deliveryMode: option.deliveryMode,
+    shippingOptionCode: option.shippingOptionCode,
+    methodIds,
+    prices: prices.map((price) => price?.amountCents ?? null),
+  }));
   if (prices.some((price) => price === null)) return null;
   const resolvedPrices = prices as Array<Readonly<{ amountCents: number; canonical: string }>>;
   if (new Set(resolvedPrices.map(({ amountCents }) => amountCents)).size !== 1) return null;
