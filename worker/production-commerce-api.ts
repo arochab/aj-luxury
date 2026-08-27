@@ -8,7 +8,6 @@ import {
   type CustomerAccountEmailPort,
 } from "../lib/commerce/customer-password-account-store.ts";
 import { hashCustomerPassword, verifyCustomerPassword } from "../lib/commerce/password-security.ts";
-import { scrypt } from "node:crypto";
 import { D1ProductionCheckoutStore, ProductionCheckoutError } from "../lib/commerce/d1-production-checkout-store.ts";
 import { D1ProductionDeliveryActivationStore } from "../lib/commerce/d1-production-delivery-activation-store.ts";
 import { D1LatePaymentRefundDispatcher } from "../lib/commerce/d1-late-payment-refunds.ts";
@@ -1203,49 +1202,13 @@ export async function productionCommerceApiResponse(
         const checkoutToken = await createOpaqueAccessToken(
           accessTokenHashContexts.customerCheckoutLink,
         );
-        const passwordBytes = new TextEncoder().encode(password);
-        step = "password-import";
-        const passwordKey = await crypto.subtle.importKey(
-          "raw",
-          Uint8Array.from(passwordBytes).buffer,
-          { name: "PBKDF2" },
-          false,
-          ["deriveBits"],
-        );
-        step = "password-derive-minimal";
-        await crypto.subtle.deriveBits(
-          {
-            name: "PBKDF2",
-            hash: { name: "SHA-256" },
-            salt: new Uint8Array(16).buffer,
-            iterations: 1,
-          },
-          passwordKey,
-          256,
-        );
-        step = "password-scrypt-owasp";
-        const scryptProbe = await new Promise<Uint8Array>((resolve, reject) => {
-          scrypt(
-            password,
-            "AJ-Luxury-controlled-scrypt-probe",
-            32,
-            { N: 2 ** 14, r: 8, p: 5, maxmem: 32 * 1024 * 1024 },
-            (error, derivedKey) => {
-              if (error) reject(error);
-              else resolve(Uint8Array.from(derivedKey));
-            },
-          );
-        });
-        console.log(JSON.stringify({
-          event: "customer_account_scrypt_probe_ready",
-          derivedBytes: scryptProbe.byteLength,
-        }));
         step = "password-hash-governed";
         const stored = await hashCustomerPassword(password);
         step = "password-verify";
         const ready = isOpaqueAccessToken(verificationToken.token) &&
           isOpaqueAccessToken(checkoutToken.token) &&
           await verifyCustomerPassword(password, stored);
+        console.log(JSON.stringify({ event: "customer_account_crypto_probe_ready", ready }));
         return json({ data: { ready } }, ready ? 200 : 503);
       } catch (cause) {
         console.warn(JSON.stringify({

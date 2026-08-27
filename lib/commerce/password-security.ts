@@ -1,5 +1,11 @@
-const PASSWORD_ALGORITHM = "pbkdf2-sha512" as const;
-const PASSWORD_ITERATIONS = 220_000;
+import { scrypt } from "node:crypto";
+
+const PASSWORD_ALGORITHM = "scrypt-n16384-r8-p5" as const;
+// The legacy column is retained for compatibility; for scrypt it records p.
+const PASSWORD_ITERATIONS = 5;
+const PASSWORD_SCRYPT_N = 2 ** 14;
+const PASSWORD_SCRYPT_R = 8;
+const PASSWORD_SCRYPT_MAX_MEMORY = 32 * 1024 * 1024;
 const PASSWORD_SALT_BYTES = 16;
 const PASSWORD_HASH_BYTES = 32;
 const MIN_PASSWORD_CHARACTERS = 12;
@@ -18,6 +24,9 @@ export const customerPasswordPolicy = Object.freeze({
   maximumCharacters: MAX_PASSWORD_CHARACTERS,
   algorithm: PASSWORD_ALGORITHM,
   iterations: PASSWORD_ITERATIONS,
+  cost: PASSWORD_SCRYPT_N,
+  blockSize: PASSWORD_SCRYPT_R,
+  parallelization: PASSWORD_ITERATIONS,
 });
 
 function base64Url(bytes: Uint8Array): string {
@@ -54,27 +63,24 @@ function passwordBytes(password: unknown): Uint8Array | null {
 async function derive(
   encodedPassword: Uint8Array,
   salt: Uint8Array,
-  iterations: number,
 ): Promise<Uint8Array> {
-  const passwordSource = Uint8Array.from(encodedPassword).buffer;
-  const saltSource = Uint8Array.from(salt).buffer;
-  const key = await crypto.subtle.importKey(
-    "raw",
-    passwordSource,
-    { name: "PBKDF2" },
-    false,
-    ["deriveBits"],
-  );
-  return new Uint8Array(await crypto.subtle.deriveBits(
-    {
-      name: "PBKDF2",
-      hash: { name: "SHA-512" },
-      salt: saltSource,
-      iterations,
-    },
-    key,
-    PASSWORD_HASH_BYTES * 8,
-  ));
+  return new Promise<Uint8Array>((resolve, reject) => {
+    scrypt(
+      encodedPassword,
+      salt,
+      PASSWORD_HASH_BYTES,
+      {
+        N: PASSWORD_SCRYPT_N,
+        r: PASSWORD_SCRYPT_R,
+        p: PASSWORD_ITERATIONS,
+        maxmem: PASSWORD_SCRYPT_MAX_MEMORY,
+      },
+      (error, derivedKey) => {
+        if (error) reject(error);
+        else resolve(Uint8Array.from(derivedKey));
+      },
+    );
+  });
 }
 
 function constantTimeEqual(left: Uint8Array, right: Uint8Array): boolean {
@@ -95,7 +101,7 @@ export async function hashCustomerPassword(password: unknown): Promise<CustomerP
   if (!encoded) throw new Error("CUSTOMER_PASSWORD_POLICY_REJECTED");
   const salt = new Uint8Array(PASSWORD_SALT_BYTES);
   crypto.getRandomValues(salt);
-  const hash = await derive(encoded, salt, PASSWORD_ITERATIONS);
+  const hash = await derive(encoded, salt);
   return Object.freeze({
     algorithm: PASSWORD_ALGORITHM,
     iterations: PASSWORD_ITERATIONS,
@@ -124,7 +130,7 @@ export async function verifyCustomerPassword(
   ) {
     return false;
   }
-  return constantTimeEqual(await derive(encoded, salt, PASSWORD_ITERATIONS), expected);
+  return constantTimeEqual(await derive(encoded, salt), expected);
 }
 
 /** Performs the same expensive work for an unknown account to reduce enumeration signals. */
@@ -135,5 +141,5 @@ export async function consumeDummyPasswordWork(password: unknown): Promise<void>
   const encoded = new TextEncoder().encode(fallback);
   const salt = new Uint8Array(PASSWORD_SALT_BYTES);
   salt.fill(0xa7);
-  await derive(encoded, salt, PASSWORD_ITERATIONS);
+  await derive(encoded, salt);
 }

@@ -381,6 +381,7 @@ test("detached Sites build keeps migrations out of the frontend while Wrangler a
       "0022_customer_password_accounts.sql",
       "0023_controlled_order_runtime_provenance.sql",
       "0024_customer_password_runtime_profile.sql",
+      "0025_customer_password_scrypt_profile.sql",
     ],
   );
 

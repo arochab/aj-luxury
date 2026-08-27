@@ -19,6 +19,7 @@ const migrations = [
   "0003_identity_access.sql",
   "0022_customer_password_accounts.sql",
   "0024_customer_password_runtime_profile.sql",
+  "0025_customer_password_scrypt_profile.sql",
 ];
 
 class Statement {
@@ -76,8 +77,10 @@ function fixture() {
 }
 
 test("passwords use the governed slow one-way format", async () => {
-  assert.equal(customerPasswordPolicy.algorithm, "pbkdf2-sha512");
-  assert.equal(customerPasswordPolicy.iterations, 220_000);
+  assert.equal(customerPasswordPolicy.algorithm, "scrypt-n16384-r8-p5");
+  assert.equal(customerPasswordPolicy.cost, 16_384);
+  assert.equal(customerPasswordPolicy.blockSize, 8);
+  assert.equal(customerPasswordPolicy.parallelization, 5);
   const password = "Satin-Pourpre-2026!";
   const stored = await hashCustomerPassword(password);
   assert.equal(await verifyCustomerPassword(password, stored), true);
