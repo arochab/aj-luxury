@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  customerEmailVerificationPage,
   controlledRequestAuthorization,
   productionCommerceRuntimeBlockers,
   productionCommerceApiResponse,
@@ -72,6 +73,20 @@ const controlled = Object.freeze({
 const ownerHeaders = Object.freeze({
   "oai-authenticated-user-email": "owner@example.com",
   "oai-authenticated-user-id": "owner-1",
+});
+
+test("email verification GET is scanner-safe and requires an explicit human POST", async () => {
+  const token = "A".repeat(43);
+  const response = customerEmailVerificationPage(token);
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("Cache-Control"), "no-store");
+  assert.match(response.headers.get("Content-Security-Policy"), /form-action 'self'/);
+  const html = await response.text();
+  assert.match(html, /Confirmer mon adresse/);
+  assert.match(html, /method="post"/);
+  assert.match(html, new RegExp(`/api/commerce/account/verify\\?token=${token}`));
+  assert.doesNotMatch(html, /<script/i);
+  assert.equal(customerEmailVerificationPage("invalid").status, 400);
 });
 
 test("production release schema sentinel is bound to its canonical contract", async () => {

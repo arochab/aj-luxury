@@ -158,6 +158,56 @@ function json(value: unknown, status = 200, extra?: HeadersInit): Response {
 function fail(code: string, status: number, headers?: HeadersInit): Response {
   return json({ error: { code, requestId: `req_${crypto.randomUUID()}` } }, status, headers);
 }
+export function customerEmailVerificationPage(token: string): Response {
+  if (!isOpaqueAccessToken(token)) return fail("INVALID_TOKEN", 400);
+  const action = `${routes.accountVerify}?token=${encodeURIComponent(token)}`;
+  const document = `<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Confirmer votre adresse | AJ Luxury</title>
+  <style>
+    :root{color-scheme:light;--ink:#0a0a0a;--paper:#f7f6f3;--line:#d5d2cc}
+    *{box-sizing:border-box}
+    body{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--paper);color:var(--ink);font-family:Arial,Helvetica,sans-serif}
+    main{width:min(640px,calc(100% - 32px));padding:clamp(32px,7vw,72px);border:1px solid var(--line);background:#fff}
+    .brand{margin:0 0 64px;font-size:14px;letter-spacing:.34em}
+    .eyebrow{margin:0 0 18px;font-size:12px;letter-spacing:.22em;text-transform:uppercase}
+    h1{margin:0 0 24px;font-size:clamp(42px,8vw,72px);font-weight:300;letter-spacing:-.05em;line-height:.95}
+    p{margin:0 0 36px;max-width:48ch;color:#555;line-height:1.6}
+    button{width:100%;min-height:58px;border:1px solid var(--ink);background:var(--ink);color:#fff;font:inherit;font-size:13px;letter-spacing:.16em;text-transform:uppercase;cursor:pointer}
+    button:hover,button:focus-visible{background:#fff;color:var(--ink)}
+    a{display:block;margin-top:24px;color:inherit;font-size:12px;letter-spacing:.12em;text-align:center;text-transform:uppercase;text-underline-offset:4px}
+  </style>
+</head>
+<body>
+  <main>
+    <p class="brand">AJ LUXURY</p>
+    <p class="eyebrow">Espace client sécurisé</p>
+    <h1>Confirmez<br>votre adresse.</h1>
+    <p>Une dernière validation permet d’activer votre compte et de retrouver vos commandes en toute sécurité.</p>
+    <form method="post" action="${action}">
+      <button type="submit">Confirmer mon adresse</button>
+    </form>
+    <a href="/">Revenir à l’accueil</a>
+  </main>
+</body>
+</html>`;
+  return new Response(document, {
+    status: 200,
+    headers: {
+      "Cache-Control": "no-store",
+      "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
+      "Content-Type": "text/html; charset=utf-8",
+      "Referrer-Policy": "no-referrer",
+      "X-Content-Type-Options": "nosniff",
+      "X-Frame-Options": "DENY",
+      "X-Robots-Tag": "noindex, nofollow",
+    },
+  });
+}
 function cookie(request: Request, name: string): string[] {
   const raw = request.headers.get("Cookie");
   if (!raw) return [];
@@ -1236,11 +1286,17 @@ export async function productionCommerceApiResponse(
       });
     }
     if (url.pathname === routes.accountVerify) {
-      if (request.method !== "GET") return fail("METHOD_NOT_ALLOWED", 405);
+      if (!["GET", "POST"].includes(request.method)) return fail("METHOD_NOT_ALLOWED", 405);
       if ([...url.searchParams.keys()].some((name) => name !== "token")) {
         return fail("INVALID_TOKEN", 400);
       }
-      const verified = await accountStore.verifyEmail(url.searchParams.get("token"), accountNow);
+      const rawToken = url.searchParams.get("token");
+      if (!isOpaqueAccessToken(rawToken)) return fail("INVALID_TOKEN", 400);
+      // Mail security scanners routinely open every GET link before the recipient.
+      // GET therefore only presents the human confirmation; POST performs the mutation.
+      if (request.method === "GET") return customerEmailVerificationPage(rawToken);
+      if (!originOk(request, gate.origin)) return fail("ORIGIN_REJECTED", 403);
+      const verified = await accountStore.verifyEmail(rawToken, accountNow);
       const destination = new URL("/account", gate.origin);
       destination.searchParams.set("verification", verified ? "confirmed" : "invalid");
       const headers = verified ? sessionCookies(verified, accountNow) : new Headers();

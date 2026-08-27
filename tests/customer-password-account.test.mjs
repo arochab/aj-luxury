@@ -159,4 +159,14 @@ test("registration, verification, sessions, consent and recovery form one tracea
   assert.ok(await store.login({
     email, password: newPassword, now: "2026-08-27T01:13:00.000Z",
   }));
+  assert.equal(
+    sqlite.prepare(`SELECT COUNT(*) AS count
+      FROM customer_sessions AS session
+      INNER JOIN access_challenges AS challenge
+        ON challenge.id = session.issued_by_challenge_id
+      WHERE session.revoked_at IS NULL
+        AND challenge.dispatched_at IS NOT NULL
+        AND challenge.consumed_at IS NOT NULL`).get().count,
+    2,
+  );
 });

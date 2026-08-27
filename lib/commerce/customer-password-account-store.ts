@@ -336,7 +336,7 @@ export class D1CustomerPasswordAccountStore {
     const bootstrapExpiresAt = after(now, INTERNAL_CHALLENGE_TTL_MS);
     const expiresAt = after(now, SESSION_ABSOLUTE_MS);
     const idleExpiresAt = after(now, SESSION_IDLE_MS);
-    const results = await this.#database.batch([
+    await this.#database.batch([
       this.#database.prepare(
         `INSERT INTO access_challenges (
           id, purpose, customer_id, order_id, token_hash, expires_at,
@@ -362,7 +362,30 @@ export class D1CustomerPasswordAccountStore {
         expiresAt, idleExpiresAt, now, challengeId, bootstrap.tokenHash, now,
       ),
     ]);
-    if (changed(results[0]) !== 1 || changed(results[1]) !== 1 || changed(results[2]) !== 1) {
+    // D1 may report trigger side-effects in `meta.changes`, so a strict
+    // `changes === 1` check can turn a successfully persisted session into a
+    // false 503. Verify the actual security invariants instead.
+    const persisted = await this.#database.prepare(
+      `SELECT 1 AS ready
+      FROM customer_sessions AS session
+      INNER JOIN access_challenges AS challenge
+        ON challenge.id = session.issued_by_challenge_id
+      WHERE session.id = ? AND session.customer_id = ?
+        AND session.token_hash = ? AND session.csrf_token_hash = ?
+        AND session.authentication_source = 'challenge'
+        AND session.revoked_at IS NULL AND session.expires_at = ?
+        AND session.idle_expires_at = ?
+        AND challenge.id = ? AND challenge.customer_id = ?
+        AND challenge.purpose = 'customer_sign_in'
+        AND challenge.dispatched_at IS NOT NULL
+        AND challenge.consumed_at IS NOT NULL
+        AND challenge.revoked_at IS NULL
+      LIMIT 1`,
+    ).bind(
+      sessionId, customerId, session.tokenHash, csrf.tokenHash,
+      expiresAt, idleExpiresAt, challengeId, customerId,
+    ).first<{ ready: number }>();
+    if (persisted?.ready !== 1) {
       throw new CustomerAccountError("PERSISTENCE_FAILURE", "Customer session creation failed.");
     }
     return Object.freeze({ token: session.token, csrfToken: csrf.token, expiresAt });
