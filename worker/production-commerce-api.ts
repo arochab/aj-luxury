@@ -1,4 +1,4 @@
-import { accessTokenHashContexts, hashOneTimeAccessToken, isOpaqueAccessToken } from "../lib/commerce/account-security.ts";
+import { accessTokenHashContexts, createOpaqueAccessToken, hashOneTimeAccessToken, isOpaqueAccessToken } from "../lib/commerce/account-security.ts";
 import { CommerceError } from "../lib/commerce/backend-domain.ts";
 import { D1CommerceStore } from "../lib/commerce/d1-commerce-store.ts";
 import type { CommerceD1Database } from "../lib/commerce/d1-port.ts";
@@ -7,6 +7,7 @@ import {
   D1CustomerPasswordAccountStore,
   type CustomerAccountEmailPort,
 } from "../lib/commerce/customer-password-account-store.ts";
+import { hashCustomerPassword, verifyCustomerPassword } from "../lib/commerce/password-security.ts";
 import { D1ProductionCheckoutStore, ProductionCheckoutError } from "../lib/commerce/d1-production-checkout-store.ts";
 import { D1ProductionDeliveryActivationStore } from "../lib/commerce/d1-production-delivery-activation-store.ts";
 import { D1LatePaymentRefundDispatcher } from "../lib/commerce/d1-late-payment-refunds.ts";
@@ -71,6 +72,7 @@ const routes = Object.freeze({
   refundDispatch: `${PREFIX}admin/late-payment-refunds/dispatch`,
   account: `${PREFIX}account/current`, adminHealth: `${PREFIX}admin/health`,
   accountRegister: `${PREFIX}account/register`,
+  accountCryptoProbe: `${PREFIX}account/crypto-health`,
   accountVerify: `${PREFIX}account/verify`,
   accountLogin: `${PREFIX}account/login`,
   accountLogout: `${PREFIX}account/logout`,
@@ -1176,7 +1178,7 @@ export async function productionCommerceApiResponse(
   }
   const now = () => new Date().toISOString();
   const isAccountRoute = [
-    routes.account, routes.accountRegister, routes.accountVerify,
+    routes.account, routes.accountRegister, routes.accountCryptoProbe, routes.accountVerify,
     routes.accountLogin, routes.accountLogout, routes.accountForgot,
     routes.accountReset, routes.accountMarketing,
   ].includes(url.pathname as never);
@@ -1187,6 +1189,28 @@ export async function productionCommerceApiResponse(
     const accountStore = new D1CustomerPasswordAccountStore(env.DB);
     const sessionToken = singleCookie(request, "__Host-aj_customer");
     const accountNow = now();
+    if (url.pathname === routes.accountCryptoProbe) {
+      if (request.method !== "GET") return fail("METHOD_NOT_ALLOWED", 405);
+      if (gate.mode !== "controlled") return fail("NOT_FOUND", 404);
+      try {
+        const password = "AJ-Luxury-controlled-runtime-probe-2026!";
+        const [verificationToken, checkoutToken, stored] = await Promise.all([
+          createOpaqueAccessToken(accessTokenHashContexts.customerEmailVerification),
+          createOpaqueAccessToken(accessTokenHashContexts.customerCheckoutLink),
+          hashCustomerPassword(password),
+        ]);
+        const ready = isOpaqueAccessToken(verificationToken.token) &&
+          isOpaqueAccessToken(checkoutToken.token) &&
+          await verifyCustomerPassword(password, stored);
+        return json({ data: { ready } }, ready ? 200 : 503);
+      } catch (cause) {
+        console.warn(JSON.stringify({
+          event: "customer_account_crypto_probe_failed",
+          errorName: cause instanceof Error ? cause.name : "UnknownError",
+        }));
+        return fail("ACCOUNT_CRYPTO_UNAVAILABLE", 503);
+      }
+    }
     if (url.pathname === routes.account) {
       if (request.method !== "GET") return fail("METHOD_NOT_ALLOWED", 405);
       const account = await accountStore.currentAccount(sessionToken, accountNow);

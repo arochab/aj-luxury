@@ -56,20 +56,19 @@ async function derive(
   salt: Uint8Array,
   iterations: number,
 ): Promise<Uint8Array> {
-  const passwordSource = Uint8Array.from(encodedPassword).buffer;
-  const saltSource = Uint8Array.from(salt).buffer;
-  const key = await crypto.subtle.importKey(
-    "raw",
-    passwordSource,
-    { name: "PBKDF2" },
-    false,
-    ["deriveBits"],
-  );
-  return new Uint8Array(await crypto.subtle.deriveBits(
-    { name: "PBKDF2", hash: "SHA-256", salt: saltSource, iterations },
-    key,
-    PASSWORD_HASH_BYTES * 8,
-  ));
+  return new Promise((resolve, reject) => {
+    pbkdf2(
+      Uint8Array.from(encodedPassword),
+      Uint8Array.from(salt),
+      iterations,
+      PASSWORD_HASH_BYTES,
+      "sha256",
+      (error, derivedKey) => {
+        if (error) reject(error);
+        else resolve(Uint8Array.from(derivedKey));
+      },
+    );
+  });
 }
 
 function constantTimeEqual(left: Uint8Array, right: Uint8Array): boolean {
@@ -132,3 +131,4 @@ export async function consumeDummyPasswordWork(password: unknown): Promise<void>
   salt.fill(0xa7);
   await derive(encoded, salt, PASSWORD_ITERATIONS);
 }
+import { pbkdf2 } from "node:crypto";
