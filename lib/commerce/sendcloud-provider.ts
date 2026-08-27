@@ -307,6 +307,11 @@ function expectedLastMile(mode: SendcloudUnpricedOption["deliveryMode"]): string
 
 function exactProductCodeMatch(option: SendcloudUnpricedOption, productCode: string): boolean {
   if (option.shippingOptionCode === productCode) return true;
+  // Sendcloud exposes the same Mondial Relay locker product under two exact,
+  // version-specific names. The QR variant remains a distinct workflow.
+  if (option.carrierCode === "mondial_relay" &&
+    option.shippingOptionCode === "mondial_relay:locker_delivery,dualapi" &&
+    productCode === "mondial_relay:service_point,dualapi") return true;
   // Sendcloud V3 currently appends this account-specific Mondial Relay suffix,
   // while the V2 product endpoint exposes the underlying product code. No other
   // prefix/suffix or fuzzy matching is permitted.
@@ -344,7 +349,9 @@ function methodMatchesParcel(
     !finiteNonNegativeInteger(properties.max_weight) ||
     properties.min_weight > properties.max_weight ||
     request.parcel.weightGrams < properties.min_weight ||
-    request.parcel.weightGrams > properties.max_weight ||
+    // Adjacent Sendcloud bands share their boundary (0–250 g, 250–500 g).
+    // Treat them as half-open intervals so 250 g selects one band, not two.
+    request.parcel.weightGrams >= properties.max_weight ||
     !record(properties.max_dimensions)) return false;
   const maximum = properties.max_dimensions;
   const maximumLength = dimensionInMillimeters(maximum.length, maximum.unit);

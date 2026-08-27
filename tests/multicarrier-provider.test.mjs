@@ -575,6 +575,103 @@ test("Sendcloud preserves all four published France carrier and delivery-mode co
   assert.equal(calls.filter(({ pathname }) => pathname === "/api/v2/shipping-price").length, 4);
 });
 
+test("Sendcloud maps the live France V3 codes to one exact V2 price band", async () => {
+  const ports = createSendcloudProviderPorts(
+    { publicKey: "public_key", secretKey: "x".repeat(32) },
+    async (input) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/api/v3/checkout/delivery-options") {
+        return Response.json({
+          configuration_id: "configuration_fr_live",
+          delivery_options: [
+            nullRateOffer({
+              id: "colissimo-home-live",
+              carrierCode: "colissimo",
+              carrierName: "Colissimo",
+              shippingOptionCode: "colissimo:home/fr",
+              deliveryMethodType: "standard_delivery",
+            }),
+            nullRateOffer({
+              id: "mondial-point-live",
+              carrierCode: "mondial_relay",
+              carrierName: "Mondial Relay",
+              shippingOptionCode: "mondial_relay:locker_delivery,dualapi",
+              deliveryMethodType: "service_point_delivery",
+            }),
+          ],
+        });
+      }
+      if (url.pathname === "/api/v2/shipping-products") {
+        if (url.searchParams.get("carrier") === "colissimo") {
+          const product = shippingProduct({ code: "colissimo:home/fr", methodIds: [] });
+          return Response.json([{
+            ...product,
+            methods: [
+              {
+                id: 7301,
+                name: "Colissimo Home 0-0.25kg",
+                functionalities: {},
+                shipping_product_code: "colissimo:home/fr",
+                properties: {
+                  min_weight: 1,
+                  max_weight: 250,
+                  max_dimensions: { length: 100, width: 70, height: 58, unit: "centimeter" },
+                },
+              },
+              {
+                id: 7302,
+                name: "Colissimo Home 0.25-0.5kg",
+                functionalities: {},
+                shipping_product_code: "colissimo:home/fr",
+                properties: {
+                  min_weight: 250,
+                  max_weight: 500,
+                  max_dimensions: { length: 100, width: 70, height: 58, unit: "centimeter" },
+                },
+              },
+            ],
+          }]);
+        }
+        return Response.json([
+          shippingProduct({
+            carrier: "mondial_relay",
+            code: "mondial_relay:service_point,dualapi",
+            lastMile: "service_point",
+            methodIds: [7401],
+          }),
+          shippingProduct({
+            carrier: "mondial_relay",
+            code: "mondial_relay:service_point_qr,dualapi",
+            lastMile: "service_point",
+            methodIds: [7402],
+          }),
+        ]);
+      }
+      if (url.pathname === "/api/v2/shipping-price") {
+        const methodId = Number(url.searchParams.get("shipping_method_id"));
+        return Response.json([{
+          price: methodId === 7302 ? "6.61" : "3.50",
+          currency: "EUR",
+          to_country: "FR",
+          breakdown: [],
+        }]);
+      }
+      return Response.json({}, { status: 404 });
+    },
+  );
+  const quotes = await ports.quotes.quote(quoteRequest({
+    destination: { countryCode: "FR", postalCode: "67130", city: "Belmont" },
+  }));
+  assert.deepEqual(quotes.map((quote) => ({
+    amountCents: quote.amountCents,
+    carrierCode: quote.carrierCode,
+    deliveryMode: quote.deliveryMode,
+  })), [
+    { amountCents: 661, carrierCode: "colissimo", deliveryMode: "home" },
+    { amountCents: 350, carrierCode: "mondial_relay", deliveryMode: "service_point" },
+  ]);
+});
+
 test("Sendcloud prefers a real EU V3 rate and keeps non-EU null rates closed", async (t) => {
   await t.test("priced EU option", async () => {
     let calls = 0;
