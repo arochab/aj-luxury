@@ -1085,7 +1085,15 @@ export async function productionCommerceApiResponse(
     const ready = gate.ready && blockers.length === 0;
     return json({ status: ready ? "ready" : "closed", environment: "production", mode: gate.mode, releaseSha: gate.releaseSha, origin: gate.origin, launchZones: gate.launchZones, blockers: [...gate.blockers, ...blockers], capabilities: { sandboxCheckout: ready && gate.mode === "sandbox", realPayment: ready && ["controlled", "live"].includes(gate.mode), realDelivery: ready && ["controlled", "live"].includes(gate.mode), transactionalEmail: ready && productionEmailDispatchRuntimeConfigured(env), returns: ready && gate.mode === "live" && env.RETURNS_WORKFLOW_ENABLED === "true", controlledOrder: ready && gate.mode === "controlled", publicCommerce: ready && gate.mode === "live" }, routes: { cart: "wired", homeDelivery: "wired-provider-priced", order: "wired", paymentSession: "sandbox-controlled-or-live-behind-release-gate", servicePoint: "wired-encrypted", stripeWebhook: "atomic-d1-effects-and-late-refund-obligation", resendWebhook: "svix-signed-idempotent-audit", lateRefundDispatch: "wired-bounded-owner-only", returns: "workflow-gated" } }, ready ? 200 : 503);
   }
-  if (!gate.ready || !gate.origin || url.origin !== gate.origin) return fail("COMMERCE_CLOSED", 503);
+  if (!gate.ready || !gate.origin || url.origin !== gate.origin) {
+    console.warn(JSON.stringify({
+      event: "production_commerce_gate_rejected",
+      gateReady: gate.ready,
+      originMatches: Boolean(gate.origin && url.origin === gate.origin),
+      mode: gate.mode,
+    }));
+    return fail("COMMERCE_CLOSED", 503);
+  }
   const controlledStorefront = env.COMMERCE_BACKEND_ONLY === "true" &&
     dependencies.trustedStorefrontOrigin === env.COMMERCE_CONTROLLED_STOREFRONT_ORIGIN;
   const controlledEdgeAccess = gate.mode === "controlled" &&
