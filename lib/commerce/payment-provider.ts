@@ -15,6 +15,7 @@ export type CheckoutSessionRequest = Readonly<{
   cancelUrl: string;
   locale: "fr" | "en";
   currency: PaymentCurrency;
+  settlementMode: "test" | "live";
   lines: readonly CheckoutLine[];
 }>;
 

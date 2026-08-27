@@ -223,6 +223,10 @@ export const orders = sqliteTable(
     billingAddressJson: text("billing_address_json").notNull(),
     termsVersion: text("terms_version").notNull(),
     privacyVersion: text("privacy_version").notNull(),
+    commerceReleaseSha: text("commerce_release_sha"),
+    commerceWorkerVersionId: text("commerce_worker_version_id"),
+    commerceMode: text("commerce_mode"),
+    settlementMode: text("settlement_mode"),
     paidAt: text("paid_at"),
     createdAt: text("created_at").notNull().default(utcNow),
     updatedAt: text("updated_at").notNull().default(utcNow),
@@ -235,6 +239,8 @@ export const orders = sqliteTable(
       .where(sql`${table.shippingQuoteId} IS NOT NULL`),
     index("idx_orders_customer_created_at").on(table.customerId, table.createdAt),
     index("idx_orders_status_created_at").on(table.status, table.createdAt),
+    index("idx_orders_commerce_runtime")
+      .on(table.commerceReleaseSha, table.commerceWorkerVersionId),
     check(
       "ck_orders_status",
       sql`${table.status} IN (
@@ -253,6 +259,32 @@ export const orders = sqliteTable(
     check(
       "ck_orders_total_consistent",
       sql`${table.totalCents} = ${table.subtotalCents} + ${table.shippingCents} + ${table.taxCents}`,
+    ),
+    check(
+      "ck_orders_commerce_runtime_provenance",
+      sql`(${table.commerceReleaseSha} IS NULL
+          AND ${table.commerceWorkerVersionId} IS NULL
+          AND ${table.commerceMode} IS NULL
+          AND ${table.settlementMode} IS NULL)
+        OR (
+          length(${table.commerceReleaseSha}) = 40
+          AND ${table.commerceReleaseSha} = lower(${table.commerceReleaseSha})
+          AND ${table.commerceReleaseSha} NOT GLOB '*[^0-9a-f]*'
+          AND length(${table.commerceWorkerVersionId}) = 36
+          AND ${table.commerceWorkerVersionId} = lower(${table.commerceWorkerVersionId})
+          AND ${table.commerceWorkerVersionId} NOT GLOB '*[^0-9a-f-]*'
+          AND substr(${table.commerceWorkerVersionId}, 9, 1) = '-'
+          AND substr(${table.commerceWorkerVersionId}, 14, 1) = '-'
+          AND substr(${table.commerceWorkerVersionId}, 15, 1) GLOB '[1-8]'
+          AND substr(${table.commerceWorkerVersionId}, 19, 1) = '-'
+          AND substr(${table.commerceWorkerVersionId}, 20, 1) GLOB '[89ab]'
+          AND substr(${table.commerceWorkerVersionId}, 24, 1) = '-'
+          AND (
+            (${table.commerceMode} = 'sandbox' AND ${table.settlementMode} = 'test')
+            OR (${table.commerceMode} IN ('controlled','live')
+              AND ${table.settlementMode} = 'live')
+          )
+        )`,
     ),
   ],
 );
@@ -357,6 +389,7 @@ export const payments = sqliteTable(
     amountCents: integer("amount_cents").notNull(),
     currency: text("currency", { enum: ["EUR"] }).notNull().default("EUR"),
     idempotencyKey: text("idempotency_key").notNull(),
+    livemode: integer("livemode"),
     failureCode: text("failure_code"),
     createdAt: text("created_at").notNull().default(utcNow),
     updatedAt: text("updated_at").notNull().default(utcNow),
@@ -383,6 +416,10 @@ export const payments = sqliteTable(
     ),
     check("ck_payments_amount_non_negative", sql`${table.amountCents} >= 0`),
     check("ck_payments_currency_eur", sql`${table.currency} = 'EUR'`),
+    check(
+      "ck_payments_livemode",
+      sql`${table.livemode} IS NULL OR ${table.livemode} IN (0, 1)`,
+    ),
   ],
 );
 

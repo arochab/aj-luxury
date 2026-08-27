@@ -93,6 +93,15 @@
     //   COMMERCE_PROMOTED_FROM_VERSION_ID
     //                                  en live, l'ID immutable de la version
     //                                  controlled ayant passe la commande preuve
+    //   COMMERCE_PROMOTED_FROM_RELEASE_SHA
+    //                                  en live, le SHA enregistre sur cette
+    //                                  meme commande controlled
+    //   COMMERCE_STOCK_EVIDENCE_RELEASE_SHA
+    //   COMMERCE_STOCK_EVIDENCE_VERSION_ID
+    //                                  paire immutable de la version ayant
+    //                                  importe et atteste le stock. Elle permet
+    //                                  a une version de code ulterieure de relire
+    //                                  cette preuve sans reecrire le manifeste.
     //   COMMERCE_CONTROLLED_OWNER_EMAIL
     //                                  compte Adam seul autorise sur le Site prive
     //   PRODUCTION_STOCK_IMPORT_ENABLED

@@ -37,6 +37,7 @@ type OrderPaymentRow = Readonly<{
   checkout_status: string | null;
   checkout_amount: number | null;
   checkout_currency: string | null;
+  checkout_livemode: number | null;
   succeeded_payment_id: string | null;
 }>;
 
@@ -67,7 +68,9 @@ export class D1StripePaymentEffectsStore implements PaymentWebhookEffectsPort {
       order.total_cents !== event.amountCents || event.currency !== "EUR" ||
       order.checkout_session_id !== event.providerCheckoutSessionId ||
       order.checkout_status !== "created" || order.checkout_amount !== order.total_cents ||
-      order.checkout_currency !== "EUR" || order.succeeded_payment_id !== null
+      order.checkout_currency !== "EUR" ||
+      order.checkout_livemode !== (event.livemode ? 1 : 0) ||
+      order.succeeded_payment_id !== null
     ) throw new StripePaymentEffectsError("MISMATCH", "Stripe payment does not match the server order.");
     if (order.status === "cancelled") {
       return await this.#latePaymentRecorded(event)
@@ -188,9 +191,9 @@ export class D1StripePaymentEffectsStore implements PaymentWebhookEffectsPort {
         this.#database.prepare(
           `INSERT INTO payments (
             id, order_id, provider, provider_session_id, status, amount_cents,
-            currency, idempotency_key, failure_code, created_at, updated_at
-          ) VALUES (?, ?, 'stripe', ?, 'succeeded', ?, 'EUR', ?, NULL, ?, ?)`,
-        ).bind(`payment_stripe_paid_${eventHash}`, order.id, event.providerPaymentId, order.total_cents, `payment:stripe:${event.providerPaymentId}`, event.occurredAt, verifiedAt),
+            currency, idempotency_key, livemode, failure_code, created_at, updated_at
+          ) VALUES (?, ?, 'stripe', ?, 'succeeded', ?, 'EUR', ?, ?, NULL, ?, ?)`,
+        ).bind(`payment_stripe_paid_${eventHash}`, order.id, event.providerPaymentId, order.total_cents, `payment:stripe:${event.providerPaymentId}`, event.livemode ? 1 : 0, event.occurredAt, verifiedAt),
         this.#database.prepare(
           `UPDATE stock_reservations SET status='converted', converted_order_id=?,
             last_transition_key=?, updated_at=?
@@ -282,6 +285,7 @@ export class D1StripePaymentEffectsStore implements PaymentWebhookEffectsPort {
         checkout.status AS checkout_status,
         checkout.amount_cents AS checkout_amount,
         checkout.currency AS checkout_currency,
+        checkout.livemode AS checkout_livemode,
         succeeded.provider_session_id AS succeeded_payment_id
       FROM orders AS customer_order
       LEFT JOIN payments AS checkout ON checkout.order_id=customer_order.id
@@ -446,7 +450,7 @@ export class D1StripePaymentEffectsStore implements PaymentWebhookEffectsPort {
       INNER JOIN payments ON payments.order_id=orders.id
         AND payments.provider='stripe' AND payments.status='succeeded'
         AND payments.provider_session_id=? AND payments.amount_cents=orders.total_cents
-        AND payments.currency=orders.currency
+        AND payments.currency=orders.currency AND payments.livemode=?
       INNER JOIN webhook_events ON webhook_events.order_id=orders.id
         AND webhook_events.provider='stripe' AND webhook_events.provider_event_id=?
         AND webhook_events.provider_payment_id=? AND webhook_events.status='processed'
@@ -460,7 +464,7 @@ export class D1StripePaymentEffectsStore implements PaymentWebhookEffectsPort {
         AND orders.total_cents=? AND orders.currency='EUR'
         AND EXISTS (SELECT 1 FROM stock_reservations WHERE cart_id=orders.cart_id
           AND status='converted' AND converted_order_id=orders.id)`,
-    ).bind(event.providerPaymentId, event.providerEventId, event.providerPaymentId, `stripe-semantic:${semanticHash}`, event.orderId, event.amountCents).first<{ count: number }>();
+    ).bind(event.providerPaymentId, event.livemode ? 1 : 0, event.providerEventId, event.providerPaymentId, `stripe-semantic:${semanticHash}`, event.orderId, event.amountCents).first<{ count: number }>();
     return Number(row?.count ?? 0) === 1;
   }
 
@@ -472,7 +476,7 @@ export class D1StripePaymentEffectsStore implements PaymentWebhookEffectsPort {
       INNER JOIN payments ON payments.order_id=orders.id
         AND payments.provider='stripe' AND payments.status='succeeded'
         AND payments.provider_session_id=? AND payments.amount_cents=orders.total_cents
-        AND payments.currency=orders.currency
+        AND payments.currency=orders.currency AND payments.livemode=?
       INNER JOIN audit_log ON audit_log.entity_id=orders.id
         AND audit_log.idempotency_key=?
       INNER JOIN email_outbox AS payment_email ON payment_email.order_id=orders.id
@@ -485,7 +489,7 @@ export class D1StripePaymentEffectsStore implements PaymentWebhookEffectsPort {
           AND provider='stripe' AND provider_payment_id=? AND status='processed')
         AND EXISTS (SELECT 1 FROM stock_reservations WHERE cart_id=orders.cart_id
           AND status='converted' AND converted_order_id=orders.id)`,
-    ).bind(event.providerPaymentId, `stripe-semantic:${semanticHash}`, event.orderId, event.amountCents, event.providerPaymentId).first<{ count: number }>();
+    ).bind(event.providerPaymentId, event.livemode ? 1 : 0, `stripe-semantic:${semanticHash}`, event.orderId, event.amountCents, event.providerPaymentId).first<{ count: number }>();
     return Number(row?.count ?? 0) === 1;
   }
 }

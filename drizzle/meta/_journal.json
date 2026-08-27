@@ -162,6 +162,13 @@
       "when": 1787875200000,
       "tag": "0022_customer_password_accounts",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "6",
+      "when": 1787961600000,
+      "tag": "0023_controlled_order_runtime_provenance",
+      "breakpoints": true
     }
   ]
 }

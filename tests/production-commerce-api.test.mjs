@@ -12,6 +12,8 @@ import { launchVariantSeed } from "../db/seed.ts";
 import { getLaunchInventoryPosition } from "../lib/commerce/launch-inventory.ts";
 import { createLaunchStockPayloadSha256 } from "../lib/commerce/launch-stock-import.ts";
 import {
+  productionControlledOrderRuntimeProvenanceContract,
+  productionControlledOrderRuntimeProvenanceContractSha256,
   productionLaunchStockCurrentGridContract,
   productionLaunchStockCurrentGridContractSha256,
   productionReleaseSchemaContract,
@@ -79,6 +81,8 @@ test("production release schema sentinel is bound to its canonical contract", as
       productionLaunchStockCurrentGridContractSha256],
     [productionProviderConfigurationSchemaContract,
       productionProviderConfigurationSchemaContractSha256],
+    [productionControlledOrderRuntimeProvenanceContract,
+      productionControlledOrderRuntimeProvenanceContractSha256],
   ]) {
     const digest = new Uint8Array(await crypto.subtle.digest(
       "SHA-256",
@@ -464,6 +468,10 @@ test("live stock attestation recomputes the exact 12-line manifest and controlle
     worker_version_tag: releaseSha, controlled_order_id: "order-controlled-0001",
     stock_owner_id: "jeremy", release_owner_id: "adam",
     jeremy_approver_id: "jeremy", adam_approver_id: "adam",
+    controlled_release_sha: "e".repeat(40),
+    controlled_worker_version_id: "018f47ce-24bd-7b16-a1ea-4b3fc2d66b74",
+    controlled_commerce_mode: "controlled",
+    controlled_settlement_mode: "live",
     controlled_order_proven: 1,
   };
   const provider = await createProductionProviderConfigurationAttestation({
@@ -494,13 +502,17 @@ test("live stock attestation recomputes the exact 12-line manifest and controlle
   const env = {
     ...controlled,
     DB: stockProofDatabase(proof, lines, releaseProof, providerProof), STOCK_MANIFEST_ID: unsigned.manifestId,
-    STOCK_MANIFEST_SHA256: payload, COMMERCE_RELEASE_SHA: releaseSha,
+    STOCK_MANIFEST_SHA256: payload, COMMERCE_RELEASE_SHA: "d".repeat(40),
     COMMERCE_CONTROLLED_ORDER_PROOF_ID: "order-controlled-0001",
     COMMERCE_MODE: "live",
-    COMMERCE_PROMOTED_FROM_VERSION_ID: controlled.CF_VERSION_METADATA.id,
+    COMMERCE_PROMOTED_FROM_RELEASE_SHA: "e".repeat(40),
+    COMMERCE_PROMOTED_FROM_VERSION_ID: "018f47ce-24bd-7b16-a1ea-4b3fc2d66b74",
+    COMMERCE_STOCK_EVIDENCE_RELEASE_SHA: releaseSha,
+    COMMERCE_STOCK_EVIDENCE_VERSION_ID: controlled.CF_VERSION_METADATA.id,
     CF_VERSION_METADATA: {
       ...controlled.CF_VERSION_METADATA,
       id: "018f47ce-24bd-7b16-a1ea-4b3fc2d66b76",
+      tag: "d".repeat(40),
     },
   };
   assert.equal(await productionStockRuntimeAttested(env), true);
@@ -511,6 +523,10 @@ test("live stock attestation recomputes the exact 12-line manifest and controlle
   assert.equal(await productionStockRuntimeAttested({ ...env, DB: stockProofDatabase({ ...proof, worker_version_id: crypto.randomUUID() }, lines, releaseProof, providerProof) }), false);
   assert.equal(await productionStockRuntimeAttested({ ...env, STOCK_MANIFEST_SHA256: "c".repeat(64) }), false);
   assert.equal(await productionStockRuntimeAttested({ ...env, COMMERCE_PROMOTED_FROM_VERSION_ID: env.CF_VERSION_METADATA.id }), false);
+  assert.equal(await productionStockRuntimeAttested({ ...env, COMMERCE_PROMOTED_FROM_VERSION_ID: crypto.randomUUID() }), false);
+  assert.equal(await productionStockRuntimeAttested({ ...env, COMMERCE_PROMOTED_FROM_RELEASE_SHA: "f".repeat(40) }), false);
+  assert.equal(await productionStockRuntimeAttested({ ...env, DB: stockProofDatabase(proof, lines, { ...releaseProof, controlled_commerce_mode: "sandbox", controlled_settlement_mode: "test" }, providerProof) }), false);
+  assert.equal(await productionStockRuntimeAttested({ ...env, COMMERCE_STOCK_EVIDENCE_RELEASE_SHA: undefined }), false);
   assert.equal(await productionStockRuntimeAttested({ ...env, STRIPE_ACCOUNT_ID: "acct_DIFFERENT123456" }), false);
 });
 

@@ -348,6 +348,7 @@ test("public live label route remains closed while legal terms are unresolved", 
       ...adminEnv,
       COMMERCE_MODE: "live",
       COMMERCE_CONTROLLED_ORDER_PROOF_ID: "proof-controlled-order-0001",
+      COMMERCE_PROMOTED_FROM_RELEASE_SHA: adminEnv.COMMERCE_RELEASE_SHA,
       COMMERCE_PROMOTED_FROM_VERSION_ID: adminEnv.CF_VERSION_METADATA.id,
       CF_VERSION_METADATA: {
         ...adminEnv.CF_VERSION_METADATA,

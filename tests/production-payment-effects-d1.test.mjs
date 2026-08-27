@@ -11,11 +11,14 @@ import { DeliveryReferenceVault } from "../lib/commerce/delivery-reference-vault
 import { D1StripePaymentEffectsStore, StripePaymentEffectsError } from "../lib/commerce/d1-stripe-payment-effects.ts";
 import { D1LatePaymentRefundDispatcher, LatePaymentRefundDispatchError } from "../lib/commerce/d1-late-payment-refunds.ts";
 import { PaymentProviderError } from "../lib/commerce/payment-provider.ts";
-import { productionReleaseSchemaInstalled } from "../worker/production-commerce-api.ts";
+import {
+  productionControlledOrderRuntimeProvenanceInstalled,
+  productionReleaseSchemaInstalled,
+} from "../worker/production-commerce-api.ts";
 
 const directory = fileURLToPath(new URL("../drizzle/", import.meta.url));
 const migrations = readdirSync(directory)
-  .filter((name) => /^(?:000[0-7]|0009|001[0-9]|002[01])_.+\.sql$/.test(name))
+  .filter((name) => /^(?:000[0-7]|0009|001[0-9]|002[013])_.+\.sql$/.test(name))
   .sort();
 class Statement {
   constructor(database, query, values = []) { this.database = database; this.query = query; this.values = values; }
@@ -68,7 +71,7 @@ async function fixture(
   const delivery = new D1ProductionDeliveryActivationStore(d1, { quotes: { async quote() { return [{ providerCode: "sendcloud", providerQuoteReference: "provider-ref-home", carrierCode: "colissimo", serviceCode: "home", displayName: "Livraison domicile", deliveryMode: "home", amountCents: 900, currency: "EUR", estimatedDaysMin: 2, estimatedDaysMax: 5, dutiesTerms: "EU_INCLUDED", expiresAt: expiry, responseFingerprint: "c".repeat(64) }]; } }, servicePoints: { async servicePoints() { return []; } }, documents: { async document() { throw new Error("closed"); } }, returns: { async validate() { throw new Error("closed"); }, async create() { throw new Error("closed"); } } }, new DeliveryReferenceVault({ encryptionKeyBase64: Buffer.alloc(32, 7).toString("base64"), keyVersion: 1 }));
   const [option] = await delivery.quoteOptions({ cartId: "cart_prod", address, idempotencyKey: "delivery-idem-0001", now: iso(base, 50) });
   const checkout = new D1ProductionCheckoutStore(d1);
-  await checkout.createOrder({ cartId: "cart_prod", quoteId: option.quoteId, optionId: option.optionId, address, email: "ada@example.com", idempotencyKey: "order-idem-0001", termsVersion: "2026-08-26", privacyVersion: "2026-07-30", now: iso(base, 60) });
+  await checkout.createOrder({ cartId: "cart_prod", quoteId: option.quoteId, optionId: option.optionId, address, email: "ada@example.com", idempotencyKey: "order-idem-0001", termsVersion: "2026-08-26", privacyVersion: "2026-07-30", commerceReleaseSha: "a".repeat(40), commerceWorkerVersionId: "018f47ce-24bd-7b16-a1ea-4b3fc2d66b75", commerceMode: livemode ? "controlled" : "sandbox", settlementMode: livemode ? "live" : "test", now: iso(base, 60) });
   const request = await checkout.prepareCheckoutSession({ cartId: "cart_prod", idempotencyKey: "payment-idem-0001", origin: "https://ajluxurystore.com", locale: "fr", now: iso(base, 70) });
   const sessionId = livemode ? "cs_live_fixture_001" : "cs_test_fixture_001";
   const totalCents = ({ 1: 2999, 2: 4999, 3: 6999 })[quantity] + 900;
@@ -115,6 +118,40 @@ test("same-colour pack two charges 49.99 before delivery without pack stock", as
     sqlite.prepare("SELECT quantity FROM stock_reservations").get().quantity,
     2,
   );
+  assert.deepEqual(
+    { ...sqlite.prepare("SELECT commerce_release_sha, commerce_worker_version_id, commerce_mode, settlement_mode FROM orders").get() },
+    {
+      commerce_release_sha: "a".repeat(40),
+      commerce_worker_version_id: "018f47ce-24bd-7b16-a1ea-4b3fc2d66b75",
+      commerce_mode: "controlled",
+      settlement_mode: "live",
+    },
+  );
+  assert.throws(
+    () => sqlite.prepare("UPDATE orders SET commerce_release_sha=?").run("b".repeat(40)),
+    /order_commerce_runtime_provenance_is_immutable/,
+  );
+});
+
+test("controlled order runtime provenance schema is installed with its exact sentinel", async () => {
+  const { sqlite, d1 } = await fixture();
+  assert.equal(await productionControlledOrderRuntimeProvenanceInstalled(d1), true);
+  sqlite.close();
+});
+
+test("a sandbox order cannot consume the immutable production release attestation", async () => {
+  const { sqlite, effects, event } = await fixture(null, false);
+  assert.equal(await effects.applyVerified(event), "applied");
+  sqlite.exec("DROP TRIGGER trg_production_release_attestation_validate");
+  assert.throws(
+    () => sqlite.prepare(`INSERT INTO production_release_attestations (
+      release_sha, worker_version_id, worker_version_tag, stock_manifest_id,
+      controlled_order_id, adam_approver_id, jeremy_approver_id, approved_at
+    ) VALUES (?, ?, ?, 'missing_manifest', ?, 'adam', 'jeremy', ?)`)
+      .run("b".repeat(40), "018f47ce-24bd-7b16-a1ea-4b3fc2d66b75", "b".repeat(40), event.orderId, iso(Date.now(), 0)),
+    /production_release_attestation_runtime_invalid/,
+  );
+  sqlite.close();
 });
 
 test("paid Checkout event atomically pays, sells stock, closes cart and enqueues bounded copy", async () => {
@@ -125,6 +162,7 @@ test("paid Checkout event atomically pays, sells stock, closes cart and enqueues
   assert.equal(sqlite.prepare("SELECT status FROM carts WHERE id='cart_prod'").get().status, "converted");
   assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM stock_reservations WHERE status='converted'").get().n, 1);
   assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM inventory_movements WHERE kind='sale'").get().n, 1);
+  assert.equal(sqlite.prepare("SELECT livemode FROM payments WHERE status='succeeded'").get().livemode, 1);
   const outbox = sqlite.prepare("SELECT kind,payload_json,status FROM email_outbox WHERE order_id=? ORDER BY kind").all(event.orderId);
   assert.deepEqual(outbox.map(({ kind, status }) => ({ kind, status })), [
     { kind: "order_confirmation", status: "pending" },

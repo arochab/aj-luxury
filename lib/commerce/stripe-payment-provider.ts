@@ -135,6 +135,7 @@ function checkoutAmount(request: CheckoutSessionRequest): number {
   validateHttpsUrl(request.successUrl, "Checkout success URL");
   validateHttpsUrl(request.cancelUrl, "Checkout cancel URL");
   if (request.currency !== "EUR" || !["fr", "en"].includes(request.locale) ||
+    !["test", "live"].includes(request.settlementMode) ||
     request.lines.length < 1 || request.lines.length > 50) {
     invalidRequest("Checkout request is invalid.");
   }
@@ -327,6 +328,7 @@ function checkoutReceipt(
 ): CheckoutSessionReceipt {
   if (!record(value) || value.object !== "checkout.session" ||
     value.livemode !== runtime.livemode || value.status !== "open" ||
+    value.livemode !== (request.settlementMode === "live") ||
     value.payment_status !== "unpaid" || value.currency !== "eur" ||
     value.client_reference_id !== request.orderId || metadataOrderId(value) !== request.orderId ||
     !safeInteger(value.amount_total, 1, 100_000_000) || value.amount_total !== expectedAmount ||

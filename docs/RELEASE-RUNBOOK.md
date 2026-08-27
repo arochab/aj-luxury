@@ -34,12 +34,17 @@ signature by Jérémy.
 
 The controlled stock import must be executed once, through its owner-only and
 idempotent route, from the exact controlled Worker version that is recorded by
-the stock attestation. Keep `PRODUCTION_STOCK_IMPORT_ENABLED=true` on that
-single controlled version: publishing a second controlled version merely to
-turn the flag off would change the Worker version ID and invalidate the
-attestation. Close the import when promoting the separate `live` version, and
-set `COMMERCE_PROMOTED_FROM_VERSION_ID` there to the recorded controlled Worker
-version ID. The private owner-only controlled order may defer the mediator,
+the stock attestation. Never rewrite that manifest to make a later runtime
+appear to be the importer. A reviewed code-only controlled upgrade may instead
+set the exact pair `COMMERCE_STOCK_EVIDENCE_RELEASE_SHA` and
+`COMMERCE_STOCK_EVIDENCE_VERSION_ID` to the original attested source. Both
+values are required, the new code SHA still needs both human approvals, and the
+new version must keep the import route closed. Live promotion keeps that same
+immutable stock-evidence pair and separately sets
+`COMMERCE_PROMOTED_FROM_RELEASE_SHA` and
+`COMMERCE_PROMOTED_FROM_VERSION_ID` to the exact controlled runtime provenance
+written immutably on the first order. The private owner-only
+controlled order may defer the mediator,
 monitoring-alert approval and operator-MFA gates by the release owner's dated
 decision. All three remain mandatory before promotion to public `live` commerce;
 the controlled exception never represents those tasks as completed.
@@ -58,12 +63,14 @@ Any different identity closes the release gate pending a new dated verification.
 
 ### Controlled runtime matrix
 
-`cloudflare.controlled.jsonc` is the reproducible Worker base. It binds only the
-isolated controlled D1, exposes only a `workers.dev` endpoint, and accepts the
-private Sites origin as `COMMERCE_ORIGIN` and
-`COMMERCE_CONTROLLED_STOREFRONT_ORIGIN`. Controlled mode deliberately has no
-public storefront allowlist; the backend bridge must accept exactly that private
-origin, while live mode continues to require its separate public allowlist.
+`cloudflare.controlled.jsonc` remains the isolated rehearsal Worker: it uses a
+separate D1 and private Sites origin and can never become the source of public
+release evidence. The first real order on the official domain instead runs the
+`aj-luxury-production` Worker in `controlled` mode, on the production D1, with
+`COMMERCE_ORIGIN=https://ajluxurystore.com`. Its immutable stock/provider proof,
+order provenance and later `live` promotion therefore stay on the same D1 and
+the same canonical origin. Public traffic remains owner-restricted until that
+order is reconciled and the live gates pass.
 
 The private Sites environment supplies `COMMERCE_BACKEND_ORIGIN`, an exact
 `COMMERCE_STOREFRONT_ORIGINS_JSON` containing only the private Sites origin,
@@ -135,8 +142,9 @@ they must never trigger a blind second charge, refund or label. Email retries us
 the retained provider idempotency key. Restore the previous Worker and private
 Sites versions together only after recording which D1 state they continue to
 serve. A future live Worker must retain
-`COMMERCE_PROMOTED_FROM_VERSION_ID` for the controlled version that produced the
-stock and first-order evidence.
+the exact `COMMERCE_PROMOTED_FROM_RELEASE_SHA` plus
+`COMMERCE_PROMOTED_FROM_VERSION_ID` written on the first order, while the
+separate stock-evidence pair remains bound to the immutable importer.
 
 A production release is anchored by both:
 

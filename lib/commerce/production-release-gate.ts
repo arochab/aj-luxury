@@ -17,7 +17,10 @@ export type ProductionCommerceEnvironment = Readonly<{
   COMMERCE_ADAM_APPROVAL_SHA?: string;
   COMMERCE_JEREMY_APPROVAL_SHA?: string;
   COMMERCE_CONTROLLED_ORDER_PROOF_ID?: string;
+  COMMERCE_PROMOTED_FROM_RELEASE_SHA?: string;
   COMMERCE_PROMOTED_FROM_VERSION_ID?: string;
+  COMMERCE_STOCK_EVIDENCE_RELEASE_SHA?: string;
+  COMMERCE_STOCK_EVIDENCE_VERSION_ID?: string;
   STOCK_MANIFEST_ID?: string;
   STOCK_MANIFEST_SHA256?: string;
   STOCK_MANIFEST_APPROVED_BY?: string;
@@ -67,6 +70,7 @@ export type ProductionReleaseBlocker =
   | "visible-legal-terms-not-ready"
   | "controlled-order-proof-missing"
   | "promotion-source-version-missing"
+  | "stock-evidence-source-invalid"
   | "commerce-router-not-wired";
 
 export type ProductionReleaseGate = Readonly<{
@@ -126,6 +130,52 @@ export function productionEvidenceVersionId(
       candidateVersionId !== currentVersionId
     ? candidateVersionId
     : null;
+}
+
+export function productionEvidenceReleaseSha(
+  env: ProductionCommerceEnvironment,
+): string | null {
+  const currentReleaseSha = env.COMMERCE_RELEASE_SHA ?? "";
+  if (!SHA_1_PATTERN.test(currentReleaseSha)) return null;
+  if (readMode(env.COMMERCE_MODE) !== "live") return currentReleaseSha;
+  const candidateReleaseSha = env.COMMERCE_PROMOTED_FROM_RELEASE_SHA ?? "";
+  return SHA_1_PATTERN.test(candidateReleaseSha) ? candidateReleaseSha : null;
+}
+
+export function productionStockEvidenceVersionId(
+  env: ProductionCommerceEnvironment,
+): string | null {
+  const currentVersionId = env.CF_VERSION_METADATA?.id ?? "";
+  if (!WORKER_VERSION_ID_PATTERN.test(currentVersionId)) return null;
+  const explicitEvidence = explicitStockEvidence(env, currentVersionId);
+  if (explicitEvidence === null) return null;
+  return explicitEvidence?.versionId ?? productionEvidenceVersionId(env);
+}
+
+export function productionStockEvidenceReleaseSha(
+  env: ProductionCommerceEnvironment,
+): string | null {
+  const currentVersionId = env.CF_VERSION_METADATA?.id ?? "";
+  if (!WORKER_VERSION_ID_PATTERN.test(currentVersionId)) return null;
+  const explicitEvidence = explicitStockEvidence(env, currentVersionId);
+  if (explicitEvidence === null) return null;
+  if (explicitEvidence) return explicitEvidence.releaseSha;
+  const currentReleaseSha = env.COMMERCE_RELEASE_SHA ?? "";
+  return SHA_1_PATTERN.test(currentReleaseSha) ? currentReleaseSha : null;
+}
+
+function explicitStockEvidence(
+  env: ProductionCommerceEnvironment,
+  currentVersionId: string,
+): Readonly<{ releaseSha: string; versionId: string }> | null | undefined {
+  const releaseSha = env.COMMERCE_STOCK_EVIDENCE_RELEASE_SHA ?? "";
+  const versionId = env.COMMERCE_STOCK_EVIDENCE_VERSION_ID ?? "";
+  if (!releaseSha && !versionId) return undefined;
+  if (!SHA_1_PATTERN.test(releaseSha) ||
+    !WORKER_VERSION_ID_PATTERN.test(versionId) || versionId === currentVersionId) {
+    return null;
+  }
+  return Object.freeze({ releaseSha, versionId });
 }
 
 function stripeIsReady(
@@ -242,8 +292,15 @@ function evaluateProductionReleaseGateInternal(
   ) {
     blockers.push("controlled-order-proof-missing");
   }
-  if (mode === "live" && productionEvidenceVersionId(env) === null) {
+  if (mode === "live" && (productionEvidenceReleaseSha(env) === null ||
+    productionEvidenceVersionId(env) === null)) {
     blockers.push("promotion-source-version-missing");
+  }
+  if ((env.COMMERCE_STOCK_EVIDENCE_RELEASE_SHA ||
+    env.COMMERCE_STOCK_EVIDENCE_VERSION_ID) &&
+    (productionStockEvidenceReleaseSha(env) === null ||
+      productionStockEvidenceVersionId(env) === null)) {
+    blockers.push("stock-evidence-source-invalid");
   }
 
   // Configuration can never attest that executable routing code is present.

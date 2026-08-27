@@ -1,10 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { evaluateProductionReleaseGate } from "../lib/commerce/production-release-gate.ts";
+import {
+  evaluateProductionReleaseGate,
+  productionEvidenceReleaseSha,
+  productionEvidenceVersionId,
+  productionStockEvidenceReleaseSha,
+  productionStockEvidenceVersionId,
+} from "../lib/commerce/production-release-gate.ts";
 
 const releaseSha = "a".repeat(40);
 const candidateVersionId = "018f47ce-24bd-7b16-a1ea-4b3fc2d66b75";
 const liveVersionId = "018f47ce-24bd-7b16-a1ea-4b3fc2d66b76";
+const stockEvidenceVersionId = "018f47ce-24bd-7b16-a1ea-4b3fc2d66b77";
+const stockEvidenceReleaseSha = "d".repeat(40);
 const base = Object.freeze({
   APP_ENV: "production",
   COMMERCE_MODE: "sandbox",
@@ -76,6 +84,46 @@ test("controlled live evidence cannot enable an absent router", () => {
   assert.equal(gate.capabilities.publicCommerce, false);
 });
 
+test("a newer controlled runtime can verify immutable stock evidence without rewriting it", () => {
+  const env = {
+    ...base,
+    COMMERCE_MODE: "controlled",
+    STRIPE_SECRET_KEY: "sk_live_redacted",
+    CF_VERSION_METADATA: { ...base.CF_VERSION_METADATA, id: liveVersionId },
+    COMMERCE_STOCK_EVIDENCE_RELEASE_SHA: stockEvidenceReleaseSha,
+    COMMERCE_STOCK_EVIDENCE_VERSION_ID: stockEvidenceVersionId,
+  };
+  const gate = evaluateProductionReleaseGate(env);
+  assert.deepEqual(gate.blockers, ["commerce-router-not-wired"]);
+  assert.equal(productionEvidenceVersionId(env), liveVersionId);
+  assert.equal(productionStockEvidenceReleaseSha(env), stockEvidenceReleaseSha);
+  assert.equal(productionStockEvidenceVersionId(env), stockEvidenceVersionId);
+
+  const partial = evaluateProductionReleaseGate({
+    ...env,
+    COMMERCE_STOCK_EVIDENCE_VERSION_ID: undefined,
+  });
+  assert.ok(partial.blockers.includes("stock-evidence-source-invalid"));
+});
+
+test("live keeps controlled-order promotion separate from immutable stock evidence", () => {
+  const env = {
+    ...base,
+    COMMERCE_MODE: "live",
+    STRIPE_SECRET_KEY: "sk_live_redacted",
+    COMMERCE_CONTROLLED_ORDER_PROOF_ID: "proof-controlled-order-0001",
+    COMMERCE_PROMOTED_FROM_RELEASE_SHA: releaseSha,
+    COMMERCE_PROMOTED_FROM_VERSION_ID: candidateVersionId,
+    COMMERCE_STOCK_EVIDENCE_RELEASE_SHA: stockEvidenceReleaseSha,
+    COMMERCE_STOCK_EVIDENCE_VERSION_ID: stockEvidenceVersionId,
+    CF_VERSION_METADATA: { ...base.CF_VERSION_METADATA, id: liveVersionId },
+  };
+  assert.equal(productionEvidenceVersionId(env), candidateVersionId);
+  assert.equal(productionEvidenceReleaseSha(env), releaseSha);
+  assert.equal(productionStockEvidenceReleaseSha(env), stockEvidenceReleaseSha);
+  assert.equal(productionStockEvidenceVersionId(env), stockEvidenceVersionId);
+});
+
 test("public live remains closed until a controlled order proof is recorded", () => {
   const missingProof = evaluateProductionReleaseGate({
     ...base,
@@ -92,6 +140,7 @@ test("public live remains closed until a controlled order proof is recorded", ()
     COMMERCE_MODE: "live",
     STRIPE_SECRET_KEY: "sk_live_redacted",
     COMMERCE_CONTROLLED_ORDER_PROOF_ID: "proof-controlled-order-0001",
+    COMMERCE_PROMOTED_FROM_RELEASE_SHA: releaseSha,
     COMMERCE_PROMOTED_FROM_VERSION_ID: candidateVersionId,
     CF_VERSION_METADATA: { ...base.CF_VERSION_METADATA, id: liveVersionId },
   });
@@ -105,6 +154,7 @@ test("public live remains closed until a controlled order proof is recorded", ()
     COMMERCE_MODE: "live",
     STRIPE_SECRET_KEY: "sk_live_redacted",
     COMMERCE_CONTROLLED_ORDER_PROOF_ID: "proof-controlled-order-0001",
+    COMMERCE_PROMOTED_FROM_RELEASE_SHA: releaseSha,
     COMMERCE_PROMOTED_FROM_VERSION_ID: liveVersionId,
     CF_VERSION_METADATA: { ...base.CF_VERSION_METADATA, id: liveVersionId },
   });
@@ -127,6 +177,7 @@ test("private controlled checkout defers monitoring and mediator gates but publi
     STRIPE_SECRET_KEY: "sk_live_redacted",
     MONITORING_ALERTS_APPROVED: undefined,
     COMMERCE_CONTROLLED_ORDER_PROOF_ID: "proof-controlled-order-0001",
+    COMMERCE_PROMOTED_FROM_RELEASE_SHA: releaseSha,
     COMMERCE_PROMOTED_FROM_VERSION_ID: candidateVersionId,
     CF_VERSION_METADATA: { ...base.CF_VERSION_METADATA, id: liveVersionId },
   });

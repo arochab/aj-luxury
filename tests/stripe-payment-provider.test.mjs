@@ -33,6 +33,7 @@ function checkoutRequest() {
     cancelUrl: "https://ajluxurystore.com/checkout",
     locale: "fr",
     currency: "EUR",
+    settlementMode: "test",
     lines: [
       {
         internalReference: "AJ-BOXER-POURPRE-M",

@@ -70,6 +70,10 @@ type OrderRow = Readonly<{
   shipping_quote_id: string;
   terms_version: string;
   privacy_version: string;
+  commerce_release_sha: string | null;
+  commerce_worker_version_id: string | null;
+  commerce_mode: "sandbox" | "controlled" | "live" | null;
+  settlement_mode: "test" | "live" | null;
   created_at: string;
   paid_at: string | null;
 }>;
@@ -107,6 +111,7 @@ type PaymentRow = Readonly<{
   amount_cents: number;
   currency: "EUR";
   idempotency_key: string;
+  livemode: number | null;
 }>;
 
 export type ProductionOrderSnapshot = Readonly<{
@@ -141,15 +146,23 @@ export type CreateProductionOrderInput = Readonly<{
   idempotencyKey: string;
   termsVersion: string;
   privacyVersion: string;
+  commerceReleaseSha: string;
+  commerceWorkerVersionId: string;
+  commerceMode: "sandbox" | "controlled" | "live";
+  settlementMode: "test" | "live";
   now: string;
 }>;
 
 const orderColumns = `id, order_number, cart_id, customer_id, status,
   currency, email, subtotal_cents, discount_cents, shipping_cents, tax_cents, total_cents,
   shipping_country_code, shipping_address_json, shipping_address_fingerprint,
-  shipping_quote_id, terms_version, privacy_version, created_at, paid_at`;
+  shipping_quote_id, terms_version, privacy_version, commerce_release_sha,
+  commerce_worker_version_id, commerce_mode, settlement_mode, created_at, paid_at`;
 const EMAIL_PATTERN =
   /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]{1,64}@[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?$/;
+const RELEASE_SHA_PATTERN = /^[a-f0-9]{40}$/;
+const WORKER_VERSION_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 function normalizeEmail(value: unknown): string {
   if (typeof value !== "string") {
@@ -238,6 +251,17 @@ export class D1ProductionCheckoutStore {
     assertFulfillmentTimestamp(input.now, "now");
     assertLegalVersion(input.termsVersion, "termsVersion");
     assertLegalVersion(input.privacyVersion, "privacyVersion");
+    if (!RELEASE_SHA_PATTERN.test(input.commerceReleaseSha) ||
+      !WORKER_VERSION_ID_PATTERN.test(input.commerceWorkerVersionId)) {
+      throw new ProductionCheckoutError("INVALID_INPUT", "Commerce runtime provenance is invalid.");
+    }
+    if (!(["sandbox", "controlled", "live"] as const).includes(input.commerceMode) ||
+      !(["test", "live"] as const).includes(input.settlementMode) ||
+      (input.commerceMode === "sandbox" && input.settlementMode !== "test") ||
+      (["controlled", "live"].includes(input.commerceMode) &&
+        input.settlementMode !== "live")) {
+      throw new ProductionCheckoutError("INVALID_INPUT", "Commerce settlement provenance is invalid.");
+    }
     if (input.customerId !== undefined && input.customerId !== null) {
       assertFulfillmentIdentifier(input.customerId, "customerId");
     }
@@ -320,6 +344,10 @@ export class D1ProductionCheckoutStore {
       privacyVersion: input.privacyVersion,
       quoteId: input.quoteId,
       termsVersion: input.termsVersion,
+      commerceReleaseSha: input.commerceReleaseSha,
+      commerceWorkerVersionId: input.commerceWorkerVersionId,
+      commerceMode: input.commerceMode,
+      settlementMode: input.settlementMode,
     }));
     const orderHash = await sha256Hex(
       `${input.cartId}\0${input.idempotencyKey}\0${checkoutFingerprint}`,
@@ -333,6 +361,10 @@ export class D1ProductionCheckoutStore {
         existing.email !== email || existing.total_cents !== subtotalCents + quote.amount_cents ||
         existing.discount_cents !== pricing.discountCents ||
         existing.customer_id !== (input.customerId ?? null) ||
+        existing.commerce_release_sha !== input.commerceReleaseSha ||
+        existing.commerce_worker_version_id !== input.commerceWorkerVersionId ||
+        existing.commerce_mode !== input.commerceMode ||
+        existing.settlement_mode !== input.settlementMode ||
         option.selected_service_point_id !== (input.servicePointId ?? null)
       ) {
         throw new ProductionCheckoutError(
@@ -379,10 +411,12 @@ export class D1ProductionCheckoutStore {
           subtotal_cents, discount_cents, shipping_cents, tax_cents, total_cents,
           shipping_country_code, shipping_address_json,
           shipping_address_fingerprint, billing_address_json,
-          shipping_quote_id, terms_version, privacy_version, paid_at,
+          shipping_quote_id, terms_version, privacy_version,
+          commerce_release_sha, commerce_worker_version_id, commerce_mode,
+          settlement_mode, paid_at,
           created_at, updated_at
         ) VALUES (?, ?, ?, ?, ?, 'pending_payment', 'EUR', ?, ?, ?, 0, ?,
-          ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)`,
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)`,
       ).bind(
         orderId,
         orderNumber,
@@ -400,6 +434,10 @@ export class D1ProductionCheckoutStore {
         input.quoteId,
         input.termsVersion,
         input.privacyVersion,
+        input.commerceReleaseSha,
+        input.commerceWorkerVersionId,
+        input.commerceMode,
+        input.settlementMode,
         input.now,
         input.now,
       ),
@@ -548,6 +586,7 @@ export class D1ProductionCheckoutStore {
       cancelUrl: `${origin.origin}/checkout`,
       locale: input.locale,
       currency: "EUR",
+      settlementMode: order.settlement_mode!,
       lines: Object.freeze(lines),
     });
   }
@@ -564,6 +603,7 @@ export class D1ProductionCheckoutStore {
     if (
       !order || order.status !== "pending_payment" || receipt.provider !== "stripe" ||
       receipt.state !== "open" || receipt.currency !== "EUR" ||
+      receipt.livemode !== (order.settlement_mode === "live") ||
       receipt.amountTotalCents !== order.total_cents
     ) {
       throw new ProductionCheckoutError(
@@ -576,8 +616,8 @@ export class D1ProductionCheckoutStore {
       await this.#database.prepare(
         `INSERT INTO payments (
           id, order_id, provider, provider_session_id, status, amount_cents,
-          currency, idempotency_key, failure_code, created_at, updated_at
-        ) VALUES (?, ?, 'stripe', ?, 'created', ?, 'EUR', ?, NULL, ?, ?)
+          currency, idempotency_key, livemode, failure_code, created_at, updated_at
+        ) VALUES (?, ?, 'stripe', ?, 'created', ?, 'EUR', ?, ?, NULL, ?, ?)
         ON CONFLICT(idempotency_key) DO NOTHING`,
       ).bind(
         paymentId,
@@ -585,6 +625,7 @@ export class D1ProductionCheckoutStore {
         receipt.providerSessionId,
         order.total_cents,
         request.idempotencyKey,
+        receipt.livemode ? 1 : 0,
         now,
         now,
       ).run();
@@ -597,12 +638,12 @@ export class D1ProductionCheckoutStore {
     }
     const persisted = await this.#database.prepare(
       `SELECT provider_session_id, status, amount_cents, currency,
-        idempotency_key FROM payments WHERE idempotency_key = ?`,
+        idempotency_key, livemode FROM payments WHERE idempotency_key = ?`,
     ).bind(request.idempotencyKey).first<PaymentRow>();
     if (
       !persisted || persisted.provider_session_id !== receipt.providerSessionId ||
       persisted.status !== "created" || persisted.amount_cents !== order.total_cents ||
-      persisted.currency !== "EUR"
+      persisted.currency !== "EUR" || persisted.livemode !== (receipt.livemode ? 1 : 0)
     ) {
       throw new ProductionCheckoutError(
         "PAYMENT_CONFLICT",

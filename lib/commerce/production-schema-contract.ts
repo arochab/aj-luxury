@@ -11,3 +11,10 @@ export const productionLaunchStockCurrentGridContract =
 
 export const productionLaunchStockCurrentGridContractSha256 =
   "8116bfbc132aa2db8e06c82d1575afe63886c9213dc61c395627089219e53cc3" as const;
+
+/** Canonical contract installed by migration 0023. */
+export const productionControlledOrderRuntimeProvenanceContract =
+  "AJL_PRODUCTION_CONTROLLED_ORDER_PAYMENT_AND_RELEASE_ATTESTATION_RUNTIME_PROVENANCE_CONTRACT_V3" as const;
+
+export const productionControlledOrderRuntimeProvenanceContractSha256 =
+  "99e97e28ca90431040dbc5dd2072efef3c232d6151d7b573b374f316b454a531" as const;

@@ -28,10 +28,11 @@ import {
   type ProductionProviderIdentities,
 } from "../lib/commerce/production-provider-configuration.ts";
 import {
+  productionControlledOrderRuntimeProvenanceContractSha256,
   productionLaunchStockCurrentGridContractSha256,
   productionReleaseSchemaContractSha256,
 } from "../lib/commerce/production-schema-contract.ts";
-import { evaluateWiredProductionReleaseGate, productionEvidenceVersionId, type ProductionCommerceEnvironment } from "../lib/commerce/production-release-gate.ts";
+import { evaluateWiredProductionReleaseGate, productionEvidenceReleaseSha, productionEvidenceVersionId, productionStockEvidenceReleaseSha, productionStockEvidenceVersionId, type ProductionCommerceEnvironment } from "../lib/commerce/production-release-gate.ts";
 import { recordVerifiedResendWebhook, ResendWebhookError } from "../lib/commerce/resend-webhook.ts";
 import { ResendIdentityDelivery } from "../lib/commerce/resend-identity-delivery.ts";
 import { createSendcloudProviderPorts } from "../lib/commerce/sendcloud-provider.ts";
@@ -525,6 +526,7 @@ const productionReleaseSchemaInventory = Object.freeze([
   "trigger:trg_production_provider_configuration_validate:production_provider_configuration_attestations",
   "trigger:trg_production_release_attestation_immutable:production_release_attestations",
   "trigger:trg_production_release_attestation_retain:production_release_attestations",
+  "trigger:trg_production_release_attestation_runtime_validate:production_release_attestations",
   "trigger:trg_production_release_attestation_validate:production_release_attestations",
   "trigger:trg_production_schema_proof_immutable:production_runtime_schema_proofs",
   "trigger:trg_production_schema_proof_retain:production_runtime_schema_proofs",
@@ -618,6 +620,61 @@ export async function productionCustomerAccountRuntimeInstalled(
   }
 }
 
+export async function productionControlledOrderRuntimeProvenanceInstalled(
+  database: CommerceD1Database | undefined,
+): Promise<boolean> {
+  if (!database) return false;
+  try {
+    const [columns, paymentColumns, trigger, paymentTrigger, attestationTrigger, sentinel] = await Promise.all([
+      database.prepare(
+        `SELECT lower(name) AS name FROM pragma_table_info('orders')
+        WHERE lower(name) IN (
+          'commerce_mode','commerce_release_sha','commerce_worker_version_id','settlement_mode'
+        )
+        ORDER BY name`,
+      ).all<{ name: string }>(),
+      database.prepare(
+        `SELECT lower(name) AS name FROM pragma_table_info('payments')
+        WHERE lower(name)='livemode'`,
+      ).all<{ name: string }>(),
+      database.prepare(
+        `SELECT COUNT(*) AS count FROM sqlite_master
+        WHERE type='trigger' AND name='trg_orders_commerce_runtime_immutable'
+          AND tbl_name='orders'`,
+      ).first<{ count: number }>(),
+      database.prepare(
+        `SELECT COUNT(*) AS count FROM sqlite_master
+        WHERE type='trigger'
+          AND name='trg_production_release_attestation_runtime_validate'
+          AND tbl_name='production_release_attestations'`,
+      ).first<{ count: number }>(),
+      database.prepare(
+        `SELECT COUNT(*) AS count FROM sqlite_master
+        WHERE type='trigger' AND name='trg_payments_livemode_immutable'
+          AND tbl_name='payments'`,
+      ).first<{ count: number }>(),
+      database.prepare(
+        `SELECT contract_sha256 FROM production_runtime_schema_proofs
+        WHERE migration_id='0023_controlled_order_runtime_provenance'`,
+      ).first<{ contract_sha256: string }>(),
+    ]);
+    return columns.results.length === 4 &&
+      columns.results[0]?.name === "commerce_mode" &&
+      columns.results[1]?.name === "commerce_release_sha" &&
+      columns.results[2]?.name === "commerce_worker_version_id" &&
+      columns.results[3]?.name === "settlement_mode" &&
+      paymentColumns.results.length === 1 &&
+      paymentColumns.results[0]?.name === "livemode" &&
+      trigger?.count === 1 &&
+      paymentTrigger?.count === 1 &&
+      attestationTrigger?.count === 1 &&
+      sentinel?.contract_sha256 ===
+        productionControlledOrderRuntimeProvenanceContractSha256;
+  } catch {
+    return false;
+  }
+}
+
 export async function productionLatePaymentRefundRuntimeReady(
   database: CommerceD1Database | undefined,
 ): Promise<boolean> {
@@ -649,12 +706,13 @@ function productionProviderIdentities(
 export async function productionProviderConfigurationRuntimeAttested(
   env: ProductionCommerceRuntimeEnvironment,
 ): Promise<boolean> {
-  const evidenceVersionId = productionEvidenceVersionId(env);
-  if (!env.DB || !env.COMMERCE_RELEASE_SHA || !env.STOCK_MANIFEST_ID ||
+  const evidenceVersionId = productionStockEvidenceVersionId(env);
+  const evidenceReleaseSha = productionStockEvidenceReleaseSha(env);
+  if (!env.DB || !evidenceReleaseSha || !env.STOCK_MANIFEST_ID ||
     !evidenceVersionId) return false;
   try {
     const expected = await createProductionProviderConfigurationAttestation({
-      releaseSha: env.COMMERCE_RELEASE_SHA,
+      releaseSha: evidenceReleaseSha,
       workerVersionId: evidenceVersionId,
       stockManifestId: env.STOCK_MANIFEST_ID,
       ...productionProviderIdentities(env),
@@ -673,7 +731,7 @@ export async function productionProviderConfigurationRuntimeAttested(
         ) THEN 1 ELSE 0 END AS schema_proven
       FROM production_provider_configuration_attestations AS attestation
       WHERE attestation.release_sha=?`,
-    ).bind(env.COMMERCE_RELEASE_SHA).first<Record<string, string | number>>();
+    ).bind(evidenceReleaseSha).first<Record<string, string | number>>();
     return proof?.schema_proven === 1 &&
       proof.release_sha === expected.releaseSha &&
       proof.worker_version_id === expected.workerVersionId &&
@@ -696,10 +754,12 @@ export async function productionStockManifestRuntimeAttested(
 ): Promise<boolean> {
   if (!await productionProviderConfigurationRuntimeAttested(env)) return false;
   const metadata = env.CF_VERSION_METADATA;
-  const evidenceVersionId = productionEvidenceVersionId(env);
+  const evidenceVersionId = productionStockEvidenceVersionId(env);
+  const evidenceReleaseSha = productionStockEvidenceReleaseSha(env);
   if (!env.DB || !env.STOCK_MANIFEST_ID || !env.STOCK_MANIFEST_SHA256 ||
-    !env.COMMERCE_RELEASE_SHA ||
-    !metadata?.id || !metadata.tag || !evidenceVersionId) return false;
+    !evidenceReleaseSha ||
+    !metadata?.id || !metadata.tag || metadata.tag !== env.COMMERCE_RELEASE_SHA ||
+    !evidenceVersionId) return false;
   try {
     const proof = await env.DB.prepare(
       `SELECT manifest.id AS manifest_id, manifest.protocol, manifest.payload_sha256,
@@ -724,10 +784,10 @@ export async function productionStockManifestRuntimeAttested(
     ).bind(
       env.STOCK_MANIFEST_ID,
       env.STOCK_MANIFEST_SHA256,
-      env.COMMERCE_RELEASE_SHA,
+      evidenceReleaseSha,
     ).first<Record<string, string | number>>();
     if (!proof || proof.schema_proven !== 1 ||
-      proof.release_sha !== env.COMMERCE_RELEASE_SHA ||
+      proof.release_sha !== evidenceReleaseSha ||
       proof.worker_version_id !== evidenceVersionId) return false;
 
     const rows = await env.DB.prepare(
@@ -788,18 +848,30 @@ export async function productionStockRuntimeAttested(
   env: ProductionCommerceRuntimeEnvironment,
 ): Promise<boolean> {
   const metadata = env.CF_VERSION_METADATA;
-  const evidenceVersionId = productionEvidenceVersionId(env);
+  const evidenceVersionId = productionStockEvidenceVersionId(env);
+  const evidenceReleaseSha = productionStockEvidenceReleaseSha(env);
+  const promotionReleaseSha = productionEvidenceReleaseSha(env);
+  const promotionVersionId = productionEvidenceVersionId(env);
   if (!await productionStockManifestRuntimeAttested(env) || !env.DB ||
-    !env.STOCK_MANIFEST_ID || !env.COMMERCE_RELEASE_SHA ||
+    !env.STOCK_MANIFEST_ID || !evidenceReleaseSha ||
     !env.COMMERCE_CONTROLLED_ORDER_PROOF_ID || !metadata?.id || !metadata.tag ||
-    !evidenceVersionId) return false;
+    metadata.tag !== env.COMMERCE_RELEASE_SHA ||
+    !evidenceVersionId || !promotionReleaseSha || !promotionVersionId) return false;
   try {
     const release = await env.DB.prepare(
       `SELECT release.worker_version_id, release.worker_version_tag,
         release.controlled_order_id, release.adam_approver_id,
         release.jeremy_approver_id, manifest.stock_owner_id,
         manifest.release_owner_id,
+        controlled_order.commerce_release_sha AS controlled_release_sha,
+        controlled_order.commerce_worker_version_id AS controlled_worker_version_id,
+        controlled_order.commerce_mode AS controlled_commerce_mode,
+        controlled_order.settlement_mode AS controlled_settlement_mode,
         CASE WHEN EXISTS (
+          SELECT 1 FROM production_runtime_schema_proofs
+          WHERE migration_id='0023_controlled_order_runtime_provenance'
+            AND contract_sha256='${productionControlledOrderRuntimeProvenanceContractSha256}'
+        ) AND EXISTS (
           SELECT 1 FROM orders AS customer_order
           INNER JOIN payments AS payment ON payment.order_id=customer_order.id
           INNER JOIN shipments AS shipment ON shipment.order_id=customer_order.id
@@ -808,6 +880,7 @@ export async function productionStockRuntimeAttested(
             AND customer_order.status IN ('paid','preparing','shipped')
             AND customer_order.paid_at IS NOT NULL
             AND payment.provider='stripe' AND payment.status='succeeded'
+            AND payment.livemode=1
             AND payment.amount_cents=customer_order.total_cents
             AND payment.currency=customer_order.currency
             AND shipment.status IN ('handed_over','in_transit','delivered')
@@ -821,13 +894,19 @@ export async function productionStockRuntimeAttested(
       FROM production_release_attestations AS release
       INNER JOIN production_launch_stock_manifests AS manifest
         ON manifest.id=release.stock_manifest_id
+      INNER JOIN orders AS controlled_order
+        ON controlled_order.id=release.controlled_order_id
       WHERE release.release_sha=? AND release.stock_manifest_id=?`,
-    ).bind(env.COMMERCE_RELEASE_SHA, env.STOCK_MANIFEST_ID)
+    ).bind(evidenceReleaseSha, env.STOCK_MANIFEST_ID)
       .first<Record<string, string | number>>();
     return release?.controlled_order_proven === 1 &&
       release.worker_version_id === evidenceVersionId &&
-      release.worker_version_tag === metadata.tag &&
+      release.worker_version_tag === evidenceReleaseSha &&
       release.controlled_order_id === env.COMMERCE_CONTROLLED_ORDER_PROOF_ID &&
+      release.controlled_release_sha === promotionReleaseSha &&
+      release.controlled_worker_version_id === promotionVersionId &&
+      release.controlled_commerce_mode === "controlled" &&
+      release.controlled_settlement_mode === "live" &&
       release.stock_owner_id === release.jeremy_approver_id &&
       release.release_owner_id === release.adam_approver_id;
   } catch {
@@ -988,6 +1067,10 @@ export async function productionCommerceApiResponse(
       blockers.push("customer-account-schema-0022-not-installed");
     }
     if (["controlled", "live"].includes(gate.mode) &&
+      !await productionControlledOrderRuntimeProvenanceInstalled(env.DB)) {
+      blockers.push("controlled-order-provenance-schema-0023-not-installed");
+    }
+    if (["controlled", "live"].includes(gate.mode) &&
       !await productionStockManifestRuntimeAttested(env)) {
       blockers.push("stock-manifest-runtime-not-attested");
     }
@@ -1026,6 +1109,10 @@ export async function productionCommerceApiResponse(
   }
   if (gate.mode !== "closed" && !await productionCustomerAccountRuntimeInstalled(env.DB)) {
     blockers.push("customer-account-schema-0022-not-installed");
+  }
+  if (["controlled", "live"].includes(gate.mode) &&
+    !await productionControlledOrderRuntimeProvenanceInstalled(env.DB)) {
+    blockers.push("controlled-order-provenance-schema-0023-not-installed");
   }
   if (["controlled", "live"].includes(gate.mode) &&
     !await productionStockManifestRuntimeAttested(env)) {
@@ -1340,6 +1427,8 @@ export async function productionCommerceApiResponse(
     if (Object.hasOwn(parsed, "servicePointId") && typeof parsed.servicePointId !== "string") return fail("INVALID_BODY", 400);
     try {
       const orderNow = now();
+      const orderSettlementMode = settlementMode(env);
+      if (!orderSettlementMode) return fail("SETTLEMENT_UNAVAILABLE", 503);
       const customerId = await new D1CustomerPasswordAccountStore(env.DB)
         .resolveCheckoutCustomer({
           email: parsed.email,
@@ -1358,6 +1447,10 @@ export async function productionCommerceApiResponse(
         idempotencyKey: key(request)!,
         termsVersion: LEGAL_VERSION,
         privacyVersion: LEGAL_VERSION,
+        commerceReleaseSha: gate.releaseSha!,
+        commerceWorkerVersionId: env.CF_VERSION_METADATA!.id!,
+        commerceMode: gate.mode as "sandbox" | "controlled" | "live",
+        settlementMode: orderSettlementMode,
         now: orderNow,
       }) }, 201);
     } catch (cause) { return map(cause); }
@@ -1382,6 +1475,7 @@ export async function productionCommerceApiResponse(
       const prepared = await checkout.prepareCheckoutSession({ cartId: current.cartId, idempotencyKey: key(request)!, origin: returnOrigin, locale: "fr", now: now() });
       const mode = settlementMode(env);
       if (!mode) return fail("SETTLEMENT_UNAVAILABLE", 503);
+      if (prepared.settlementMode !== mode) return fail("SETTLEMENT_ORDER_MISMATCH", 409);
       const provider = dependencies.paymentProvider ?? createStripePaymentProviderPorts({ apiKey: env.STRIPE_SECRET_KEY, webhookSecret: env.STRIPE_WEBHOOK_SECRET, mode });
       const receipt = await provider.checkout.createSession(prepared);
       await checkout.recordCheckoutSession(prepared, receipt, now());
