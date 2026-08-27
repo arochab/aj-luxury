@@ -1,5 +1,3 @@
-import { pbkdf2 } from "node:crypto";
-
 const PASSWORD_ALGORITHM = "pbkdf2-sha256" as const;
 const PASSWORD_ITERATIONS = 600_000;
 const PASSWORD_SALT_BYTES = 16;
@@ -58,19 +56,25 @@ async function derive(
   salt: Uint8Array,
   iterations: number,
 ): Promise<Uint8Array> {
-  return new Promise((resolve, reject) => {
-    pbkdf2(
-      Uint8Array.from(encodedPassword),
-      Uint8Array.from(salt),
+  const passwordSource = Uint8Array.from(encodedPassword).buffer;
+  const saltSource = Uint8Array.from(salt).buffer;
+  const key = await crypto.subtle.importKey(
+    "raw",
+    passwordSource,
+    { name: "PBKDF2" },
+    false,
+    ["deriveBits"],
+  );
+  return new Uint8Array(await crypto.subtle.deriveBits(
+    {
+      name: "PBKDF2",
+      hash: { name: "SHA-256" },
+      salt: saltSource,
       iterations,
-      PASSWORD_HASH_BYTES,
-      "sha256",
-      (error, derivedKey) => {
-        if (error) reject(error);
-        else resolve(Uint8Array.from(derivedKey));
-      },
-    );
-  });
+    },
+    key,
+    PASSWORD_HASH_BYTES * 8,
+  ));
 }
 
 function constantTimeEqual(left: Uint8Array, right: Uint8Array): boolean {
