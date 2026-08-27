@@ -124,8 +124,14 @@ test("homepage product portraits preserve the full head area", () => {
   );
 });
 
-test("the unvalidated size guide never reaches the public product page", () => {
-  assert.doesNotMatch(purchase, /sizeGuideOpen|sizeGuidePending|Guide des tailles/);
+test("the validated body-waist guide covers only the four sold sizes", () => {
+  assert.match(purchase, /S:\s*"67–73 cm"/);
+  assert.match(purchase, /M:\s*"74–80 cm"/);
+  assert.match(purchase, /L:\s*"81–87 cm"/);
+  assert.match(purchase, /XL:\s*"88–97 cm"/);
+  assert.doesNotMatch(purchase, /(?:XS|XXL):\s*"/);
+  assert.match(purchase, /product\.waistMeasurement/);
+  assert.match(purchase, /<table>/);
   assert.match(purchase, /selectedPackSize > 1 && selectedSize/);
   assert.match(purchase, /product\.oneSizeForPack/);
 });

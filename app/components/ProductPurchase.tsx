@@ -35,6 +35,15 @@ const PRODUCT_COLOR_ORDER = [
   "lilas-bleu-clair",
 ] as const;
 
+/* Les plages validées décrivent le tour de taille du corps conseillé, jamais
+   les dimensions du boxer. Une seule table alimente les trois coloris. */
+const SIZE_GUIDE = {
+  S: "67–73 cm",
+  M: "74–80 cm",
+  L: "81–87 cm",
+  XL: "88–97 cm",
+} as const satisfies Readonly<Record<ProductSize, string>>;
+
 type PackSize = keyof typeof AJ_APOLLON_PACK_PRICE_CENTS;
 
 const PACK_OPTIONS: ReadonlyArray<{
@@ -490,6 +499,37 @@ export default function ProductPurchase({
               </button>
             );
           })}
+        </div>
+
+        <div className={`${styles.details} ${styles.sizeGuide}`}>
+          <details>
+            <summary>{t("product.sizeGuide")}</summary>
+            <div
+              className={`${styles.detailsContent} ${styles.sizeGuideContent}`}
+            >
+              <p>{t("product.sizeGuideIntro")}</p>
+              <table>
+                <caption className="aj-sr-only">{t("product.sizeGuide")}</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">{t("product.size")}</th>
+                    <th scope="col">{t("product.waistMeasurement")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sizes.map((size) => (
+                    <tr key={size}>
+                      <th scope="row">{size}</th>
+                      <td>{SIZE_GUIDE[size]}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p className={styles.sizeGuideNote}>
+                {t("product.sizeGuideNote")}
+              </p>
+            </div>
+          </details>
         </div>
       </fieldset>
 

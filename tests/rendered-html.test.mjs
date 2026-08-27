@@ -793,10 +793,17 @@ for (const [pathname, colorName, galerie, assetOrder] of productCases) {
     assert.match(html, /ceinture de 3,5 cm/i);
     assert.match(html, /Description complète/);
     assert.match(html, /Caractéristiques/);
-    /* Les mesures fabricant ne sont pas publiées tant qu'elles ne sont pas
-       validées par AJ Luxury. Le PDP ne doit donc rendre ni guide vide, ni
-       promesse d'information "à venir". */
-    assert.doesNotMatch(html, /Guide des tailles|mesures? à confirmer|à venir/i);
+    /* Le guide décrit explicitement le tour de taille du corps conseillé et
+       reste identique sur les trois coloris. Il ne revendique aucune mesure
+       du vêtement fabricant. */
+    assert.match(html, /Guide des tailles/);
+    assert.match(html, /Tour de taille conseillé/);
+    assert.match(html, /Mesurez votre tour de taille/);
+    assert.match(html, /67–73 cm/);
+    assert.match(html, /74–80 cm/);
+    assert.match(html, /81–87 cm/);
+    assert.match(html, /88–97 cm/);
+    assert.doesNotMatch(html, />XS<|>XXL<|mesures? à confirmer/i);
     assert.match(html, /Agrandir la vue 1/);
     assert.equal(
       (html.match(/data-gallery-media="full"/g) ?? []).length,

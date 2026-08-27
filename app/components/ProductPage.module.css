@@ -306,6 +306,45 @@
   text-decoration: line-through;
 }
 
+.sizeGuide {
+  margin-top: 0.8rem;
+}
+
+.sizeGuideContent table {
+  width: 100%;
+  border-collapse: collapse;
+  color: var(--pdp-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.sizeGuideContent th,
+.sizeGuideContent td {
+  padding: 0.55rem 0;
+  border-bottom: 1px solid var(--pdp-line);
+  text-align: left;
+}
+
+.sizeGuideContent th:last-child,
+.sizeGuideContent td:last-child {
+  text-align: right;
+}
+
+.sizeGuideContent thead th {
+  color: var(--pdp-muted);
+  font-size: 0.62rem;
+  font-weight: 600;
+}
+
+.sizeGuideContent tbody th {
+  font-weight: 650;
+}
+
+.sizeGuideContent .sizeGuideNote {
+  margin-top: 0.75rem;
+  color: var(--pdp-muted);
+  font-size: 0.64rem;
+}
+
 .purchaseButton {
   width: 100%;
   min-height: 3.5rem;
