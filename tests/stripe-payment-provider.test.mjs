@@ -194,6 +194,58 @@ test("Stripe Checkout Session uses pinned API, form encoding and idempotency", a
   assert.equal(form.get("line_items[1][price_data][unit_amount]"), "900");
 });
 
+test("Stripe Checkout expiration verifies identity and is replay-safe", async () => {
+  const calls = [];
+  const provider = ports(async (url, init) => {
+    calls.push({ url, init });
+    const expired = calls.length === 2;
+    return new Response(JSON.stringify({
+      ...checkoutResponse(),
+      status: expired ? "expired" : "open",
+    }), {
+      status: 200,
+      headers: {
+        "Content-Type": "application/json",
+        "Request-Id": expired ? "req_expire123456789" : "req_get123456789",
+      },
+    });
+  });
+  const request = {
+    idempotencyKey: "stripe-expire:cs_test_checkout123456789",
+    orderId: "order_aj_00000001",
+    providerSessionId: "cs_test_checkout123456789",
+    amountTotalCents: 3_899,
+    currency: "EUR",
+    settlementMode: "test",
+  };
+  assert.deepEqual(await provider.checkout.expireSession(request), {
+    provider: "stripe",
+    providerSessionId: "cs_test_checkout123456789",
+    state: "expired",
+    providerRequestId: "req_expire123456789",
+  });
+  assert.deepEqual(calls.map(({ url, init }) => ({ url, method: init.method })), [
+    {
+      url: "https://api.stripe.com/v1/checkout/sessions/cs_test_checkout123456789",
+      method: "GET",
+    },
+    {
+      url: "https://api.stripe.com/v1/checkout/sessions/cs_test_checkout123456789/expire",
+      method: "POST",
+    },
+  ]);
+  assert.equal(
+    calls[1].init.headers["Idempotency-Key"],
+    "stripe-expire:cs_test_checkout123456789",
+  );
+
+  const replay = ports(async () => new Response(JSON.stringify({
+    ...checkoutResponse(),
+    status: "expired",
+  }), { status: 200 }));
+  assert.equal((await replay.checkout.expireSession(request)).state, "expired");
+});
+
 test("Stripe connector fails closed on missing or cross-mode credentials", () => {
   assert.throws(
     () => createStripePaymentProviderPorts({ mode: "test" }),

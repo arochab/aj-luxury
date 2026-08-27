@@ -31,6 +31,22 @@ export type CheckoutSessionReceipt = Readonly<{
   providerRequestId: string | null;
 }>;
 
+export type CheckoutSessionExpirationRequest = Readonly<{
+  idempotencyKey: string;
+  orderId: string;
+  providerSessionId: string;
+  amountTotalCents: number;
+  currency: PaymentCurrency;
+  settlementMode: "test" | "live";
+}>;
+
+export type CheckoutSessionExpirationReceipt = Readonly<{
+  provider: "stripe";
+  providerSessionId: string;
+  state: "expired";
+  providerRequestId: string | null;
+}>;
+
 export type RefundReason = "duplicate" | "fraudulent" | "requested_by_customer";
 export type RefundState =
   | "pending"
@@ -131,6 +147,9 @@ export type PaymentWebhookInput = Readonly<{
 
 export interface CheckoutPaymentProviderPort {
   createSession(request: CheckoutSessionRequest): Promise<CheckoutSessionReceipt>;
+  expireSession(
+    request: CheckoutSessionExpirationRequest,
+  ): Promise<CheckoutSessionExpirationReceipt>;
 }
 
 export interface RefundPaymentProviderPort {

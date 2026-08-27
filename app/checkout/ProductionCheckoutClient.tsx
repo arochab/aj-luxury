@@ -18,6 +18,7 @@ import {
   type PublicProductionServicePoint,
 } from "../../lib/commerce/production-delivery-client";
 import {
+  changeProductionOrderDelivery,
   createProductionOrder,
   createProductionPaymentSession,
   getCurrentProductionOrder,
@@ -28,6 +29,7 @@ import { useI18n } from "../../lib/i18n/I18nProvider";
 import LocalizedPrice from "../components/LocalizedPrice";
 import {
   CustomerAccountApiError,
+  getCustomerAccount,
   registerCustomerAccount,
 } from "../../lib/commerce/customer-account-client.ts";
 import styles from "../cart/CommerceShell.module.css";
@@ -93,7 +95,7 @@ export default function ProductionCheckoutClient() {
   const [selectedPoint, setSelectedPoint] = useState<PublicProductionServicePoint | null>(null);
   const [order, setOrder] = useState<PublicProductionOrder | null>(null);
   const [legalAccepted, setLegalAccepted] = useState(false);
-  const [createAccount, setCreateAccount] = useState(false);
+  const [signedInEmail, setSignedInEmail] = useState<string | null>(null);
   const [accountPassword, setAccountPassword] = useState("");
   const [accountPasswordConfirmation, setAccountPasswordConfirmation] = useState("");
   const [acceptsMarketing, setAcceptsMarketing] = useState(false);
@@ -106,14 +108,20 @@ export default function ProductionCheckoutClient() {
   const pointsAttempt = useRef<{ optionId: string; key: string } | null>(null);
   const orderAttempt = useRef<string | null>(null);
   const paymentAttempt = useRef<string | null>(null);
+  const deliveryChangeAttempt = useRef<string | null>(null);
   const errorRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setErrorCode(null);
     try {
-      const currentOrder = await getCurrentProductionOrder();
+      const [currentOrder, currentAccount] = await Promise.all([
+        getCurrentProductionOrder(),
+        getCustomerAccount().catch(() => null),
+      ]);
       setOrder(currentOrder);
+      setSignedInEmail(currentAccount?.email ?? null);
+      if (currentAccount?.email) setEmail(currentAccount.email);
       if (!currentOrder) setCart(await getCart("production"));
     } catch {
       setErrorCode("CHECKOUT_UNAVAILABLE");
@@ -257,7 +265,7 @@ export default function ProductionCheckoutClient() {
     setSubmitting(true);
     setErrorCode(null);
     try {
-      if (createAccount && !accountPrepared) {
+      if (!signedInEmail && !accountPrepared) {
         if (accountPassword !== accountPasswordConfirmation || accountPassword.length < 12) {
           setErrorCode("ACCOUNT_PASSWORD_INVALID");
           return;
@@ -302,6 +310,39 @@ export default function ProductionCheckoutClient() {
       setErrorCode(error instanceof ProductionOrderApiError
         ? error.code
         : "CHECKOUT_UNAVAILABLE");
+      setSubmitting(false);
+    }
+  }
+
+  async function changeDelivery() {
+    if (!order || submitting ||
+      !["pending_payment", "cancelled"].includes(order.status)) return;
+    setSubmitting(true);
+    setErrorCode(null);
+    try {
+      const key = deliveryChangeAttempt.current ?? crypto.randomUUID();
+      deliveryChangeAttempt.current = key;
+      await changeProductionOrderDelivery(key);
+      const nextCart = await getCart("production");
+      setCart(nextCart);
+      setOrder(null);
+      setOptions(null);
+      setSelected(null);
+      setRelayOption(null);
+      setPoints(null);
+      setSelectedPoint(null);
+      setLegalAccepted(false);
+      quoteAttempt.current = null;
+      selectAttempt.current = null;
+      pointsAttempt.current = null;
+      orderAttempt.current = null;
+      paymentAttempt.current = null;
+      deliveryChangeAttempt.current = null;
+    } catch (error) {
+      setErrorCode(error instanceof ProductionOrderApiError
+        ? error.code
+        : "CHECKOUT_UNAVAILABLE");
+    } finally {
       setSubmitting(false);
     }
   }
@@ -400,26 +441,36 @@ export default function ProductionCheckoutClient() {
 
           {selected && !order ? (
             <div className={styles.testCheckout}>
-              <label>{t("checkout.email")}<input type="email" inputMode="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.currentTarget.value)} /></label>
-              <label className={styles.checkbox}><input type="checkbox" checked={createAccount} onChange={(e) => { setCreateAccount(e.currentTarget.checked); setAccountPrepared(false); }} /><span>Créer mon compte AJ Luxury pour retrouver cette commande.</span></label>
-              {createAccount ? (
+              <label>{t("checkout.email")}<input type="email" inputMode="email" autoComplete="email" required readOnly={signedInEmail !== null} value={email} onChange={(e) => { setEmail(e.currentTarget.value); setAccountPrepared(false); }} /></label>
+              {signedInEmail ? (
                 <div className={styles.accountCheckoutFields}>
+                  <p className={styles.muted}>Connecté avec {signedInEmail}. Cette commande sera ajoutée automatiquement à votre espace client.</p>
+                </div>
+              ) : (
+                <div className={styles.accountCheckoutFields}>
+                  <p><strong>Votre espace client</strong></p>
                   <label>Mot de passe<input type="password" minLength={12} maxLength={128} autoComplete="new-password" required value={accountPassword} onChange={(e) => { setAccountPassword(e.currentTarget.value); setAccountPrepared(false); }} /></label>
                   <label>Confirmer le mot de passe<input type="password" minLength={12} maxLength={128} autoComplete="new-password" required value={accountPasswordConfirmation} onChange={(e) => { setAccountPasswordConfirmation(e.currentTarget.value); setAccountPrepared(false); }} /></label>
                   <label className={styles.checkbox}><input type="checkbox" checked={acceptsMarketing} onChange={(e) => { setAcceptsMarketing(e.currentTarget.checked); setAccountPrepared(false); }} /><span>Recevoir les nouveautés AJ Luxury. Facultatif et révocable.</span></label>
-                  <p className={styles.muted}>Un e-mail vous permettra de confirmer le compte. La commande reste possible sans accepter les messages marketing.</p>
+                  <p className={styles.muted}>Votre compte sera créé avec l’adresse ci-dessus. Confirmez ensuite l’e-mail AJ Luxury pour retrouver la commande et suivre sa livraison.</p>
                 </div>
-              ) : <p className={styles.muted}>Déjà client ? <Link href="/account">Se connecter</Link> avant de confirmer la commande.</p>}
+              )}
+              {!signedInEmail && <p className={styles.muted}>Déjà client ? <Link href="/account">Se connecter</Link> avant de confirmer la commande.</p>}
               <label className={styles.checkbox}><input type="checkbox" checked={legalAccepted} onChange={(e) => setLegalAccepted(e.currentTarget.checked)} /><span>J’accepte les <Link href="/terms">conditions de vente</Link> et la <Link href="/privacy">politique de confidentialité</Link>.</span></label>
-              <button className={styles.button} type="button" disabled={submitting || !legalAccepted || !email || (createAccount && (!accountPassword || !accountPasswordConfirmation))} onClick={() => void confirmOrder()}>Confirmer la commande</button>
+              <button className={styles.button} type="button" disabled={submitting || !legalAccepted || !email || (!signedInEmail && (!accountPassword || !accountPasswordConfirmation))} onClick={() => void confirmOrder()}>{signedInEmail ? "Confirmer la commande" : "Créer mon compte et confirmer la commande"}</button>
             </div>
           ) : null}
 
           {order ? (
             <div className={styles.quote} role="status" aria-live="polite">
-              <strong>{order.status === "paid" ? "Paiement confirmé" : "Commande réservée"}</strong>
+              <strong>{order.status === "paid"
+                ? "Paiement confirmé"
+                : order.status === "cancelled"
+                  ? "Commande annulée"
+                  : "Commande réservée"}</strong>
               <p>{order.orderNumber}</p>
               {order.status === "pending_payment" ? <button className={styles.button} type="button" disabled={submitting} onClick={() => void pay()}>Payer avec Stripe</button> : null}
+              {["pending_payment", "cancelled"].includes(order.status) ? <button className={styles.button} type="button" disabled={submitting} onClick={() => void changeDelivery()}>Modifier la livraison</button> : null}
             </div>
           ) : null}
           <p className={styles.muted}>{t("checkout.securityNote")}</p>

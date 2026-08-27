@@ -1,5 +1,7 @@
 import {
   PaymentProviderError,
+  type CheckoutSessionExpirationReceipt,
+  type CheckoutSessionExpirationRequest,
   type CheckoutSessionReceipt,
   type CheckoutSessionRequest,
   type PaymentProviderPorts,
@@ -362,6 +364,66 @@ function checkoutReceipt(
   });
 }
 
+function validateCheckoutExpirationRequest(
+  request: CheckoutSessionExpirationRequest,
+  runtime: StripeRuntimeConfiguration,
+): void {
+  validateIdempotencyKey(request.idempotencyKey);
+  validateInternalId(request.orderId, "Order id");
+  providerId(
+    request.providerSessionId,
+    runtime.livemode ? "cs_live" : "cs_test",
+    "Stripe session id",
+  );
+  if (
+    request.currency !== "EUR" ||
+    request.settlementMode !== (runtime.livemode ? "live" : "test") ||
+    !safeInteger(request.amountTotalCents, 1, 100_000_000)
+  ) {
+    invalidRequest("Checkout expiration request is invalid.");
+  }
+}
+
+function checkoutExpirationState(
+  value: unknown,
+  request: CheckoutSessionExpirationRequest,
+  runtime: StripeRuntimeConfiguration,
+): "open" | "expired" | "complete" {
+  if (
+    !record(value) || value.object !== "checkout.session" ||
+    value.id !== request.providerSessionId || value.livemode !== runtime.livemode ||
+    value.currency !== "eur" || value.client_reference_id !== request.orderId ||
+    metadataOrderId(value) !== request.orderId ||
+    value.amount_total !== request.amountTotalCents ||
+    !safeInteger(value.amount_total, 1, 100_000_000) ||
+    !["open", "expired", "complete"].includes(String(value.status))
+  ) {
+    throw new PaymentProviderError(
+      "MALFORMED_RESPONSE",
+      "Stripe Checkout expiration response is invalid.",
+    );
+  }
+  if (value.status !== "complete" && value.payment_status !== "unpaid") {
+    throw new PaymentProviderError(
+      "REJECTED",
+      "Stripe Checkout can no longer be expired safely.",
+    );
+  }
+  return value.status as "open" | "expired" | "complete";
+}
+
+function checkoutExpirationReceipt(
+  request: CheckoutSessionExpirationRequest,
+  requestId: string | null,
+): CheckoutSessionExpirationReceipt {
+  return Object.freeze({
+    provider: "stripe",
+    providerSessionId: request.providerSessionId,
+    state: "expired",
+    providerRequestId: requestId,
+  });
+}
+
 function validateRefundRequest(request: RefundRequest): void {
   validateIdempotencyKey(request.idempotencyKey);
   validateInternalId(request.orderId, "Order id");
@@ -631,6 +693,38 @@ export function createStripePaymentProviderPorts(
           checkoutForm(request),
         );
         return checkoutReceipt(response.value, request, expectedAmount, runtime, response.requestId);
+      },
+      async expireSession(request: CheckoutSessionExpirationRequest) {
+        validateCheckoutExpirationRequest(request, runtime);
+        const current = await stripeGet(
+          runtime,
+          fetchImpl,
+          `/v1/checkout/sessions/${request.providerSessionId}`,
+        );
+        const currentState = checkoutExpirationState(current.value, request, runtime);
+        if (currentState === "expired") {
+          return checkoutExpirationReceipt(request, current.requestId);
+        }
+        if (currentState === "complete") {
+          throw new PaymentProviderError(
+            "REJECTED",
+            "Stripe Checkout has already completed.",
+          );
+        }
+        const expired = await stripePost(
+          runtime,
+          fetchImpl,
+          `/v1/checkout/sessions/${request.providerSessionId}/expire`,
+          request.idempotencyKey,
+          new URLSearchParams(),
+        );
+        if (checkoutExpirationState(expired.value, request, runtime) !== "expired") {
+          throw new PaymentProviderError(
+            "MALFORMED_RESPONSE",
+            "Stripe Checkout was not expired.",
+          );
+        }
+        return checkoutExpirationReceipt(request, expired.requestId);
       },
     }),
     refunds: Object.freeze({

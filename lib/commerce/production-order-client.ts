@@ -10,6 +10,10 @@ const PAYMENT_SESSION_PATH = commerceApiPath(
   "production",
   "/checkout/payment-session",
 );
+const DELIVERY_CHANGE_PATH = commerceApiPath(
+  "production",
+  "/checkout/order/delivery-change",
+);
 
 export type PublicProductionOrder = Readonly<{
   orderNumber: string;
@@ -214,4 +218,22 @@ export async function createProductionPaymentSession(
     throw new ProductionOrderApiError("MALFORMED_RESPONSE", response.status);
   }
   return url.href;
+}
+
+export async function changeProductionOrderDelivery(
+  idempotencyKey: string,
+): Promise<void> {
+  const response = await fetch(DELIVERY_CHANGE_PATH, {
+    method: "POST",
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: mutationHeaders(idempotencyKey),
+  });
+  const payload = await jsonResponse(response);
+  if (
+    !exact(payload, ["data"]) || !record(payload.data) ||
+    !exact(payload.data, ["status"]) || payload.data.status !== "ready"
+  ) {
+    throw new ProductionOrderApiError("MALFORMED_RESPONSE", response.status);
+  }
 }

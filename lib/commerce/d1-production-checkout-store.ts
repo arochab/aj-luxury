@@ -153,6 +153,14 @@ export type CreateProductionOrderInput = Readonly<{
   now: string;
 }>;
 
+export type ProductionDeliveryChangePlan =
+  | Readonly<{ state: "completed" }>
+  | Readonly<{
+    state: "pending";
+    checkoutRequest: CheckoutSessionRequest;
+    existingProviderSessionId: string | null;
+  }>;
+
 const orderColumns = `id, order_number, cart_id, customer_id, status,
   currency, email, subtotal_cents, discount_cents, shipping_cents, tax_cents, total_cents,
   shipping_country_code, shipping_address_json, shipping_address_fingerprint,
@@ -236,6 +244,225 @@ export class D1ProductionCheckoutStore {
       `SELECT ${orderColumns} FROM orders WHERE id = ?`,
     ).bind(orderId).first<OrderRow>();
     return order ? this.#snapshot(order) : null;
+  }
+
+  async prepareDeliveryChange(input: Readonly<{
+    cartId: string;
+    newCartId: string;
+    idempotencyKey: string;
+    origin: string;
+    locale: "fr" | "en";
+    now: string;
+  }>): Promise<ProductionDeliveryChangePlan> {
+    assertFulfillmentIdentifier(input.cartId, "cartId");
+    assertFulfillmentIdentifier(input.newCartId, "newCartId");
+    if (input.newCartId === input.cartId) {
+      throw new ProductionCheckoutError("INVALID_INPUT", "Replacement cart is invalid.");
+    }
+    const order = await this.#database.prepare(
+      `SELECT id, status FROM orders WHERE cart_id=?`,
+    ).bind(input.cartId).first<Pick<OrderRow, "id" | "status">>();
+    if (!order) {
+      throw new ProductionCheckoutError("ORDER_NOT_FOUND", "Order not found.");
+    }
+    if (order.status === "cancelled") {
+      if (await this.#deliveryChangeComplete(order.id, input.cartId, input.newCartId)) {
+        return Object.freeze({ state: "completed" });
+      }
+      throw new ProductionCheckoutError(
+        "ORDER_CONFLICT",
+        "Cancelled order has no recoverable delivery-change cart.",
+      );
+    }
+    if (order.status !== "pending_payment") {
+      throw new ProductionCheckoutError(
+        "ORDER_CONFLICT",
+        "Only a pending payment order can change delivery.",
+      );
+    }
+    const checkoutRequest = await this.prepareCheckoutSession({
+      cartId: input.cartId,
+      idempotencyKey: input.idempotencyKey,
+      origin: input.origin,
+      locale: input.locale,
+      now: input.now,
+    });
+    const payment = await this.#database.prepare(
+      `SELECT provider_session_id, status, amount_cents, currency,
+        idempotency_key, livemode FROM payments
+      WHERE order_id=? AND provider='stripe' AND idempotency_key=?`,
+    ).bind(order.id, checkoutRequest.idempotencyKey).first<PaymentRow>();
+    const amountTotalCents = checkoutRequest.lines.reduce(
+      (total, line) => total + line.unitAmountCents * line.quantity,
+      0,
+    );
+    if (payment && (
+      !["created", "requires_action", "failed", "expired"].includes(payment.status) ||
+      payment.amount_cents !== amountTotalCents || payment.currency !== "EUR" ||
+      payment.livemode !== (checkoutRequest.settlementMode === "live" ? 1 : 0)
+    )) {
+      throw new ProductionCheckoutError(
+        "PAYMENT_CONFLICT",
+        "Stored Stripe Checkout is not safe to expire.",
+      );
+    }
+    return Object.freeze({
+      state: "pending",
+      checkoutRequest,
+      existingProviderSessionId: payment?.provider_session_id ?? null,
+    });
+  }
+
+  async cancelPendingOrderForDeliveryChange(input: Readonly<{
+    cartId: string;
+    newCartId: string;
+    newCartExpiresAt: string;
+    now: string;
+  }>): Promise<void> {
+    assertFulfillmentIdentifier(input.cartId, "cartId");
+    assertFulfillmentIdentifier(input.newCartId, "newCartId");
+    assertFulfillmentTimestamp(input.newCartExpiresAt, "newCartExpiresAt");
+    assertFulfillmentTimestamp(input.now, "now");
+    if (input.newCartId === input.cartId) {
+      throw new ProductionCheckoutError("INVALID_INPUT", "Replacement cart is invalid.");
+    }
+    const order = await this.#database.prepare(
+      `SELECT id, status, updated_at FROM orders WHERE cart_id=?`,
+    ).bind(input.cartId).first<Pick<OrderRow, "id" | "status"> & { updated_at: string }>();
+    if (!order) {
+      throw new ProductionCheckoutError("ORDER_NOT_FOUND", "Order not found.");
+    }
+    if (order.status === "cancelled") {
+      if (await this.#deliveryChangeComplete(order.id, input.cartId, input.newCartId)) return;
+      throw new ProductionCheckoutError(
+        "ORDER_CONFLICT",
+        "Cancelled order has no recoverable delivery-change cart.",
+      );
+    }
+    if (order.status !== "pending_payment") {
+      throw new ProductionCheckoutError(
+        "ORDER_CONFLICT",
+        "Only a pending payment order can change delivery.",
+      );
+    }
+    const latestReservation = await this.#database.prepare(
+      `SELECT MAX(updated_at) AS updated_at FROM stock_reservations
+      WHERE cart_id=? AND status='active'`,
+    ).bind(input.cartId).first<{ updated_at: string | null }>();
+    const latestTimestamp = [order.updated_at, latestReservation?.updated_at]
+      .filter((value): value is string => typeof value === "string")
+      .reduce((latest, value) => value > latest ? value : latest, order.updated_at);
+    const transitionAt = input.now > latestTimestamp
+      ? input.now
+      : new Date(Date.parse(latestTimestamp) + 1).toISOString();
+    if (input.newCartExpiresAt <= transitionAt) {
+      throw new ProductionCheckoutError("INVALID_INPUT", "Replacement cart expiry is invalid.");
+    }
+    const transitionKey = `delivery-change:${order.id}`;
+    const auditId = `audit_delivery_change_${await sha256Hex(order.id)}`;
+    try {
+      await this.#database.batch([
+        this.#database.prepare(
+          `UPDATE stock_reservations SET status='released',
+            last_transition_key=?, converted_order_id=NULL, updated_at=?
+          WHERE cart_id=? AND status='active' AND EXISTS (
+            SELECT 1 FROM orders WHERE id=? AND cart_id=?
+              AND status='pending_payment' AND paid_at IS NULL
+              AND NOT EXISTS (
+                SELECT 1 FROM payments WHERE order_id=orders.id
+                  AND status IN ('succeeded','refunded')
+              )
+          )`,
+        ).bind(
+          transitionKey,
+          transitionAt,
+          input.cartId,
+          order.id,
+          input.cartId,
+        ),
+        this.#database.prepare(
+          `INSERT OR IGNORE INTO inventory_movements (
+            id, variant_id, kind, quantity, reference_type, reference_id,
+            actor_type, actor_id, idempotency_key, created_at
+          ) SELECT 'movement_delivery_change_' || id, variant_id, 'release',
+            quantity, 'reservation', id, 'customer', NULL,
+            ? || ':' || id, ? FROM stock_reservations
+          WHERE cart_id=? AND status='released' AND last_transition_key=?`,
+        ).bind(transitionKey, transitionAt, input.cartId, transitionKey),
+        this.#database.prepare(
+          `UPDATE orders SET status='cancelled', updated_at=?
+          WHERE id=? AND cart_id=? AND status='pending_payment' AND paid_at IS NULL
+            AND NOT EXISTS (
+              SELECT 1 FROM payments WHERE order_id=orders.id
+                AND status IN ('succeeded','refunded')
+            )
+            AND NOT EXISTS (
+              SELECT 1 FROM stock_reservations
+              WHERE cart_id=orders.cart_id AND status IN ('active','converted')
+            )`,
+        ).bind(transitionAt, order.id, input.cartId),
+        this.#database.prepare(
+          `INSERT INTO carts (
+            id, customer_id, status, currency, email, expires_at,
+            created_at, updated_at
+          ) SELECT ?, cart.customer_id, 'open', 'EUR', cart.email, ?, ?, ?
+          FROM carts AS cart
+          INNER JOIN orders AS customer_order ON customer_order.cart_id=cart.id
+          WHERE cart.id=? AND customer_order.id=?
+            AND customer_order.status='cancelled'
+          ON CONFLICT(id) DO NOTHING`,
+        ).bind(
+          input.newCartId,
+          input.newCartExpiresAt,
+          transitionAt,
+          transitionAt,
+          input.cartId,
+          order.id,
+        ),
+        this.#database.prepare(
+          `INSERT INTO cart_lines (
+            id, cart_id, variant_id, quantity, unit_price_cents,
+            created_at, updated_at
+          ) SELECT 'line:' || ? || ':' || source.variant_id, ?,
+            source.variant_id, source.quantity, source.unit_price_cents, ?, ?
+          FROM cart_lines AS source
+          WHERE source.cart_id=? AND EXISTS (
+            SELECT 1 FROM carts WHERE id=? AND status='open'
+          )
+          ON CONFLICT(cart_id, variant_id) DO NOTHING`,
+        ).bind(
+          input.newCartId,
+          input.newCartId,
+          transitionAt,
+          transitionAt,
+          input.cartId,
+          input.newCartId,
+        ),
+        this.#database.prepare(
+          `INSERT INTO audit_log (
+            id, actor_type, actor_id, action, entity_type, entity_id,
+            idempotency_key, metadata_json, created_at
+          ) SELECT ?, 'customer', customer_id, 'delivery_change_requested',
+            'order', id, ?, ?, ? FROM orders
+          WHERE id=? AND status='cancelled'
+          ON CONFLICT(idempotency_key) DO NOTHING`,
+        ).bind(
+          auditId,
+          transitionKey,
+          JSON.stringify({ previousCartId: input.cartId, newCartId: input.newCartId }),
+          transitionAt,
+          order.id,
+        ),
+      ]);
+    } catch (error) {
+      mapDatabaseError(error);
+    }
+    if (!await this.#deliveryChangeComplete(order.id, input.cartId, input.newCartId)) {
+      throw new ProductionCheckoutError(
+        "ORDER_CONFLICT",
+        "The delivery-change transaction did not commit completely.",
+      );
+    }
   }
 
   async createOrder(
@@ -691,5 +918,59 @@ export class D1ProductionCheckoutStore {
         lineTotalCents: line.line_total_cents,
       }))),
     });
+  }
+
+  async #deliveryChangeComplete(
+    orderId: string,
+    oldCartId: string,
+    newCartId: string,
+  ): Promise<boolean> {
+    const proof = await this.#database.prepare(
+      `SELECT
+        (SELECT status FROM orders WHERE id=? AND cart_id=?) AS order_status,
+        (SELECT status FROM carts WHERE id=?) AS cart_status,
+        (SELECT COUNT(*) FROM stock_reservations
+          WHERE cart_id=? AND status IN ('active','converted')) AS locked_count,
+        (SELECT COUNT(*) FROM audit_log WHERE entity_type='order'
+          AND entity_id=? AND action='delivery_change_requested'
+          AND idempotency_key=?) AS audit_count,
+        EXISTS (
+          SELECT variant_id, quantity, unit_price_cents FROM cart_lines
+          WHERE cart_id=?
+          EXCEPT
+          SELECT variant_id, quantity, unit_price_cents FROM cart_lines
+          WHERE cart_id=?
+        ) AS old_minus_new,
+        EXISTS (
+          SELECT variant_id, quantity, unit_price_cents FROM cart_lines
+          WHERE cart_id=?
+          EXCEPT
+          SELECT variant_id, quantity, unit_price_cents FROM cart_lines
+          WHERE cart_id=?
+        ) AS new_minus_old`,
+    ).bind(
+      orderId,
+      oldCartId,
+      newCartId,
+      oldCartId,
+      orderId,
+      `delivery-change:${orderId}`,
+      oldCartId,
+      newCartId,
+      newCartId,
+      oldCartId,
+    ).first<{
+      order_status: string | null;
+      cart_status: string | null;
+      locked_count: number;
+      audit_count: number;
+      old_minus_new: number;
+      new_minus_old: number;
+    }>();
+    return Boolean(
+      proof && proof.order_status === "cancelled" && proof.cart_status === "open" &&
+      proof.locked_count === 0 && proof.audit_count === 1 &&
+      proof.old_minus_new === 0 && proof.new_minus_old === 0,
+    );
   }
 }

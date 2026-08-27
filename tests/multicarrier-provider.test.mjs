@@ -484,29 +484,95 @@ test("Sendcloud resolves null EU V3 rates from exact V2 products and EUR prices"
   }
 });
 
-test("Sendcloud keeps France on V3 and never invokes the EU fallback", async () => {
-  let calls = 0;
+test("Sendcloud preserves all four published France carrier and delivery-mode combinations", async () => {
+  const calls = [];
+  const methodByCombination = new Map([
+    ["colissimo:home_delivery", 7101],
+    ["colissimo:service_point", 7102],
+    ["mondial_relay:home_delivery", 7201],
+    ["mondial_relay:service_point", 7202],
+  ]);
   const ports = createSendcloudProviderPorts(
     { publicKey: "public_key", secretKey: "x".repeat(32) },
-    async () => {
-      calls += 1;
-      return Response.json({
-        configuration_id: "configuration_fr",
-        delivery_options: [nullRateOffer({
-          id: "fr-null-rate",
-          carrierCode: "colissimo",
-          carrierName: "Colissimo",
-          shippingOptionCode: "colissimo:domestic/home",
-          deliveryMethodType: "standard_delivery",
-        })],
-      });
+    async (input) => {
+      const url = new URL(String(input));
+      calls.push(url);
+      if (url.pathname === "/api/v3/checkout/delivery-options") {
+        return Response.json({
+          configuration_id: "configuration_fr",
+          delivery_options: [
+            nullRateOffer({
+              id: "colissimo-home",
+              carrierCode: "colissimo",
+              carrierName: "Colissimo",
+              shippingOptionCode: "colissimo:france/home_delivery",
+              deliveryMethodType: "standard_delivery",
+            }),
+            nullRateOffer({
+              id: "colissimo-point",
+              carrierCode: "colissimo",
+              carrierName: "Colissimo",
+              shippingOptionCode: "colissimo:france/service_point",
+              deliveryMethodType: "service_point_delivery",
+            }),
+            nullRateOffer({
+              id: "mondial-home",
+              carrierCode: "mondial_relay",
+              carrierName: "Mondial Relay",
+              shippingOptionCode: "mondial_relay:france/home_delivery/c2c",
+              deliveryMethodType: "standard_delivery",
+            }),
+            nullRateOffer({
+              id: "mondial-point",
+              carrierCode: "mondial_relay",
+              carrierName: "Mondial Relay",
+              shippingOptionCode: "mondial_relay:france/service_point/c2c",
+              deliveryMethodType: "service_point_delivery",
+            }),
+          ],
+        });
+      }
+      if (url.pathname === "/api/v2/shipping-products") {
+        const carrier = url.searchParams.get("carrier");
+        const lastMile = url.searchParams.get("last_mile");
+        const methodId = methodByCombination.get(`${carrier}:${lastMile}`);
+        if (!methodId) return Response.json([]);
+        const v3Code = carrier === "colissimo"
+          ? `colissimo:france/${lastMile === "home_delivery" ? "home_delivery" : "service_point"}`
+          : `mondial_relay:france/${lastMile === "home_delivery" ? "home_delivery" : "service_point"}`;
+        return Response.json([shippingProduct({
+          carrier,
+          code: v3Code,
+          lastMile,
+          methodIds: [methodId],
+        })]);
+      }
+      if (url.pathname === "/api/v2/shipping-price") {
+        const methodId = Number(url.searchParams.get("shipping_method_id"));
+        return Response.json([{
+          price: (methodId / 1000).toFixed(2),
+          currency: "EUR",
+          to_country: "FR",
+          breakdown: [],
+        }]);
+      }
+      return Response.json({}, { status: 404 });
     },
   );
   const quotes = await ports.quotes.quote(quoteRequest({
     destination: { countryCode: "FR", postalCode: "75001", city: "Paris" },
   }));
-  assert.deepEqual(quotes, []);
-  assert.equal(calls, 1);
+  assert.deepEqual(quotes.map((quote) => ({
+    carrierCode: quote.carrierCode,
+    deliveryMode: quote.deliveryMode,
+  })), [
+    { carrierCode: "colissimo", deliveryMode: "home" },
+    { carrierCode: "colissimo", deliveryMode: "service_point" },
+    { carrierCode: "mondial_relay", deliveryMode: "home" },
+    { carrierCode: "mondial_relay", deliveryMode: "service_point" },
+  ]);
+  assert.equal(calls.filter(({ pathname }) => pathname === "/api/v2/shipping-products").length, 4);
+  assert.equal(calls.filter(({ pathname }) => pathname === "/api/v2/shipping-price").length, 4);
 });
 
 test("Sendcloud prefers a real EU V3 rate and keeps non-EU null rates closed", async (t) => {

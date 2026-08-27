@@ -62,6 +62,7 @@ const routes = Object.freeze({
   points: `${PREFIX}checkout/service-points`,
   select: `${PREFIX}checkout/delivery-options/select`,
   order: `${PREFIX}checkout/order`, payment: `${PREFIX}checkout/payment-session`,
+  deliveryChange: `${PREFIX}checkout/order/delivery-change`,
   webhook: `${PREFIX}webhooks/stripe`, resendWebhook: `${PREFIX}webhooks/resend`,
   currentOrder: `${PREFIX}orders/current`,
   refundDispatch: `${PREFIX}admin/late-payment-refunds/dispatch`,
@@ -316,6 +317,9 @@ function map(cause: unknown): Response {
   if (cause instanceof ProductionCheckoutError) {
     if (cause.code === "INVALID_INPUT") return fail("INVALID_INPUT", 400);
     if (cause.code === "ORDER_NOT_FOUND") return fail("ORDER_NOT_FOUND", 404);
+    if (["ORDER_CONFLICT", "PAYMENT_CONFLICT"].includes(cause.code)) {
+      return fail("ORDER_NOT_MODIFIABLE", 409);
+    }
     return fail("CHECKOUT_UNAVAILABLE", cause.code === "ORDER_EXPIRED" ? 409 : 503);
   }
   if (cause instanceof ProductionDeliveryError) return fail(cause.code === "SERVICE_POINT_NOT_ACTIVATED" ? "SERVICE_POINT_NOT_ACTIVATED" : "DELIVERY_UNAVAILABLE", 503);
@@ -1388,7 +1392,8 @@ export async function productionCommerceApiResponse(
     } catch (cause) { return map(cause); }
   }
   if (!current) return fail("CART_SESSION_REQUIRED", 401);
-  if ([routes.delivery, routes.points, routes.select, routes.order, routes.payment].includes(url.pathname as never)) {
+  if ([routes.delivery, routes.points, routes.select, routes.order, routes.payment,
+    routes.deliveryChange].includes(url.pathname as never)) {
     if (request.method !== "POST") return fail("METHOD_NOT_ALLOWED", 405);
     if (!key(request)) return fail("IDEMPOTENCY_KEY_REQUIRED", 400);
     if (!mutationOk(request, gate.origin, current)) return fail("CSRF_REJECTED", 403);
@@ -1487,6 +1492,90 @@ export async function productionCommerceApiResponse(
       return json({ data: { url: receipt.checkoutUrl } }, 201);
     } catch (cause) {
       if (cause instanceof PaymentProviderError && ["INVALID_REQUEST", "REJECTED"].includes(cause.code)) return fail("PAYMENT_REJECTED", 409);
+      return map(cause);
+    }
+  }
+  if (url.pathname === routes.deliveryChange) {
+    const empty = await bytes(request, 1);
+    if (!empty || empty.length) return fail("INVALID_BODY", 400);
+    const hmac = secret(env);
+    if (!hmac) return fail("CART_SESSION_UNAVAILABLE", 503);
+    try {
+      const mode = settlementMode(env);
+      if (!mode) return fail("SETTLEMENT_UNAVAILABLE", 503);
+      const returnOrigin = env.COMMERCE_BACKEND_ONLY === "true" &&
+        dependencies.trustedStorefrontOrigin &&
+        isConfiguredStorefrontOrigin(dependencies.trustedStorefrontOrigin, env)
+        ? dependencies.trustedStorefrontOrigin
+        : gate.origin;
+      const [cartToken, csrfToken] = await Promise.all([
+        token(hmac, "delivery-change-session", current.cartId),
+        token(hmac, "delivery-change-csrf", current.cartId),
+      ]);
+      const newCartId = `cart_${await hashOneTimeAccessToken(
+        `${cartToken}:${csrfToken}`,
+        accessTokenHashContexts.cartSession,
+      )}`;
+      const checkout = new D1ProductionCheckoutStore(env.DB);
+      const changeNow = now();
+      const plan = await checkout.prepareDeliveryChange({
+        cartId: current.cartId,
+        newCartId,
+        idempotencyKey: key(request)!,
+        origin: returnOrigin,
+        locale: "fr",
+        now: changeNow,
+      });
+      if (plan.state === "pending") {
+        if (plan.checkoutRequest.settlementMode !== mode) {
+          return fail("SETTLEMENT_ORDER_MISMATCH", 409);
+        }
+        const provider = dependencies.paymentProvider ?? createStripePaymentProviderPorts({
+          apiKey: env.STRIPE_SECRET_KEY,
+          webhookSecret: env.STRIPE_WEBHOOK_SECRET,
+          mode,
+        });
+        // Replaying the order-scoped Checkout creation key recovers even a
+        // provider session whose first response was lost before D1 recorded it.
+        const receipt = plan.existingProviderSessionId
+          ? null
+          : await provider.checkout.createSession(plan.checkoutRequest);
+        if (receipt) {
+          await checkout.recordCheckoutSession(plan.checkoutRequest, receipt, now());
+        }
+        const providerSessionId = receipt?.providerSessionId ??
+          plan.existingProviderSessionId!;
+        const amountTotalCents = plan.checkoutRequest.lines.reduce(
+          (total, line) => total + line.unitAmountCents * line.quantity,
+          0,
+        );
+        await provider.checkout.expireSession({
+          idempotencyKey: `stripe-expire:${providerSessionId}`,
+          orderId: plan.checkoutRequest.orderId,
+          providerSessionId,
+          amountTotalCents,
+          currency: plan.checkoutRequest.currency,
+          settlementMode: plan.checkoutRequest.settlementMode,
+        });
+      }
+      const cancellationNow = now();
+      await checkout.cancelPendingOrderForDeliveryChange({
+        cartId: current.cartId,
+        newCartId,
+        newCartExpiresAt: new Date(
+          Date.parse(cancellationNow) + CART_TTL * 1_000,
+        ).toISOString(),
+        now: cancellationNow,
+      });
+      const headers = new Headers();
+      headers.append("Set-Cookie", buildSessionCookie("cart", cartToken, CART_TTL));
+      headers.append("Set-Cookie", buildCsrfCookie("cart", csrfToken, CART_TTL));
+      return json({ data: { status: "ready" } }, 200, headers);
+    } catch (cause) {
+      if (cause instanceof PaymentProviderError &&
+        ["INVALID_REQUEST", "REJECTED"].includes(cause.code)) {
+        return fail("ORDER_NOT_MODIFIABLE", 409);
+      }
       return map(cause);
     }
   }

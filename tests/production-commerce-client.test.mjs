@@ -19,6 +19,7 @@ import {
   selectProductionDeliveryOption,
 } from "../lib/commerce/production-delivery-client.ts";
 import {
+  changeProductionOrderDelivery,
   createProductionPaymentSession,
   parseProductionOrder,
 } from "../lib/commerce/production-order-client.ts";
@@ -375,6 +376,30 @@ test("payment uses the canonical session route and accepts only Stripe Checkout"
   }
 });
 
+test("delivery change uses the protected order release route", async () => {
+  const originalFetch = globalThis.fetch;
+  let call;
+  globalThis.fetch = async (path, init) => {
+    call = { path, init };
+    return Response.json({ data: { status: "ready" } });
+  };
+  try {
+    await withDocumentCookie(
+      () => changeProductionOrderDelivery("delivery-change-attempt-0001"),
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+  assert.equal(call.path, "/api/commerce/checkout/order/delivery-change");
+  assert.equal(call.init.method, "POST");
+  assert.equal(call.init.body, undefined);
+  assert.equal(call.init.headers.get("X-CSRF-Token"), csrf);
+  assert.equal(
+    call.init.headers.get("Idempotency-Key"),
+    "delivery-change-attempt-0001",
+  );
+});
+
 test("production UI wiring contains no synthetic payment or hostname switch", async () => {
   const sources = await Promise.all([
     "../app/checkout/ProductionCheckoutClient.tsx",
@@ -408,6 +433,32 @@ test("production checkout exposes the 27 EU countries and no non-EU destination"
   assert.ok(!countryCodes.includes("GB"));
   assert.ok(!countryCodes.includes("US"));
   assert.ok(!countryCodes.includes("CA"));
+});
+
+test("production checkout binds every new order to a customer account", async () => {
+  const source = await readFile(
+    new URL("../app/checkout/ProductionCheckoutClient.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /getCustomerAccount\(\)\.catch\(\(\) => null\)/);
+  assert.match(source, /if \(!signedInEmail && !accountPrepared\)/);
+  assert.match(source, /source: "checkout"/);
+  assert.match(source, /Créer mon compte et confirmer la commande/);
+  assert.match(source, /readOnly=\{signedInEmail !== null\}/);
+  assert.doesNotMatch(source, /const \[createAccount, setCreateAccount\]/);
+  assert.doesNotMatch(source, /Créer mon compte AJ Luxury pour retrouver cette commande/);
+});
+
+test("pending production orders expose a delivery-change recovery action", async () => {
+  const source = await readFile(
+    new URL("../app/checkout/ProductionCheckoutClient.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /changeProductionOrderDelivery\(key\)/);
+  assert.match(source, /Modifier la livraison/);
+  assert.match(source, /setOrder\(null\)/);
+  assert.match(source, /await getCart\("production"\)/);
+  assert.match(source, /\["pending_payment", "cancelled"\]\.includes\(order\.status\)/);
 });
 
 test("mock product availability has no authority over production sizes", async () => {

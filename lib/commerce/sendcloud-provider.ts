@@ -825,11 +825,11 @@ export function createSendcloudProviderPorts(
           now: request.now,
           ttlSeconds: request.ttlSeconds,
           dutiesTerms: request.dutiesTerms,
-          // France keeps its published Dynamic Checkout V3 prices unchanged.
-          // The V2 lookup is a real-price fallback only for the other EU zones
-          // whose published V3 options currently omit shipping_rate.value.
+          // Keep every published Dynamic Checkout V3 price unchanged. When an
+          // eligible EU option is published with a null rate (including for a
+          // domestic French shipment), resolve only that exact carrier,
+          // shipping-option code and last-mile mode through Sendcloud V2.
           ...(request.originCountryCode === "FR" &&
-            request.destination.countryCode !== "FR" &&
             EU_COUNTRY_CODES.includes(
               request.destination.countryCode as typeof EU_COUNTRY_CODES[number],
             )

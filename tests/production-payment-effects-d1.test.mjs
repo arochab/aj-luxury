@@ -243,6 +243,80 @@ test("new browser idempotency keys reload the one active Checkout Session per or
   ).run(event.orderId));
 });
 
+test("delivery change atomically cancels, releases stock and clones an open cart", async () => {
+  const { sqlite, d1, event } = await fixture();
+  const checkout = new D1ProductionCheckoutStore(d1);
+  const changedAt = new Date().toISOString();
+  const newCartId = "cart_delivery_change_001";
+  await checkout.cancelPendingOrderForDeliveryChange({
+    cartId: "cart_prod",
+    newCartId,
+    newCartExpiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1_000).toISOString(),
+    now: changedAt,
+  });
+  assert.equal(
+    sqlite.prepare("SELECT status FROM orders WHERE id=?").get(event.orderId).status,
+    "cancelled",
+  );
+  assert.equal(
+    sqlite.prepare("SELECT status FROM stock_reservations WHERE cart_id='cart_prod'").get().status,
+    "released",
+  );
+  assert.equal(
+    sqlite.prepare("SELECT active_reserved_quantity FROM inventory WHERE variant_id='variant_boxer_pourpre_m'").get().active_reserved_quantity,
+    0,
+  );
+  assert.equal(
+    sqlite.prepare("SELECT COUNT(*) AS n FROM inventory_movements WHERE kind='release'").get().n,
+    1,
+  );
+  assert.equal(
+    sqlite.prepare("SELECT status FROM carts WHERE id=?").get(newCartId).status,
+    "open",
+  );
+  assert.deepEqual(
+    sqlite.prepare("SELECT variant_id,quantity,unit_price_cents FROM cart_lines WHERE cart_id=?").all(newCartId),
+    sqlite.prepare("SELECT variant_id,quantity,unit_price_cents FROM cart_lines WHERE cart_id='cart_prod'").all(),
+  );
+  assert.equal((await checkout.prepareDeliveryChange({
+    cartId: "cart_prod",
+    newCartId,
+    idempotencyKey: "delivery-change-replay-0001",
+    origin: "https://ajluxurystore.com",
+    locale: "fr",
+    now: new Date(Date.now() + 1).toISOString(),
+  })).state, "completed");
+  await checkout.cancelPendingOrderForDeliveryChange({
+    cartId: "cart_prod",
+    newCartId,
+    newCartExpiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1_000).toISOString(),
+    now: new Date(Date.now() + 2).toISOString(),
+  });
+  assert.equal(
+    sqlite.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action='delivery_change_requested'").get().n,
+    1,
+  );
+  sqlite.close();
+});
+
+test("delivery change rolls back every local effect when its atomic batch fails", async () => {
+  const { sqlite } = await fixture();
+  const checkout = new D1ProductionCheckoutStore(new D1(sqlite, 2));
+  await assert.rejects(() => checkout.cancelPendingOrderForDeliveryChange({
+    cartId: "cart_prod",
+    newCartId: "cart_delivery_change_failure",
+    newCartExpiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1_000).toISOString(),
+    now: new Date().toISOString(),
+  }));
+  assert.equal(sqlite.prepare("SELECT status FROM orders").get().status, "pending_payment");
+  assert.equal(sqlite.prepare("SELECT status FROM stock_reservations").get().status, "active");
+  assert.equal(
+    sqlite.prepare("SELECT COUNT(*) AS n FROM carts WHERE id='cart_delivery_change_failure'").get().n,
+    0,
+  );
+  sqlite.close();
+});
+
 test("late paid event is durably flagged without selling or marking paid", async () => {
   const { sqlite, effects, event, expiry } = await fixture();
   const late = { ...event, occurredAt: expiry };
