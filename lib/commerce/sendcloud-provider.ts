@@ -509,6 +509,7 @@ async function resolveV2FallbackPrice(
           ? product.methods.slice(0, 12).map((method) => record(method)
             ? Object.freeze({
               id: Number.isSafeInteger(method.id) ? method.id : "invalid",
+              name: typeof method.name === "string" ? method.name.slice(0, 120) : null,
               methodLastMile: record(method.functionalities) &&
                   typeof method.functionalities.last_mile === "string"
                 ? method.functionalities.last_mile.slice(0, 40)
