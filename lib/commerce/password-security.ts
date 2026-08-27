@@ -61,7 +61,7 @@ async function derive(
   const key = await crypto.subtle.importKey(
     "raw",
     passwordSource,
-    "PBKDF2",
+    { name: "PBKDF2" },
     false,
     ["deriveBits"],
   );

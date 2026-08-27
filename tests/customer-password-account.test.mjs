@@ -84,6 +84,21 @@ test("passwords use the governed slow one-way format", async () => {
   assert.doesNotMatch(JSON.stringify(stored), /Satin-Pourpre/);
 });
 
+test("password key import uses the Cloudflare-compatible algorithm descriptor", async () => {
+  const originalImportKey = crypto.subtle.importKey;
+  let importedAlgorithm = null;
+  crypto.subtle.importKey = async function (...argumentsList) {
+    importedAlgorithm = argumentsList[2];
+    return originalImportKey.apply(this, argumentsList);
+  };
+  try {
+    await hashCustomerPassword("Satin-Pourpre-2026!");
+  } finally {
+    crypto.subtle.importKey = originalImportKey;
+  }
+  assert.deepEqual(importedAlgorithm, { name: "PBKDF2" });
+});
+
 test("registration, verification, sessions, consent and recovery form one traceable account", async () => {
   const { sqlite, store } = fixture();
   const email = "adam@example.com";
