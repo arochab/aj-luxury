@@ -243,6 +243,37 @@ test("new browser idempotency keys reload the one active Checkout Session per or
   ).run(event.orderId));
 });
 
+test("delivery change can close a persisted Checkout session after reservation expiry", async () => {
+  const { sqlite, d1, event } = await fixture();
+  const reservationExpiry = sqlite.prepare(
+    "SELECT expires_at FROM stock_reservations WHERE cart_id='cart_prod'",
+  ).get().expires_at;
+  const expiredAt = new Date(Date.parse(reservationExpiry) + 1).toISOString();
+  sqlite.prepare(
+    `UPDATE stock_reservations SET status='expired',
+      last_transition_key='scheduled-expire:test', updated_at=?
+    WHERE cart_id='cart_prod'`,
+  ).run(expiredAt);
+  const plan = await new D1ProductionCheckoutStore(d1).prepareDeliveryChange({
+    cartId: "cart_prod",
+    newCartId: "cart_delivery_change_after_expiry",
+    idempotencyKey: "delivery-change-after-expiry-0001",
+    origin: "https://ajluxurystore.com",
+    locale: "fr",
+    now: expiredAt,
+  });
+  assert.equal(plan.state, "pending");
+  assert.equal(plan.existingProviderSessionId, event.providerCheckoutSessionId);
+  assert.equal(
+    plan.checkoutRequest.lines.reduce(
+      (total, line) => total + line.unitAmountCents * line.quantity,
+      0,
+    ),
+    event.amountCents,
+  );
+  sqlite.close();
+});
+
 test("delivery change atomically cancels, releases stock and clones an open cart", async () => {
   const { sqlite, d1, event } = await fixture();
   const checkout = new D1ProductionCheckoutStore(d1);

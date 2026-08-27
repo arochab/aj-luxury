@@ -260,8 +260,8 @@ export class D1ProductionCheckoutStore {
       throw new ProductionCheckoutError("INVALID_INPUT", "Replacement cart is invalid.");
     }
     const order = await this.#database.prepare(
-      `SELECT id, status FROM orders WHERE cart_id=?`,
-    ).bind(input.cartId).first<Pick<OrderRow, "id" | "status">>();
+      `SELECT ${orderColumns} FROM orders WHERE cart_id=?`,
+    ).bind(input.cartId).first<OrderRow>();
     if (!order) {
       throw new ProductionCheckoutError("ORDER_NOT_FOUND", "Order not found.");
     }
@@ -280,18 +280,33 @@ export class D1ProductionCheckoutStore {
         "Only a pending payment order can change delivery.",
       );
     }
-    const checkoutRequest = await this.prepareCheckoutSession({
-      cartId: input.cartId,
-      idempotencyKey: input.idempotencyKey,
-      origin: input.origin,
-      locale: input.locale,
-      now: input.now,
-    });
+    const lineResult = await this.#database.prepare(
+      `SELECT internal_reference, product_name, color_name, size, quantity,
+        unit_price_cents FROM order_lines WHERE order_id=? ORDER BY id`,
+    ).bind(order.id).all<CheckoutLineRow>();
+    const persistedCheckoutRequest = await this.#checkoutSessionRequest(
+      order,
+      lineResult.results,
+      input.origin,
+      input.locale,
+    );
     const payment = await this.#database.prepare(
       `SELECT provider_session_id, status, amount_cents, currency,
         idempotency_key, livemode FROM payments
       WHERE order_id=? AND provider='stripe' AND idempotency_key=?`,
-    ).bind(order.id, checkoutRequest.idempotencyKey).first<PaymentRow>();
+    ).bind(order.id, persistedCheckoutRequest.idempotencyKey).first<PaymentRow>();
+    // A scheduled expiry may release stock before the shopper clicks
+    // "Modifier la livraison". An already-persisted Stripe session must still
+    // be expired before the local order is cancelled and its cart is cloned.
+    const checkoutRequest = payment
+      ? persistedCheckoutRequest
+      : await this.prepareCheckoutSession({
+        cartId: input.cartId,
+        idempotencyKey: input.idempotencyKey,
+        origin: input.origin,
+        locale: input.locale,
+        now: input.now,
+      });
     const amountTotalCents = checkoutRequest.lines.reduce(
       (total, line) => total + line.unitAmountCents * line.quantity,
       0,
@@ -779,10 +794,34 @@ export class D1ProductionCheckoutStore {
     ) {
       throw new ProductionCheckoutError("ORDER_EXPIRED", "Order reservation expired.");
     }
-    const itemCount = linesResult.results.reduce(
+    return this.#checkoutSessionRequest(
+      order,
+      linesResult.results,
+      input.origin,
+      input.locale,
+    );
+  }
+
+  async #checkoutSessionRequest(
+    order: OrderRow,
+    sourceLines: readonly CheckoutLineRow[],
+    originValue: string,
+    locale: "fr" | "en",
+  ): Promise<CheckoutSessionRequest> {
+    const origin = new URL(originValue);
+    if (origin.protocol !== "https:" || origin.origin !== originValue) {
+      throw new ProductionCheckoutError("INVALID_INPUT", "Origin is invalid.");
+    }
+    const itemCount = sourceLines.reduce(
       (total, line) => total + line.quantity,
       0,
     );
+    if (itemCount < 1 || !order.settlement_mode) {
+      throw new ProductionCheckoutError(
+        "CHECKOUT_UNAVAILABLE",
+        "The order has no payable lines.",
+      );
+    }
     const lines: CheckoutLine[] = [Object.freeze({
       internalReference: `pack:apollon:${itemCount}`,
       displayName: itemCount === 1
@@ -811,7 +850,7 @@ export class D1ProductionCheckoutStore {
       // session and D1 remain the sole authority on the success page.
       successUrl: `${origin.origin}/checkout/success`,
       cancelUrl: `${origin.origin}/checkout`,
-      locale: input.locale,
+      locale,
       currency: "EUR",
       settlementMode: order.settlement_mode!,
       lines: Object.freeze(lines),
