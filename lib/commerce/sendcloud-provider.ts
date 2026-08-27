@@ -466,12 +466,37 @@ async function resolveV2FallbackPrice(
   productsUrl.searchParams.set("height_unit", "millimeter");
   productsUrl.searchParams.set("to_postal_code", request.destination.postalCode);
   productsUrl.searchParams.set("last_mile", expectedLastMile(option.deliveryMode));
-  const methodId = exactShippingMethodId(await providerJson(
+  const products = await providerJson(
     fetchImpl,
     auth,
     productsUrl.href,
     { method: "GET" },
-  ), option, request);
+  );
+  const productShapes = Array.isArray(products)
+    ? products.slice(0, 20).map((product) => record(product)
+      ? Object.freeze({
+        carrierCode: typeof product.carrier === "string"
+          ? product.carrier.slice(0, 80)
+          : "invalid",
+        productCode: typeof product.code === "string"
+          ? product.code.slice(0, 160)
+          : "invalid",
+        lastMile: record(product.available_functionalities) &&
+            Array.isArray(product.available_functionalities.last_mile)
+          ? product.available_functionalities.last_mile.slice(0, 4)
+          : [],
+      })
+      : Object.freeze({ invalid: true }))
+    : [];
+  console.info(JSON.stringify({
+    event: "sendcloud_fallback_product_shapes",
+    carrierCode: option.carrierCode,
+    deliveryMode: option.deliveryMode,
+    shippingOptionCode: option.shippingOptionCode,
+    productCount: productShapes.length,
+    products: productShapes,
+  }));
+  const methodId = exactShippingMethodId(products, option, request);
   if (methodId === null) return null;
 
   const priceUrl = new URL(`${PANEL_ORIGIN}/api/v2/shipping-price`);
@@ -830,6 +855,10 @@ export function createSendcloudProviderPorts(
                 : "invalid",
               deliveryMethodType: typeof candidate.delivery_method_type === "string"
                 ? candidate.delivery_method_type.slice(0, 80)
+                : "invalid",
+              shippingOptionCode: record(candidate.checkout_identifier) &&
+                  typeof candidate.checkout_identifier.value === "string"
+                ? candidate.checkout_identifier.value.slice(0, 160)
                 : "invalid",
               leadTimeMissing: candidate.lead_time_hours === null,
               rateMissing: record(candidate.shipping_rate) &&
