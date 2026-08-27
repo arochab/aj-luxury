@@ -1192,13 +1192,19 @@ export async function productionCommerceApiResponse(
     if (url.pathname === routes.accountCryptoProbe) {
       if (request.method !== "GET") return fail("METHOD_NOT_ALLOWED", 405);
       if (gate.mode !== "controlled") return fail("NOT_FOUND", 404);
+      let step = "verification-token";
       try {
         const password = "AJ-Luxury-controlled-runtime-probe-2026!";
-        const [verificationToken, checkoutToken, stored] = await Promise.all([
-          createOpaqueAccessToken(accessTokenHashContexts.customerEmailVerification),
-          createOpaqueAccessToken(accessTokenHashContexts.customerCheckoutLink),
-          hashCustomerPassword(password),
-        ]);
+        const verificationToken = await createOpaqueAccessToken(
+          accessTokenHashContexts.customerEmailVerification,
+        );
+        step = "checkout-token";
+        const checkoutToken = await createOpaqueAccessToken(
+          accessTokenHashContexts.customerCheckoutLink,
+        );
+        step = "password-hash";
+        const stored = await hashCustomerPassword(password);
+        step = "password-verify";
         const ready = isOpaqueAccessToken(verificationToken.token) &&
           isOpaqueAccessToken(checkoutToken.token) &&
           await verifyCustomerPassword(password, stored);
@@ -1207,6 +1213,7 @@ export async function productionCommerceApiResponse(
         console.warn(JSON.stringify({
           event: "customer_account_crypto_probe_failed",
           errorName: cause instanceof Error ? cause.name : "UnknownError",
+          step,
         }));
         return fail("ACCOUNT_CRYPTO_UNAVAILABLE", 503);
       }

@@ -1,3 +1,5 @@
+import { pbkdf2 } from "node:crypto";
+
 const PASSWORD_ALGORITHM = "pbkdf2-sha256" as const;
 const PASSWORD_ITERATIONS = 600_000;
 const PASSWORD_SALT_BYTES = 16;
@@ -131,4 +133,3 @@ export async function consumeDummyPasswordWork(password: unknown): Promise<void>
   salt.fill(0xa7);
   await derive(encoded, salt, PASSWORD_ITERATIONS);
 }
-import { pbkdf2 } from "node:crypto";
