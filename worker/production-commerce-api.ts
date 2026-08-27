@@ -1580,6 +1580,18 @@ export async function productionCommerceApiResponse(
       headers.append("Set-Cookie", buildCsrfCookie("cart", csrfToken, CART_TTL));
       return json({ data: { status: "ready" } }, 200, headers);
     } catch (cause) {
+      console.warn(JSON.stringify({
+        event: "delivery_change_failed",
+        category: cause instanceof PaymentProviderError
+          ? "payment-provider"
+          : cause instanceof ProductionCheckoutError
+            ? "checkout-store"
+            : "unexpected",
+        code: cause instanceof PaymentProviderError ||
+            cause instanceof ProductionCheckoutError
+          ? cause.code
+          : "UNKNOWN",
+      }));
       if (cause instanceof PaymentProviderError &&
         ["INVALID_REQUEST", "REJECTED"].includes(cause.code)) {
         return fail("ORDER_NOT_MODIFIABLE", 409);
