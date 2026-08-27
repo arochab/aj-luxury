@@ -417,8 +417,9 @@ test("mock product availability has no authority over production sizes", async (
   );
   assert.match(
     source,
-    /if \(runtimeMode === "production"\) \{\s*return t\("product\.stockCheckedAtAdd"\)/,
+    /if \(runtimeMode === "production"\) return ""/,
   );
+  assert.match(source, /\{label && <span className=\{styles\.sizeAvailability\}>\{label\}<\/span>\}/);
   assert.match(
     source,
     /const soldOut = runtimeMode === "preproduction" &&\s*availability\[size\]\.state === "sold-out"/,

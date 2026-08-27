@@ -153,9 +153,9 @@ export default function ProductPurchase({
 
     /* EN PRODUCTION, LE REGISTRE DE MAQUETTE NE PARLE PAS. Il est codé en dur
        et ne lit pas D1 : afficher « Disponible » ou « Plus que 3 » à partir de
-       lui serait annoncer à un client un chiffre inventé. On dit donc ce qui
-       est vrai — le stock est vérifié au moment de l'ajout au panier, contre
-       la vraie base.
+       lui serait annoncer à un client un chiffre inventé. Le bouton n'affiche
+       donc aucune promesse de disponibilité ; l'ajout au panier reste contrôlé
+       par la vraie base.
 
        Ce garde-fou est antérieur à la refonte du front ; je l'avais supprimé
        en réécrivant cette fonction, et c'est le test
@@ -167,9 +167,7 @@ export default function ProductPurchase({
        Conséquence assumée : les libellés « Live » restent inutilisés tant que
        le stock réel n'est pas branché sur cette page. Les supprimer serait
        perdre le vocabulaire du jour où il le sera. */
-    if (runtimeMode === "production") {
-      return t("product.stockCheckedAtAdd");
-    }
+    if (runtimeMode === "production") return "";
 
     const stock = stockOf(size);
 
@@ -329,9 +327,7 @@ export default function ProductPurchase({
     return runtimeMode === "preproduction"
       ? t("product.cartSecureNotice")
       : runtimeMode === "production"
-        ? availability
-          ? t("product.securePayment")
-          : `${t("product.securePayment")} ${t("product.stockCheckedAtAdd")}.`
+        ? t("product.securePayment")
         : /*
              Commerce fermé : la boutique n'est pas en panne, elle n'est pas
              encore ouverte. `product.cartUnavailable` (« momentanément
@@ -474,12 +470,14 @@ export default function ProductPurchase({
                 /* Le libellé visible est court pour que les quatre boîtes de
                    taille tiennent chacune sur une ligne ; l'assistance reçoit la
                    phrase entière, qui dit ce que « À l'ouverture » sous-entend. */
-                aria-label={`${t("product.size")} ${size}, ${
+                aria-label={`${t("product.size")} ${size}${
                   reviewMode
-                    ? label
+                    ? `, ${label}`
                     : runtimeMode === "closed"
-                    ? t("product.availabilityAtOpening")
+                    ? `, ${t("product.availabilityAtOpening")}`
                     : label
+                    ? `, ${label}`
+                    : ""
                 }`}
                 /* aria-disabled et non disabled : la taille en rupture reste
                    atteignable au clavier et annoncée par le lecteur d'écran,
@@ -488,7 +486,7 @@ export default function ProductPurchase({
                 onClick={() => selectSize(size)}
               >
                 <span className={styles.sizeLetter}>{size}</span>
-                <span className={styles.sizeAvailability}>{label}</span>
+                {label && <span className={styles.sizeAvailability}>{label}</span>}
               </button>
             );
           })}
