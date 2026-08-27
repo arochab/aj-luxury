@@ -503,6 +503,34 @@ async function resolveV2FallbackPrice(
             Array.isArray(product.available_functionalities.last_mile)
           ? product.available_functionalities.last_mile.slice(0, 4)
           : [],
+        methods: Array.isArray(product.methods)
+          ? product.methods.slice(0, 12).map((method) => record(method)
+            ? Object.freeze({
+              id: Number.isSafeInteger(method.id) ? method.id : "invalid",
+              methodLastMile: record(method.functionalities) &&
+                  typeof method.functionalities.last_mile === "string"
+                ? method.functionalities.last_mile.slice(0, 40)
+                : null,
+              minWeight: record(method.properties) &&
+                  Number.isFinite(method.properties.min_weight)
+                ? method.properties.min_weight
+                : "invalid",
+              maxWeight: record(method.properties) &&
+                  Number.isFinite(method.properties.max_weight)
+                ? method.properties.max_weight
+                : "invalid",
+              dimensions: record(method.properties) &&
+                  record(method.properties.max_dimensions)
+                ? Object.freeze({
+                  length: method.properties.max_dimensions.length,
+                  width: method.properties.max_dimensions.width,
+                  height: method.properties.max_dimensions.height,
+                  unit: method.properties.max_dimensions.unit,
+                })
+                : null,
+            })
+            : Object.freeze({ invalid: true }))
+          : [],
       })
       : Object.freeze({ invalid: true }))
     : [];
