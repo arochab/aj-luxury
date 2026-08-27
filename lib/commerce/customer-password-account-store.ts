@@ -91,7 +91,7 @@ type SessionCustomerRow = Readonly<{
   idle_expires_at: string;
 }>;
 
-function changed(result: CommerceD1Result | undefined): number {
+function changed(result: CommerceD1Result<object> | undefined): number {
   return Number(result?.meta?.changes ?? 0);
 }
 

@@ -70,7 +70,7 @@ export class ResendIdentityDelivery implements CustomerAccountEmailPort {
       !["email_verification", "password_reset"].includes(input.purpose) ||
       !SAFE_MAILBOX.test(input.destinationEmail) ||
       !SAFE_IDEMPOTENCY_KEY.test(input.idempotencyKey) ||
-      Date.now() >= Date.parse(input.notAfter)
+      Date.now() >= Date.parse(input.expiresAt)
     ) {
       throw new Error("Identity email delivery is invalid or expired.");
     }

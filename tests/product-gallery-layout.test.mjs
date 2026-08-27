@@ -124,17 +124,10 @@ test("homepage product portraits preserve the full head area", () => {
   );
 });
 
-test("the size guide restores focus after every close path", () => {
-  assert.match(purchase, /const restoreSizeGuideFocus = useRef\(false\)/);
-  assert.match(
-    purchase,
-    /if \(sizeGuideOpen \|\| !restoreSizeGuideFocus\.current\) return;[\s\S]*sizeGuideTrigger\.current\?\.focus\(\{ preventScroll: true \}\)/,
-  );
-  assert.match(
-    purchase,
-    /function closeSizeGuide\(\) \{[\s\S]*restoreSizeGuideFocus\.current = true;[\s\S]*setSizeGuideOpen\(false\)/,
-  );
-  assert.doesNotMatch(purchase, /requestAnimationFrame\([\s\S]*trigger\?\.focus/);
+test("the unvalidated size guide never reaches the public product page", () => {
+  assert.doesNotMatch(purchase, /sizeGuideOpen|sizeGuidePending|Guide des tailles/);
+  assert.match(purchase, /selectedPackSize > 1 && selectedSize/);
+  assert.match(purchase, /product\.oneSizeForPack/);
 });
 
 test("the mobile story removes the empty definition visual spacer", () => {

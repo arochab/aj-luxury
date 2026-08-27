@@ -40,7 +40,7 @@ export function generateMetadata() {
     title: runtimeMode === "production"
       ? "Mon compte | AJ Luxury"
       : runtimeMode === "preproduction"
-        ? "Espace client de test | AJ Luxury"
+        ? "Espace client privé | AJ Luxury"
         : "Espace client fermé | AJ Luxury",
     robots: { index: false, follow: false },
   };

@@ -14,15 +14,16 @@ export default function CookiesPage() {
     >
       <InfoNotice>
         <p>
-          <strong>À ce jour :</strong> aucun outil publicitaire, pixel social ou
-          outil de mesure d’audience nécessitant un consentement n’est activé.
-          Le site utilise seulement deux stockages locaux liés à l’interface.
+          AJ Luxury n’utilise aucun traceur publicitaire, pixel social ou outil
+          de mesure d’audience. Les seuls stockages utilisés servent au panier,
+          au compte client, à la sécurité et aux préférences demandées par
+          l’utilisateur.
         </p>
       </InfoNotice>
 
       <section>
-        <h2>1. Technologies actuellement utilisées</h2>
-        <InfoTable label="Technologies actuellement utilisées">
+        <h2>Préférences d’affichage</h2>
+        <InfoTable label="Stockages des préférences d’affichage">
           <table>
             <thead>
               <tr>
@@ -41,7 +42,7 @@ export default function CookiesPage() {
                 <td>Stockage local</td>
                 <td>Mémoriser la langue explicitement choisie</td>
                 <td>Jusqu’à suppression par l’utilisateur</td>
-                <td>Non, préférence demandée</td>
+                <td>Non</td>
               </tr>
               <tr>
                 <td>
@@ -49,8 +50,8 @@ export default function CookiesPage() {
                 </td>
                 <td>Stockage de session</td>
                 <td>Éviter de rejouer l’introduction à chaque page</td>
-                <td>Durée de la session</td>
-                <td>Non, fonctionnement de l’interface</td>
+                <td>Jusqu’à la fermeture de l’onglet</td>
+                <td>Non</td>
               </tr>
             </tbody>
           </table>
@@ -63,46 +64,80 @@ export default function CookiesPage() {
       </section>
 
       <section>
-        <h2>2. Stockages strictement nécessaires à la boutique</h2>
+        <h2>Panier, compte et sécurité</h2>
         <p>
-          Des cookies techniques sont utilisés lorsque nécessaire pour la
-          sécurité, l’authentification, le panier, le paiement, la prévention de
-          la fraude et la mémorisation des choix
-          de confidentialité. Ils ne serviront pas à suivre l’utilisateur à des
-          fins publicitaires et seront limités à la durée nécessaire.
+          Ces cookies sont strictement nécessaires aux fonctions demandées par
+          l’utilisateur. Ils ne servent ni à la publicité ni au suivi de la
+          navigation à des fins marketing.
         </p>
+        <InfoTable label="Cookies nécessaires au fonctionnement de la boutique">
+          <table>
+            <thead>
+              <tr>
+                <th>Nom</th>
+                <th>Finalité</th>
+                <th>Durée maximale</th>
+                <th>Consentement</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>__Host-aj_cart</code><br /><code>__Host-aj_cart_csrf</code></td>
+                <td>Conserver et protéger le panier</td>
+                <td>7 jours</td>
+                <td>Non</td>
+              </tr>
+              <tr>
+                <td><code>__Host-aj_customer</code><br /><code>__Host-aj_customer_csrf</code></td>
+                <td>Authentifier et protéger le compte client</td>
+                <td>7 jours maximum</td>
+                <td>Non</td>
+              </tr>
+              <tr>
+                <td><code>__Host-aj_pending_customer</code></td>
+                <td>Sécuriser une création de compte en cours</td>
+                <td>1 heure</td>
+                <td>Non</td>
+              </tr>
+              <tr>
+                <td><code>__Host-aj_guest_order</code><br /><code>__Host-aj_guest_order_csrf</code></td>
+                <td>Permettre le suivi sécurisé d’une commande sans compte</td>
+                <td>24 heures maximum</td>
+                <td>Non</td>
+              </tr>
+            </tbody>
+          </table>
+        </InfoTable>
         <p>
-          Selon les protections activées, l’hébergeur peut déposer ponctuellement
-          un cookie de sécurité pour distinguer un accès légitime d’un trafic
-          automatisé. Ces traceurs de sécurité sont utilisés uniquement lorsque
-          nécessaires au fonctionnement ou à la protection du service.
+          L’infrastructure d’hébergement peut également utiliser un cookie de
+          sécurité temporaire pour protéger le site contre les accès automatisés
+          ou malveillants.
         </p>
       </section>
 
       <section>
-        <h2>3. Audience, personnalisation et publicité</h2>
+        <h2>Mesure d’audience et publicité</h2>
         <p>
-          Aucun traceur non essentiel ne sera déposé avant un choix positif.
-          S’ils sont ajoutés, le bandeau présentera au même niveau des actions
-          aussi simples pour <strong>tout accepter</strong> ou{" "}
-          <strong>tout refuser</strong>, ainsi qu’un réglage par finalité. Les
-          traceurs refusés resteront bloqués.
+          Aucun traceur de mesure d’audience, de publicité personnalisée ou de
+          réseau social n’est chargé sur le site. Aucun partenaire publicitaire
+          ne reçoit donc de données de navigation depuis AJ Luxury.
         </p>
         <p>
-          Le choix sera conservé pendant une durée de référence de six mois,
-          sauf justification différente. Il pourra être modifié à tout moment
-          depuis un lien permanent « Gérer mes cookies ».
+          Si ces usages évoluent, la présente politique sera mise à jour et les
+          traceurs concernés resteront bloqués jusqu’au choix de l’utilisateur.
+          Accepter et refuser seront proposés avec la même simplicité, et le
+          choix restera modifiable à tout moment.
         </p>
       </section>
 
       <section>
-        <h2>4. Gérer les stockages</h2>
+        <h2>Gérer les données enregistrées</h2>
         <p>
-          Tant qu’aucun traceur soumis au consentement n’est activé, aucun
-          bandeau n’est affiché. Les données locales actuelles peuvent être
-          supprimées depuis les paramètres du navigateur. Dès qu’un outil
-          d’audience, de publicité ou de média social non exempté sera connecté,
-          le gestionnaire de consentement sera activé avant cet outil.
+          Aucun bandeau de consentement n’est affiché parce qu’aucun traceur
+          soumis au consentement n’est utilisé. Les cookies et stockages
+          techniques peuvent être supprimés depuis les réglages du navigateur.
+          Cette suppression peut vider le panier, déconnecter le compte ou
+          réinitialiser la langue choisie.
         </p>
         <p>
           Toute question peut être adressée à{" "}

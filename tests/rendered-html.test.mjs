@@ -793,7 +793,10 @@ for (const [pathname, colorName, galerie, assetOrder] of productCases) {
     assert.match(html, /ceinture de 3,5 cm/i);
     assert.match(html, /Description complète/);
     assert.match(html, /Caractéristiques/);
-    assert.match(html, /Guide des tailles/);
+    /* Les mesures fabricant ne sont pas publiées tant qu'elles ne sont pas
+       validées par AJ Luxury. Le PDP ne doit donc rendre ni guide vide, ni
+       promesse d'information "à venir". */
+    assert.doesNotMatch(html, /Guide des tailles|mesures? à confirmer|à venir/i);
     assert.match(html, /Agrandir la vue 1/);
     assert.equal(
       (html.match(/data-gallery-media="full"/g) ?? []).length,
@@ -807,8 +810,9 @@ for (const [pathname, colorName, galerie, assetOrder] of productCases) {
     );
     assertDomAssetOrder(html, assetOrder, `${pathname} live`);
     assert.doesNotMatch(html, /images\/editorial\/isabelle-apollon/);
-    assert.match(html, /Pack Duo/);
-    assert.match(html, /Pack Trio/);
+    assert.match(html, />1 pièce</);
+    assert.match(html, />2 pièces</);
+    assert.match(html, />3 pièces</);
     assert.match(html, />Accueil</);
     assert.match(
       html,
@@ -965,14 +969,12 @@ test("legal notice publishes the sourced seller identity and never the closed es
   assert.match(html, /TVA non applicable, article 293 B/);
 
   /* La ligne editeur reste omise quand le telephone est null, sans attirer
-     l'attention du client sur cette decision temporaire. Le seul gate legal
-     visible et runtime est la publication du mediateur de la consommation. */
+     l'attention du client sur cette decision temporaire. Aucun statut public
+     ne doit annoncer une activation future de la vente. */
   assert.doesNotMatch(html, /À compléter/);
   assert.doesNotMatch(html, /Aucun numéro de téléphone|ligne professionnelle/i);
-  assert.match(
-    html,
-    /vente en ligne activée après publication du médiateur de la consommation désigné/i,
-  );
+  assert.match(html, /Informations juridiques applicables à la boutique en ligne/i);
+  assert.doesNotMatch(html, /vente en ligne activée après|avant l’ouverture/i);
 
   /* Attention au faux positif : l'hebergeur AFFICHE un telephone, celui de
      Cloudflare France. Interdire la chaine « Telephone » ferait echouer le
@@ -1037,10 +1039,12 @@ test("privacy and cookies describe the live commerce storage and no fictitious t
   const cookiesHtml = await cookiesResponse.text();
   assert.match(cookiesHtml, /aj-luxury\.locale\.v1/);
   assert.match(cookiesHtml, /aj-luxury-intro-seen/);
-  assert.match(cookiesHtml, /aucun outil publicitaire/i);
-  assert.match(cookiesHtml, /tout accepter/i);
-  assert.match(cookiesHtml, /tout refuser/i);
-  assert.match(cookiesHtml, /six mois/i);
+  assert.match(cookiesHtml, /aucun traceur publicitaire/i);
+  assert.match(cookiesHtml, /__Host-aj_cart/);
+  assert.match(cookiesHtml, /__Host-aj_customer/);
+  assert.match(cookiesHtml, /__Host-aj_guest_order/);
+  assert.match(cookiesHtml, /aucun bandeau de consentement n’est affiché/i);
+  assert.doesNotMatch(cookiesHtml, /À ce jour|sera activé|six mois/i);
   assert.doesNotMatch(cookiesHtml, /Google Analytics|Meta Pixel|TikTok Pixel/i);
 });
 

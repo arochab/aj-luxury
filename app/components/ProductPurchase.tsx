@@ -40,30 +40,22 @@ type PackSize = keyof typeof AJ_APOLLON_PACK_PRICE_CENTS;
 const PACK_OPTIONS: ReadonlyArray<{
   count: PackSize;
   labelKey: "product.unitOffer" | "product.duoOffer" | "product.trioOffer";
-  detailKey: "product.unitDetail" | "product.duoDetail" | "product.trioDetail";
   savingCents: number;
-  savingPercent: string | null;
 }> = [
   {
     count: 1,
     labelKey: "product.unitOffer",
-    detailKey: "product.unitDetail",
     savingCents: 0,
-    savingPercent: null,
   },
   {
     count: 2,
     labelKey: "product.duoOffer",
-    detailKey: "product.duoDetail",
     savingCents: 999,
-    savingPercent: "16,66 %",
   },
   {
     count: 3,
     labelKey: "product.trioOffer",
-    detailKey: "product.trioDetail",
     savingCents: 1_998,
-    savingPercent: "22,21 %",
   },
 ];
 
@@ -95,10 +87,6 @@ export default function ProductPurchase({
     | null
   >(null);
   const [cartBusy, setCartBusy] = useState(false);
-  const [sizeGuideOpen, setSizeGuideOpen] = useState(false);
-  const sizeGuideDialog = useRef<HTMLDivElement>(null);
-  const sizeGuideClose = useRef<HTMLButtonElement>(null);
-  const sizeGuideTrigger = useRef<HTMLButtonElement>(null);
   const cartError = useRef<HTMLParagraphElement>(null);
   const cartRequestInFlight = useRef(false);
   const cartCreateAttempt = useRef<string | null>(null);
@@ -106,7 +94,6 @@ export default function ProductPurchase({
     fingerprint: string;
     key: string;
   } | null>(null);
-  const restoreSizeGuideFocus = useRef(false);
   const { locale, t } = useI18n();
   const localizedProduct = getLocalizedProductCopy(t, product.slug);
   const orderedProducts = PRODUCT_COLOR_ORDER.flatMap((slug) => {
@@ -216,73 +203,9 @@ export default function ProductPurchase({
   }
 
   useEffect(() => {
-    if (!sizeGuideOpen) return;
-
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    sizeGuideClose.current?.focus();
-
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        restoreSizeGuideFocus.current = true;
-        setSizeGuideOpen(false);
-        return;
-      }
-
-      if (event.key !== "Tab") return;
-      const dialog = sizeGuideDialog.current;
-      if (!dialog) return;
-      const focusable = Array.from(
-        dialog.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), a[href], select, input, textarea, [tabindex]:not([tabindex="-1"])',
-        ),
-      );
-      if (focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    }
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-      document.body.style.overflow = previousOverflow;
-    };
-  }, [sizeGuideOpen]);
-
-  useEffect(() => {
-    if (sizeGuideOpen || !restoreSizeGuideFocus.current) return;
-
-    const frame = window.requestAnimationFrame(() => {
-      restoreSizeGuideFocus.current = false;
-      sizeGuideTrigger.current?.focus({ preventScroll: true });
-    });
-
-    return () => window.cancelAnimationFrame(frame);
-  }, [sizeGuideOpen]);
-
-  useEffect(() => {
     if (feedback?.kind !== "error") return;
     cartError.current?.focus({ preventScroll: true });
   }, [feedback]);
-
-  function openSizeGuide() {
-    restoreSizeGuideFocus.current = false;
-    setSizeGuideOpen(true);
-  }
-
-  function closeSizeGuide() {
-    restoreSizeGuideFocus.current = true;
-    setSizeGuideOpen(false);
-  }
 
   async function addToCart() {
     if (!selectedSize || cartRequestInFlight.current) return;
@@ -383,7 +306,11 @@ export default function ProductPurchase({
 
   function cartFeedbackText() {
     if (feedback?.kind === "success") {
-      return t("product.cartAdded")
+      return t(
+        feedback.quantity === 1
+          ? "product.cartAddedOne"
+          : "product.cartAddedMany",
+      )
         .replace("{size}", feedback.size)
         .replace("{count}", String(feedback.quantity));
     }
@@ -403,8 +330,8 @@ export default function ProductPurchase({
       ? t("product.cartSecureNotice")
       : runtimeMode === "production"
         ? availability
-          ? "Paiement sécurisé."
-          : `Paiement sécurisé. ${t("product.stockCheckedAtAdd")}.`
+          ? t("product.securePayment")
+          : `${t("product.securePayment")} ${t("product.stockCheckedAtAdd")}.`
         : /*
              Commerce fermé : la boutique n'est pas en panne, elle n'est pas
              encore ouverte. `product.cartUnavailable` (« momentanément
@@ -470,7 +397,6 @@ export default function ProductPurchase({
       <fieldset className={`${styles.selector} ${styles.packSelector}`}>
         <legend className={styles.selectorHeading}>
           <span>{t("product.chooseOffer")}</span>
-          <strong>{t("product.bestPriceAutomatic")}</strong>
         </legend>
 
         <div className={styles.packOptions}>
@@ -488,118 +414,51 @@ export default function ProductPurchase({
                   {formatPrice(AJ_APOLLON_PACK_PRICE_CENTS[option.count], locale)}
                 </strong>
               </span>
-              <span className={styles.packOptionBottomline}>
-                <span>{t(option.detailKey)}</span>
-                {option.savingCents > 0 && option.savingPercent ? (
-                  <span className={styles.packSaving}>
-                    {t("product.packSaving")
-                      .replace("{amount}", formatPrice(option.savingCents, locale))
-                      .replace("{percent}", option.savingPercent)}
-                  </span>
-                ) : (
-                  <span>{t("product.unitPriceReference")}</span>
-                )}
+              <span className={styles.packOptionMeta}>
+                {option.savingCents > 0
+                  ? t("product.packSaving").replace(
+                      "{amount}",
+                      formatPrice(option.savingCents, locale),
+                    )
+                  : t("product.unitPriceReference")}
               </span>
             </button>
           ))}
         </div>
-
-        {selectedPackSize > 1 && (
-          <div className={styles.packComposer}>
-            <div className={styles.packComposerHeading}>
-              <strong>{t("product.composePack")}</strong>
-              <span>{t("product.oneSizeForPack")}</span>
-            </div>
-
-            <div className={styles.packSlots}>
-              {Array.from({ length: selectedPackSize }, (_, slotIndex) => (
-                <fieldset className={styles.packSlot} key={slotIndex}>
-                  <legend>
-                    {t("product.packPiece").replace(
-                      "{count}",
-                      String(slotIndex + 1),
-                    )}
-                  </legend>
-                  <div className={styles.packColorOptions}>
-                    {orderedProducts.map((variant) => (
-                      <button
-                        className={styles.packColorOption}
-                        type="button"
-                        key={variant.slug}
-                        aria-pressed={
-                          selectedPackColors[slotIndex] === variant.slug
-                        }
-                        aria-label={`${t("product.packPiece").replace(
-                          "{count}",
-                          String(slotIndex + 1),
-                        )} — ${variant.name}`}
-                        onClick={() =>
-                          selectPackColor(slotIndex, variant.slug)}
-                      >
-                        <span
-                          className={styles.packColorSwatch}
-                          style={{ backgroundColor: variant.swatch }}
-                          aria-hidden="true"
-                        />
-                        <span>{variant.name}</span>
-                      </button>
-                    ))}
-                  </div>
-                </fieldset>
-              ))}
-            </div>
-          </div>
-        )}
-
-        <p className={styles.packExplanation}>
-          {selectedPackSize === 1
-            ? t("product.unitColorNotice")
-            : t("product.packColorNotice")}
-        </p>
       </fieldset>
 
-      <div className={styles.selector}>
-        <div className={styles.selectorHeading}>
-          <span>{t("product.color")}</span>
-          <strong>{product.color}</strong>
+      {selectedPackSize === 1 && (
+        <div className={styles.selector}>
+          <div className={styles.selectorHeading}>
+            <span>{t("product.color")}</span>
+            <strong>{product.color}</strong>
+          </div>
+          <div className={styles.variantOptions}>
+            {orderedProducts.map((variant) => (
+              <Link
+                className={`${styles.variant} ${
+                  variant.slug === product.slug ? styles.variantActive : ""
+                }`}
+                href={`/products/${variant.slug}`}
+                key={variant.slug}
+                aria-current={variant.slug === product.slug ? "page" : undefined}
+              >
+                <span
+                  className={styles.swatch}
+                  style={{ backgroundColor: variant.swatch }}
+                  aria-hidden="true"
+                />
+                <span className={styles.variantName}>{variant.name}</span>
+              </Link>
+            ))}
+          </div>
         </div>
-        <div className={styles.variantOptions}>
-          {orderedProducts.map((variant) => (
-            <Link
-              className={`${styles.variant} ${
-                variant.slug === product.slug ? styles.variantActive : ""
-              }`}
-              href={`/products/${variant.slug}`}
-              key={variant.slug}
-              aria-current={variant.slug === product.slug ? "page" : undefined}
-            >
-              <span
-                className={styles.swatch}
-                style={{ backgroundColor: variant.swatch }}
-                aria-hidden="true"
-              />
-              {/* Deux lignes réservées à tous les libellés : voir .variantName.
-                  « Pourpre Impérial » se casse en deux là où « Rose Velours » et
-                  « Lilas Céleste » tiennent sur une ligne. */}
-              <span className={styles.variantName}>{variant.name}</span>
-            </Link>
-          ))}
-        </div>
-      </div>
+      )}
 
       <fieldset className={styles.selector}>
         <legend className={styles.selectorHeading}>
           <span>{t("product.selectSize")}</span>
-          <button
-            className={styles.sizeGuideTrigger}
-            type="button"
-            ref={sizeGuideTrigger}
-            onClick={openSizeGuide}
-            aria-expanded={sizeGuideOpen}
-            aria-controls="size-guide-dialog"
-          >
-            {t("product.sizeGuide")}
-          </button>
+          {selectedSize && <strong>{selectedSize}</strong>}
         </legend>
         <div className={styles.sizeOptions}>
           {sizes.map((size) => {
@@ -636,56 +495,50 @@ export default function ProductPurchase({
         </div>
       </fieldset>
 
-      {sizeGuideOpen && (
-        <div
-          className={styles.sizeGuideOverlay}
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) closeSizeGuide();
-          }}
-        >
-          <div
-            className={styles.sizeGuideDialog}
-            id="size-guide-dialog"
-            ref={sizeGuideDialog}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="size-guide-title"
-          >
-            <div className={styles.sizeGuideHeader}>
-              <div>
-                <p className={styles.eyebrow}>{product.model}</p>
-                <h2 id="size-guide-title">{t("product.sizeGuide")}</h2>
-              </div>
-              <button
-                className={styles.sizeGuideClose}
-                type="button"
-                ref={sizeGuideClose}
-                onClick={closeSizeGuide}
-                aria-label={t("product.close")}
-              >
-                ×
-              </button>
-            </div>
-            <p className={styles.sizeGuideIntro}>{t("product.sizeGuideIntro")}</p>
-            <div className={styles.sizeGuideTableWrap}>
-              <table className={styles.sizeGuideTable}>
-                <thead>
-                  <tr>
-                    <th scope="col">{t("product.size")}</th>
-                    <th scope="col">{t("product.waistMeasurement")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sizes.map((size) => (
-                    <tr key={size}>
-                      <th scope="row">{size}</th>
-                      <td>{t("product.sizeGuidePending")}</td>
-                    </tr>
+      {selectedPackSize > 1 && selectedSize && (
+        <div className={styles.packComposer}>
+          <div className={styles.packComposerHeading}>
+            <strong>{t("product.composePack")}</strong>
+            <span>
+              {t("product.size")} {selectedSize} · {t("product.oneSizeForPack")}
+            </span>
+          </div>
+
+          <div className={styles.packSlots}>
+            {Array.from({ length: selectedPackSize }, (_, slotIndex) => (
+              <fieldset className={styles.packSlot} key={slotIndex}>
+                <legend>
+                  {t("product.packPiece").replace(
+                    "{count}",
+                    String(slotIndex + 1),
+                  )}
+                </legend>
+                <div className={styles.packColorOptions}>
+                  {orderedProducts.map((variant) => (
+                    <button
+                      className={styles.packColorOption}
+                      type="button"
+                      key={variant.slug}
+                      aria-pressed={
+                        selectedPackColors[slotIndex] === variant.slug
+                      }
+                      aria-label={`${t("product.packPiece").replace(
+                        "{count}",
+                        String(slotIndex + 1),
+                      )} — ${variant.name}`}
+                      onClick={() => selectPackColor(slotIndex, variant.slug)}
+                    >
+                      <span
+                        className={styles.packColorSwatch}
+                        style={{ backgroundColor: variant.swatch }}
+                        aria-hidden="true"
+                      />
+                      <span>{variant.name}</span>
+                    </button>
                   ))}
-                </tbody>
-              </table>
-            </div>
-            <p className={styles.sizeGuideNote}>{t("product.sizeGuideNote")}</p>
+                </div>
+              </fieldset>
+            ))}
           </div>
         </div>
       )}
@@ -794,9 +647,9 @@ export default function ProductPurchase({
       </div>
 
       <div className={styles.service}>
-        <span>{reviewMode ? t("product.reviewShipping") : runtimeMode === "production" ? "Livraison calculée à l’adresse" : t("product.shippingPending")}</span>
-        <span>{reviewMode ? t("product.reviewPayment") : runtimeMode === "production" ? "Paiement sécurisé par Stripe" : t("product.paymentPending")}</span>
-        <span>{reviewMode ? t("product.reviewPacks") : runtimeMode === "production" ? "Retours selon les conditions de vente" : t("product.returnsPending")}</span>
+        <span>{reviewMode ? t("product.reviewShipping") : runtimeMode === "production" ? t("product.shippingCalculated") : t("product.shippingPending")}</span>
+        <span>{reviewMode ? t("product.reviewPayment") : runtimeMode === "production" ? t("product.paymentByStripe") : t("product.paymentPending")}</span>
+        <span>{reviewMode ? t("product.reviewPacks") : runtimeMode === "production" ? t("product.returnsAccordingTerms") : t("product.returnsPending")}</span>
       </div>
     </aside>
   );

@@ -56,15 +56,17 @@ async function derive(
   salt: Uint8Array,
   iterations: number,
 ): Promise<Uint8Array> {
+  const passwordSource = Uint8Array.from(encodedPassword).buffer;
+  const saltSource = Uint8Array.from(salt).buffer;
   const key = await crypto.subtle.importKey(
     "raw",
-    encodedPassword,
+    passwordSource,
     "PBKDF2",
     false,
     ["deriveBits"],
   );
   return new Uint8Array(await crypto.subtle.deriveBits(
-    { name: "PBKDF2", hash: "SHA-256", salt, iterations },
+    { name: "PBKDF2", hash: "SHA-256", salt: saltSource, iterations },
     key,
     PASSWORD_HASH_BYTES * 8,
   ));
