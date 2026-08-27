@@ -21,19 +21,18 @@ export default function PrivacyPage() {
     >
       <InfoNotice>
         <p>
-          <strong>État actuel.</strong> La prévisualisation ne permet pas encore
-          de payer ni de passer une commande réelle. Cette politique couvre
-          aussi les fonctions transactionnelles lorsqu’elles seront activées ;
-          une capacité fermée ne collecte pas les données correspondantes. Le
-          site mémorise la langue choisie et l’affichage de l’introduction sur
-          l’appareil.
+          <strong>En bref.</strong> AJ Luxury utilise uniquement les données
+          nécessaires au fonctionnement du site, au compte client, à la
+          commande, au paiement, à la livraison et au service après-vente. Les
+          données ne sont pas vendues et aucun outil publicitaire tiers n’est
+          activé.
         </p>
       </InfoNotice>
 
       <section>
         <h2>1. Responsable du traitement</h2>
         <p>
-          Le responsable des traitements liés à la future boutique est{" "}
+          Le responsable des traitements liés à la boutique est{" "}
           <strong>{SELLER_IDENTITY.legalName}</strong>, établi à{" "}
           <strong>{SELLER_IDENTITY.registeredOffice}</strong>. Pour toute
           question ou demande relative aux données :{" "}
@@ -126,14 +125,13 @@ export default function PrivacyPage() {
           authentification, livraison, e-mails transactionnels et support.
         </p>
         <p>
-          La prévisualisation est hébergée par {HOSTING_PROVIDER.name},{" "}
+          Le site est hébergé par {HOSTING_PROVIDER.name},{" "}
           {HOSTING_PROVIDER.address}. Les prestataires techniques retenus pour
-          l’ouverture sont <strong>Cloudflare</strong> (exécution et base de
+          la boutique sont <strong>Cloudflare</strong> (exécution et base de
           données), <strong>Stripe</strong> (paiement), <strong>Sendcloud</strong>
           (tarifs, points relais, expédition et retours) et <strong>Resend</strong>
-          (e-mails transactionnels). Leur activation reste conditionnée aux
-          contrôles de lancement. Aucune donnée client n’est vendue et aucun SDK
-          publicitaire tiers n’est activé.
+          (e-mails transactionnels). Aucune donnée client n’est vendue et aucun
+          SDK publicitaire tiers n’est activé.
         </p>
       </section>
 
@@ -172,7 +170,7 @@ export default function PrivacyPage() {
       <section>
         <h2>7. Sécurité et mineurs</h2>
         <p>
-          Des mesures techniques et organisationnelles proportionnées seront
+          Des mesures techniques et organisationnelles proportionnées sont
           appliquées : limitation des accès, chiffrement des échanges,
           authentification adaptée, sauvegardes et journalisation des incidents.
           La boutique ne cible pas spécifiquement les mineurs ; une commande

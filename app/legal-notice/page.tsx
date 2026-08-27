@@ -108,8 +108,8 @@ export default function LegalNoticePage() {
           </div>
         </dl>
         <p>
-          Ces informations décrivent l’hébergement de la prévisualisation et
-          devront être actualisées si l’environnement de production change.
+          Ces informations décrivent l’hébergement actuellement utilisé par le
+          site et seront actualisées en cas de changement de prestataire.
         </p>
       </section>
 

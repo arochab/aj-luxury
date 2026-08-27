@@ -63,11 +63,11 @@ export default function CookiesPage() {
       </section>
 
       <section>
-        <h2>2. Stockages strictement nécessaires à la future boutique</h2>
+        <h2>2. Stockages strictement nécessaires à la boutique</h2>
         <p>
-          Lors de l’activation du commerce, des cookies techniques pourront être
-          nécessaires à la sécurité, à l’authentification, au panier, au
-          paiement, à la prévention de la fraude et à la mémorisation des choix
+          Des cookies techniques sont utilisés lorsque nécessaire pour la
+          sécurité, l’authentification, le panier, le paiement, la prévention de
+          la fraude et la mémorisation des choix
           de confidentialité. Ils ne serviront pas à suivre l’utilisateur à des
           fins publicitaires et seront limités à la durée nécessaire.
         </p>

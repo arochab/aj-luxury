@@ -18,14 +18,14 @@ const publicVariantContract = Object.freeze({
   "variant_boxer_pourpre_m": ["pourpre", "pourpre", "M", "Pourpre Impérial", "/images/client/raw/product-card-pourpre.webp"],
   "variant_boxer_pourpre_l": ["pourpre", "pourpre", "L", "Pourpre Impérial", "/images/client/raw/product-card-pourpre.webp"],
   "variant_boxer_pourpre_xl": ["pourpre", "pourpre", "XL", "Pourpre Impérial", "/images/client/raw/product-card-pourpre.webp"],
-  "variant_boxer_rose-pale_s": ["rose-pale", "rose", "S", "Rose Velours", "/images/client/raw/product-card-rose.webp"],
-  "variant_boxer_rose-pale_m": ["rose-pale", "rose", "M", "Rose Velours", "/images/client/raw/product-card-rose.webp"],
-  "variant_boxer_rose-pale_l": ["rose-pale", "rose", "L", "Rose Velours", "/images/client/raw/product-card-rose.webp"],
-  "variant_boxer_rose-pale_xl": ["rose-pale", "rose", "XL", "Rose Velours", "/images/client/raw/product-card-rose.webp"],
-  "variant_boxer_lilas-bleu-clair_s": ["lilas-bleu-clair", "lilas", "S", "Lilas Céleste", "/images/client/editorial-lilas-chair.webp"],
-  "variant_boxer_lilas-bleu-clair_m": ["lilas-bleu-clair", "lilas", "M", "Lilas Céleste", "/images/client/editorial-lilas-chair.webp"],
-  "variant_boxer_lilas-bleu-clair_l": ["lilas-bleu-clair", "lilas", "L", "Lilas Céleste", "/images/client/editorial-lilas-chair.webp"],
-  "variant_boxer_lilas-bleu-clair_xl": ["lilas-bleu-clair", "lilas", "XL", "Lilas Céleste", "/images/client/editorial-lilas-chair.webp"],
+  "variant_boxer_rose-pale_s": ["rose-pale", "rose", "S", "Rose Velours", "/images/client/raw/product-rose-profile.webp"],
+  "variant_boxer_rose-pale_m": ["rose-pale", "rose", "M", "Rose Velours", "/images/client/raw/product-rose-profile.webp"],
+  "variant_boxer_rose-pale_l": ["rose-pale", "rose", "L", "Rose Velours", "/images/client/raw/product-rose-profile.webp"],
+  "variant_boxer_rose-pale_xl": ["rose-pale", "rose", "XL", "Rose Velours", "/images/client/raw/product-rose-profile.webp"],
+  "variant_boxer_lilas-bleu-clair_s": ["lilas-bleu-clair", "lilas", "S", "Lilas Céleste", "/images/client/raw/product-lilas-model.webp"],
+  "variant_boxer_lilas-bleu-clair_m": ["lilas-bleu-clair", "lilas", "M", "Lilas Céleste", "/images/client/raw/product-lilas-model.webp"],
+  "variant_boxer_lilas-bleu-clair_l": ["lilas-bleu-clair", "lilas", "L", "Lilas Céleste", "/images/client/raw/product-lilas-model.webp"],
+  "variant_boxer_lilas-bleu-clair_xl": ["lilas-bleu-clair", "lilas", "XL", "Lilas Céleste", "/images/client/raw/product-lilas-model.webp"],
 } as const);
 
 export type PublicCartLine = Readonly<{

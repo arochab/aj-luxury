@@ -15,38 +15,35 @@ export default function WithdrawalPage() {
       status={<T id="info.withdrawal.status" />}
       officialFrenchOnly
     >
-      <InfoNotice warning>
+      <InfoNotice>
         <p>
-          <strong>La boutique est encore en prévisualisation.</strong> Aucune
-          commande réelle ne peut avoir été conclue sur ce site ; le formulaire
-          de rétractation n’est donc pas encore activé.
+          <strong>Exercer votre droit.</strong> Envoyez une déclaration claire à{" "}
+          <a href={`mailto:${LEGAL_CONTACT.email}`}>{LEGAL_CONTACT.email}</a>
+          {" "}dans les quatorze jours suivant la réception de la commande.
         </p>
       </InfoNotice>
 
       <section>
-        <h2>Fonctionnement prévu à l’ouverture</h2>
+        <h2>Comment faire</h2>
         <ol>
-          <li>identifier la commande avec l’e-mail et le numéro de commande ;</li>
-          <li>sélectionner le ou les produits concernés ;</li>
-          <li>confirmer explicitement la rétractation ;</li>
-          <li>
-            recevoir immédiatement un accusé horodaté par e-mail, avec le
-            contenu de la déclaration et les instructions de retour.
-          </li>
+          <li>indiquez l’e-mail et le numéro de commande ;</li>
+          <li>précisez le ou les produits concernés ;</li>
+          <li>déclarez sans ambiguïté votre décision de vous rétracter ;</li>
+          <li>conservez la preuve d’envoi de votre demande.</li>
         </ol>
         <p>
-          Cette fonctionnalité sera accessible sans connexion et sans frais
-          pendant toute la durée légale du droit de rétractation.
+          Vous pouvez utiliser le modèle figurant dans les conditions générales
+          de vente, sans que ce modèle soit obligatoire.
         </p>
       </section>
 
       <section>
         <h2>Autre moyen de contact</h2>
         <p>
-          Une déclaration claire pourra aussi être envoyée à{" "}
+          Une déclaration claire peut être envoyée à{" "}
           <a href={`mailto:${LEGAL_CONTACT.email}`}>{LEGAL_CONTACT.email}</a>.
-          L’utilisation de la fonctionnalité en ligne ne sera pas obligatoire et
-          ne réduira pas le délai légal de quatorze jours.
+          Cette démarche est gratuite et ne réduit pas le délai légal de
+          quatorze jours.
         </p>
       </section>
     </InfoPage>

@@ -1017,10 +1017,11 @@ test("terms cover the 2026 consumer baseline without a blanket underwear exclusi
   assert.doesNotMatch(html, /À sélectionner/);
 });
 
-test("privacy and cookies describe the actual preview storage and no fictitious tracker", async () => {
+test("privacy and cookies describe the live commerce storage and no fictitious tracker", async () => {
   const privacyResponse = await render("/privacy");
   const privacyHtml = await privacyResponse.text();
-  assert.match(privacyHtml, /prévisualisation ne permet pas encore/i);
+  assert.match(privacyHtml, /compte client, à la commande, au paiement/i);
+  assert.match(privacyHtml, /données ne sont pas vendues/i);
   assert.match(privacyHtml, /Facturation et comptabilité/);
   assert.match(privacyHtml, /10 ans/);
   assert.match(privacyHtml, /CNIL/);
@@ -1043,14 +1044,16 @@ test("privacy and cookies describe the actual preview storage and no fictitious 
   assert.doesNotMatch(cookiesHtml, /Google Analytics|Meta Pixel|TikTok Pixel/i);
 });
 
-test("withdrawal route is visible but cannot fake a live order workflow", async () => {
+test("withdrawal route gives an immediately usable customer process", async () => {
   const response = await render("/withdrawal");
   assert.equal(response.status, 200);
   const html = await response.text();
-  assert.match(html, /Aucune commande réelle ne peut avoir été conclue/i);
-  assert.match(html, /accusé horodaté/i);
-  assert.match(html, /accessible sans connexion et sans frais/i);
+  assert.match(html, /Exercer votre droit/i);
+  assert.match(html, /quatorze jours suivant la réception/i);
+  assert.match(html, /conservez la preuve d’envoi/i);
+  assert.match(html, /modèle figurant dans les conditions générales/i);
   assert.match(html, /contact@ajluxurystore\.com/);
+  assert.doesNotMatch(html, /prévisualisation|Aucune commande réelle/i);
 });
 
 test("cart renders a secure loading state and ignores legacy URL variants", async () => {

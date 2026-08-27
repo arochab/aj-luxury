@@ -16,12 +16,11 @@ export default function ShippingReturnsPage() {
       status={<T id="info.shipping.status" />}
       officialFrenchOnly
     >
-      <InfoNotice warning>
+      <InfoNotice>
         <p>
-          <strong>Aucune commande réelle n’est encore acceptée.</strong> Les
-          modalités ci-dessous définissent le niveau de service attendu. Les
-          informations opérationnelles seront publiées et testées avant
-          l’activation du paiement.
+          <strong>Avant de payer.</strong> Le client voit les modes de livraison
+          réellement disponibles pour son adresse, leur prix et leur délai
+          estimé. Une destination sans offre affichée ne peut pas être commandée.
         </p>
       </InfoNotice>
 

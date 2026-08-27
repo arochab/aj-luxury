@@ -162,7 +162,7 @@ export default function ProductionAccountClient() {
   }
 
   if (loading) {
-    return <div className={`${styles.main} ${styles.accountMain}`} aria-busy="true"><p>Chargement de votre espace…</p></div>;
+    return <div className={`${styles.main} ${styles.accountMain}`} aria-busy="true"><p>Chargement sécurisé de votre espace…</p></div>;
   }
 
   if (account) {
