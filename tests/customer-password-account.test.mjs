@@ -115,6 +115,17 @@ test("registration, verification, sessions, consent and recovery form one tracea
     now: "2026-08-27T01:05:00.000Z",
   }));
 
+  sqlite.prepare(`INSERT INTO orders (
+    id, order_number, cart_id, customer_id, email, status, currency,
+    subtotal_cents, shipping_cents, tax_cents, total_cents,
+    shipping_country_code, shipping_address_json, billing_address_json,
+    terms_version, privacy_version, paid_at, created_at, updated_at
+  ) VALUES (
+    'order_pre_verification', 'AJ-PRE-VERIFY', NULL, NULL, ?,
+    'pending_payment', 'EUR', 0, 0, 0, 0, 'FR', '{}', '{}',
+    'terms-v1', 'privacy-v1', NULL, ?, ?
+  )`).run(email, createdAt, createdAt);
+
   const verified = await store.verifyEmail(
     registration.emailDelivery.rawToken,
     "2026-08-27T01:06:00.000Z",
@@ -125,6 +136,11 @@ test("registration, verification, sessions, consent and recovery form one tracea
     WHERE purpose = 'email_verification'
       AND consumed_at = '2026-08-27T01:06:00.000Z'
       AND revoked_at IS NULL`).get().count, 1);
+  const immutableOrder = sqlite.prepare(
+    "SELECT customer_id, updated_at FROM orders WHERE id = 'order_pre_verification'",
+  ).get();
+  assert.equal(immutableOrder.customer_id, null);
+  assert.equal(immutableOrder.updated_at, createdAt);
   const account = await store.currentAccount(verified.token, "2026-08-27T01:07:00.000Z");
   assert.equal(account.email, email);
   assert.equal(account.acceptsMarketing, true);

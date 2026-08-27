@@ -417,12 +417,9 @@ export class D1CustomerPasswordAccountStore {
         `UPDATE customers SET account_enabled_at = COALESCE(account_enabled_at, ?), updated_at = ?
         WHERE id = ? AND deleted_at IS NULL`,
       ).bind(now, now, challenge.customer_id),
-      this.#database.prepare(
-        `UPDATE orders SET customer_id = ?, updated_at = ?
-        WHERE customer_id IS NULL AND lower(email) = (
-          SELECT lower(email) FROM customers WHERE id = ? AND deleted_at IS NULL
-        )`,
-      ).bind(challenge.customer_id, now, challenge.customer_id),
+      // Order headers are immutable legal snapshots. Checkout already binds a
+      // pending or authenticated customer before the order is created, so
+      // verification must never rewrite an older guest or cancelled order.
       this.#database.prepare(
         `UPDATE customer_checkout_links SET revoked_at = ?
         WHERE customer_id = ? AND revoked_at IS NULL`,
