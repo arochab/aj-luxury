@@ -101,6 +101,8 @@ test("the hero hands its measured plum floor to the horizontal chromatic rail", 
   assert.match(rail, /prefers-reduced-motion: no-preference/);
   assert.match(rail, /pin:\s*stage/);
   assert.match(rail, /scrub:\s*true/);
+  assert.match(rail, /anticipatePin:\s*0/);
+  assert.doesNotMatch(rail, /anticipatePin:\s*1/);
   assert.doesNotMatch(rail, /scrub:\s*0\./);
   assert.match(rail, /x:\s*\(\) => -panelOffset\(1\)/);
   assert.match(rail, /x:\s*\(\) => -panelOffset\(2\)/);

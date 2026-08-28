@@ -129,7 +129,10 @@ export default function HomeHorizontalChromaticRail() {
             pin: stage,
             pinSpacing: true,
             scrub: true,
-            anticipatePin: 1,
+            // The hero and rail already share one exact edge. Anticipating the
+            // pin pulled the rail roughly 6 px over the film on mobile, so the
+            // pin now begins only when that shared edge reaches the viewport.
+            anticipatePin: 0,
             invalidateOnRefresh: true,
             fastScrollEnd: 2800,
             onRefreshInit: syncPanelWidth,
