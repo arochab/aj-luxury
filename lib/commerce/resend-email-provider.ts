@@ -5,6 +5,7 @@ import type {
 } from "./email-outbox.ts";
 
 const RESEND_EMAILS_ENDPOINT = "https://api.resend.com/emails";
+const RESEND_USER_AGENT = "aj-luxury-commerce/1.0";
 const DEFAULT_TIMEOUT_MS = 8_000;
 const MAX_RESPONSE_BYTES = 64 * 1024;
 const SAFE_IDEMPOTENCY_KEY = /^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,255}$/;
@@ -154,8 +155,10 @@ export class ResendEmailProvider implements TransactionalEmailProviderPort {
         method: "POST",
         headers: {
           Authorization: `Bearer ${this.#apiKey}`,
+          Accept: "application/json",
           "Content-Type": "application/json",
           "Idempotency-Key": delivery.idempotencyKey,
+          "User-Agent": RESEND_USER_AGENT,
         },
         body: JSON.stringify({
           from: `${this.#fromName} <${this.#fromEmail}>`,

@@ -46,6 +46,8 @@ test("Resend receives one bounded branded email with the durable idempotency key
   assert.equal(receipt.providerMessageId, "email_123");
   assert.equal(call.url, "https://api.resend.com/emails");
   assert.equal(call.init.headers["Idempotency-Key"], receipt.idempotencyKey);
+  assert.equal(call.init.headers["User-Agent"], "aj-luxury-commerce/1.0");
+  assert.equal(call.init.headers.Accept, "application/json");
   assert.match(call.init.headers.Authorization, /^Bearer re_/);
   const body = JSON.parse(call.init.body);
   assert.deepEqual(body.to, ["client@example.com"]);
