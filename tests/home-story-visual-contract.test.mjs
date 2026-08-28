@@ -33,3 +33,8 @@ test("story sections expose headings without visible act numbers", () => {
     assert.match(storyPage, new RegExp(`<h2 id="${heading}">`));
   }
 });
+
+test("the story page delegates its only closing collection CTA to the shared footer", () => {
+  assert.doesNotMatch(storyPage, /styles\.closing/);
+  assert.equal((storyPage.match(/<StoreFooter\s*\/>/g) ?? []).length, 1);
+});

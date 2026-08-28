@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import Image from "next/image";
-import Link from "next/link";
 import StoreFooter from "../components/StoreFooter";
 import StoreHeader from "../components/StoreHeader";
 import { T } from "../../lib/i18n/TranslatedText";
@@ -126,15 +125,6 @@ export default function NotreHistoirePage() {
             sizes="(max-width: 760px) 100vw, 40vw"
           />
         </figure>
-      </section>
-
-      <section className={styles.closing} aria-labelledby="closing-title">
-        <h2 id="closing-title" lang="en">
-          Reveal Your Inner Beauty
-        </h2>
-        <Link href="/shop">
-          <T id="story.discoverCollection" />
-        </Link>
       </section>
 
       <StoreFooter />
