@@ -9,23 +9,32 @@ type NavigatorWithConnection = Navigator & {
 export default function ProductionHeroMotion() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [sourceEnabled, setSourceEnabled] = useState(false);
+  const [portraitSource, setPortraitSource] = useState(false);
   const [started, setStarted] = useState(false);
 
   useEffect(() => {
     const reducedMotion = window.matchMedia(
       "(prefers-reduced-motion: reduce)",
     );
-    const mobileStill = window.matchMedia("(max-aspect-ratio: 4 / 5)");
+    const portraitMedia = window.matchMedia("(max-aspect-ratio: 4 / 5)");
+    const syncPortraitSource = () => setPortraitSource(portraitMedia.matches);
+    syncPortraitSource();
+    portraitMedia.addEventListener("change", syncPortraitSource);
     const saveData = (navigator as NavigatorWithConnection).connection
       ?.saveData;
-    if (mobileStill.matches || reducedMotion.matches || saveData) return;
+    if (reducedMotion.matches || saveData) {
+      return () => portraitMedia.removeEventListener("change", syncPortraitSource);
+    }
 
     const video = videoRef.current;
     if (!video) return;
 
     if (typeof IntersectionObserver === "undefined") {
       const fallback = window.setTimeout(() => setSourceEnabled(true), 0);
-      return () => window.clearTimeout(fallback);
+      return () => {
+        window.clearTimeout(fallback);
+        portraitMedia.removeEventListener("change", syncPortraitSource);
+      };
     }
 
     const observer = new IntersectionObserver(
@@ -43,7 +52,10 @@ export default function ProductionHeroMotion() {
       { threshold: 0.08 },
     );
     observer.observe(video);
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      portraitMedia.removeEventListener("change", syncPortraitSource);
+    };
   }, []);
 
   useEffect(() => {
@@ -54,7 +66,7 @@ export default function ProductionHeroMotion() {
     void video.play().catch(() => {
       // The approved photograph remains fully visible when autoplay is denied.
     });
-  }, [sourceEnabled]);
+  }, [portraitSource, sourceEnabled]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -85,8 +97,11 @@ export default function ProductionHeroMotion() {
     >
       {sourceEnabled ? (
         <source
-          media="(min-aspect-ratio: 4 / 5)"
-          src="/videos/aj-luxury-hero-isabelle-v2-landscape-1920x1080-realesrgan.mp4?v=2"
+          src={
+            portraitSource
+              ? "/videos/aj-luxury-hero-openart-mobile-1080x1920.mp4"
+              : "/videos/aj-luxury-hero-openart-desktop-1920x1080.mp4"
+          }
           type="video/mp4"
         />
       ) : null}

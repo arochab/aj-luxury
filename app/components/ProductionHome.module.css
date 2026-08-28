@@ -358,18 +358,15 @@
   }
 }
 
-/* Mobile uses the approved true 9:16 campaign photograph. It fills the hero
-   directly; the desktop film is deliberately not loaded or painted here. */
+/* Mobile uses the approved true 9:16 campaign film and its exact first-frame
+   poster. Both fill the hero without the synthetic zoom used by the old crop. */
 @media (max-aspect-ratio: 4 / 5) {
-  .home :global(.aj-film__hero-poster img) {
+  .home :global(.aj-film__hero-poster img),
+  .home :global(.aj-film__hero-video) {
     object-fit: cover;
     object-position: center;
     -webkit-mask-image: none;
     mask-image: none;
-  }
-
-  .home :global(.aj-film__hero-video) {
-    display: none;
   }
 }
 
@@ -388,7 +385,8 @@
     height: 100%;
   }
 
-  .home :global(.aj-film__hero-poster img) {
+  .home :global(.aj-film__hero-poster img),
+  .home :global(.aj-film__hero-video) {
     object-fit: cover;
     object-position: center;
   }

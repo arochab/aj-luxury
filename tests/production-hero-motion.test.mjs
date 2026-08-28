@@ -8,7 +8,8 @@ import { promisify } from "node:util";
 
 const projectFile = (path) => new URL(`../${path}`, import.meta.url);
 const execFileAsync = promisify(execFile);
-const landscapePath = "public/videos/aj-luxury-hero-isabelle-v2-landscape-1920x1080-realesrgan.mp4";
+const landscapePath = "public/videos/aj-luxury-hero-openart-desktop-1920x1080.mp4";
+const portraitPath = "public/videos/aj-luxury-hero-openart-mobile-1080x1920.mp4";
 
 const sha256 = async (path) => createHash("sha256")
   .update(await readFile(projectFile(path)))
@@ -31,35 +32,40 @@ test("the welcome film uses only the approved Isabelle V2 runtime assets", async
     readFile(projectFile("app/components/ProductionHeroMotion.tsx"), "utf8"),
   ]);
 
-  assert.match(hero, /data-hero-version="isabelle-welcome-v2"/);
+  assert.match(hero, /data-hero-version="openart-dual-v1"/);
   assert.match(hero, /className="aj-film__hero-backdrop"/);
-  assert.match(hero, /aj-luxury-hero-vertical-approved-540\.webp 540w/);
-  assert.match(hero, /aj-luxury-hero-vertical-approved-1080\.webp 1080w/);
-  assert.match(hero, /aj-luxury-hero-isabelle-v2-landscape-1920x1080-poster\.webp/);
+  assert.match(hero, /aj-luxury-hero-openart-mobile-poster-540\.webp 540w/);
+  assert.match(hero, /aj-luxury-hero-openart-mobile-poster-1080\.webp 1080w/);
+  assert.match(hero, /aj-luxury-hero-openart-desktop-poster\.webp/);
   assert.match(motion, /prefers-reduced-motion: reduce/);
   assert.match(motion, /saveData/);
   assert.match(motion, /IntersectionObserver/);
   assert.match(motion, /visibilitychange/);
   assert.match(motion, /preload="none"/);
   assert.match(motion, /\sloop(?:\s|=)/);
-  assert.match(motion, /max-aspect-ratio: 4 \/ 5/);
-  assert.match(motion, /media="\(min-aspect-ratio: 4 \/ 5\)"/);
-  assert.doesNotMatch(motion, /portrait-720x934\.mp4/);
-  assert.match(motion, /aj-luxury-hero-isabelle-v2-landscape-1920x1080-realesrgan\.mp4\?v=2/);
+  assert.match(motion, /window\.matchMedia\("\(max-aspect-ratio: 4 \/ 5\)"\)/);
+  assert.match(motion, /addEventListener\("change", syncPortraitSource\)/);
+  assert.match(motion, /removeEventListener\("change", syncPortraitSource\)/);
+  assert.match(motion, /\[portraitSource, sourceEnabled\]/);
+  assert.match(motion, /aj-luxury-hero-openart-mobile-1080x1920\.mp4/);
+  assert.match(motion, /aj-luxury-hero-openart-desktop-1920x1080\.mp4/);
   assert.doesNotMatch(`${hero}\n${motion}`, /https?:\/\//i);
   assert.doesNotMatch(motion, /aj-luxury-hero-v4-motion/);
 
   for (const poster of [
-    "public/images/client/aj-luxury-hero-vertical-approved-540.webp",
-    "public/images/client/aj-luxury-hero-vertical-approved-1080.webp",
-    "public/images/client/aj-luxury-hero-isabelle-v2-landscape-1920x1080-poster.webp",
+    "public/images/client/aj-luxury-hero-openart-mobile-poster-540.webp",
+    "public/images/client/aj-luxury-hero-openart-mobile-poster-1080.webp",
+    "public/images/client/aj-luxury-hero-openart-desktop-poster.webp",
   ]) {
     assert.ok((await stat(projectFile(poster))).size > 0, `${poster} is empty`);
   }
 });
 
-test("the approved desktop film decodes with its exact runtime geometry", async () => {
-  const landscape = await probe(landscapePath);
+test("the approved desktop and mobile films decode with their exact runtime geometry", async () => {
+  const [landscape, portrait] = await Promise.all([
+    probe(landscapePath),
+    probe(portraitPath),
+  ]);
 
   assert.deepEqual(
     [landscape.streams[0].width, landscape.streams[0].height, landscape.streams[0].r_frame_rate],
@@ -75,9 +81,16 @@ test("the approved desktop film decodes with its exact runtime geometry", async 
     ],
     ["tv", "bt709", "bt709", "bt709", "121"],
   );
-  assert.equal(await sha256(landscapePath), "9ee1447fd4630b37b53dbadfe24db48da1c4e354a90d3a8f13b2a8229c823ac1");
+  assert.equal(await sha256(landscapePath), "fd4ef29158865597b261c5239df41caad86b5c3f0c3a3797d246539889c71b2a");
   assert.ok(Number(landscape.format.size) < 5 * 1024 * 1024);
   assert.ok(Math.abs(Number(landscape.format.duration) - 5.041667) < 0.01);
+  assert.deepEqual(
+    [portrait.streams[0].width, portrait.streams[0].height, portrait.streams[0].r_frame_rate],
+    [1080, 1920, "24/1"],
+  );
+  assert.equal(await sha256(portraitPath), "e52d3a1aa3d61e8231ee8e32b9a2a3a76f459fc32c4268c47d43b860a32e2717");
+  assert.ok(Number(portrait.format.size) < 5 * 1024 * 1024);
+  assert.ok(Math.abs(Number(portrait.format.duration) - 6.041667) < 0.01);
 });
 
 test("the hero hands its measured plum floor to the horizontal chromatic rail", async () => {
@@ -127,7 +140,9 @@ test("the hero hands its measured plum floor to the horizontal chromatic rail", 
   assert.match(homeCss, /var\(--hero-rail-seam\) 100%/);
   assert.match(css, /background:\s*var\(--hero-rail-seam, #261019\)/);
   assert.match(css, /\.track::after\s*\{[\s\S]*var\(--hero-rail-seam, #261019\) 0%[\s\S]*transparent 100%/);
-  assert.match(css, /\.sequence\s*\{[\s\S]*border-top:\s*var\(--rail-divider-size\) solid #f7f5f2/);
+  assert.match(css, /--rail-divider-size:\s*clamp\(14px, 1\.25vw, 20px\)/);
+  assert.match(css, /\.sequence\s*\{[\s\S]*border-top:\s*var\(--rail-divider-size\) solid #f6f3ef/);
+  assert.match(css, /@media \(max-width: 900px\)[\s\S]*--rail-divider-size:\s*16px/);
   assert.match(css, /\.trackViewport\s*\{/);
   assert.match(css, /@media \(max-width: 900px\)[\s\S]*overflow-x:\s*auto[\s\S]*scroll-snap-type:\s*x mandatory/);
   assert.match(css, /touch-action:\s*pan-x pan-y/);
@@ -154,7 +169,7 @@ test("the hero hands its measured plum floor to the horizontal chromatic rail", 
 
   assert.match(
     homeCss,
-    /@media \(max-aspect-ratio: 4 \/ 5\)[\s\S]*\.aj-film__hero-poster img[\s\S]*object-fit:\s*cover[\s\S]*\.aj-film__hero-video[\s\S]*display:\s*none[\s\S]*@media \(max-width: 560px\)[\s\S]*inset:\s*0[\s\S]*width:\s*100%/,
+    /@media \(max-aspect-ratio: 4 \/ 5\)[\s\S]*\.aj-film__hero-poster img[\s\S]*\.aj-film__hero-video[\s\S]*object-fit:\s*cover[\s\S]*@media \(max-width: 560px\)[\s\S]*inset:\s*0[\s\S]*width:\s*100%/,
   );
   assert.match(homeCss, /@media \(max-aspect-ratio: 4 \/ 5\)[\s\S]*mask-image:\s*none/);
 

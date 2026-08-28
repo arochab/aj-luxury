@@ -659,14 +659,14 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
   /* Le poster client reste la première image du hero. Le film progressif est
      dérivé pixel pour pixel de cette source et ne remplace jamais le fallback. */
   assert.match(html, /<main class="aj-home [^"]+">/);
-  assert.match(html, /data-hero-version="isabelle-welcome-v2"/);
+  assert.match(html, /data-hero-version="openart-dual-v1"/);
   assert.match(html, /Reveal Your[\s\S]*Inner Beauty/);
   assert.match(
     html,
-    /aj-luxury-hero-isabelle-v2-landscape-1920x1080-poster\.webp"[^>]*fetchPriority="high"[^>]*decoding="async"/,
+    /aj-luxury-hero-openart-desktop-poster\.webp"[^>]*fetchPriority="high"[^>]*decoding="async"/,
   );
-  assert.match(html, /aj-luxury-hero-vertical-approved-540\.webp 540w/);
-  assert.match(html, /aj-luxury-hero-vertical-approved-1080\.webp 1080w/);
+  assert.match(html, /aj-luxury-hero-openart-mobile-poster-540\.webp 540w/);
+  assert.match(html, /aj-luxury-hero-openart-mobile-poster-1080\.webp 1080w/);
   assert.match(html, /apollon-pourpre-lyre-v1\.webp/);
   assert.match(html, /apollon-pourpre-model-color-v2\.webp/);
   assert.match(html, /apollon-lilas-lyre-v1\.webp/);
@@ -694,7 +694,7 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
   assertDomAssetOrder(
     html,
     [
-      "/images/client/aj-luxury-hero-isabelle-v2-landscape-1920x1080-poster.webp",
+      "/images/client/aj-luxury-hero-openart-desktop-poster.webp",
       "/images/editorial/isabelle-apollon/apollon-pourpre-lyre-v1.webp",
       "/images/client/apollon-world/apollon-pourpre-model-color-v2.webp",
       "/images/editorial/isabelle-apollon/apollon-lilas-lyre-v1.webp",

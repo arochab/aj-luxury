@@ -1,9 +1,9 @@
 .sequence {
-  --rail-divider-size: clamp(9px, 0.72vw, 12px);
+  --rail-divider-size: clamp(14px, 1.25vw, 20px);
   position: relative;
   min-width: 0;
   overflow: clip;
-  border-top: var(--rail-divider-size) solid #f7f5f2;
+  border-top: var(--rail-divider-size) solid #f6f3ef;
   border-bottom: 1px solid rgba(255, 255, 255, 0.16);
   background: var(--hero-rail-seam, #261019);
   color: #f7f5f2;
@@ -344,7 +344,7 @@
    gesture surface. */
 @media (max-width: 900px) {
   .sequence {
-    --rail-divider-size: 10px;
+    --rail-divider-size: 16px;
   }
 
   .motionReady .trackViewport {
