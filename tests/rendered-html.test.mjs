@@ -665,7 +665,8 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
     html,
     /aj-luxury-hero-isabelle-v2-landscape-1920x1080-poster\.webp"[^>]*fetchPriority="high"[^>]*decoding="async"/,
   );
-  assert.match(html, /aj-luxury-hero-isabelle-v2-portrait-poster\.webp\?v=5/);
+  assert.match(html, /aj-luxury-hero-vertical-approved-540\.webp 540w/);
+  assert.match(html, /aj-luxury-hero-vertical-approved-1080\.webp 1080w/);
   assert.match(html, /apollon-pourpre-lyre-v1\.webp/);
   assert.match(html, /apollon-pourpre-model-color-v2\.webp/);
   assert.match(html, /apollon-lilas-lyre-v1\.webp/);

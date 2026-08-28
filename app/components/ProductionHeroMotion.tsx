@@ -15,9 +15,10 @@ export default function ProductionHeroMotion() {
     const reducedMotion = window.matchMedia(
       "(prefers-reduced-motion: reduce)",
     );
+    const mobileStill = window.matchMedia("(max-aspect-ratio: 4 / 5)");
     const saveData = (navigator as NavigatorWithConnection).connection
       ?.saveData;
-    if (reducedMotion.matches || saveData) return;
+    if (mobileStill.matches || reducedMotion.matches || saveData) return;
 
     const video = videoRef.current;
     if (!video) return;
@@ -83,17 +84,11 @@ export default function ProductionHeroMotion() {
       onPlaying={() => setStarted(true)}
     >
       {sourceEnabled ? (
-        <>
-          <source
-            media="(max-aspect-ratio: 4 / 5)"
-            src="/videos/aj-luxury-hero-isabelle-v2-portrait-720x934.mp4?v=5"
-            type="video/mp4"
-          />
-          <source
-            src="/videos/aj-luxury-hero-isabelle-v2-landscape-1920x1080-realesrgan.mp4?v=2"
-            type="video/mp4"
-          />
-        </>
+        <source
+          media="(min-aspect-ratio: 4 / 5)"
+          src="/videos/aj-luxury-hero-isabelle-v2-landscape-1920x1080-realesrgan.mp4?v=2"
+          type="video/mp4"
+        />
       ) : null}
     </video>
   );
