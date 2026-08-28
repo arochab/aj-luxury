@@ -642,7 +642,15 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
   assert.match(html, /<title>AJ Luxury \| Reveal Your Inner Beauty<\/title>/i);
   assert.match(
     html,
-    /<link rel="icon" href="(?:https:\/\/ajluxurystore\.com)?\/favicon\.svg"/i,
+    /<link rel="icon" href="(?:https:\/\/ajluxurystore\.com)?\/favicon\.png"[^>]*sizes="512x512"[^>]*type="image\/png"/i,
+  );
+  assert.match(
+    html,
+    /<link rel="manifest" href="(?:https:\/\/ajluxurystore\.com)?\/site\.webmanifest"/i,
+  );
+  assert.match(
+    html,
+    /<link rel="apple-touch-icon" href="(?:https:\/\/ajluxurystore\.com)?\/apple-touch-icon\.png"[^>]*sizes="180x180"/i,
   );
   assert.match(html, /Apollon/);
   assert.match(html, /Pourpre Impérial/);
