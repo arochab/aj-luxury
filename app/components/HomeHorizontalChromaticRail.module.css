@@ -1,7 +1,9 @@
 .sequence {
+  --rail-divider-size: clamp(3px, 0.28vw, 5px);
   position: relative;
   min-width: 0;
   overflow: clip;
+  border-top: var(--rail-divider-size) solid #f7f5f2;
   border-bottom: 1px solid rgba(255, 255, 255, 0.16);
   background: var(--hero-rail-seam, #261019);
   color: #f7f5f2;
@@ -13,6 +15,18 @@
   min-height: 100svh;
   overflow: visible;
   background: var(--hero-rail-seam, #261019);
+}
+
+.trackViewport {
+  position: relative;
+  z-index: 0;
+  min-width: 100%;
+  outline: none;
+}
+
+.trackViewport:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.92);
+  outline-offset: -4px;
 }
 
 .track {
@@ -113,6 +127,12 @@
 .motionReady .stage {
   height: 100svh;
   min-height: 640px;
+  overflow: clip;
+}
+
+.motionReady .trackViewport {
+  width: 100%;
+  height: 100%;
   overflow: clip;
 }
 
@@ -315,6 +335,39 @@
     width: min(100%, calc((100svh - 220px) * 4 / 3));
     justify-self: stretch;
     gap: clamp(8px, 1.6vw, 14px);
+  }
+}
+
+/* Compact screens use the browser's own inertial horizontal scroll. The
+   chromatic field remains one continuous 300vw canvas behind the three
+   panels, while vertical page panning is still available from the same
+   gesture surface. */
+@media (max-width: 900px) {
+  .motionReady .trackViewport {
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-x pan-y;
+  }
+
+  .motionReady .trackViewport::-webkit-scrollbar {
+    display: none;
+  }
+
+  .motionReady .track {
+    width: max-content;
+    min-width: 300vw;
+    transform: none !important;
+  }
+
+  .motionReady .panel {
+    width: 100vw;
+    flex-basis: 100vw;
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
   }
 }
 

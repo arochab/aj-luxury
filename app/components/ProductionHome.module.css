@@ -197,10 +197,10 @@
   transform: none;
 }
 
-/* On compact screens the header stays in normal flow. The poster stage stops
-   above the signature and uses contain, reproducing production's full-subject
-   framing: both faces and both boxers stay visible, with the CTA still inside
-   the first viewport. */
+/* On compact screens the dedicated portrait master fills the complete hero
+   canvas. It was composed with protected side margins around both models, so
+   cover makes the film materially larger without sacrificing faces or boxers.
+   The signature remains over the photographed floor, not in reserved space. */
 @media (max-width: 900px) {
   .home :global(.aj-featured) {
     min-height: 0;
@@ -211,16 +211,17 @@
   }
 
   .home :global(.aj-film__hero-stage) {
+    top: 0;
     right: 0;
-    bottom: 70px;
+    bottom: 0;
     left: 0;
-    height: auto;
+    height: 100%;
   }
 
   .home :global(.aj-film__hero-poster img),
   .home :global(.aj-film__hero-video) {
-    object-fit: contain;
-    object-position: center;
+    object-fit: cover;
+    object-position: 50% 0%;
   }
 }
 
@@ -365,22 +366,10 @@
 @media (max-aspect-ratio: 4 / 5) {
   .home :global(.aj-film__hero-poster img),
   .home :global(.aj-film__hero-video) {
-    object-fit: contain;
-    object-position: center;
-    -webkit-mask-image: linear-gradient(
-      180deg,
-      transparent 0%,
-      #000 12%,
-      #000 88%,
-      transparent 100%
-    );
-    mask-image: linear-gradient(
-      180deg,
-      transparent 0%,
-      #000 12%,
-      #000 88%,
-      transparent 100%
-    );
+    object-fit: cover;
+    object-position: 50% 0%;
+    -webkit-mask-image: none;
+    mask-image: none;
   }
 }
 
@@ -391,23 +380,21 @@
     --aj-tete-h: 8.7rem;
   }
 
-  /* Le cadre repart du bord gauche et remplit toute la hauteur disponible,
-     comme le visuel mobile de production : aucun vide latéral ou inférieur.
-     La dérivée portrait conserve le film horizontal au centre d'un fond animé
-     issu du même asset. Le centrage garde ainsi les deux visages et les deux
-     boxers dans la zone sûre, sans bande latérale. */
+  /* The stage owns every available pixel below the two-row header. The
+     portrait master is the image itself, not a smaller image sitting inside a
+     blurred frame. */
   .home :global(.aj-film__hero-stage) {
-    top: 22px;
+    top: 0;
     right: 0;
-    bottom: 92px;
+    bottom: 0;
     left: 0;
-    height: auto;
+    height: 100%;
   }
 
   .home :global(.aj-film__hero-poster img),
   .home :global(.aj-film__hero-video) {
-    object-fit: contain;
-    object-position: center;
+    object-fit: cover;
+    object-position: 50% 0%;
   }
 
   .home :global(.aj-featured__editorial) {

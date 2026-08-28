@@ -97,8 +97,9 @@ test("the hero hands its measured plum floor to the horizontal chromatic rail", 
   assert.match(page, /<h1>Reveal Your Inner Beauty<\/h1>/);
   assert.doesNotMatch(page, /<HomeChromaticBridge\s*\/>/);
   assert.doesNotMatch(page, /className="aj-section-break"/);
-  assert.match(rail, /data-home-horizontal-rail="v46"/);
+  assert.match(rail, /data-home-horizontal-rail="v47"/);
   assert.match(rail, /prefers-reduced-motion: no-preference/);
+  assert.match(rail, /desktop:\s*"\(min-width: 901px\)"/);
   assert.match(rail, /pin:\s*stage/);
   assert.match(rail, /scrub:\s*true/);
   assert.match(rail, /anticipatePin:\s*0/);
@@ -111,6 +112,10 @@ test("the hero hands its measured plum floor to the horizontal chromatic rail", 
   assert.match(rail, /stage\.clientHeight \* 3\.15/);
   assert.doesNotMatch(rail, /window\.innerHeight \* 3\.15/);
   assert.match(rail, /className=\{styles\.compactCopy\}/);
+  assert.match(rail, /ref=\{viewportRef\}/);
+  assert.match(rail, /addEventListener\("scroll", onScroll, \{ passive: true \}\)/);
+  assert.match(rail, /addEventListener\("wheel", onWheel, \{ passive: false \}\)/);
+  assert.match(rail, /Math\.abs\(event\.deltaX\) > Math\.abs\(event\.deltaY\)/);
   assert.match(rail, /srcSet=\{responsiveSrcSet/);
   assert.match(rail, /sizes=\{RAIL_IMAGE_SIZES\}/);
   assert.ok(
@@ -127,7 +132,10 @@ test("the hero hands its measured plum floor to the horizontal chromatic rail", 
   assert.match(homeCss, /var\(--hero-rail-seam\) 100%/);
   assert.match(css, /background:\s*var\(--hero-rail-seam, #261019\)/);
   assert.match(css, /\.track::after\s*\{[\s\S]*var\(--hero-rail-seam, #261019\) 0%[\s\S]*transparent 100%/);
-  assert.doesNotMatch(css, /\.sequence\s*\{[^}]*border-top:/);
+  assert.match(css, /\.sequence\s*\{[\s\S]*border-top:\s*var\(--rail-divider-size\) solid #f7f5f2/);
+  assert.match(css, /\.trackViewport\s*\{/);
+  assert.match(css, /@media \(max-width: 900px\)[\s\S]*overflow-x:\s*auto[\s\S]*scroll-snap-type:\s*x mandatory/);
+  assert.match(css, /touch-action:\s*pan-x pan-y/);
   assert.match(css, /#777a9d/);
   assert.match(css, /#08080a/);
   assert.match(
@@ -149,6 +157,12 @@ test("the hero hands its measured plum floor to the horizontal chromatic rail", 
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
   assert.doesNotMatch(css, /transition:\s*all/);
 
+  assert.match(
+    homeCss,
+    /@media \(max-width: 900px\)[\s\S]*\.aj-film__hero-stage[\s\S]*bottom:\s*0[\s\S]*object-fit:\s*cover/,
+  );
+  assert.match(homeCss, /@media \(max-aspect-ratio: 4 \/ 5\)[\s\S]*mask-image:\s*none/);
+
   for (const path of [
     "public/images/editorial/isabelle-apollon/apollon-pourpre-lyre-v1-360.webp",
     "public/images/editorial/isabelle-apollon/apollon-pourpre-lyre-v1-720.webp",
@@ -165,7 +179,28 @@ test("the hero hands its measured plum floor to the horizontal chromatic rail", 
     "public/images/client/apollon-world/apollon-rose-model-color-v2-360.webp",
     "public/images/client/apollon-world/apollon-rose-model-color-v2-720.webp",
     "public/images/client/apollon-world/apollon-rose-model-color-v2-1080.webp",
+    "public/images/client/raw/product-card-pourpre-480.webp",
+    "public/images/client/raw/product-card-pourpre-960.webp",
+    "public/images/client/raw/product-rose-profile-480.webp",
+    "public/images/client/raw/product-rose-profile-960.webp",
+    "public/images/client/raw/product-lilas-model-480.webp",
+    "public/images/client/raw/product-lilas-model-960.webp",
   ]) {
     assert.ok((await stat(projectFile(path))).size > 0, `${path} is empty`);
   }
+});
+
+test("the Apollon collection serves responsive deterministic image derivatives", async () => {
+  const [shop, home, css] = await Promise.all([
+    readFile(projectFile("app/shop/page.tsx"), "utf8"),
+    readFile(projectFile("app/page.tsx"), "utf8"),
+    readFile(projectFile("app/shop/Shop.module.css"), "utf8"),
+  ]);
+
+  assert.match(shop, /function productSrcSet/);
+  assert.match(shop, /srcSet=\{productSrcSet\(product\.image\)\}/);
+  assert.match(shop, /loading="eager"/);
+  assert.match(shop, /fetchPriority=\{index === 0 \? "high" : "auto"\}/);
+  assert.match(home, /srcSet=\{productCardSrcSet\(image\)\}/);
+  assert.match(css, /\.productVisual img\s*\{[\s\S]*position:\s*absolute[\s\S]*width:\s*100%[\s\S]*height:\s*100%/);
 });

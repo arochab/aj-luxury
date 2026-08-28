@@ -1,5 +1,6 @@
+/* eslint-disable @next/next/no-img-element -- static responsive derivatives
+   avoid a runtime optimizer and keep the three collection cards deterministic. */
 import type { Metadata } from "next";
-import Image from "next/image";
 import Link from "next/link";
 import {
   AJ_APOLLON_PACK_PRICE_CENTS,
@@ -62,6 +63,11 @@ const PRODUCTION_IMAGES: Readonly<Record<(typeof PRODUCTION_ORDER)[number], stri
     "lilas-bleu-clair": "/images/client/raw/product-lilas-model.webp",
   });
 
+function productSrcSet(src: string) {
+  const variant = (width: 480 | 960) => src.replace(/\.webp$/, `-${width}.webp`);
+  return `${variant(480)} 480w, ${variant(960)} 960w, ${src} 1731w`;
+}
+
 export default function ShopPage() {
   const catalog = getProducts();
   const products = PRODUCTION_ORDER.flatMap((slug) => {
@@ -110,13 +116,16 @@ export default function ShopPage() {
                 href={`/products/${product.slug}`}
                 aria-label={`${product.model} ${product.name}`}
               >
-                <Image
-                  unoptimized
+                <img
                   src={product.image}
+                  srcSet={productSrcSet(product.image)}
                   alt={`${product.model} ${product.name}`}
-                  fill
+                  width={1731}
+                  height={2600}
                   sizes="(max-width: 760px) 100vw, 33vw"
-                  priority={index === 0}
+                  loading="eager"
+                  fetchPriority={index === 0 ? "high" : "auto"}
+                  decoding="async"
                 />
                 <span className={styles.discover}>
                   <T id="shop.discover" />

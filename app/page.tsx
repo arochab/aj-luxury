@@ -58,6 +58,11 @@ const productDetails = [
   },
 ] as const;
 
+function productCardSrcSet(src: string) {
+  const variant = (width: 480 | 960) => src.replace(/\.webp$/, `-${width}.webp`);
+  return `${variant(480)} 480w, ${variant(960)} 960w, ${src} 1731w`;
+}
+
 export default function Home() {
   const products = getProducts();
   const displayedProducts = productPresentation.flatMap((presentation) => {
@@ -100,6 +105,7 @@ export default function Home() {
               >
                 <img
                   src={image}
+                  srcSet={productCardSrcSet(image)}
                   alt={alt}
                   width={1731}
                   height={2600}
