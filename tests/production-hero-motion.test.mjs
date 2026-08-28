@@ -86,10 +86,11 @@ test("the supplied and portrait films decode with their exact responsive geometr
 });
 
 test("the hero hands its measured plum floor to the horizontal chromatic rail", async () => {
-  const [page, rail, css] = await Promise.all([
+  const [page, rail, css, homeCss] = await Promise.all([
     readFile(projectFile("app/page.tsx"), "utf8"),
     readFile(projectFile("app/components/HomeHorizontalChromaticRail.tsx"), "utf8"),
     readFile(projectFile("app/components/HomeHorizontalChromaticRail.module.css"), "utf8"),
+    readFile(projectFile("app/components/ProductionHome.module.css"), "utf8"),
   ]);
 
   assert.match(page, /<HomeHorizontalChromaticRail\s*\/>/);
@@ -120,6 +121,11 @@ test("the hero hands its measured plum floor to the horizontal chromatic rail", 
   assert.match(rail, /apollon-lilas-lyre-v1\.webp/);
   assert.match(rail, /apollon-rose-lyre-v1\.webp/);
   assert.match(css, /#261019/);
+  assert.match(homeCss, /--hero-rail-seam:\s*#261019/);
+  assert.match(homeCss, /var\(--hero-rail-seam\) 100%/);
+  assert.match(css, /background:\s*var\(--hero-rail-seam, #261019\)/);
+  assert.match(css, /\.track::after\s*\{[\s\S]*var\(--hero-rail-seam, #261019\) 0%[\s\S]*transparent 100%/);
+  assert.doesNotMatch(css, /\.sequence\s*\{[^}]*border-top:/);
   assert.match(css, /#777a9d/);
   assert.match(css, /#08080a/);
   assert.match(

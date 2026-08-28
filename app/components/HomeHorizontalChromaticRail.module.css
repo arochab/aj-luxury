@@ -2,9 +2,8 @@
   position: relative;
   min-width: 0;
   overflow: clip;
-  border-top: 1px solid rgba(255, 255, 255, 0.2);
   border-bottom: 1px solid rgba(255, 255, 255, 0.16);
-  background: #08080a;
+  background: var(--hero-rail-seam, #261019);
   color: #f7f5f2;
   isolation: isolate;
 }
@@ -13,7 +12,7 @@
   position: relative;
   min-height: 100svh;
   overflow: visible;
-  background: #08080a;
+  background: var(--hero-rail-seam, #261019);
 }
 
 .track {
@@ -46,7 +45,7 @@
     ),
     linear-gradient(
       90deg in oklab,
-      #261019 0%,
+      var(--hero-rail-seam, #261019) 0%,
       #411124 7%,
       #5b1233 18%,
       #682744 27%,
@@ -85,6 +84,28 @@
       rgba(7, 7, 10, 0.18) 76%,
       rgba(7, 7, 10, 0.48) 100%
     );
+  content: "";
+  pointer-events: none;
+}
+
+/* The first pixels of the rail inherit the hero's fully opaque plum floor,
+   then release it gradually into the Pourpre field. This is a colour handoff,
+   not a spacer: it has no layout height and cannot disturb ScrollTrigger's
+   pin measurement. */
+.track::after {
+  position: absolute;
+  z-index: 0;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: clamp(92px, 14svh, 144px);
+  background: linear-gradient(
+    180deg,
+    var(--hero-rail-seam, #261019) 0%,
+    rgba(38, 16, 25, 0.88) 18%,
+    rgba(38, 16, 25, 0.5) 54%,
+    transparent 100%
+  );
   content: "";
   pointer-events: none;
 }
@@ -425,7 +446,12 @@
   }
 
   .panel[data-colorway="pourpre"] {
-    background: linear-gradient(180deg, #261019 0%, #541a38 54%, #68475e 100%);
+    background: linear-gradient(
+      180deg,
+      var(--hero-rail-seam, #261019) 0%,
+      #541a38 54%,
+      #68475e 100%
+    );
   }
 
   .panel[data-colorway="lilas-bleu-clair"] {

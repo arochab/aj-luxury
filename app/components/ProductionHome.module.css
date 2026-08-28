@@ -1,4 +1,5 @@
 .home {
+  --hero-rail-seam: #261019;
   min-width: 0;
 }
 
@@ -39,7 +40,8 @@
       180deg,
       rgba(8, 4, 8, 0.08),
       transparent 34%,
-      rgba(38, 16, 25, 0.72)
+      rgba(38, 16, 25, 0.76) 78%,
+      var(--hero-rail-seam) 100%
     );
   content: "";
   pointer-events: none;
@@ -66,7 +68,8 @@
   background: linear-gradient(
     180deg,
     rgba(38, 16, 25, 0.08),
-    rgba(38, 16, 25, 0.78)
+    rgba(38, 16, 25, 0.74) 56%,
+    var(--hero-rail-seam) 100%
   );
 }
 
