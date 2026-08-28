@@ -23,10 +23,11 @@ import test from "node:test";
 
 const lire = (chemin) => readFile(new URL(chemin, import.meta.url), "utf8");
 
-const [produits, sequence, accueil, recit, boutique, fiche] =
+const [produits, sequence, railAccueil, accueil, recit, boutique, fiche] =
   await Promise.all([
     lire("../lib/products.ts"),
     lire("../app/components/ApollonGuidedSequence.tsx"),
+    lire("../app/components/HomeHorizontalChromaticRail.tsx"),
     lire("../app/page.tsx"),
     lire("../app/notre-histoire/page.tsx"),
     lire("../app/shop/page.tsx"),
@@ -142,7 +143,7 @@ test("la séquence guidée de l'accueil alterne", () => {
   const suite = personnes(sequence);
   assert.deepEqual(
     suite.map((entree) => entree.qui),
-    ["alex", "jeremy", "alex"],
+    ["jeremy", "alex", "jeremy"],
   );
   exigerAlternance(suite, "séquence guidée");
 });
@@ -169,11 +170,14 @@ test("les cartes de /shop alternent", () => {
   exigerAlternance(suite, "cartes de /shop");
 });
 
-test("les neuf images portées de l'accueil suivent l'ordre du live", () => {
-  const suite = personnes(accueil);
+test("les neuf images portées de l'accueil composé alternent sans rupture", () => {
+  // Le rail est un composant importé avant les deux séquences restées dans
+  // app/page.tsx. Les sources sont donc concaténées dans l'ordre réellement
+  // rencontré au scroll, au lieu de sous-compter les médias du composant.
+  const suite = personnes(`${railAccueil}\n${accueil}`);
   assert.deepEqual(
     suite.map((entree) => entree.qui),
-    ["alex", "duo", "jeremy", "alex", "jeremy", "alex", "jeremy", "duo", "alex"],
+    ["jeremy", "alex", "jeremy", "alex", "jeremy", "alex", "jeremy", "duo", "alex"],
   );
   exigerAlternance(suite, "accueil live");
 });

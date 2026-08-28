@@ -12,12 +12,9 @@ import { getProducts } from "../lib/products";
 import styles from "./components/ProductionHome.module.css";
 
 /*
- * The hero is the only duo image on the page. Every identifiable solo plan
- * after it is unique and follows one strict reading order:
- * Jérémy / Alex / Jérémy / Alex / Jérémy / Alex.
- *
- * The final editorial band deliberately uses product details without a face,
- * so it does not create a hidden seventh model plan or break the alternation.
+ * The hero is the opening duo. The horizontal collection rail begins the
+ * solo rhythm Jérémy / Alex / Jérémy; the sequences below continue it without
+ * repeating the same model across a section boundary.
  */
 const productPresentation = [
   {
