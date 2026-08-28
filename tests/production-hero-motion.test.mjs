@@ -92,31 +92,64 @@ test("the supplied and portrait films decode with their exact responsive geometr
   assert.ok(Math.abs(Number(portrait.format.duration) - 5.041667) < 0.01);
 });
 
-test("the hero hands its measured plum floor to the editorial screen through scroll", async () => {
-  const [page, bridge, css] = await Promise.all([
+test("the hero hands its measured plum floor to the horizontal chromatic rail", async () => {
+  const [page, rail, css] = await Promise.all([
     readFile(projectFile("app/page.tsx"), "utf8"),
-    readFile(projectFile("app/components/HomeChromaticBridge.tsx"), "utf8"),
-    readFile(projectFile("app/components/ProductionHome.module.css"), "utf8"),
+    readFile(projectFile("app/components/HomeHorizontalChromaticRail.tsx"), "utf8"),
+    readFile(projectFile("app/components/HomeHorizontalChromaticRail.module.css"), "utf8"),
   ]);
 
-  assert.match(page, /<HomeChromaticBridge\s*\/>/);
-  assert.match(page, /className="aj-featured__chromatic-flow"/);
-  assert.doesNotMatch(page, /className="aj-featured__rules"/);
+  assert.match(page, /<HomeHorizontalChromaticRail\s*\/>/);
+  assert.doesNotMatch(page, /<HomeChromaticBridge\s*\/>/);
   assert.doesNotMatch(page, /className="aj-section-break"/);
-  assert.match(bridge, /data-motion="hero-to-editorial"/);
-  assert.match(bridge, /className=\{styles\.scrollJunction\}/);
-  assert.match(bridge, /prefers-reduced-motion: no-preference/);
-  assert.match(bridge, /scrub:\s*0\.1/);
-  assert.match(bridge, /scrub:\s*0\.12/);
-  assert.doesNotMatch(bridge, /bridgeField|bridgeHalo|bridgeChrome/);
-  assert.doesNotMatch(bridge, /filter\s*:/);
+  assert.match(rail, /data-home-horizontal-rail="v46"/);
+  assert.match(rail, /prefers-reduced-motion: no-preference/);
+  assert.match(rail, /pin:\s*stage/);
+  assert.match(rail, /scrub:\s*true/);
+  assert.doesNotMatch(rail, /scrub:\s*0\./);
+  assert.match(rail, /x:\s*\(\) => -panelOffset\(1\)/);
+  assert.match(rail, /x:\s*\(\) => -panelOffset\(2\)/);
+  assert.match(rail, /--rail-panel-width/);
+  assert.match(rail, /onRefreshInit:\s*syncPanelWidth/);
+  assert.match(rail, /className=\{styles\.compactCopy\}/);
+  assert.match(rail, /srcSet=\{responsiveSrcSet/);
+  assert.match(rail, /sizes=\{RAIL_IMAGE_SIZES\}/);
+  assert.ok(
+    rail.indexOf('slug: "pourpre"') <
+      rail.indexOf('slug: "lilas-bleu-clair"') &&
+      rail.indexOf('slug: "lilas-bleu-clair"') <
+        rail.indexOf('slug: "rose-pale"'),
+  );
+  assert.match(rail, /apollon-pourpre-lyre-v1\.webp/);
+  assert.match(rail, /apollon-lilas-lyre-v1\.webp/);
+  assert.match(rail, /apollon-rose-lyre-v1\.webp/);
   assert.match(css, /#261019/);
-  assert.match(css, /#120a10/);
-  assert.match(css, /#77767e/);
-  assert.match(css, /blur\(clamp\(26px, 3vw, 46px\)\)/);
+  assert.match(css, /#777780/);
   assert.match(css, /#08080a/);
-  assert.match(css, /border:\s*1px solid rgba\(255, 255, 255, 0\.68\)/);
-  assert.doesNotMatch(css, /aj-featured__rules/);
-  assert.doesNotMatch(css, /\.chromaticBridge/);
-  assert.match(css, /\.home\s+:global\(\.aj-featured\)\s*\{[^}]*min-height:\s*116svh;\s*animation:\s*none;/s);
+  assert.match(css, /\.frame\s*\{[\s\S]*border:\s*1px solid rgba\(255, 255, 255, 0\.78\)/);
+  assert.match(css, /object-fit:\s*contain/);
+  assert.match(css, /flex:\s*0 0 var\(--rail-panel-width/);
+  assert.match(css, /\.exitBridge\s*\{[\s\S]*height:\s*clamp\(28px, 2\.8vw, 42px\)/);
+  assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
+  assert.doesNotMatch(css, /transition:\s*all/);
+
+  for (const path of [
+    "public/images/editorial/isabelle-apollon/apollon-pourpre-lyre-v1-360.webp",
+    "public/images/editorial/isabelle-apollon/apollon-pourpre-lyre-v1-720.webp",
+    "public/images/editorial/isabelle-apollon/apollon-lilas-lyre-v1-360.webp",
+    "public/images/editorial/isabelle-apollon/apollon-lilas-lyre-v1-720.webp",
+    "public/images/editorial/isabelle-apollon/apollon-rose-lyre-v1-360.webp",
+    "public/images/editorial/isabelle-apollon/apollon-rose-lyre-v1-720.webp",
+    "public/images/client/apollon-world/apollon-pourpre-model-color-v2-360.webp",
+    "public/images/client/apollon-world/apollon-pourpre-model-color-v2-720.webp",
+    "public/images/client/apollon-world/apollon-pourpre-model-color-v2-1080.webp",
+    "public/images/client/apollon-world/apollon-lilas-model-color-v2-360.webp",
+    "public/images/client/apollon-world/apollon-lilas-model-color-v2-720.webp",
+    "public/images/client/apollon-world/apollon-lilas-model-color-v2-1080.webp",
+    "public/images/client/apollon-world/apollon-rose-model-color-v2-360.webp",
+    "public/images/client/apollon-world/apollon-rose-model-color-v2-720.webp",
+    "public/images/client/apollon-world/apollon-rose-model-color-v2-1080.webp",
+  ]) {
+    assert.ok((await stat(projectFile(path))).size > 0, `${path} is empty`);
+  }
 });
