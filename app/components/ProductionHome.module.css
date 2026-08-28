@@ -358,17 +358,18 @@
   }
 }
 
-/* The portrait rendition has a protected 60 px horizontal margin around the
-   complete landscape film. It can therefore fill every portrait viewport
-   without clipping either model, while its own animated background removes
-   the letterbox bands that `contain` would otherwise expose on tablets. */
+/* Mobile uses the approved true 9:16 campaign photograph. It fills the hero
+   directly; the desktop film is deliberately not loaded or painted here. */
 @media (max-aspect-ratio: 4 / 5) {
-  .home :global(.aj-film__hero-poster img),
-  .home :global(.aj-film__hero-video) {
-    object-fit: contain;
+  .home :global(.aj-film__hero-poster img) {
+    object-fit: cover;
     object-position: center;
     -webkit-mask-image: none;
     mask-image: none;
+  }
+
+  .home :global(.aj-film__hero-video) {
+    display: none;
   }
 }
 
@@ -379,21 +380,16 @@
     --aj-tete-h: 8.7rem;
   }
 
-  /* The 136vw canvas accepts a slight crop on the outer arms to give both
-     models materially more presence. Faces, torsos and both boxers remain
-     inside the safe window; the centre-only crop is still avoided. */
+  /* The 9:16 approved master closely matches the available mobile viewport,
+     so a full-frame cover maximises presence with only negligible edge crop. */
   .home :global(.aj-film__hero-stage) {
-    top: clamp(32px, 4svh, 48px);
-    right: -18vw;
-    bottom: clamp(44px, 6svh, 66px);
-    left: -18vw;
-    width: 136vw;
-    height: auto;
+    inset: 0;
+    width: 100%;
+    height: 100%;
   }
 
-  .home :global(.aj-film__hero-poster img),
-  .home :global(.aj-film__hero-video) {
-    object-fit: contain;
+  .home :global(.aj-film__hero-poster img) {
+    object-fit: cover;
     object-position: center;
   }
 

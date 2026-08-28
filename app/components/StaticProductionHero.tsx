@@ -10,7 +10,8 @@ export default function StaticProductionHero() {
         <picture className="aj-film__hero-backdrop">
           <source
             media="(max-aspect-ratio: 4 / 5)"
-            srcSet="/images/client/aj-luxury-hero-isabelle-v2-portrait-poster.webp?v=5"
+            srcSet="/images/client/aj-luxury-hero-vertical-approved-540.webp 540w, /images/client/aj-luxury-hero-vertical-approved-1080.webp 1080w"
+            sizes="100vw"
           />
           <img
             src="/images/client/aj-luxury-hero-isabelle-v2-landscape-1920x1080-poster.webp"
@@ -26,7 +27,8 @@ export default function StaticProductionHero() {
           <picture className="aj-film__hero-poster">
             <source
               media="(max-aspect-ratio: 4 / 5)"
-              srcSet="/images/client/aj-luxury-hero-isabelle-v2-portrait-poster.webp?v=5"
+              srcSet="/images/client/aj-luxury-hero-vertical-approved-540.webp 540w, /images/client/aj-luxury-hero-vertical-approved-1080.webp 1080w"
+              sizes="100vw"
             />
             <img
               src="/images/client/aj-luxury-hero-isabelle-v2-landscape-1920x1080-poster.webp"

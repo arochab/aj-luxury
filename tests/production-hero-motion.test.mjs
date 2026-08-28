@@ -9,7 +9,6 @@ import { promisify } from "node:util";
 const projectFile = (path) => new URL(`../${path}`, import.meta.url);
 const execFileAsync = promisify(execFile);
 const landscapePath = "public/videos/aj-luxury-hero-isabelle-v2-landscape-1920x1080-realesrgan.mp4";
-const portraitPath = "public/videos/aj-luxury-hero-isabelle-v2-portrait-720x934.mp4";
 
 const sha256 = async (path) => createHash("sha256")
   .update(await readFile(projectFile(path)))
@@ -34,7 +33,8 @@ test("the welcome film uses only the approved Isabelle V2 runtime assets", async
 
   assert.match(hero, /data-hero-version="isabelle-welcome-v2"/);
   assert.match(hero, /className="aj-film__hero-backdrop"/);
-  assert.match(hero, /aj-luxury-hero-isabelle-v2-portrait-poster\.webp/);
+  assert.match(hero, /aj-luxury-hero-vertical-approved-540\.webp 540w/);
+  assert.match(hero, /aj-luxury-hero-vertical-approved-1080\.webp 1080w/);
   assert.match(hero, /aj-luxury-hero-isabelle-v2-landscape-1920x1080-poster\.webp/);
   assert.match(motion, /prefers-reduced-motion: reduce/);
   assert.match(motion, /saveData/);
@@ -42,24 +42,24 @@ test("the welcome film uses only the approved Isabelle V2 runtime assets", async
   assert.match(motion, /visibilitychange/);
   assert.match(motion, /preload="none"/);
   assert.match(motion, /\sloop(?:\s|=)/);
-  assert.match(motion, /aj-luxury-hero-isabelle-v2-portrait-720x934\.mp4\?v=5/);
+  assert.match(motion, /max-aspect-ratio: 4 \/ 5/);
+  assert.match(motion, /media="\(min-aspect-ratio: 4 \/ 5\)"/);
+  assert.doesNotMatch(motion, /portrait-720x934\.mp4/);
   assert.match(motion, /aj-luxury-hero-isabelle-v2-landscape-1920x1080-realesrgan\.mp4\?v=2/);
   assert.doesNotMatch(`${hero}\n${motion}`, /https?:\/\//i);
   assert.doesNotMatch(motion, /aj-luxury-hero-v4-motion/);
 
   for (const poster of [
-    "public/images/client/aj-luxury-hero-isabelle-v2-portrait-poster.webp",
+    "public/images/client/aj-luxury-hero-vertical-approved-540.webp",
+    "public/images/client/aj-luxury-hero-vertical-approved-1080.webp",
     "public/images/client/aj-luxury-hero-isabelle-v2-landscape-1920x1080-poster.webp",
   ]) {
     assert.ok((await stat(projectFile(poster))).size > 0, `${poster} is empty`);
   }
 });
 
-test("the supplied and portrait films decode with their exact responsive geometry", async () => {
-  const [landscape, portrait] = await Promise.all([
-    probe(landscapePath),
-    probe(portraitPath),
-  ]);
+test("the approved desktop film decodes with its exact runtime geometry", async () => {
+  const landscape = await probe(landscapePath);
 
   assert.deepEqual(
     [landscape.streams[0].width, landscape.streams[0].height, landscape.streams[0].r_frame_rate],
@@ -77,12 +77,7 @@ test("the supplied and portrait films decode with their exact responsive geometr
   );
   assert.equal(await sha256(landscapePath), "9ee1447fd4630b37b53dbadfe24db48da1c4e354a90d3a8f13b2a8229c823ac1");
   assert.ok(Number(landscape.format.size) < 5 * 1024 * 1024);
-  assert.deepEqual(
-    [portrait.streams[0].width, portrait.streams[0].height, portrait.streams[0].r_frame_rate],
-    [720, 934, "24/1"],
-  );
   assert.ok(Math.abs(Number(landscape.format.duration) - 5.041667) < 0.01);
-  assert.ok(Math.abs(Number(portrait.format.duration) - 5.041667) < 0.01);
 });
 
 test("the hero hands its measured plum floor to the horizontal chromatic rail", async () => {
@@ -159,7 +154,7 @@ test("the hero hands its measured plum floor to the horizontal chromatic rail", 
 
   assert.match(
     homeCss,
-    /@media \(max-width: 900px\)[\s\S]*\.aj-film__hero-poster img[\s\S]*object-fit:\s*contain[\s\S]*@media \(max-width: 560px\)[\s\S]*right:\s*-18vw[\s\S]*width:\s*136vw/,
+    /@media \(max-aspect-ratio: 4 \/ 5\)[\s\S]*\.aj-film__hero-poster img[\s\S]*object-fit:\s*cover[\s\S]*\.aj-film__hero-video[\s\S]*display:\s*none[\s\S]*@media \(max-width: 560px\)[\s\S]*inset:\s*0[\s\S]*width:\s*100%/,
   );
   assert.match(homeCss, /@media \(max-aspect-ratio: 4 \/ 5\)[\s\S]*mask-image:\s*none/);
 
