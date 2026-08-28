@@ -46,6 +46,13 @@ const launchCountries = Object.freeze([
   ["SI", "Slovénie"], ["ES", "Espagne"], ["SE", "Suède"],
 ] as const);
 
+function accountAccessHref(view: "login" | "forgot", email: string): string {
+  const params = new URLSearchParams({ view, returnTo: "/checkout" });
+  const normalizedEmail = email.trim();
+  if (normalizedEmail) params.set("email", normalizedEmail);
+  return `/account?${params.toString()}`;
+}
+
 type AddressForm = {
   recipient: string;
   company: string;
@@ -455,23 +462,40 @@ export default function ProductionCheckoutClient() {
 
           {selected && !order ? (
             <div className={styles.testCheckout}>
-              <label>{t("checkout.email")}<input type="email" inputMode="email" autoComplete="email" required readOnly={signedInEmail !== null} value={email} onChange={(e) => { setEmail(e.currentTarget.value); setAccountPrepared(false); }} /></label>
               {signedInEmail ? (
-                <div className={styles.accountCheckoutFields}>
-                  <p className={styles.muted}>Connecté avec {signedInEmail}. Cette commande sera ajoutée automatiquement à votre espace client.</p>
-                </div>
+                <section className={styles.accountCheckoutFields} aria-labelledby="checkout-account-title">
+                  <div className={styles.accountCheckoutHeading}>
+                    <div>
+                      <p className={styles.accountCheckoutEyebrow}>Compte client</p>
+                      <h2 id="checkout-account-title">Votre espace client</h2>
+                    </div>
+                    <span className={styles.accountCheckoutStatus}>Connecté</span>
+                  </div>
+                  <label>{t("checkout.email")}<input type="email" inputMode="email" autoComplete="email" readOnly value={email} /></label>
+                  <p className={styles.accountCheckoutIntro}>Cette commande sera ajoutée automatiquement à votre historique.</p>
+                </section>
               ) : (
-                <div className={styles.accountCheckoutFields}>
-                  <p><strong>Votre espace client</strong></p>
-                  <label>Mot de passe<input type="password" minLength={12} maxLength={128} autoComplete="new-password" required value={accountPassword} onChange={(e) => { setAccountPassword(e.currentTarget.value); setAccountPrepared(false); }} /></label>
+                <section className={styles.accountCheckoutFields} aria-labelledby="checkout-account-title">
+                  <div className={styles.accountCheckoutHeading}>
+                    <div>
+                      <p className={styles.accountCheckoutEyebrow}>Compte client</p>
+                      <h2 id="checkout-account-title">Créer votre espace</h2>
+                    </div>
+                    <nav className={styles.accountCheckoutLinks} aria-label="Accès à votre compte">
+                      <Link href={accountAccessHref("login", email)}>Se connecter</Link>
+                      <Link href={accountAccessHref("forgot", email)}>Mot de passe oublié</Link>
+                    </nav>
+                  </div>
+                  <p className={styles.accountCheckoutIntro}>Retrouvez votre commande, son paiement et sa livraison depuis un espace sécurisé.</p>
+                  <label>{t("checkout.email")}<input type="email" inputMode="email" autoComplete="email" required aria-describedby="checkout-account-email-help" value={email} onChange={(e) => { setEmail(e.currentTarget.value); setAccountPrepared(false); }} /></label>
+                  <label>Choisir un mot de passe <span className={styles.fieldHint}>12 caractères minimum</span><input type="password" minLength={12} maxLength={128} autoComplete="new-password" required value={accountPassword} onChange={(e) => { setAccountPassword(e.currentTarget.value); setAccountPrepared(false); }} /></label>
                   <label>Confirmer le mot de passe<input type="password" minLength={12} maxLength={128} autoComplete="new-password" required value={accountPasswordConfirmation} onChange={(e) => { setAccountPasswordConfirmation(e.currentTarget.value); setAccountPrepared(false); }} /></label>
+                  <p className={styles.accountEmailNotice} id="checkout-account-email-help"><strong>Après cette étape</strong> Un e-mail AJ Luxury vous sera envoyé. Confirmez votre adresse pour activer l’espace et retrouver cette commande.</p>
                   <label className={styles.checkbox}><input type="checkbox" checked={acceptsMarketing} onChange={(e) => { setAcceptsMarketing(e.currentTarget.checked); setAccountPrepared(false); }} /><span>Recevoir les nouveautés AJ Luxury. Facultatif et révocable.</span></label>
-                  <p className={styles.muted}>Votre compte sera créé avec l’adresse ci-dessus. Confirmez ensuite l’e-mail AJ Luxury pour retrouver la commande et suivre sa livraison.</p>
-                </div>
+                </section>
               )}
-              {!signedInEmail && <p className={styles.muted}>Déjà client ? <Link href="/account">Se connecter</Link> avant de confirmer la commande.</p>}
               <label className={styles.checkbox}><input type="checkbox" checked={legalAccepted} onChange={(e) => setLegalAccepted(e.currentTarget.checked)} /><span>J’accepte les <Link href="/terms">conditions de vente</Link> et la <Link href="/privacy">politique de confidentialité</Link>.</span></label>
-              <button className={styles.button} type="button" disabled={submitting || !legalAccepted || !email || (!signedInEmail && (!accountPassword || !accountPasswordConfirmation))} onClick={() => void confirmOrder()}>{signedInEmail ? "Confirmer la commande" : "Créer mon compte et confirmer la commande"}</button>
+              <button className={styles.button} type="button" disabled={submitting || !legalAccepted || !email || (!signedInEmail && (!accountPassword || !accountPasswordConfirmation))} onClick={() => void confirmOrder()}>{signedInEmail ? "Confirmer la commande" : "Créer mon compte et continuer"}</button>
             </div>
           ) : null}
 
