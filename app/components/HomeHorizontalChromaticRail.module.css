@@ -324,7 +324,7 @@
   }
 
   .panelInner {
-    width: calc(100vw - 30px);
+    width: calc(100vw - 20px);
     gap: clamp(14px, 2.3vh, 20px);
     padding: 70px 0 54px;
     transform: translateY(clamp(56px, 13svh, 110px));
@@ -379,6 +379,18 @@
 
   .mediaPair {
     gap: 6px;
+  }
+
+  /* On a phone, two native 2:3 frames side by side leave a deep shelf above
+     and below the photographs. The taller editorial crop keeps both images
+     visible together while giving the product and model materially more
+     presence; only the low-information outer edges are trimmed. */
+  .frame {
+    aspect-ratio: 8 / 15;
+  }
+
+  .frame img {
+    object-fit: cover;
   }
 
   .stageHeader,
