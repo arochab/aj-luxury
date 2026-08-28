@@ -197,10 +197,9 @@
   transform: none;
 }
 
-/* On compact screens the dedicated portrait master fills the complete hero
-   canvas. It was composed with protected side margins around both models, so
-   cover makes the film materially larger without sacrificing faces or boxers.
-   The signature remains over the photographed floor, not in reserved space. */
+/* On compact screens the portrait master remains intact so both models stay
+   visible. The phone rule below enlarges that intact canvas beyond the viewport
+   while its own blurred backdrop carries the remaining vertical atmosphere. */
 @media (max-width: 900px) {
   .home :global(.aj-featured) {
     min-height: 0;
@@ -220,8 +219,8 @@
 
   .home :global(.aj-film__hero-poster img),
   .home :global(.aj-film__hero-video) {
-    object-fit: cover;
-    object-position: 50% 0%;
+    object-fit: contain;
+    object-position: center;
   }
 }
 
@@ -366,8 +365,8 @@
 @media (max-aspect-ratio: 4 / 5) {
   .home :global(.aj-film__hero-poster img),
   .home :global(.aj-film__hero-video) {
-    object-fit: cover;
-    object-position: 50% 0%;
+    object-fit: contain;
+    object-position: center;
     -webkit-mask-image: none;
     mask-image: none;
   }
@@ -380,21 +379,22 @@
     --aj-tete-h: 8.7rem;
   }
 
-  /* The stage owns every available pixel below the two-row header. The
-     portrait master is the image itself, not a smaller image sitting inside a
-     blurred frame. */
+  /* The 120vw canvas is the largest undistorted crop that keeps both models.
+     Extending it past the side edges adds presence without reverting to the
+     centre-only cover crop that removed them from the opening screen. */
   .home :global(.aj-film__hero-stage) {
-    top: 0;
-    right: 0;
-    bottom: 0;
-    left: 0;
-    height: 100%;
+    top: clamp(48px, 6svh, 68px);
+    right: -10vw;
+    bottom: clamp(62px, 8svh, 92px);
+    left: -10vw;
+    width: 120vw;
+    height: auto;
   }
 
   .home :global(.aj-film__hero-poster img),
   .home :global(.aj-film__hero-video) {
-    object-fit: cover;
-    object-position: 50% 0%;
+    object-fit: contain;
+    object-position: center;
   }
 
   .home :global(.aj-featured__editorial) {
