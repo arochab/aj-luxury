@@ -68,3 +68,19 @@ test("header and footer expose the connected language selector", async () => {
   assert.match(styles, /@media \(max-width: 900px\)/);
   assert.match(styles, /\.languageSwitcher select/);
 });
+
+test("the shared footer keeps the collection pre-footer accessible and localized", async () => {
+  const footer = await readSource("app/components/StoreFooter.tsx");
+  const styles = await readSource("app/components/StoreChrome.module.css");
+
+  assert.match(footer, /<footer className=\{styles\.siteFooter\}>/);
+  assert.match(footer, /aria-labelledby="pre-footer-title"/);
+  assert.match(footer, /role="heading"/);
+  assert.match(footer, /aria-level=\{2\}/);
+  assert.match(footer, /Reveal Your Inner/);
+  assert.match(footer, /t\("story\.discoverCollection"\)/);
+  assert.match(footer, /<Link className=\{styles\.preFooterCta\} href="\/shop">/);
+  assert.match(styles, /\.preFooter\s*\{/);
+  assert.match(styles, /\.preFooterTitle\s*\{/);
+  assert.match(styles, /\.preFooterCta\s*\{/);
+});
