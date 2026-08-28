@@ -364,6 +364,7 @@
   .motionReady .track {
     width: max-content;
     min-width: 300vw;
+    gap: clamp(42px, 12vw, 56px);
     transform: none !important;
   }
 
@@ -382,10 +383,10 @@
   }
 
   .panelInner {
-    width: min(108vw, 440px);
+    width: min(calc(100vw - 18px), 440px);
     gap: clamp(14px, 2.3vh, 20px);
-    padding: 70px 0 54px;
-    transform: translateY(clamp(42px, 8svh, 62px));
+    padding: clamp(238px, 33svh, 258px) 0 54px;
+    transform: none;
   }
 
   .copy {
@@ -399,23 +400,24 @@
     right: 15px;
     left: 15px;
     display: grid;
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) auto;
     align-items: start;
     gap: 8px;
     animation: compact-copy-in 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
   }
 
   .compactCopy .moment {
+    grid-column: 1 / -1;
     margin: 0;
   }
 
   .compactCopy h2 {
     min-width: 0;
     margin: 0;
-    font-size: var(--t6);
+    font-size: clamp(2.2rem, 10vw, 3rem);
     font-weight: 300;
     letter-spacing: var(--aj-ls-titre);
-    line-height: 0.9;
+    line-height: 0.88;
     text-wrap: balance;
     word-spacing: 0.06em;
   }
@@ -426,7 +428,8 @@
     align-items: center;
     width: fit-content;
     gap: 8px;
-    justify-self: start;
+    align-self: end;
+    justify-self: end;
     border-bottom: 1px solid currentColor;
     font-size: var(--t0);
     font-weight: 650;
@@ -459,10 +462,19 @@
 
   .stageHeader {
     min-height: 52px;
+    column-gap: 16px;
+    font-size: clamp(0.65rem, 2.8vw, 0.72rem);
+    letter-spacing: 0.13em;
+  }
+
+  .stageHeader p {
+    flex: 0 0 auto;
   }
 
   .stageHeader a {
-    font-size: var(--t0);
+    margin-left: auto;
+    font-size: inherit;
+    letter-spacing: inherit;
   }
 
   .stageFooter {

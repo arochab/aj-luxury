@@ -87,17 +87,25 @@ export default function HomeHorizontalChromaticRail() {
     const compact = window.matchMedia("(max-width: 900px)");
     const root = viewport.closest<HTMLElement>(`.${styles.sequence}`);
     const progress = root?.querySelector<HTMLElement>(`.${styles.progressFill}`);
+    const panels = Array.from(
+      viewport.querySelectorAll<HTMLElement>(`.${styles.panel}`),
+    );
     let frame = 0;
     let listening = false;
 
     const sync = () => {
       frame = 0;
-      const panelWidth = Math.max(viewport.clientWidth, 1);
       const maxScroll = Math.max(viewport.scrollWidth - viewport.clientWidth, 1);
-      const next = Math.max(
-        0,
-        Math.min(CHAPTERS.length - 1, Math.round(viewport.scrollLeft / panelWidth)),
-      );
+      const next = panels.length
+        ? panels.reduce(
+            (closest, panel, index) =>
+              Math.abs(panel.offsetLeft - viewport.scrollLeft) <
+              Math.abs(panels[closest].offsetLeft - viewport.scrollLeft)
+                ? index
+                : closest,
+            0,
+          )
+        : 0;
 
       if (next !== lastActive.current) {
         lastActive.current = next;
