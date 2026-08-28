@@ -1,5 +1,5 @@
 .sequence {
-  --rail-divider-size: clamp(3px, 0.28vw, 5px);
+  --rail-divider-size: clamp(9px, 0.72vw, 12px);
   position: relative;
   min-width: 0;
   overflow: clip;
@@ -343,6 +343,10 @@
    panels, while vertical page panning is still available from the same
    gesture surface. */
 @media (max-width: 900px) {
+  .sequence {
+    --rail-divider-size: 10px;
+  }
+
   .motionReady .trackViewport {
     overflow-x: auto;
     overflow-y: hidden;
@@ -373,14 +377,15 @@
 
 @media (max-width: 560px) {
   .motionReady .stage {
-    min-height: 520px;
+    height: min(100svh, 760px);
+    min-height: min(100svh, 620px);
   }
 
   .panelInner {
-    width: calc(100vw - 20px);
+    width: min(108vw, 440px);
     gap: clamp(14px, 2.3vh, 20px);
     padding: 70px 0 54px;
-    transform: translateY(clamp(56px, 13svh, 110px));
+    transform: translateY(clamp(42px, 8svh, 62px));
   }
 
   .copy {

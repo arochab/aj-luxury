@@ -97,7 +97,7 @@ test("the hero hands its measured plum floor to the horizontal chromatic rail", 
   assert.match(page, /<h1>Reveal Your Inner Beauty<\/h1>/);
   assert.doesNotMatch(page, /<HomeChromaticBridge\s*\/>/);
   assert.doesNotMatch(page, /className="aj-section-break"/);
-  assert.match(rail, /data-home-horizontal-rail="v47"/);
+  assert.match(rail, /data-home-horizontal-rail="v48"/);
   assert.match(rail, /prefers-reduced-motion: no-preference/);
   assert.match(rail, /desktop:\s*"\(min-width: 901px\)"/);
   assert.match(rail, /pin:\s*stage/);
@@ -149,7 +149,7 @@ test("the hero hands its measured plum floor to the horizontal chromatic rail", 
   assert.match(css, /object-fit:\s*contain/);
   assert.match(
     css,
-    /@media \(max-width: 560px\)[\s\S]*\.panelInner\s*\{[\s\S]*width:\s*calc\(100vw - 20px\)[\s\S]*\.frame\s*\{[\s\S]*aspect-ratio:\s*8 \/ 15[\s\S]*\.frame img\s*\{[\s\S]*object-fit:\s*cover/,
+    /@media \(max-width: 560px\)[\s\S]*\.panelInner\s*\{[\s\S]*width:\s*min\(108vw, 440px\)[\s\S]*\.frame\s*\{[\s\S]*aspect-ratio:\s*8 \/ 15[\s\S]*\.frame img\s*\{[\s\S]*object-fit:\s*cover/,
   );
   assert.match(css, /flex:\s*0 0 var\(--rail-panel-width/);
   assert.match(css, /\.moment\s*\{[\s\S]*font-size:\s*var\(--t0\)/);
@@ -159,7 +159,7 @@ test("the hero hands its measured plum floor to the horizontal chromatic rail", 
 
   assert.match(
     homeCss,
-    /@media \(max-width: 900px\)[\s\S]*\.aj-film__hero-stage[\s\S]*bottom:\s*0[\s\S]*object-fit:\s*cover/,
+    /@media \(max-width: 900px\)[\s\S]*\.aj-film__hero-poster img[\s\S]*object-fit:\s*contain[\s\S]*@media \(max-width: 560px\)[\s\S]*right:\s*-10vw[\s\S]*width:\s*120vw/,
   );
   assert.match(homeCss, /@media \(max-aspect-ratio: 4 \/ 5\)[\s\S]*mask-image:\s*none/);
 

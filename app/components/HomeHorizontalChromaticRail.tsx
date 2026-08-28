@@ -341,7 +341,7 @@ export default function HomeHorizontalChromaticRail() {
       className={`${styles.sequence}${motionReady ? ` ${styles.motionReady}` : ""}`}
       id="apollon"
       aria-labelledby="horizontal-apollon-title"
-      data-home-horizontal-rail="v47"
+      data-home-horizontal-rail="v48"
     >
       <div className={styles.stage}>
         <div className={styles.stageHeader}>
@@ -424,7 +424,10 @@ export default function HomeHorizontalChromaticRail() {
         </div>
 
         <div className={styles.stageFooter} aria-hidden="true">
-          <span>{t(CHAPTERS[activeIndex]?.nameKey ?? CHAPTERS[0].nameKey)}</span>
+          <span>
+            {String(activeIndex + 1).padStart(2, "0")} / {String(CHAPTERS.length).padStart(2, "0")} ·{" "}
+            {t(CHAPTERS[activeIndex]?.nameKey ?? CHAPTERS[0].nameKey)}
+          </span>
           <div className={styles.progressTrack}>
             <span className={styles.progressFill} />
           </div>
