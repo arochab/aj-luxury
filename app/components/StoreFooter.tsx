@@ -107,7 +107,7 @@ export default function StoreFooter() {
         </div>
 
         <div className={styles.footerBottom}>
-          <span>© {new Date().getFullYear()} AJ Luxury</span>
+          <span>© AJ Luxury</span>
           <span lang="en">Reveal Your Inner Beauty</span>
         </div>
       </div>

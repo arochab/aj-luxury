@@ -21,21 +21,60 @@
   z-index: 0;
   display: grid;
   min-width: 100%;
-  background: linear-gradient(
-    90deg,
-    #261019 0%,
-    #32101f 8%,
-    #531a3c 22%,
-    #634c60 33%,
-    #777780 42%,
-    #6e7080 50%,
-    #595462 58%,
-    #5b3342 66%,
-    #6e414c 74%,
-    #3a2029 82%,
-    #161014 92%,
-    #08080a 100%
-  );
+  isolation: isolate;
+  background:
+    radial-gradient(
+      ellipse 23% 96% at 16% 43%,
+      rgba(129, 37, 85, 0.54) 0%,
+      rgba(101, 35, 70, 0.24) 48%,
+      transparent 78%
+    ),
+    radial-gradient(
+      ellipse 24% 104% at 49% 42%,
+      rgba(222, 216, 231, 0.27) 0%,
+      rgba(157, 154, 174, 0.2) 46%,
+      transparent 79%
+    ),
+    radial-gradient(
+      ellipse 22% 100% at 73% 44%,
+      rgba(184, 104, 126, 0.34) 0%,
+      rgba(132, 61, 83, 0.2) 52%,
+      transparent 82%
+    ),
+    linear-gradient(
+      90deg in oklab,
+      #261019 0%,
+      #5b1233 20%,
+      #777a9d 50%,
+      #ad777c 77%,
+      #161014 92%,
+      #08080a 100%
+    );
+}
+
+/* A single luminance veil spans the complete three-panel rail. Keeping this
+   off the individual panels prevents vertical colour blocks at their edges
+   and turns the former dark shelf below the photographs into a long fade. */
+.track::before {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  background:
+    radial-gradient(
+      ellipse 72% 42% at 50% 18%,
+      rgba(255, 255, 255, 0.09),
+      transparent 74%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.055) 0%,
+      transparent 25%,
+      rgba(7, 7, 10, 0.05) 58%,
+      rgba(7, 7, 10, 0.18) 76%,
+      rgba(7, 7, 10, 0.48) 100%
+    );
+  content: "";
+  pointer-events: none;
 }
 
 .motionReady .stage {
@@ -54,44 +93,11 @@
 .panel {
   --chapter-accent: #5b1233;
   position: relative;
+  z-index: 1;
   display: grid;
   min-height: 100svh;
   place-items: center;
   overflow: hidden;
-  isolation: isolate;
-}
-
-.panel::before,
-.panel::after {
-  position: absolute;
-  z-index: -1;
-  content: "";
-  pointer-events: none;
-}
-
-.panel::before {
-  inset: 0;
-  background:
-    radial-gradient(
-      ellipse 58% 72% at 70% 48%,
-      color-mix(in srgb, var(--chapter-accent) 52%, transparent),
-      transparent 74%
-    ),
-    linear-gradient(
-      180deg,
-      rgba(255, 255, 255, 0.06),
-      transparent 22%,
-      rgba(3, 3, 5, 0.25) 78%,
-      rgba(3, 3, 5, 0.72)
-    );
-}
-
-.panel::after {
-  right: -1px;
-  bottom: 0;
-  left: -1px;
-  height: 24%;
-  background: linear-gradient(180deg, transparent, rgba(8, 8, 10, 0.52));
 }
 
 .motionReady .panel {
@@ -120,19 +126,22 @@
 .moment {
   margin: 0 0 18px;
   color: rgba(255, 255, 255, 0.68);
-  font-size: 10px;
+  font-size: var(--t0);
   font-weight: 650;
-  letter-spacing: 0.19em;
+  letter-spacing: var(--aj-ls-label);
+  line-height: 1.4;
   text-transform: uppercase;
 }
 
 .copy h2 {
   max-width: 5.5ch;
   margin: 0 0 34px;
-  font-size: clamp(58px, 6.8vw, 126px);
+  font-size: var(--t7);
   font-weight: 300;
-  letter-spacing: -0.075em;
-  line-height: 0.84;
+  letter-spacing: var(--aj-ls-titre);
+  line-height: 0.9;
+  text-wrap: balance;
+  word-spacing: 0.06em;
 }
 
 .copy a,
@@ -142,9 +151,10 @@
   align-items: center;
   gap: 16px;
   border-bottom: 1px solid currentColor;
-  font-size: 10px;
+  font-size: var(--t0);
   font-weight: 650;
-  letter-spacing: 0.14em;
+  letter-spacing: var(--aj-ls-nav);
+  line-height: 1.4;
   text-transform: uppercase;
 }
 
@@ -190,9 +200,10 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 10px;
+  font-size: var(--t0);
   font-weight: 650;
-  letter-spacing: 0.16em;
+  letter-spacing: var(--aj-ls-nav);
+  line-height: 1.4;
   text-transform: uppercase;
 }
 
@@ -235,8 +246,15 @@
 }
 
 .exitBridge {
-  height: clamp(28px, 2.8vw, 42px);
-  background: linear-gradient(180deg, #08080a 0%, #6e6e72 56%, #f3f2ef 100%);
+  height: clamp(44px, 3.8vw, 60px);
+  background: linear-gradient(
+    180deg in oklab,
+    #08080a 0%,
+    #151419 24%,
+    #4e4e54 52%,
+    #a6a6a8 76%,
+    #f3f2ef 100%
+  );
 }
 
 @media (max-width: 1024px) {
@@ -269,7 +287,7 @@
   .copy h2 {
     max-width: none;
     margin: 0;
-    font-size: clamp(50px, 8.4vw, 82px);
+    font-size: var(--t7);
   }
 
   .mediaPair {
@@ -302,36 +320,39 @@
     right: 15px;
     left: 15px;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: end;
-    gap: 10px 12px;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    gap: 8px;
     animation: compact-copy-in 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
   }
 
   .compactCopy .moment {
-    grid-column: 1 / -1;
-    margin: 0 0 -6px;
-    font-size: 9px;
+    margin: 0;
   }
 
   .compactCopy h2 {
     min-width: 0;
     margin: 0;
-    font-size: clamp(42px, 12vw, 56px);
+    font-size: var(--t6);
     font-weight: 300;
-    letter-spacing: -0.075em;
-    line-height: 0.84;
+    letter-spacing: var(--aj-ls-titre);
+    line-height: 0.9;
+    text-wrap: balance;
+    word-spacing: 0.06em;
   }
 
   .compactCopy a {
     display: inline-flex;
     min-height: 44px;
     align-items: center;
+    width: fit-content;
     gap: 8px;
+    justify-self: start;
     border-bottom: 1px solid currentColor;
-    font-size: 9px;
+    font-size: var(--t0);
     font-weight: 650;
-    letter-spacing: 0.14em;
+    letter-spacing: var(--aj-ls-nav);
+    line-height: 1.4;
     text-transform: uppercase;
   }
 
@@ -350,13 +371,13 @@
   }
 
   .stageHeader a {
-    font-size: 9px;
+    font-size: var(--t0);
   }
 
   .stageFooter {
     min-height: 46px;
     gap: 12px;
-    font-size: 9px;
+    font-size: var(--t0);
   }
 
   .progressTrack {
@@ -407,7 +428,15 @@
     height: 28px;
   }
 
-  .panel {
-    border-bottom: 1px solid rgba(255, 255, 255, 0.18);
+  .panel[data-colorway="pourpre"] {
+    background: linear-gradient(180deg, #261019 0%, #541a38 54%, #68475e 100%);
+  }
+
+  .panel[data-colorway="lilas-bleu-clair"] {
+    background: linear-gradient(180deg, #68475e 0%, #9b97a5 48%, #8d5c6d 100%);
+  }
+
+  .panel[data-colorway="rose-pale"] {
+    background: linear-gradient(180deg, #8d5c6d 0%, #9b5d70 44%, #08080a 100%);
   }
 }

@@ -3712,14 +3712,15 @@ footer:not([class]) > p {
   align-items: center;
   justify-content: space-between;
   border-top: 1px solid rgba(255, 255, 255, 0.24);
-  font-size: 10px;
+  font-size: var(--t0);
   font-weight: 600;
   letter-spacing: 0.2em;
   text-transform: uppercase;
 }
 
-.aj-film__signature p {
+.aj-film__signature h1 {
   margin: 0;
+  font: inherit;
   background: linear-gradient(110deg, #f2f3f4, #8d9096 32%, #e6e7e8 58%, #777a80);
   background-clip: text;
   color: transparent;
@@ -4001,7 +4002,7 @@ footer:not([class]) > p {
 .aj-shop__heading h2 {
   margin: 0;
   color: #70747b;
-  font-size: clamp(64px, 7.5vw, 112px);
+  font-size: var(--t7);
   font-weight: 320;
   letter-spacing: -0.075em;
   line-height: 0.82;
@@ -4013,7 +4014,7 @@ footer:not([class]) > p {
   align-items: center;
   border-bottom: 1px solid currentColor;
   margin: 0;
-  font-size: 10px;
+  font-size: var(--t0);
   font-weight: 650;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -4066,7 +4067,7 @@ footer:not([class]) > p {
 .aj-product-card__caption p {
   margin: 0 0 5px;
   color: #66666a;
-  font-size: 10px;
+  font-size: var(--t0);
   font-weight: 650;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -4074,7 +4075,7 @@ footer:not([class]) > p {
 
 .aj-product-card__caption h3 {
   margin: 0;
-  font-size: clamp(18px, 1.7vw, 27px);
+  font-size: var(--t2);
   font-weight: 430;
   letter-spacing: -0.04em;
 }
@@ -4084,7 +4085,7 @@ footer:not([class]) > p {
   min-height: 44px;
   align-items: center;
   border-bottom: 1px solid;
-  font-size: 10px;
+  font-size: var(--t0);
   font-weight: 650;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -4178,7 +4179,7 @@ footer:not([class]) > p {
   align-items: center;
   width: fit-content;
   border-bottom: 1px solid rgba(255, 255, 255, 0.74);
-  font-size: 10px;
+  font-size: var(--t0);
   font-weight: 650;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -4372,14 +4373,14 @@ footer:not([class]) > p {
     background: linear-gradient(180deg, rgba(6, 6, 8, 0.1), rgba(6, 6, 8, 0.7));
   }
 
-  .aj-film__signature p {
-    max-width: 112px;
+  .aj-film__signature h1 {
+    max-width: 142px;
     line-height: 1.45;
   }
 
   .aj-film__signature a {
     gap: 8px;
-    font-size: 9px;
+    font-size: var(--t0);
     letter-spacing: 0.1em;
   }
 
@@ -4472,7 +4473,7 @@ footer:not([class]) > p {
   }
 
   .aj-shop__heading h2 {
-    font-size: clamp(68px, 22vw, 96px);
+    font-size: var(--t7);
   }
 
   .aj-shop__rail {
@@ -4502,7 +4503,7 @@ footer:not([class]) > p {
   }
 
   .aj-product-card__caption h3 {
-    font-size: 22px;
+    font-size: var(--t2);
   }
 
   .aj-story {

@@ -107,7 +107,7 @@ export default function HomeHorizontalChromaticRail() {
         const scrollLength = () =>
           Math.max(
             stage.clientWidth * 2.3,
-            window.innerHeight * 3.15,
+            stage.clientHeight * 3.15,
           );
 
         syncPanelWidth();

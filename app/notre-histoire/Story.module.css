@@ -23,11 +23,6 @@
   z-index: 4;
 }
 
-.heroTop :global(a:not([aria-label="AJ Luxury, accueil"])),
-.heroTop :global(select) {
-  font-size: 0.75rem;
-}
-
 .heroBody {
   display: grid;
   min-height: calc(100svh - 5.75rem);
@@ -50,7 +45,7 @@
 
 .eyebrow {
   margin: 0;
-  font-size: 0.75rem;
+  font-size: var(--t0);
   font-weight: 650;
   letter-spacing: 0.18em;
   line-height: 1.4;
@@ -68,6 +63,7 @@
   font-weight: 300;
   letter-spacing: -0.075em;
   line-height: 0.86;
+  text-wrap: balance;
 }
 
 .heroCopy blockquote {
@@ -114,6 +110,7 @@
   font-weight: 310;
   letter-spacing: -0.06em;
   line-height: 0.98;
+  text-wrap: balance;
 }
 
 .originCopy {
@@ -197,7 +194,7 @@
   padding-top: 0.9rem;
   border-top: 1px solid rgba(255, 255, 255, 0.52);
   color: #fff;
-  font-size: 0.75rem;
+  font-size: var(--t0);
   font-weight: 650;
   letter-spacing: 0.16em;
   text-transform: uppercase;
@@ -255,63 +252,6 @@
 .definitionVisual img {
   object-fit: cover;
   object-position: 50% 58%;
-}
-
-.closing {
-  display: flex;
-  min-height: clamp(14rem, 28vw, 22rem);
-  align-items: center;
-  justify-content: space-between;
-  gap: clamp(2rem, 6vw, 8rem);
-  padding: clamp(3rem, 6vw, 6rem) clamp(1.25rem, 5vw, 6rem);
-  border-top: var(--story-sequence-gap) solid var(--story-paper);
-  border-bottom: 1px solid rgba(11, 11, 13, 0.22);
-  background:
-    linear-gradient(112deg, transparent 0 23%, rgba(255, 255, 255, 0.68) 42%, transparent 59%),
-    linear-gradient(165deg, #8d9096 0%, #e6e7e8 31%, #a8abb0 61%, #f0f0ef 100%);
-  color: var(--story-ink);
-}
-
-.closing h2 {
-  max-width: 13ch;
-  margin: 0;
-  color: var(--story-ink);
-  font-size: clamp(2.75rem, 6vw, 7.25rem);
-  font-weight: 300;
-  letter-spacing: -0.07em;
-  line-height: 0.9;
-}
-
-.closing a {
-  display: inline-flex;
-  min-width: min(100%, 15.5rem);
-  min-height: 3.25rem;
-  align-items: center;
-  justify-content: center;
-  padding: 0.85rem 1.25rem;
-  border: 1px solid rgba(11, 11, 13, 0.58);
-  color: var(--story-ink);
-  font-size: 0.75rem;
-  font-weight: 650;
-  letter-spacing: 0.13em;
-  text-align: center;
-  text-decoration: none;
-  text-transform: uppercase;
-  transition:
-    background-color 180ms ease,
-    color 180ms ease,
-    border-color 180ms ease;
-}
-
-.closing a:hover {
-  border-color: var(--story-ink);
-  background: var(--story-ink);
-  color: #fff;
-}
-
-.closing a:focus-visible {
-  outline: 2px solid var(--story-ink);
-  outline-offset: 0.35rem;
 }
 
 @media (max-width: 1080px) {
@@ -433,36 +373,10 @@
     display: none;
   }
 
-  .closing {
-    min-height: 0;
-    align-items: flex-start;
-    flex-direction: column;
-    padding: 3.75rem 1.25rem 4.25rem;
-  }
-
-  .closing h2 {
-    max-width: 11ch;
-    font-size: clamp(3.25rem, 15vw, 5rem);
-  }
-
-  .closing a {
-    width: 100%;
-  }
 }
 
 @media (max-width: 390px) {
-  .heroTop :global(a:not([aria-label="AJ Luxury, accueil"])),
-  .heroTop :global(select) {
-    font-size: 0.75rem;
-  }
-
   .portrait figcaption {
     letter-spacing: 0.12em;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .closing a {
-    transition: none;
   }
 }

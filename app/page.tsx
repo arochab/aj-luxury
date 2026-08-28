@@ -77,7 +77,7 @@ export default function Home() {
         <div className="aj-film__grade" aria-hidden="true" />
 
         <div className="aj-film__signature">
-          <p>Reveal Your Inner Beauty</p>
+          <h1>Reveal Your Inner Beauty</h1>
           <a href="#apollon">
             <T id="hero.discover" /> <span aria-hidden="true">↓</span>
           </a>

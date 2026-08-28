@@ -14,7 +14,7 @@ const [homeCss, storyPage, storyCss] = await Promise.all([
   ),
 ]);
 
-test("phone hero fills the frame from the left edge without a dead band", () => {
+test("phone hero preserves the complete supplied composition without a dead band", () => {
   const phoneRules = homeCss.slice(homeCss.indexOf("@media (max-width: 560px)"));
   assert.match(
     phoneRules,
@@ -22,7 +22,7 @@ test("phone hero fills the frame from the left edge without a dead band", () => 
   );
   assert.match(
     phoneRules,
-    /\.home :global\(\.aj-film__hero-poster img\),\s*\.home :global\(\.aj-film__hero-video\)\s*\{[^}]*object-fit:\s*cover;[^}]*object-position:\s*left top;/s,
+    /\.home :global\(\.aj-film__hero-poster img\),\s*\.home :global\(\.aj-film__hero-video\)\s*\{[^}]*object-fit:\s*contain;[^}]*object-position:\s*center;/s,
   );
 });
 
@@ -32,4 +32,9 @@ test("story sections expose headings without visible act numbers", () => {
   for (const heading of ["origin-title", "people-title", "definition-title"]) {
     assert.match(storyPage, new RegExp(`<h2 id="${heading}">`));
   }
+});
+
+test("the story page delegates its only closing collection CTA to the shared footer", () => {
+  assert.doesNotMatch(storyPage, /styles\.closing/);
+  assert.equal((storyPage.match(/<StoreFooter\s*\/>/g) ?? []).length, 1);
 });

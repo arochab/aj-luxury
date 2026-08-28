@@ -93,6 +93,7 @@ test("the hero hands its measured plum floor to the horizontal chromatic rail", 
   ]);
 
   assert.match(page, /<HomeHorizontalChromaticRail\s*\/>/);
+  assert.match(page, /<h1>Reveal Your Inner Beauty<\/h1>/);
   assert.doesNotMatch(page, /<HomeChromaticBridge\s*\/>/);
   assert.doesNotMatch(page, /className="aj-section-break"/);
   assert.match(rail, /data-home-horizontal-rail="v46"/);
@@ -104,6 +105,8 @@ test("the hero hands its measured plum floor to the horizontal chromatic rail", 
   assert.match(rail, /x:\s*\(\) => -panelOffset\(2\)/);
   assert.match(rail, /--rail-panel-width/);
   assert.match(rail, /onRefreshInit:\s*syncPanelWidth/);
+  assert.match(rail, /stage\.clientHeight \* 3\.15/);
+  assert.doesNotMatch(rail, /window\.innerHeight \* 3\.15/);
   assert.match(rail, /className=\{styles\.compactCopy\}/);
   assert.match(rail, /srcSet=\{responsiveSrcSet/);
   assert.match(rail, /sizes=\{RAIL_IMAGE_SIZES\}/);
@@ -117,12 +120,15 @@ test("the hero hands its measured plum floor to the horizontal chromatic rail", 
   assert.match(rail, /apollon-lilas-lyre-v1\.webp/);
   assert.match(rail, /apollon-rose-lyre-v1\.webp/);
   assert.match(css, /#261019/);
-  assert.match(css, /#777780/);
+  assert.match(css, /#777a9d/);
   assert.match(css, /#08080a/);
+  assert.match(css, /\.track::before\s*\{[\s\S]*pointer-events:\s*none/);
+  assert.doesNotMatch(css, /\.panel::(?:before|after)/);
   assert.match(css, /\.frame\s*\{[\s\S]*border:\s*1px solid rgba\(255, 255, 255, 0\.78\)/);
   assert.match(css, /object-fit:\s*contain/);
   assert.match(css, /flex:\s*0 0 var\(--rail-panel-width/);
-  assert.match(css, /\.exitBridge\s*\{[\s\S]*height:\s*clamp\(28px, 2\.8vw, 42px\)/);
+  assert.match(css, /\.moment\s*\{[\s\S]*font-size:\s*var\(--t0\)/);
+  assert.match(css, /\.exitBridge\s*\{[\s\S]*height:\s*clamp\(44px, 3\.8vw, 60px\)/);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
   assert.doesNotMatch(css, /transition:\s*all/);
 

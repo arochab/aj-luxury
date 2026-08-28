@@ -91,7 +91,7 @@
   border-radius: 0;
   color: inherit;
   cursor: pointer;
-  font: 650 0.62rem/1.2 var(--font-manrope), Arial, sans-serif;
+  font: 650 var(--t0)/1.2 var(--font-manrope), Arial, sans-serif;
   letter-spacing: 0.09em;
   min-height: 2.75rem;
   min-width: 2.75rem;
@@ -117,8 +117,8 @@
 .socialPending,
 .menuButton {
   color: inherit;
-  font: 600 0.69rem/1.2 var(--font-manrope), Arial, sans-serif;
-  letter-spacing: 0.14em;
+  font: 600 var(--t0)/1.2 var(--font-manrope), Arial, sans-serif;
+  letter-spacing: 0.08em;
   position: relative;
   text-decoration: none;
   text-transform: uppercase;
@@ -352,7 +352,7 @@
   border: 1px solid rgba(7, 7, 9, 0.55);
   color: inherit;
   display: inline-flex;
-  font-size: 0.72rem;
+  font-size: var(--t0);
   font-weight: 600;
   justify-content: center;
   justify-self: end;
@@ -412,7 +412,7 @@
 .footerCopy,
 .newsletterNote {
   color: #aeb1b7;
-  font-size: 0.78rem;
+  font-size: var(--t0);
   line-height: 1.65;
   margin: 0;
 }
@@ -425,7 +425,7 @@
 
 .footerHeading {
   color: #8e929a;
-  font-size: 0.64rem;
+  font-size: var(--t0);
   font-weight: 600;
   letter-spacing: 0.15em;
   margin: 0 0 1.2rem;
@@ -440,7 +440,7 @@
 .footerLink,
 .instagramPending {
   color: #f7f7f5;
-  font-size: 0.78rem;
+  font-size: var(--t0);
   line-height: 1.4;
   text-decoration: none;
 }
@@ -472,7 +472,7 @@
   background: transparent;
   border: 0;
   color: inherit;
-  font: 500 0.72rem/1.2 var(--font-manrope), Arial, sans-serif;
+  font: 500 var(--t0)/1.2 var(--font-manrope), Arial, sans-serif;
   padding: 0.8rem 0;
 }
 
@@ -495,7 +495,7 @@
   border-top: 1px solid rgba(226, 229, 234, 0.14);
   color: #777b83;
   display: flex;
-  font-size: 0.63rem;
+  font-size: var(--t0);
   justify-content: space-between;
   letter-spacing: 0.1em;
   margin-top: clamp(3rem, 7vw, 6rem);
@@ -588,8 +588,8 @@
   .socialPending {
     min-width: 0;
     padding-inline: 0.2rem;
-    font-size: clamp(0.54rem, 2.2vw, 0.68rem);
-    letter-spacing: 0.08em;
+    font-size: var(--t0);
+    letter-spacing: 0.04em;
     text-align: center;
     white-space: nowrap;
   }
@@ -603,8 +603,8 @@
   .actionLink {
     min-width: auto;
     padding-inline: 0.22rem;
-    font-size: 0.61rem;
-    letter-spacing: 0.08em;
+    font-size: var(--t0);
+    letter-spacing: 0.04em;
   }
 
   .actions .actionLink:first-of-type {
