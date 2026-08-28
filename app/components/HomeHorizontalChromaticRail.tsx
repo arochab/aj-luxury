@@ -312,7 +312,6 @@ export default function HomeHorizontalChromaticRail() {
           </div>
         </div>
       </div>
-      <div className={styles.exitBridge} aria-hidden="true" />
     </section>
   );
 }

@@ -122,13 +122,18 @@ test("the hero hands its measured plum floor to the horizontal chromatic rail", 
   assert.match(css, /#261019/);
   assert.match(css, /#777a9d/);
   assert.match(css, /#08080a/);
+  assert.match(
+    css,
+    /#5b1233 18%[\s\S]*#777a9d 50%[\s\S]*#ad777c 76%[\s\S]*#a76f79 82%[\s\S]*#95616d 87%[\s\S]*#7c505e 92%[\s\S]*#5a3c48 96%[\s\S]*#34252d 98\.5%[\s\S]*#111014 100%/,
+  );
+  assert.doesNotMatch(css, /#ad777c 77%,\s*#161014 92%/);
   assert.match(css, /\.track::before\s*\{[\s\S]*pointer-events:\s*none/);
   assert.doesNotMatch(css, /\.panel::(?:before|after)/);
   assert.match(css, /\.frame\s*\{[\s\S]*border:\s*1px solid rgba\(255, 255, 255, 0\.78\)/);
   assert.match(css, /object-fit:\s*contain/);
   assert.match(css, /flex:\s*0 0 var\(--rail-panel-width/);
   assert.match(css, /\.moment\s*\{[\s\S]*font-size:\s*var\(--t0\)/);
-  assert.match(css, /\.exitBridge\s*\{[\s\S]*height:\s*clamp\(44px, 3\.8vw, 60px\)/);
+  assert.doesNotMatch(rail, /exitBridge/);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
   assert.doesNotMatch(css, /transition:\s*all/);
 

@@ -24,31 +24,43 @@
   isolation: isolate;
   background:
     radial-gradient(
-      ellipse 23% 96% at 16% 43%,
-      rgba(129, 37, 85, 0.54) 0%,
-      rgba(101, 35, 70, 0.24) 48%,
-      transparent 78%
+      ellipse 31% 100% at 17% 43%,
+      rgba(129, 37, 85, 0.5) 0%,
+      rgba(103, 43, 77, 0.23) 52%,
+      rgba(80, 53, 78, 0.1) 78%,
+      transparent 100%
     ),
     radial-gradient(
-      ellipse 24% 104% at 49% 42%,
-      rgba(222, 216, 231, 0.27) 0%,
-      rgba(157, 154, 174, 0.2) 46%,
-      transparent 79%
+      ellipse 32% 106% at 49% 42%,
+      rgba(222, 216, 231, 0.25) 0%,
+      rgba(157, 154, 174, 0.19) 48%,
+      rgba(139, 115, 143, 0.09) 78%,
+      transparent 100%
     ),
     radial-gradient(
-      ellipse 22% 100% at 73% 44%,
-      rgba(184, 104, 126, 0.34) 0%,
-      rgba(132, 61, 83, 0.2) 52%,
-      transparent 82%
+      ellipse 34% 104% at 79% 44%,
+      rgba(194, 119, 139, 0.32) 0%,
+      rgba(158, 91, 111, 0.22) 48%,
+      rgba(92, 54, 70, 0.12) 76%,
+      transparent 100%
     ),
     linear-gradient(
       90deg in oklab,
       #261019 0%,
-      #5b1233 20%,
+      #411124 7%,
+      #5b1233 18%,
+      #682744 27%,
+      #704c6b 37%,
       #777a9d 50%,
-      #ad777c 77%,
-      #161014 92%,
-      #08080a 100%
+      #887993 59%,
+      #987585 68%,
+      #ad777c 76%,
+      #a76f79 82%,
+      #95616d 87%,
+      #7c505e 92%,
+      #5a3c48 96%,
+      #34252d 98.5%,
+      #111014 100%
     );
 }
 
@@ -245,18 +257,6 @@
   display: none;
 }
 
-.exitBridge {
-  height: clamp(44px, 3.8vw, 60px);
-  background: linear-gradient(
-    180deg in oklab,
-    #08080a 0%,
-    #151419 24%,
-    #4e4e54 52%,
-    #a6a6a8 76%,
-    #f3f2ef 100%
-  );
-}
-
 @media (max-width: 1024px) {
   .motionReady .stage {
     min-height: 560px;
@@ -422,10 +422,6 @@
 
   .copy {
     display: grid;
-  }
-
-  .exitBridge {
-    height: 28px;
   }
 
   .panel[data-colorway="pourpre"] {
