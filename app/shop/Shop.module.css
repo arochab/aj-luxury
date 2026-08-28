@@ -501,6 +501,12 @@
     padding-bottom: 1.55rem;
   }
 
+  /* Keep the three opening lines on one deliberate mobile rhythm. The former
+     0.85rem gap left the colour count visually attached to the display title. */
+  .introCopy {
+    row-gap: 1.25rem;
+  }
+
   .introCopy h1 {
     font-size: clamp(3.8rem, 19vw, 5.2rem);
   }
@@ -519,16 +525,23 @@
   }
 
   .collection {
-    padding: 5px;
+    padding: 0;
   }
 
   .productGrid {
     grid-template-columns: 1fr;
-    gap: 5px;
+    gap: 0;
   }
 
+  .productCard {
+    border: 0;
+  }
+
+  /* Every retained collection master is 1731 × 2600. Matching that exact
+     frame lets contain preserve the face, belt and garment without exposing
+     the grey visual background as side bands. */
   .productVisual {
-    aspect-ratio: 0.78;
+    aspect-ratio: 1731 / 2600;
   }
 
 }

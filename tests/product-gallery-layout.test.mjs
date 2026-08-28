@@ -153,3 +153,16 @@ test("shop cards keep the live desktop and mobile crops", () => {
     /@media \(max-width:\s*860px\)[\s\S]*?\.productVisual img\s*\{[^}]*object-position:\s*50% 16%;/s,
   );
 });
+
+test("shop mobile cards use their native portrait ratio without grey gutters", () => {
+  const mobile = /@media \(max-width:\s*540px\)([\s\S]*)/.exec(shopStyles)?.[1] ?? "";
+
+  assert.match(mobile, /\.introCopy\s*\{[^}]*row-gap:\s*1\.25rem;/s);
+  assert.match(mobile, /\.collection\s*\{[^}]*padding:\s*0;/s);
+  assert.match(mobile, /\.productGrid\s*\{[^}]*gap:\s*0;/s);
+  assert.match(mobile, /\.productCard\s*\{[^}]*border:\s*0;/s);
+  assert.match(
+    mobile,
+    /\.productVisual\s*\{[^}]*aspect-ratio:\s*1731\s*\/\s*2600;/s,
+  );
+});
