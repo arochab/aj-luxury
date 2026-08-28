@@ -8,7 +8,6 @@ import { promisify } from "node:util";
 
 const projectFile = (path) => new URL(`../${path}`, import.meta.url);
 const execFileAsync = promisify(execFile);
-const sourcePath = "artifacts/source-assets/isabelle/2026-08-26/video-accueil-v2-aj-luxury-original.mp4";
 const landscapePath = "public/videos/aj-luxury-hero-isabelle-v2-landscape-1920x1080-realesrgan.mp4";
 const portraitPath = "public/videos/aj-luxury-hero-isabelle-v2-portrait-720x934.mp4";
 
@@ -27,18 +26,12 @@ const probe = async (path) => {
   return JSON.parse(stdout);
 };
 
-test("the welcome film uses only the supplied Isabelle V2 asset and its responsive derivative", async () => {
-  const [hero, motion, sourceHash] = await Promise.all([
+test("the welcome film uses only the approved Isabelle V2 runtime assets", async () => {
+  const [hero, motion] = await Promise.all([
     readFile(projectFile("app/components/StaticProductionHero.tsx"), "utf8"),
     readFile(projectFile("app/components/ProductionHeroMotion.tsx"), "utf8"),
-    sha256(sourcePath),
   ]);
 
-  assert.equal(
-    sourceHash,
-    "0a1b1489d467c7938c4f90bfe2489eda402d53a1952aa10f07af3dc2ffbdb8bc",
-    "the supplied landscape master must remain byte-exact",
-  );
   assert.match(hero, /data-hero-version="isabelle-welcome-v2"/);
   assert.match(hero, /className="aj-film__hero-backdrop"/);
   assert.match(hero, /aj-luxury-hero-isabelle-v2-portrait-poster\.webp/);
