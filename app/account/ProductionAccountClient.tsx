@@ -104,7 +104,14 @@ export default function ProductionAccountClient() {
       if (token) {
         setResetToken(token);
         setView("reset");
+      } else {
+        const requestedView = params.get("view");
+        if (requestedView === "login" || requestedView === "register" || requestedView === "forgot") {
+          setView(requestedView);
+        }
       }
+      const requestedEmail = params.get("email");
+      if (requestedEmail) setEmail(requestedEmail);
       if (params.get("verification") === "confirmed") {
         setMessage("Adresse e-mail confirmée. Votre compte est actif.");
       } else if (params.get("verification") === "invalid") {
@@ -132,6 +139,11 @@ export default function ProductionAccountClient() {
     try {
       if (view === "login") {
         await loginCustomerAccount(email, password);
+        const returnTo = new URLSearchParams(window.location.search).get("returnTo");
+        if (returnTo === "/checkout") {
+          window.location.assign(returnTo);
+          return;
+        }
         await load();
       } else if (view === "register") {
         if (password !== confirmation) {

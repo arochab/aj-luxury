@@ -443,8 +443,11 @@ test("production checkout binds every new order to a customer account", async ()
   assert.match(source, /getCustomerAccount\(\)\.catch\(\(\) => null\)/);
   assert.match(source, /if \(!signedInEmail && !accountPrepared\)/);
   assert.match(source, /source: "checkout"/);
-  assert.match(source, /Créer mon compte et confirmer la commande/);
-  assert.match(source, /readOnly=\{signedInEmail !== null\}/);
+  assert.match(source, /Créer mon compte et continuer/);
+  assert.match(source, /accountAccessHref\("login", email\)/);
+  assert.match(source, /accountAccessHref\("forgot", email\)/);
+  assert.match(source, /Confirmez votre adresse pour activer l’espace et retrouver cette commande/);
+  assert.match(source, /readOnly value=\{email\}/);
   assert.doesNotMatch(source, /const \[createAccount, setCreateAccount\]/);
   assert.doesNotMatch(source, /Créer mon compte AJ Luxury pour retrouver cette commande/);
 });
