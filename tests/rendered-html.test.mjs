@@ -658,12 +658,12 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
     /aj-luxury-hero-isabelle-v2-landscape-1920x1080-poster\.webp"[^>]*fetchPriority="high"[^>]*decoding="async"/,
   );
   assert.match(html, /aj-luxury-hero-isabelle-v2-portrait-poster\.webp\?v=5/);
-  assert.match(html, /product-rose-model\.webp/);
-  assert.match(html, /campaign-duo-pourpre\.webp/);
-  assert.match(html, /editorial-lilas-chair\.webp/);
-  assert.match(html, /editorial-pourpre-chair\.webp/);
-  assert.match(html, /campaign-duo-lilas-seated\.webp/);
-  assert.match(html, /editorial-rose-profile\.webp/);
+  assert.match(html, /apollon-pourpre-lyre-v1\.webp/);
+  assert.match(html, /apollon-pourpre-model-color-v2\.webp/);
+  assert.match(html, /apollon-lilas-lyre-v1\.webp/);
+  assert.match(html, /apollon-lilas-model-color-v2\.webp/);
+  assert.match(html, /apollon-rose-lyre-v1\.webp/);
+  assert.match(html, /apollon-rose-model-color-v2\.webp/);
 
   /* Les trois produits canoniques et leurs routes PDP existent au premier
      rendu. La motion ne porte jamais la responsabilité du contenu commerce. */
@@ -686,9 +686,12 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
     html,
     [
       "/images/client/aj-luxury-hero-isabelle-v2-landscape-1920x1080-poster.webp",
-      "/images/client/product-rose-model.webp",
-      "/images/client/campaign-duo-pourpre.webp",
-      "/images/client/editorial-lilas-chair.webp",
+      "/images/editorial/isabelle-apollon/apollon-pourpre-lyre-v1.webp",
+      "/images/client/apollon-world/apollon-pourpre-model-color-v2.webp",
+      "/images/editorial/isabelle-apollon/apollon-lilas-lyre-v1.webp",
+      "/images/client/apollon-world/apollon-lilas-model-color-v2.webp",
+      "/images/editorial/isabelle-apollon/apollon-rose-lyre-v1.webp",
+      "/images/client/apollon-world/apollon-rose-model-color-v2.webp",
       "/images/client/raw/product-card-pourpre.webp",
       "/images/client/raw/product-rose-profile.webp",
       "/images/client/raw/product-lilas-model.webp",
@@ -708,7 +711,7 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
   assert.match(html, /<video[^>]*muted=""[^>]*playsInline=""[^>]*autoPlay=""[^>]*preload="none"/);
   assert.doesNotMatch(html, /<iframe|data-metallic-mounted="true"|metallic-field__canvas|Figer le métal/);
   assert.doesNotMatch(html, /https?:\/\/(?!ajluxurystore\.com)/i);
-  assert.doesNotMatch(html, /generated_images|hero-figures|identity-overlay|hero-v[67]-|apollon-world/);
+  assert.doesNotMatch(html, /generated_images|hero-figures|identity-overlay|hero-v[67]-/);
   assert.doesNotMatch(html, /class="[^"]*\bundefined\b/);
 
   /* Le chrome et les destinations restent ceux de la production validée. */

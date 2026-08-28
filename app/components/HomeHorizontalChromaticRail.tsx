@@ -265,7 +265,7 @@ export default function HomeHorizontalChromaticRail() {
                   </div>
 
                   <div className={styles.mediaPair}>
-                    <figure className={`${styles.frame} ${styles.productFrame}`}>
+                    <figure className={styles.frame}>
                       <img
                         src={chapter.product}
                         srcSet={responsiveSrcSet(chapter.product, 1024)}
@@ -277,7 +277,7 @@ export default function HomeHorizontalChromaticRail() {
                         decoding="async"
                       />
                     </figure>
-                    <figure className={`${styles.frame} ${styles.modelFrame}`}>
+                    <figure className={styles.frame}>
                       <img
                         src={chapter.model}
                         srcSet={responsiveSrcSet(chapter.model, 1731)}
