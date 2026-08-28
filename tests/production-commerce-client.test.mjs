@@ -415,7 +415,7 @@ test("production UI wiring contains no synthetic payment or hostname switch", as
   assert.match(joined, /\/checkout\/payment-session/);
   assert.match(joined, /runtimeMode === "production"/);
   assert.doesNotMatch(joined, /useSearchParams|session_id/);
-  assert.match(joined, /MAX_POLLS = 5/);
+  assert.match(joined, /MAX_POLLS = 90/);
 });
 
 test("production checkout exposes the 27 EU countries and no non-EU destination", async () => {

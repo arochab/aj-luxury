@@ -658,6 +658,7 @@ test("webhook provider misconfiguration remains retryable 503", async () => {
 
 test("a signed existing payment settles after commerce is closed without owner headers", async () => {
   let effects = 0;
+  let verifiedDelivery = null;
   const closedAfterSession = {
     APP_ENV: "production",
     COMMERCE_MODE: "closed",
@@ -692,9 +693,13 @@ test("a signed existing payment settles after commerce is closed without owner h
         } },
       },
       paymentEffects: { async applyVerified() { effects += 1; return "applied"; } },
+      onVerifiedPaymentWebhook(delivery) { verifiedDelivery = delivery; },
     },
   );
   assert.equal(response.status, 200);
   assert.equal(effects, 1);
+  assert.equal(verifiedDelivery.disposition, "applied");
+  assert.equal(verifiedDelivery.event.orderId, "order_1");
+  assert.equal(verifiedDelivery.event.state, "paid");
   assert.deepEqual(await response.json(), { received: true, disposition: "applied" });
 });

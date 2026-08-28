@@ -69,6 +69,7 @@ import {
   prepareBackendOnlyCommerceRequest,
 } from "./commerce-backend-bridge.ts";
 import {
+  dispatchProductionVerifiedPaidOrderEmails,
   productionOperationsApiResponse,
   runProductionScheduledOperations,
 } from "./production-operations-api.ts";
@@ -3026,9 +3027,31 @@ const worker = {
     const productionCommerceResponse = await productionCommerceApiResponse(
       effectiveRequest,
       env,
-      ingress.storefrontOrigin
-        ? { trustedStorefrontOrigin: ingress.storefrontOrigin }
-        : {},
+      {
+        ...(ingress.storefrontOrigin
+          ? { trustedStorefrontOrigin: ingress.storefrontOrigin }
+          : {}),
+        onVerifiedPaymentWebhook(delivery) {
+          if (delivery.event.kind !== "payment" || delivery.event.state !== "paid") return;
+          ctx.waitUntil(
+            dispatchProductionVerifiedPaidOrderEmails(env, {
+              now: new Date().toISOString(),
+              orderId: delivery.event.orderId,
+            }).then((result) => {
+              console.log(JSON.stringify({
+                event: "verified_paid_order_email_dispatch",
+                paymentDisposition: delivery.disposition,
+                email: result,
+              }));
+            }).catch(() => {
+              console.error(JSON.stringify({
+                event: "verified_paid_order_email_dispatch_failed",
+                paymentDisposition: delivery.disposition,
+              }));
+            }),
+          );
+        },
+      },
     );
     if (productionCommerceResponse) {
       return withSecurityHeaders(

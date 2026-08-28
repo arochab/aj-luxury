@@ -452,6 +452,62 @@ test("provider delivery without an exact idempotency receipt fails closed", asyn
   context.database.close();
 });
 
+test("a verified paid-order signal accelerates only a cooled-down durable confirmation retry", async () => {
+  const context = fixture();
+  const now = "2026-08-11T12:00:00.000Z";
+  insertOrder(context.database, {
+    id: "order_signal_retry",
+    number: "AJ-SIGNAL-RETRY",
+    email: "signal-retry@example.com",
+    status: "paid",
+    now,
+  });
+  insertSucceededPayment(context.database, "order_signal_retry", "signal_retry", now);
+  const outbox = new D1EmailOutbox(context.d1, {
+    async deliver() { return undefined; },
+  });
+  await outbox.enqueue({
+    id: "email_signal_retry",
+    kind: "payment_confirmation",
+    sourceEventId: "signal_retry",
+    recipientEmail: "signal-retry@example.com",
+    orderId: "order_signal_retry",
+    locale: "fr",
+    templateVersion: "payment-v1",
+    subject: "Paiement confirme",
+    text: "Paiement confirme.",
+    idempotencyKey: "email:payment:signal_retry",
+    createdAt: now,
+  });
+  const scheduled = await outbox.claimNext({
+    leaseTokenHash: "1".repeat(64),
+    now,
+    leaseExpiresAt: "2026-08-11T12:00:30.000Z",
+  });
+  assert.ok(scheduled);
+  assert.equal(await outbox.deliverClaim(
+    scheduled,
+    "2026-08-11T12:00:01.000Z",
+  ), "retry");
+  assert.equal(await outbox.claimNextForVerifiedPaidOrder({
+    orderId: "order_signal_retry",
+    leaseTokenHash: "2".repeat(64),
+    now: "2026-08-11T12:00:30.000Z",
+    leaseExpiresAt: "2026-08-11T12:01:00.000Z",
+  }), null);
+  const accelerated = await outbox.claimNextForVerifiedPaidOrder({
+    orderId: "order_signal_retry",
+    leaseTokenHash: "3".repeat(64),
+    now: "2026-08-11T12:01:01.000Z",
+    leaseExpiresAt: "2026-08-11T12:01:31.000Z",
+  });
+  assert.ok(accelerated);
+  assert.equal(accelerated.attempts, 2);
+  assert.equal(accelerated.providerIdempotencyKey,
+    "payment_confirmation:order_signal_retry");
+  context.database.close();
+});
+
 test("forged historical account-access claims are rejected before any provider or state call", async () => {
   const context = fixture();
   let providerCalls = 0;

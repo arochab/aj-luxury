@@ -948,6 +948,74 @@ export async function dispatchProductionTransactionalEmails(
   return Object.freeze({ staleLeasesRecovered, ...dispatched });
 }
 
+export async function dispatchProductionVerifiedPaidOrderEmails(
+  env: ProductionOperationsEnvironment | undefined,
+  input: Readonly<{ now: string; orderId: string }>,
+  dependencies: ProductionEmailDispatchDependencies = {},
+): Promise<Readonly<{
+  closed: boolean;
+  reason: string | null;
+  claimed: number;
+  sent: number;
+  retryScheduled: number;
+  failed: number;
+  queueDrained: boolean;
+}>> {
+  const closed = (reason: string) => Object.freeze({
+    closed: true,
+    reason,
+    claimed: 0,
+    sent: 0,
+    retryScheduled: 0,
+    failed: 0,
+    queueDrained: false,
+  });
+  if (!env || env.APP_ENV !== "production" || !env.DB) {
+    return closed("production-email-runtime-not-configured");
+  }
+  if (!SAFE_ID.test(input.orderId) || !isCanonicalUtcTimestamp(input.now)) {
+    return closed("verified-paid-order-email-input-invalid");
+  }
+  if (!exactProductionOperationsConfiguration(env) ||
+    !productionEmailDispatchRuntimeConfigured(env, true)) {
+    return closed("transactional-email-dispatch-not-activated");
+  }
+  if (!await productionResendRuntimeInstalled(env.DB)) {
+    return closed("transactional-email-schema-0018-not-installed");
+  }
+  const provider = emailProvider(env, dependencies);
+  if (!provider) return closed("transactional-email-provider-not-configured");
+
+  const outbox = new D1EmailOutbox(env.DB, provider);
+  const counters = { claimed: 0, sent: 0, retryScheduled: 0, failed: 0 };
+  let queueDrained = false;
+  const leaseExpiresAt = new Date(Date.parse(input.now) + 120_000).toISOString();
+  // A successful order creates at most the order and payment confirmations.
+  for (let index = 0; index < 2; index += 1) {
+    const claim = await outbox.claimNextForVerifiedPaidOrder({
+      orderId: input.orderId,
+      leaseTokenHash: await randomLeaseHash(),
+      now: input.now,
+      leaseExpiresAt,
+    });
+    if (!claim) {
+      queueDrained = true;
+      break;
+    }
+    counters.claimed += 1;
+    const outcome = await outbox.deliverClaim(claim, input.now);
+    if (outcome === "sent") counters.sent += 1;
+    else if (outcome === "retry") counters.retryScheduled += 1;
+    else counters.failed += 1;
+  }
+  return Object.freeze({
+    closed: false,
+    reason: null,
+    ...counters,
+    queueDrained,
+  });
+}
+
 export async function dispatchProductionLatePaymentRefunds(
   env: ProductionOperationsEnvironment | undefined,
   input: Readonly<{ now: string }>,

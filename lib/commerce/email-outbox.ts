@@ -381,6 +381,72 @@ export class D1EmailOutbox {
     return freezeClaim(row);
   }
 
+  /**
+   * Claims one paid-order confirmation immediately after a verified payment
+   * signal. This intentionally bypasses only the scheduled backoff clock: the
+   * same durable lease, attempt ceiling and provider idempotency key remain in
+   * force. A one-minute cool-down prevents repeated Stripe deliveries from
+   * consuming the retry budget during a provider outage.
+   */
+  async claimNextForVerifiedPaidOrder(input: Readonly<{
+    orderId: string;
+    leaseTokenHash: string;
+    now: string;
+    leaseExpiresAt: string;
+  }>): Promise<EmailOutboxClaim | null> {
+    assertId(input.orderId, "Order id");
+    if (!hash.test(input.leaseTokenHash)) {
+      throw new EmailOutboxError("INVALID_INPUT", "Lease token hash is invalid.");
+    }
+    assertTimestamp(input.now, "Now");
+    assertTimestamp(input.leaseExpiresAt, "Lease expiry");
+    if (input.leaseExpiresAt <= input.now) {
+      throw new EmailOutboxError("INVALID_INPUT", "Lease must expire after now.");
+    }
+    const retryCutoff = addSeconds(input.now, -60);
+    const update = this.database
+      .prepare(
+        `UPDATE email_outbox
+        SET status = 'sending', attempts = attempts + 1, next_attempt_at = NULL,
+          lease_token_hash = ?, leased_at = ?, lease_expires_at = ?, updated_at = ?
+        WHERE id = (
+          SELECT message.id FROM email_outbox AS message
+          INNER JOIN orders AS customer_order ON customer_order.id = message.order_id
+          WHERE message.order_id = ? AND customer_order.status = 'paid'
+            AND message.status = 'pending' AND message.attempts < message.max_attempts
+            AND message.kind IN ('order_confirmation', 'payment_confirmation')
+            AND (message.last_error_code IS NULL OR message.updated_at <= ?)
+          ORDER BY CASE message.kind WHEN 'order_confirmation' THEN 0 ELSE 1 END,
+            message.created_at, message.id LIMIT 1
+        ) AND status = 'pending' AND attempts < max_attempts
+          AND kind IN ('order_confirmation', 'payment_confirmation')`,
+      )
+      .bind(
+        input.leaseTokenHash,
+        input.now,
+        input.leaseExpiresAt,
+        input.now,
+        input.orderId,
+        retryCutoff,
+      );
+    const select = this.database
+      .prepare(
+        `SELECT id, kind, source_event_id, recipient_email, order_id,
+          access_challenge_id, locale, template_version, payload_json,
+          attempts, max_attempts, lease_token_hash, provider_idempotency_key
+        FROM email_outbox WHERE lease_token_hash = ? AND status = 'sending'
+          AND order_id = ? AND kind IN ('order_confirmation', 'payment_confirmation')`,
+      )
+      .bind(input.leaseTokenHash, input.orderId);
+    const results = await this.database.batch([update, select]);
+    if (changed(results[0]) !== 1) return null;
+    const row = resultRows<ClaimRow>(results[1])[0];
+    if (!row) {
+      throw new EmailOutboxError("PERSISTENCE_FAILURE", "Paid-order claim was not readable.");
+    }
+    return freezeClaim(row);
+  }
+
   async markSent(
     claim: EmailOutboxClaim,
     now: string,

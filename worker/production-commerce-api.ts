@@ -24,7 +24,7 @@ import {
 } from "../lib/commerce/delivery-provider.ts";
 import { DeliveryReferenceVault } from "../lib/commerce/delivery-reference-vault.ts";
 import { authorizeBrowserMutation, buildCsrfCookie, buildPendingCustomerCookie, buildSessionCookie, clearCsrfCookie, clearPendingCustomerCookie, clearSessionCookie, isTrustedMutationOrigin } from "../lib/commerce/identity-access-policy.ts";
-import { PaymentProviderError, verifyAndDeliverPaymentWebhook, type PaymentProviderPorts, type PaymentWebhookEffectsPort } from "../lib/commerce/payment-provider.ts";
+import { PaymentProviderError, verifyAndDeliverPaymentWebhook, type PaymentProviderPorts, type PaymentWebhookDeliveryResult, type PaymentWebhookEffectsPort } from "../lib/commerce/payment-provider.ts";
 import { validateLaunchStockImport } from "../lib/commerce/launch-stock-import.ts";
 import {
   createProductionProviderConfigurationAttestation,
@@ -131,6 +131,7 @@ export type ProductionCommerceRouterDependencies = Readonly<{
   deliveryProvider?: DeliveryProviderPorts;
   paymentProvider?: PaymentProviderPorts;
   paymentEffects?: PaymentWebhookEffectsPort;
+  onVerifiedPaymentWebhook?: (delivery: PaymentWebhookDeliveryResult) => void;
   stockImporter?: (
     database: CommerceD1Database,
     input: Readonly<{
@@ -1091,6 +1092,7 @@ export async function productionCommerceApiResponse(
         { rawBody: raw, stripeSignature: signature, receivedAtEpochSeconds: Math.floor(Date.now() / 1000) },
         dependencies.paymentEffects ?? new D1StripePaymentEffectsStore(env.DB, mode === "live"),
       );
+      dependencies.onVerifiedPaymentWebhook?.(delivered);
       return json({ received: true, disposition: delivered.disposition });
     } catch (cause) {
       if (cause instanceof PaymentProviderError &&

@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 
 import { D1CommerceStore } from "../lib/commerce/d1-commerce-store.ts";
 import {
+  dispatchProductionVerifiedPaidOrderEmails,
   dispatchProductionTransactionalEmails,
   dispatchProductionLatePaymentRefunds,
   expireProductionReservations,
@@ -673,6 +674,33 @@ test("scheduled email dispatch remains closed before activation without touching
     queueDrained: false,
   });
   assert.equal(db.queries.length, 0);
+});
+
+test("verified paid-order dispatch is bounded to two durable confirmations and returns no PII", async () => {
+  const db = database();
+  const result = await dispatchProductionVerifiedPaidOrderEmails(
+    {
+      ...controlledEnv(db),
+      TRANSACTIONAL_EMAIL_DISPATCH_ENABLED: "true",
+      TRANSACTIONAL_EMAIL_DISPATCH_MODE: "controlled",
+    },
+    { now: "2026-08-15T09:00:00.000Z", orderId: "order_paid_signal_1" },
+    {
+      provider: {
+        async deliver() { throw new Error("queue-is-empty"); },
+      },
+    },
+  );
+  assert.deepEqual(result, {
+    closed: false,
+    reason: null,
+    claimed: 0,
+    sent: 0,
+    retryScheduled: 0,
+    failed: 0,
+    queueDrained: true,
+  });
+  assert.doesNotMatch(JSON.stringify(result), /@|recipient|payload|secret/i);
 });
 
 test("scheduled late-refund recovery stays closed before activation without touching D1", async () => {
