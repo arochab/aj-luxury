@@ -379,15 +379,15 @@
     --aj-tete-h: 8.7rem;
   }
 
-  /* The 120vw canvas is the largest undistorted crop that keeps both models.
-     Extending it past the side edges adds presence without reverting to the
-     centre-only cover crop that removed them from the opening screen. */
+  /* The 136vw canvas accepts a slight crop on the outer arms to give both
+     models materially more presence. Faces, torsos and both boxers remain
+     inside the safe window; the centre-only crop is still avoided. */
   .home :global(.aj-film__hero-stage) {
-    top: clamp(48px, 6svh, 68px);
-    right: -10vw;
-    bottom: clamp(62px, 8svh, 92px);
-    left: -10vw;
-    width: 120vw;
+    top: clamp(32px, 4svh, 48px);
+    right: -18vw;
+    bottom: clamp(44px, 6svh, 66px);
+    left: -18vw;
+    width: 136vw;
     height: auto;
   }
 
