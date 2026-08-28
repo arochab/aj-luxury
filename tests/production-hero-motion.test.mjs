@@ -159,7 +159,7 @@ test("the hero hands its measured plum floor to the horizontal chromatic rail", 
 
   assert.match(
     homeCss,
-    /@media \(max-width: 900px\)[\s\S]*\.aj-film__hero-poster img[\s\S]*object-fit:\s*contain[\s\S]*@media \(max-width: 560px\)[\s\S]*right:\s*-10vw[\s\S]*width:\s*120vw/,
+    /@media \(max-width: 900px\)[\s\S]*\.aj-film__hero-poster img[\s\S]*object-fit:\s*contain[\s\S]*@media \(max-width: 560px\)[\s\S]*right:\s*-18vw[\s\S]*width:\s*136vw/,
   );
   assert.match(homeCss, /@media \(max-aspect-ratio: 4 \/ 5\)[\s\S]*mask-image:\s*none/);
 

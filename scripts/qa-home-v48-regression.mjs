@@ -91,7 +91,7 @@ const mobileHero = await mobile.page.evaluate(() => {
 });
 assert.equal(mobileHero.bodyOverflow, 0, "mobile page must not overflow horizontally");
 assert.equal(mobileHero.objectFit, "contain", "mobile hero must preserve both models");
-assert(mobileHero.stage?.width >= 460, "mobile film must be enlarged beyond the viewport");
+assert(mobileHero.stage?.width >= 525, "mobile film must be enlarged beyond the viewport");
 assert(mobileHero.video?.started && mobileHero.video.currentTime > 0, "mobile hero video must autoplay");
 
 const rail = mobile.page.locator('[data-home-horizontal-rail="v48"]');
