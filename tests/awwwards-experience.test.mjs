@@ -130,6 +130,12 @@ test("homepage controls answer quickly and scroll-linked product motion has no l
   assert.match(storeChrome, /@media \(max-width: 620px\)/);
   assert.match(storeChrome, /min-width:\s*2\.75rem/);
   assert.match(storeChrome, /min-height:\s*2\.75rem/);
+  assert.match(
+    storeChrome,
+    /grid-template-columns:\s*minmax\(0,\s*1fr\)\s+auto\s+minmax\(0,\s*1fr\)/,
+  );
+  assert.match(storeChrome, /\.desktopNav \.navLink:first-child\s*{[\s\S]*text-align:\s*left/);
+  assert.match(storeChrome, /\.desktopNav \.navLink:last-child\s*{[\s\S]*text-align:\s*right/);
   assert.match(homepage, /scrub:\s*true/g);
   assert.doesNotMatch(homepage, /scrub:\s*0\.[1-9]|\bpin:\s*/);
   assert.match(homepage, /collectionCleanup = \(\) =>/);

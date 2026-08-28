@@ -477,13 +477,13 @@
     border-top: 1px solid rgba(226, 229, 234, 0.16);
     display: grid;
     width: auto;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
     gap: 0;
     grid-column: 1 / -1;
     grid-row: 2;
     margin: 0 -1rem;
     overflow: hidden;
-    padding: 0.52rem 0.35rem;
+    padding: 0.52rem 1rem;
   }
 
   .desktopNav::-webkit-scrollbar {
@@ -498,6 +498,14 @@
     letter-spacing: 0.08em;
     text-align: center;
     white-space: nowrap;
+  }
+
+  .desktopNav .navLink:first-child {
+    text-align: left;
+  }
+
+  .desktopNav .navLink:last-child {
+    text-align: right;
   }
 
   .languageSwitcher select {
