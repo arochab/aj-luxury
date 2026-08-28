@@ -20,7 +20,7 @@ type View = "login" | "register" | "forgot" | "reset";
 
 const orderStatusLabel = Object.freeze({
   pending_payment: "Paiement en attente",
-  paid: "Paiement confirmé",
+  paid: "Paiement réglé",
   preparing: "Commande en préparation",
   shipped: "Commande expédiée",
   cancelled: "Commande annulée",
@@ -29,7 +29,7 @@ const orderStatusLabel = Object.freeze({
 
 const orderStatusDetail = Object.freeze({
   pending_payment: "Votre sélection est réservée dans l’attente du paiement.",
-  paid: "Le paiement est confirmé. La commande va passer en préparation.",
+  paid: "Le paiement est confirmé. Votre colis est transmis à la préparation.",
   preparing: "Votre commande est en cours de préparation.",
   shipped: "Votre commande a été remise au transporteur.",
   cancelled: "Cette commande n’est plus active et aucun paiement n’est attendu.",

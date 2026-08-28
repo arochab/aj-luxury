@@ -5,8 +5,7 @@ import type {
 } from "./email-outbox.ts";
 
 const RESEND_EMAILS_ENDPOINT = "https://api.resend.com/emails";
-const RESEND_USER_AGENT = "aj-luxury-commerce/1.0";
-const DEFAULT_TIMEOUT_MS = 8_000;
+const MAX_TRANSPORT_ATTEMPTS = 3;
 const MAX_RESPONSE_BYTES = 64 * 1024;
 const SAFE_IDEMPOTENCY_KEY = /^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,255}$/;
 const SAFE_MAILBOX = /^[\x21-\x7e]+@[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$/;
@@ -29,7 +28,6 @@ export type ResendEmailProviderConfig = Readonly<{
   fromEmail: string;
   fromName: string;
   replyTo?: string;
-  timeoutMs?: number;
   fetchImpl?: typeof fetch;
 }>;
 
@@ -117,7 +115,6 @@ export class ResendEmailProvider implements TransactionalEmailProviderPort {
   readonly #fromEmail: string;
   readonly #fromName: string;
   readonly #replyTo: string | undefined;
-  readonly #timeoutMs: number;
   readonly #fetch: typeof fetch;
 
   constructor(config: ResendEmailProviderConfig) {
@@ -133,10 +130,6 @@ export class ResendEmailProvider implements TransactionalEmailProviderPort {
     this.#replyTo = config.replyTo
       ? requireMailbox(config.replyTo, "replyTo")
       : undefined;
-    this.#timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-    if (!Number.isSafeInteger(this.#timeoutMs) || this.#timeoutMs < 1_000 || this.#timeoutMs > 15_000) {
-      throw new ResendEmailProviderError("invalid-config", "timeoutMs is invalid.");
-    }
     this.#fetch = config.fetchImpl ?? fetch;
   }
 
@@ -147,57 +140,79 @@ export class ResendEmailProvider implements TransactionalEmailProviderPort {
       throw new ResendEmailProviderError("rejected", "Email idempotency key is invalid.");
     }
     const content = parseContent(delivery.message.payloadJson);
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.#timeoutMs);
-    let response: Response;
-    try {
-      response = await this.#fetch(RESEND_EMAILS_ENDPOINT, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${this.#apiKey}`,
-          Accept: "application/json",
-          "Content-Type": "application/json",
-          "Idempotency-Key": delivery.idempotencyKey,
-          "User-Agent": RESEND_USER_AGENT,
-        },
-        body: JSON.stringify({
-          from: `${this.#fromName} <${this.#fromEmail}>`,
-          to: [delivery.message.recipientEmail],
-          subject: content.subject,
-          text: content.text,
-          html: brandedHtml(content),
-          ...(this.#replyTo ? { reply_to: this.#replyTo } : {}),
-          tags: [
-            { name: "kind", value: delivery.message.kind },
-            { name: "locale", value: delivery.message.locale },
-          ],
-        }),
-        signal: controller.signal,
-      });
-    } catch {
-      throw new ResendEmailProviderError("ambiguous", "Email provider request failed.");
-    } finally {
-      clearTimeout(timeout);
-    }
-    const payload = await boundedJson(response);
-    if (!response.ok) {
-      throw new ResendEmailProviderError(
-        response.status === 409 || response.status === 429 || response.status >= 500
-          ? "ambiguous"
-          : "rejected",
-        "Email provider rejected the request.",
-      );
-    }
-    if (
-      !payload || typeof payload !== "object" || Array.isArray(payload) ||
-      typeof (payload as Record<string, unknown>).id !== "string" ||
-      !SAFE_PROVIDER_MESSAGE_ID.test((payload as Record<string, unknown>).id as string)
-    ) {
-      throw new ResendEmailProviderError("ambiguous", "Email acceptance receipt is invalid.");
-    }
-    return Object.freeze({
-      idempotencyKey: delivery.idempotencyKey,
-      providerMessageId: (payload as Record<string, string>).id,
+    const request = Object.freeze({
+      method: "POST",
+      headers: Object.freeze({
+        Authorization: `Bearer ${this.#apiKey}`,
+        "Content-Type": "application/json",
+        "Idempotency-Key": delivery.idempotencyKey,
+      }),
+      body: JSON.stringify({
+        from: `${this.#fromName} <${this.#fromEmail}>`,
+        to: [delivery.message.recipientEmail],
+        subject: content.subject,
+        text: content.text,
+        html: brandedHtml(content),
+        ...(this.#replyTo ? { reply_to: this.#replyTo } : {}),
+        tags: [
+          { name: "kind", value: delivery.message.kind },
+          { name: "locale", value: delivery.message.locale },
+        ],
+      }),
     });
+    let lastAmbiguous: ResendEmailProviderError | null = null;
+    for (let attempt = 1; attempt <= MAX_TRANSPORT_ATTEMPTS; attempt += 1) {
+      let response: Response;
+      try {
+        // This deliberately mirrors the account-email transport that is already
+        // proven in production. Replays keep the same provider idempotency key.
+        response = await this.#fetch(RESEND_EMAILS_ENDPOINT, request);
+      } catch {
+        lastAmbiguous = new ResendEmailProviderError(
+          "ambiguous",
+          "Email provider request failed.",
+        );
+        continue;
+      }
+      let payload: unknown;
+      try {
+        payload = await boundedJson(response);
+      } catch (cause) {
+        lastAmbiguous = cause instanceof ResendEmailProviderError
+          ? cause
+          : new ResendEmailProviderError("ambiguous", "Email provider response is invalid.");
+        continue;
+      }
+      if (!response.ok) {
+        const ambiguous = response.status === 409 || response.status === 429 ||
+          response.status >= 500;
+        const rejection = new ResendEmailProviderError(
+          ambiguous ? "ambiguous" : "rejected",
+          "Email provider rejected the request.",
+        );
+        if (!ambiguous) throw rejection;
+        lastAmbiguous = rejection;
+        continue;
+      }
+      if (
+        !payload || typeof payload !== "object" || Array.isArray(payload) ||
+        typeof (payload as Record<string, unknown>).id !== "string" ||
+        !SAFE_PROVIDER_MESSAGE_ID.test((payload as Record<string, unknown>).id as string)
+      ) {
+        lastAmbiguous = new ResendEmailProviderError(
+          "ambiguous",
+          "Email acceptance receipt is invalid.",
+        );
+        continue;
+      }
+      return Object.freeze({
+        idempotencyKey: delivery.idempotencyKey,
+        providerMessageId: (payload as Record<string, string>).id,
+      });
+    }
+    throw lastAmbiguous ?? new ResendEmailProviderError(
+      "ambiguous",
+      "Email provider request failed.",
+    );
   }
 }

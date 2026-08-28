@@ -9,7 +9,7 @@ import {
 import LocalizedPrice from "../../components/LocalizedPrice";
 import styles from "../../cart/CommerceShell.module.css";
 
-const MAX_POLLS = 5;
+const MAX_POLLS = 90;
 const POLL_DELAY_MS = 2_000;
 
 /** The Stripe query parameter is intentionally ignored; D1 is authoritative. */
@@ -44,21 +44,27 @@ export default function ProductionCheckoutSuccessClient() {
   }, [poll]);
 
   const pending = order?.status === "pending_payment";
+  const settled = order !== null && ["paid", "preparing", "shipped"].includes(order.status);
+  const settlementDetail = order?.status === "shipped"
+    ? "Votre paiement est réglé et votre colis a été remis au transporteur."
+    : order?.status === "preparing"
+      ? "Votre paiement est réglé et votre colis est en cours de préparation."
+      : "Votre paiement est réglé et votre colis est transmis à la préparation.";
   return (
     <div className={styles.main} aria-busy={!failed && (!order || pending)}>
       <section aria-labelledby="payment-result-title">
         <p className={styles.eyebrow}>Paiement</p>
         <h1 className={styles.title} id="payment-result-title">
-          {order?.status === "paid"
+          {settled
             ? "Paiement confirmé."
             : failed
               ? "Vérification indisponible."
               : "Vérification du paiement…"}
         </h1>
-        {order?.status === "paid" && (
+        {settled && order && (
           <div className={styles.quote} role="status">
             <strong>Commande {order.orderNumber}</strong>
-            <p>Votre commande est enregistrée et payée.</p>
+            <p>{settlementDetail}</p>
             <p><LocalizedPrice amountCents={order.totalCents} /></p>
           </div>
         )}

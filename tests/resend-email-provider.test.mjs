@@ -46,8 +46,8 @@ test("Resend receives one bounded branded email with the durable idempotency key
   assert.equal(receipt.providerMessageId, "email_123");
   assert.equal(call.url, "https://api.resend.com/emails");
   assert.equal(call.init.headers["Idempotency-Key"], receipt.idempotencyKey);
-  assert.equal(call.init.headers["User-Agent"], "aj-luxury-commerce/1.0");
-  assert.equal(call.init.headers.Accept, "application/json");
+  assert.equal(call.init.headers["User-Agent"], undefined);
+  assert.equal(call.init.headers.Accept, undefined);
   assert.match(call.init.headers.Authorization, /^Bearer re_/);
   const body = JSON.parse(call.init.body);
   assert.deepEqual(body.to, ["client@example.com"]);
@@ -97,17 +97,41 @@ test("invalid or expanded payloads are rejected before network access", async ()
 });
 
 test("provider conflicts, throttling and invalid receipts stay ambiguous", async () => {
-  for (const response of [
-    Response.json({ message: "conflict" }, { status: 409 }),
-    Response.json({ message: "slow" }, { status: 429 }),
-    Response.json({ ok: true }, { status: 200 }),
+  for (const responseFactory of [
+    () => Response.json({ message: "conflict" }, { status: 409 }),
+    () => Response.json({ message: "slow" }, { status: 429 }),
+    () => Response.json({ ok: true }, { status: 200 }),
   ]) {
-    const adapter = provider(async () => response);
+    let calls = 0;
+    const adapter = provider(async () => {
+      calls += 1;
+      return responseFactory();
+    });
     await assert.rejects(
       adapter.deliver(delivery()),
       (error) => error instanceof ResendEmailProviderError && error.outcome === "ambiguous",
     );
+    assert.equal(calls, 3);
   }
+});
+
+test("transient transport failures retry with the exact same idempotency key", async () => {
+  const keys = [];
+  let calls = 0;
+  const adapter = provider(async (_url, init) => {
+    calls += 1;
+    keys.push(init.headers["Idempotency-Key"]);
+    if (calls < 3) throw new TypeError("transient network failure");
+    return Response.json({ id: "email_after_retry" }, { status: 200 });
+  });
+  const receipt = await adapter.deliver(delivery());
+  assert.equal(receipt.providerMessageId, "email_after_retry");
+  assert.equal(calls, 3);
+  assert.deepEqual(keys, [
+    "payment_confirmation:order_12345678",
+    "payment_confirmation:order_12345678",
+    "payment_confirmation:order_12345678",
+  ]);
 });
 
 test("configuration never accepts non-Resend keys or an unverified sender shape", () => {
