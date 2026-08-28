@@ -698,7 +698,53 @@ test("verified paid-order dispatch is bounded to two durable confirmations and r
     sent: 0,
     retryScheduled: 0,
     failed: 0,
+    processingErrors: 0,
     queueDrained: true,
+  });
+  assert.doesNotMatch(JSON.stringify(result), /@|recipient|payload|secret/i);
+});
+
+test("verified paid-order dispatch isolates one confirmation failure from the other", async () => {
+  const db = database();
+  const claims = [
+    { id: "outbox_order", kind: "order_confirmation" },
+    { id: "outbox_payment", kind: "payment_confirmation" },
+  ];
+  let claimIndex = 0;
+  const delivered = [];
+  const result = await dispatchProductionVerifiedPaidOrderEmails(
+    {
+      ...controlledEnv(db),
+      TRANSACTIONAL_EMAIL_DISPATCH_ENABLED: "true",
+      TRANSACTIONAL_EMAIL_DISPATCH_MODE: "controlled",
+    },
+    { now: "2026-08-15T09:00:00.000Z", orderId: "order_paid_signal_2" },
+    {
+      provider: {
+        async deliver() { throw new Error("not-used"); },
+      },
+      verifiedPaidOrderOutbox: {
+        async claimNextForVerifiedPaidOrder() {
+          return claims[claimIndex++] ?? null;
+        },
+        async deliverClaim(claim) {
+          delivered.push(claim.id);
+          if (claim.id === "outbox_order") throw new Error("isolated-first-confirmation");
+          return "sent";
+        },
+      },
+    },
+  );
+  assert.deepEqual(delivered, ["outbox_order", "outbox_payment"]);
+  assert.deepEqual(result, {
+    closed: false,
+    reason: null,
+    claimed: 2,
+    sent: 1,
+    retryScheduled: 0,
+    failed: 0,
+    processingErrors: 1,
+    queueDrained: false,
   });
   assert.doesNotMatch(JSON.stringify(result), /@|recipient|payload|secret/i);
 });

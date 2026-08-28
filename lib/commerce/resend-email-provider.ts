@@ -140,13 +140,17 @@ export class ResendEmailProvider implements TransactionalEmailProviderPort {
       throw new ResendEmailProviderError("rejected", "Email idempotency key is invalid.");
     }
     const content = parseContent(delivery.message.payloadJson);
-    const request = Object.freeze({
+    // Keep RequestInit and its headers mutable. Cloudflare's native fetch
+    // normalizes these objects internally; freezing them can fail before the
+    // request ever reaches Resend. The account-email adapter already uses the
+    // same plain-object shape successfully in production.
+    const request: RequestInit = {
       method: "POST",
-      headers: Object.freeze({
+      headers: {
         Authorization: `Bearer ${this.#apiKey}`,
         "Content-Type": "application/json",
         "Idempotency-Key": delivery.idempotencyKey,
-      }),
+      },
       body: JSON.stringify({
         from: `${this.#fromName} <${this.#fromEmail}>`,
         to: [delivery.message.recipientEmail],
@@ -159,7 +163,7 @@ export class ResendEmailProvider implements TransactionalEmailProviderPort {
           { name: "locale", value: delivery.message.locale },
         ],
       }),
-    });
+    };
     let lastAmbiguous: ResendEmailProviderError | null = null;
     for (let attempt = 1; attempt <= MAX_TRANSPORT_ATTEMPTS; attempt += 1) {
       let response: Response;

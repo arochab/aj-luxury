@@ -45,6 +45,8 @@ test("Resend receives one bounded branded email with the durable idempotency key
   assert.equal(receipt.idempotencyKey, "payment_confirmation:order_12345678");
   assert.equal(receipt.providerMessageId, "email_123");
   assert.equal(call.url, "https://api.resend.com/emails");
+  assert.equal(Object.isFrozen(call.init), false);
+  assert.equal(Object.isFrozen(call.init.headers), false);
   assert.equal(call.init.headers["Idempotency-Key"], receipt.idempotencyKey);
   assert.equal(call.init.headers["User-Agent"], undefined);
   assert.equal(call.init.headers.Accept, undefined);

@@ -128,6 +128,10 @@ export type ProductionOperationsDependencies = Readonly<{
 
 export type ProductionEmailDispatchDependencies = Readonly<{
   provider?: TransactionalEmailProviderPort;
+  verifiedPaidOrderOutbox?: Pick<
+    D1EmailOutbox,
+    "claimNextForVerifiedPaidOrder" | "deliverClaim"
+  >;
 }>;
 
 export type ProductionScheduledOperationsDependencies =
@@ -959,6 +963,7 @@ export async function dispatchProductionVerifiedPaidOrderEmails(
   sent: number;
   retryScheduled: number;
   failed: number;
+  processingErrors: number;
   queueDrained: boolean;
 }>> {
   const closed = (reason: string) => Object.freeze({
@@ -968,6 +973,7 @@ export async function dispatchProductionVerifiedPaidOrderEmails(
     sent: 0,
     retryScheduled: 0,
     failed: 0,
+    processingErrors: 0,
     queueDrained: false,
   });
   if (!env || env.APP_ENV !== "production" || !env.DB) {
@@ -986,24 +992,44 @@ export async function dispatchProductionVerifiedPaidOrderEmails(
   const provider = emailProvider(env, dependencies);
   if (!provider) return closed("transactional-email-provider-not-configured");
 
-  const outbox = new D1EmailOutbox(env.DB, provider);
-  const counters = { claimed: 0, sent: 0, retryScheduled: 0, failed: 0 };
+  const outbox = dependencies.verifiedPaidOrderOutbox ?? new D1EmailOutbox(env.DB, provider);
+  const counters = {
+    claimed: 0,
+    sent: 0,
+    retryScheduled: 0,
+    failed: 0,
+    processingErrors: 0,
+  };
   let queueDrained = false;
   const leaseExpiresAt = new Date(Date.parse(input.now) + 120_000).toISOString();
   // A successful order creates at most the order and payment confirmations.
   for (let index = 0; index < 2; index += 1) {
-    const claim = await outbox.claimNextForVerifiedPaidOrder({
-      orderId: input.orderId,
-      leaseTokenHash: await randomLeaseHash(),
-      now: input.now,
-      leaseExpiresAt,
-    });
+    let claim;
+    try {
+      claim = await outbox.claimNextForVerifiedPaidOrder({
+        orderId: input.orderId,
+        leaseTokenHash: await randomLeaseHash(),
+        now: input.now,
+        leaseExpiresAt,
+      });
+    } catch {
+      counters.processingErrors += 1;
+      continue;
+    }
     if (!claim) {
       queueDrained = true;
       break;
     }
     counters.claimed += 1;
-    const outcome = await outbox.deliverClaim(claim, input.now);
+    let outcome: "sent" | "retry" | "failed";
+    try {
+      outcome = await outbox.deliverClaim(claim, input.now);
+    } catch {
+      // The durable lease remains recoverable. One malformed or raced message
+      // must never prevent the independent confirmation from being attempted.
+      counters.processingErrors += 1;
+      continue;
+    }
     if (outcome === "sent") counters.sent += 1;
     else if (outcome === "retry") counters.retryScheduled += 1;
     else counters.failed += 1;
