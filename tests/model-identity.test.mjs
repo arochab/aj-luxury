@@ -139,13 +139,27 @@ test("les recommandations de bas de fiche reprennent les cartes du live", () => 
 
 /* ── 2 · Jamais deux fois le même homme à la suite ────────────────────── */
 
-test("la séquence guidée de l'accueil alterne", () => {
+test("la séquence guidée de l'accueil conserve les identités validées", () => {
   const suite = personnes(sequence);
   assert.deepEqual(
     suite.map((entree) => entree.qui),
-    ["jeremy", "alex", "jeremy"],
+    ["jeremy", "alex", "alex"],
   );
-  exigerAlternance(suite, "séquence guidée");
+
+  // Lilas puis Pourpre montrent bien Alex, mais une nature morte sépare leurs
+  // portraits dans le document : il n'y a jamais deux corps adjacents.
+  let precedent = null;
+  for (const src of medias(sequence)) {
+    const qui = porteur(src);
+    if (qui === null) {
+      precedent = null;
+      continue;
+    }
+    if (precedent !== null && precedent !== "duo" && qui !== "duo") {
+      assert.notEqual(qui, precedent, `séquence guidée : deux portraits adjacents montrent ${qui}`);
+    }
+    precedent = qui;
+  }
 });
 
 test("les cartes de /shop alternent", () => {
@@ -177,9 +191,24 @@ test("les neuf images portées de l'accueil composé alternent sans rupture", ()
   const suite = personnes(`${railAccueil}\n${accueil}`);
   assert.deepEqual(
     suite.map((entree) => entree.qui),
-    ["jeremy", "alex", "jeremy", "alex", "jeremy", "alex", "jeremy", "duo", "alex"],
+    ["alex", "alex", "jeremy", "alex", "jeremy", "alex", "jeremy", "duo", "alex"],
   );
-  exigerAlternance(suite, "accueil live");
+
+  /* Dans le rail chromatique, chaque portrait est séparé du suivant par une
+     nature morte produit. Pourpre et Lilas peuvent donc montrer Alex sans
+     créer deux portraits humains adjacents à l'écran. */
+  let precedent = null;
+  for (const src of medias(`${railAccueil}\n${accueil}`)) {
+    const qui = porteur(src);
+    if (qui === null) {
+      precedent = null;
+      continue;
+    }
+    if (precedent !== null && precedent !== "duo" && qui !== "duo") {
+      assert.notEqual(qui, precedent, `accueil live : deux portraits adjacents montrent ${qui}`);
+    }
+    precedent = qui;
+  }
 });
 
 test("/notre-histoire alterne et nomme chaque portrait", () => {

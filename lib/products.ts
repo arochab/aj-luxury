@@ -41,7 +41,8 @@ export const wearerByAsset: Readonly<Record<string, Wearer | "duo">> =
     // généré nettoyé le 18/08.
     "apollon-world/apollon-rose-model-color-v2.webp": "jeremy",
     "apollon-world/apollon-lilas-model-color-v2.webp": "alex",
-    "apollon-world/apollon-pourpre-model-color-v2.webp": "jeremy",
+    // Identité confirmée par Adam le 31/08/2026 : cheveux attachés + barbe.
+    "apollon-world/apollon-pourpre-model-color-v2.webp": "alex",
     // Le film d'ouverture : les deux dans le même plan. Les posters v6 sont
     // tirés des deux images validées par Adam le 21/08 — même duo.
     "hero-v6-desktop-1920x1080-poster.webp": "duo",

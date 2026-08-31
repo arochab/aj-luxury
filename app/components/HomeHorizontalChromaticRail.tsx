@@ -17,8 +17,8 @@ type Chapter = {
   productAlt: string;
   model: string;
   modelAlt: string;
-  modelWidth: 1200 | 1731;
-  modelHeight: 1803 | 2600;
+  modelWidth: 1731;
+  modelHeight: 2600;
   accent: string;
 };
 
@@ -31,11 +31,14 @@ const CHAPTERS: readonly Chapter[] = [
       "/images/editorial/isabelle-apollon/apollon-pourpre-lyre-v1.webp",
     productAlt:
       "Apollon Pourpre Impérial en lévitation sur son décor de marbre",
+    // Identité confirmée par Adam le 31/08/2026 : Alex est le modèle aux
+    // cheveux attachés et à la barbe. Ne pas le remplacer par les prises
+    // `pourpre-seated` / `editorial-pourpre-chair`, qui montrent Jérémy.
     model:
-      "/images/client/apollon-world/apollon-pourpre-alex-bordeaux-v1.webp",
+      "/images/client/apollon-world/apollon-pourpre-model-color-v2.webp",
     modelAlt: "Apollon Pourpre Impérial porté par Alex",
-    modelWidth: 1200,
-    modelHeight: 1803,
+    modelWidth: 1731,
+    modelHeight: 2600,
     accent: "#5b1233",
   },
   {
@@ -68,7 +71,7 @@ const CHAPTERS: readonly Chapter[] = [
 const RAIL_IMAGE_SIZES =
   "(max-width: 560px) 46vw, (max-width: 1024px) 45vw, 31vw";
 
-function responsiveSrcSet(src: string, sourceWidth: 1024 | 1200 | 1731) {
+function responsiveSrcSet(src: string, sourceWidth: 1024 | 1731) {
   const variant = (width: number) => src.replace(/\.webp$/, `-${width}.webp`);
   const widths = sourceWidth === 1024 ? [360, 720] : [360, 720, 1080];
   return [
