@@ -141,6 +141,7 @@ export class D1PreprodOwnerDemoStore {
   constructor(database: CommerceD1Database, environment: unknown) {
     this.#database = database;
     this.#fulfillment = new D1FulfillmentStore(database, {
+      transitionOrderToPreparingAfterLabel: false,
       shippingLabel: {
         async createLabel(request) {
           const receiptFingerprint = await sha256Hex(JSON.stringify({

@@ -4,7 +4,6 @@
   min-width: 0;
   overflow: clip;
   border-top: var(--rail-divider-size) solid #f6f3ef;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.16);
   background: var(--hero-rail-seam, #261019);
   color: #f7f5f2;
   isolation: isolate;
@@ -244,8 +243,7 @@
   object-position: center;
 }
 
-.stageHeader,
-.stageFooter {
+.stageHeader {
   position: absolute;
   z-index: 3;
   right: clamp(24px, 4vw, 76px);
@@ -263,18 +261,10 @@
 .stageHeader {
   top: 0;
   min-height: 62px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.26);
 }
 
 .stageHeader p {
   margin: 0;
-}
-
-.stageFooter {
-  bottom: 0;
-  min-height: 54px;
-  gap: 24px;
-  color: rgba(255, 255, 255, 0.72);
 }
 
 .compactCopy {
@@ -366,9 +356,9 @@
   }
 
   .panelInner {
-    width: min(calc(100vw - 18px), 440px);
+    width: min(calc(100vw - 12px), 440px);
     gap: clamp(14px, 2.3vh, 20px);
-    padding: clamp(238px, 33svh, 258px) 0 54px;
+    padding: clamp(222px, 31svh, 242px) 0 48px;
     transform: none;
   }
 
@@ -425,20 +415,18 @@
     gap: 6px;
   }
 
-  /* On a phone, two native 2:3 frames side by side leave a deep shelf above
-     and below the photographs. The taller editorial crop keeps both images
-     visible together while giving the product and model materially more
-     presence; only the low-information outer edges are trimmed. */
+  /* The retained masters are native 2:3. Matching that ratio and containing
+     every image keeps heads, boxer waistbands and silhouettes intact on every
+     phone while the colour-matched frame removes any visible letterboxing. */
   .frame {
-    aspect-ratio: 8 / 15;
+    aspect-ratio: 2 / 3;
   }
 
   .frame img {
-    object-fit: cover;
+    object-fit: contain;
   }
 
-  .stageHeader,
-  .stageFooter {
+  .stageHeader {
     right: 15px;
     left: 15px;
   }
@@ -460,12 +448,6 @@
     letter-spacing: inherit;
   }
 
-  .stageFooter {
-    min-height: 46px;
-    gap: 12px;
-    font-size: var(--t0);
-  }
-
 }
 
 @keyframes compact-copy-in {
@@ -485,16 +467,14 @@
   .stage,
   .track,
   .panel,
-  .frame,
-  .stageFooter {
+  .frame {
     animation: none !important;
     scroll-behavior: auto !important;
     transition: none !important;
     transform: none !important;
   }
 
-  .stageHeader,
-  .stageFooter {
+  .stageHeader {
     display: none;
   }
 

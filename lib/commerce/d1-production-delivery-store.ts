@@ -9,6 +9,7 @@ import {
   sha256Hex,
   type ShippingAddressInput,
 } from "./fulfillment-domain.ts";
+import type { LaunchShippingZone } from "./shipping-policy.ts";
 import { resolveClientValidatedParcelProfile } from "./parcel-profiles.ts";
 
 export class ProductionDeliveryError extends Error {
@@ -73,12 +74,13 @@ function assertIdempotencyKey(value: string): void {
   }
 }
 
-function routingProof(zone: "EU" | "UK" | "US" | "CA"): string {
+function routingProof(zone: LaunchShippingZone): string {
   switch (zone) {
     case "EU": return JSON.stringify({ countryCode: "FR", postalCode: "00000", regionCode: null });
     case "UK": return JSON.stringify({ countryCode: "GB", postalCode: "AA0", regionCode: null });
     case "US": return JSON.stringify({ countryCode: "US", postalCode: "00000", regionCode: "NY" });
     case "CA": return JSON.stringify({ countryCode: "CA", postalCode: "A0A", regionCode: null });
+    case "GCC": return JSON.stringify({ countryCode: "AE", postalCode: "", regionCode: null });
   }
 }
 
@@ -99,6 +101,12 @@ export class D1ProductionDeliveryStore {
   }>): Promise<readonly PublicProductionDeliveryOption[]> {
     assertIdempotencyKey(input.idempotencyKey);
     const address = await normalizeShippingAddress(input.address);
+    if (address.zone !== "EU" && !address.address.phone) {
+      throw new ProductionDeliveryError(
+        "INVALID_INPUT",
+        "A valid international phone number is required.",
+      );
+    }
     const replayKey = `delivery-options:${await sha256Hex(
       `${input.cartId}\0${input.idempotencyKey}`,
     )}`;

@@ -10,13 +10,12 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { join, relative } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { readMigrationFiles } from "drizzle-orm/migrator";
 
 const projectRoot = fileURLToPath(new URL("../", import.meta.url));
-const workspaceRoot = resolve(projectRoot, "../..");
 const migrationRoot = join(projectRoot, "drizzle");
 const wranglerCli = join(
   projectRoot,
@@ -376,12 +375,13 @@ test("0005 stays frozen; 0006 through 0009 remain additive", () => {
 
 test("real local D1 applies the governed chain, upgrades populated 0004 and replays", (t) => {
   assert.ok(existsSync(wranglerCli), "local Wrangler must be installed");
-  // Keep the local Wrangler state inside the governed workspace but outside
-  // this deeply nested worktree so Windows does not exceed SQLite path limits.
-  const proofParent = join(workspaceRoot, ".aj-luxury-d03-proofs");
+  // Keep Wrangler's disposable proof state inside this governed worktree.
+  // The workspace-level legacy junction can resolve outside the authorized
+  // root, so it must never be used as a canonical test destination.
+  const proofParent = join(projectRoot, ".test-proofs");
   mkdirSync(proofParent, { recursive: true });
   const proofRoot = mkdtempSync(join(proofParent, "migration-"));
-  assert.ok(!relative(workspaceRoot, proofRoot).startsWith(".."));
+  assert.ok(!relative(projectRoot, proofRoot).startsWith(".."));
   t.after(() => rmSync(proofRoot, { recursive: true, force: true, maxRetries: 5 }));
 
   const emptyRoot = join(proofRoot, "empty");

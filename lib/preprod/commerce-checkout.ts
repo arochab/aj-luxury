@@ -16,6 +16,7 @@ export const PREPROD_DEMO_SHIPPING_FEES_CENTS = Object.freeze({
   UK: 900,
   US: 1_500,
   CA: 1_400,
+  GCC: 1_800,
 } satisfies Readonly<Record<LaunchShippingZone, number>>);
 
 export type PreprodCommerceErrorCode =

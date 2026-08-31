@@ -350,6 +350,15 @@ export function resolveLaunchShippingScope(
   }
 
   const zone = resolveLaunchShippingCountryZone(country);
+  if (!zone) {
+    return {
+      inScope: false,
+      zone: null,
+      checkoutEnabled: false,
+      reason: "country-outside-launch-scope",
+    };
+  }
+
   const postal = normalizePostalCode(snapshot.postalCode, country);
   const region = normalizeRegionCode(snapshot.regionCode);
   if (
@@ -374,15 +383,6 @@ export function resolveLaunchShippingScope(
       zone: null,
       checkoutEnabled: false,
       reason: "special-territory-needs-explicit-validation",
-    };
-  }
-
-  if (!zone) {
-    return {
-      inScope: false,
-      zone: null,
-      checkoutEnabled: false,
-      reason: "country-outside-launch-scope",
     };
   }
 

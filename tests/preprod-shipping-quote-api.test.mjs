@@ -822,7 +822,7 @@ test("an expired unselected option is purged before a fresh quote for the same c
   context.sqlite.close();
 });
 
-test("US state is mandatory and EU, UK, US and Canada remain the only launch zones", async () => {
+test("US state is mandatory and the four frozen preproduction zones remain valid", async () => {
   const cases = [
     ["EU", france],
     ["UK", { ...france, line1: "1 Test Street", postalCode: "SW1A 1AA", city: "London", countryCode: "GB" }],

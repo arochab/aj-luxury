@@ -293,9 +293,11 @@ function snapshotAddress(input: unknown): Record<string, unknown> {
 
 export async function normalizeShippingAddress(
   input: ShippingAddressInput,
+  options?: Readonly<{ allowMissingInternationalPhone?: boolean }>,
 ): Promise<NormalizedShippingAddressProof>;
 export async function normalizeShippingAddress(
   input: unknown,
+  options: Readonly<{ allowMissingInternationalPhone?: boolean }> = {},
 ): Promise<NormalizedShippingAddressProof> {
   const snapshot = snapshotAddress(input);
   const countryCode = normalizeText(snapshot.countryCode, "countryCode", 2).toUpperCase();
@@ -322,13 +324,17 @@ export async function normalizeShippingAddress(
   const phone = snapshot.phone === undefined
     ? null
     : normalizeText(snapshot.phone, "phone", 24).replace(/[\s().-]/g, "");
-  if (scope.zone !== "EU" && (phone === null || !/^\+[1-9]\d{7,14}$/.test(phone))) {
+  if (
+    scope.zone !== "EU" &&
+    phone === null &&
+    options.allowMissingInternationalPhone !== true
+  ) {
     throw new FulfillmentError(
       "INVALID_INPUT",
       "A valid international phone number is required.",
     );
   }
-  if (scope.zone === "EU" && phone !== null && !/^\+[1-9]\d{7,14}$/.test(phone)) {
+  if (phone !== null && !/^\+[1-9]\d{7,14}$/.test(phone)) {
     throw new FulfillmentError("INVALID_INPUT", "phone is invalid.");
   }
   const address = Object.freeze({

@@ -32,10 +32,10 @@ const CHAPTERS: readonly Chapter[] = [
     productAlt:
       "Apollon Pourpre Impérial en lévitation sur son décor de marbre",
     // Identité confirmée par Adam le 31/08/2026 : Alex est le modèle aux
-    // cheveux attachés et à la barbe. Ne pas le remplacer par les prises
-    // `pourpre-seated` / `editorial-pourpre-chair`, qui montrent Jérémy.
+    // cheveux courts ondulés, au bouc et au collier. Cette prise le montre
+    // seul, sur le fond pourpre validé, sans rogner la tête ni le boxer.
     model:
-      "/images/client/apollon-world/apollon-pourpre-model-color-v2.webp",
+      "/images/client/apollon-world/apollon-pourpre-alex-bordeaux-v1.webp",
     modelAlt: "Apollon Pourpre Impérial porté par Alex",
     modelWidth: 1731,
     modelHeight: 2600,
@@ -430,12 +430,6 @@ export default function HomeHorizontalChromaticRail() {
           </Link>
         </div>
 
-        <div className={styles.stageFooter} aria-hidden="true">
-          <span>
-            {String(activeIndex + 1).padStart(2, "0")} / {String(CHAPTERS.length).padStart(2, "0")} ·{" "}
-            {t(CHAPTERS[activeIndex]?.nameKey ?? CHAPTERS[0].nameKey)}
-          </span>
-        </div>
       </div>
     </section>
   );

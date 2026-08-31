@@ -189,6 +189,7 @@ export type FulfillmentStorePorts = Readonly<{
   shippingLabel?: ShippingLabelProviderPort;
   tracking?: TrackingProviderPort;
   refund?: RefundProviderPort;
+  transitionOrderToPreparingAfterLabel?: boolean;
 }>;
 
 function changed(result: CommerceD1Result<object>): number {
@@ -388,7 +389,9 @@ export class D1FulfillmentStore {
       throw new FulfillmentError("INVALID_INPUT", "The quote lifetime is invalid.");
     }
     const [address, cart] = await Promise.all([
-      normalizeShippingAddress(input.address),
+      normalizeShippingAddress(input.address, {
+        allowMissingInternationalPhone: true,
+      }),
       this.#openCartSnapshot(input.cartId, input.now),
     ]);
     if (input.addressFingerprint !== undefined) {
@@ -542,7 +545,9 @@ export class D1FulfillmentStore {
     assertFulfillmentTimestamp(input.now, "now");
     const [quote, address, parcelSnapshot] = await Promise.all([
       this.getShippingQuote(input.quoteId),
-      normalizeShippingAddress(input.address),
+      normalizeShippingAddress(input.address, {
+        allowMissingInternationalPhone: true,
+      }),
       this.getShippingQuoteParcelSnapshot(input.quoteId),
     ]);
     const routingProofJson = JSON.stringify(
@@ -846,6 +851,8 @@ export class D1FulfillmentStore {
       );
     }
     const international = zoneProof.zone !== "EU";
+    const transitionOrderToPreparing =
+      this.#ports.transitionOrderToPreparingAfterLabel !== false;
     if (international) {
       assertFulfillmentIdentifier(
         receipt.customsDocumentReference,
@@ -910,14 +917,19 @@ export class D1FulfillmentStore {
         this.#database
           .prepare(
             `UPDATE orders SET status = 'preparing', updated_at = ?
-            WHERE id = ? AND status = 'paid'
+            WHERE ? = 1 AND id = ? AND status = 'paid'
               AND EXISTS (
                 SELECT 1 FROM shipments
                 WHERE shipments.order_id = orders.id
                   AND shipments.id = ? AND shipments.status = 'label_ready'
               )`,
           )
-          .bind(input.now, shipment.order_id, shipment.id),
+          .bind(
+            input.now,
+            transitionOrderToPreparing ? 1 : 0,
+            shipment.order_id,
+            shipment.id,
+          ),
         this.#database
           .prepare(
             `INSERT INTO audit_log (
@@ -929,7 +941,10 @@ export class D1FulfillmentStore {
             `audit_label_${shipment.id}`,
             shipment.id,
             `audit:shipment_label_ready:${shipment.id}`,
-            JSON.stringify({ orderId: shipment.order_id, status: "preparing" }),
+            JSON.stringify({
+              orderId: shipment.order_id,
+              status: transitionOrderToPreparing ? "preparing" : "paid",
+            }),
             input.now,
           ),
         this.#database
@@ -958,7 +973,8 @@ export class D1FulfillmentStore {
         throw new FulfillmentError("LEASE_UNAVAILABLE", "The shipment lease was lost.");
       }
       if (
-        changed(results[2]) !== 1 || changed(results[3]) !== 1 ||
+        changed(results[2]) !== (transitionOrderToPreparing ? 1 : 0) ||
+        changed(results[3]) !== 1 ||
         changed(results[1]) !== (international ? 1 : 0) ||
         changed(results[4]) !== (international ? 1 : 0)
       ) {

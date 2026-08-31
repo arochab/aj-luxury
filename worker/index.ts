@@ -41,6 +41,7 @@ import {
   sha256Hex,
   type ShippingAddressInput,
 } from "../lib/commerce/fulfillment-domain.ts";
+import type { LaunchShippingZone } from "../lib/commerce/shipping-policy.ts";
 import {
   CLIENT_VALIDATED_PARCEL_MIGRATION,
   parcelSnapshotMatchesProfile,
@@ -1210,7 +1211,7 @@ function publicShippingQuoteResponse(
     duties_terms: "EU_INCLUDED" | "DAP" | "DDP";
     expires_at: string;
   }>,
-  zone: "EU" | "UK" | "US" | "CA",
+  zone: LaunchShippingZone,
   cart: PublicCartSnapshot,
   parcel: ShippingQuoteParcelSnapshotRow,
 ): Response {
@@ -1260,7 +1261,7 @@ function publicShippingQuoteResponse(
 
 function publicDeliveryOption(
   option: DeliveryOptionSnapshotRow,
-  zone: "EU" | "UK" | "US" | "CA",
+  zone: LaunchShippingZone,
 ) {
   return Object.freeze({
     optionId: option.id,
@@ -1362,7 +1363,9 @@ async function handleShippingQuoteApi(
     const now = new Date().toISOString();
     const [cart, normalizedAddress] = await Promise.all([
       commerce.getPublicCartSnapshot(session.cartId, now),
-      normalizeShippingAddress(parsedBody.value.address),
+      normalizeShippingAddress(parsedBody.value.address, {
+        allowMissingInternationalPhone: true,
+      }),
     ]);
     if (env.PREPROD_DEMO_DATASET === SYNTHETIC_DEMO_FIXTURE_VERSION &&
       !isExactSyntheticDemoAddress(normalizedAddress.zone, normalizedAddress.canonicalJson)) {
@@ -1609,7 +1612,10 @@ async function handleDeliveryOptionMutationApi(
         },
       });
     }
-    const normalized = await normalizeShippingAddress(body.address as ShippingAddressInput);
+    const normalized = await normalizeShippingAddress(
+      body.address as ShippingAddressInput,
+      { allowMissingInternationalPhone: true },
+    );
     if (
       env.PREPROD_DEMO_DATASET === SYNTHETIC_DEMO_FIXTURE_VERSION &&
       !isExactSyntheticDemoAddress(normalized.zone, normalized.canonicalJson)
@@ -1889,7 +1895,9 @@ async function handleOrderPaymentApi(
       }
       const body = await parseCreateOrderBody(request);
       if (!body) return cartErrorResponse("INVALID_BODY", "Le formulaire est invalide ou trop volumineux.", 400);
-      const normalizedAddress = await normalizeShippingAddress(body.address);
+      const normalizedAddress = await normalizeShippingAddress(body.address, {
+        allowMissingInternationalPhone: true,
+      });
       if (env.PREPROD_DEMO_DATASET === SYNTHETIC_DEMO_FIXTURE_VERSION &&
         !isExactSyntheticDemoAddress(normalizedAddress.zone, normalizedAddress.canonicalJson)) {
         return cartErrorResponse(
@@ -3035,10 +3043,11 @@ const worker = {
           : {}),
         onVerifiedPaymentWebhook(delivery) {
           if (delivery.event.kind !== "payment" || delivery.event.state !== "paid") return;
+          const orderId = delivery.event.orderId;
           ctx.waitUntil(
             dispatchProductionVerifiedPaidOrderEmails(env, {
               now: new Date().toISOString(),
-              orderId: delivery.event.orderId,
+              orderId,
             }).then(async (result) => {
               console.log(JSON.stringify({
                 event: "verified_paid_order_email_dispatch",
@@ -3047,7 +3056,7 @@ const worker = {
               }));
               const shipment = await dispatchProductionOutboundShipments(env, {
                 now: new Date().toISOString(),
-                orderId: delivery.event.orderId,
+                orderId,
               });
               console.log(JSON.stringify({
                 event: "verified_paid_order_shipment_dispatch",

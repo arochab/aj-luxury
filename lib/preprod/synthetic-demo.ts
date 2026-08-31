@@ -85,7 +85,7 @@ function canonicalFixtureJson(address: ShippingAddressInput): string {
   });
 }
 
-const canonicalFixtureByZone = new Map(
+const canonicalFixtureByZone = new Map<string, string>(
   SYNTHETIC_DEMO_ADDRESS_FIXTURES.map((fixture) => [
     fixture.zone,
     canonicalFixtureJson(fixture.address),
@@ -93,7 +93,7 @@ const canonicalFixtureByZone = new Map(
 );
 
 export function isExactSyntheticDemoAddress(
-  zone: SyntheticDemoZone,
+  zone: string,
   canonicalJson: string,
 ): boolean {
   return canonicalFixtureByZone.get(zone) === canonicalJson;
