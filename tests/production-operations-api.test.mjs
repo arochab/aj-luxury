@@ -16,6 +16,8 @@ import {
 } from "../worker/production-operations-api.ts";
 import {
   productionEmailDispatchRuntimeConfigured,
+  productionEmailReconciliationRuntimeConfigured,
+  productionEmailReconciliationRuntimeInstalled,
   productionOperationsRuntimeInstalled,
   productionResendRuntimeInstalled,
 } from "../worker/production-operations-runtime.ts";
@@ -57,11 +59,40 @@ const resendSchemaColumns = Object.freeze([
   "resend_webhook_events:provider_message_id",
   "resend_webhook_events:received_at",
 ]);
+const reconciliationSchemaObjects = Object.freeze([
+  { type: "index", name: "idx_email_delivery_provider_evidence_time", table_name: "email_delivery_provider_evidence" },
+  { type: "index", name: "ux_email_delivery_provider_evidence_message", table_name: "email_delivery_provider_evidence" },
+  { type: "index", name: "ux_email_delivery_provider_evidence_outbox", table_name: "email_delivery_provider_evidence" },
+  { type: "table", name: "email_delivery_provider_evidence", table_name: "email_delivery_provider_evidence" },
+  { type: "trigger", name: "trg_email_delivery_provider_evidence_immutable_update", table_name: "email_delivery_provider_evidence" },
+  { type: "trigger", name: "trg_email_delivery_provider_evidence_retain_delete", table_name: "email_delivery_provider_evidence" },
+  { type: "trigger", name: "trg_email_delivery_provider_evidence_validate_insert", table_name: "email_delivery_provider_evidence" },
+]);
+const reconciliationSchemaColumns = Object.freeze([
+  "id",
+  "outbox_id",
+  "provider_created_at",
+  "provider_last_event",
+  "provider_message_id",
+  "reconciled_at",
+  "reconciled_by_admin_id",
+  "reconciliation_source",
+]);
 
 function statement(database, query, values = []) {
   return {
     bind(...next) { return statement(database, query, next); },
     async all() {
+      if (/idx_email_delivery_provider_evidence_time/.test(query)) {
+        return { success: true, results: reconciliationSchemaObjects, meta: { changes: 0 } };
+      }
+      if (/pragma_table_info\('email_delivery_provider_evidence'\)/.test(query)) {
+        return {
+          success: true,
+          results: reconciliationSchemaColumns.map((name) => ({ name })),
+          meta: { changes: 0 },
+        };
+      }
       if (/idx_resend_webhook_message_time/.test(query)) {
         return { success: true, results: resendSchemaObjects, meta: { changes: 0 } };
       }
@@ -319,6 +350,51 @@ test("Resend runtime proof accepts the real 0018 migration objects", async () =>
   sqlite.close();
 });
 
+test("email reconciliation runtime proof requires the exact immutable evidence schema", async () => {
+  assert.equal(await productionEmailReconciliationRuntimeInstalled(database()), true);
+  const missingRetentionTrigger = database();
+  missingRetentionTrigger.prepare = function prepare(query) {
+    if (/idx_email_delivery_provider_evidence_time/.test(query)) {
+      return {
+        async all() {
+          return {
+            results: reconciliationSchemaObjects.filter((row) =>
+              row.name !== "trg_email_delivery_provider_evidence_retain_delete"),
+          };
+        },
+      };
+    }
+    if (/pragma_table_info\('email_delivery_provider_evidence'\)/.test(query)) {
+      return {
+        async all() {
+          return { results: reconciliationSchemaColumns.map((name) => ({ name })) };
+        },
+      };
+    }
+    throw new Error(`Unexpected query: ${query}`);
+  };
+  assert.equal(
+    await productionEmailReconciliationRuntimeInstalled(missingRetentionTrigger),
+    false,
+  );
+});
+
+test("email reconciliation runtime proof accepts the real 0027 migration objects", async () => {
+  const sqlite = new DatabaseSync(":memory:");
+  sqlite.exec("PRAGMA foreign_keys = ON");
+  for (const name of ["0000_flimsy_rhino.sql", "0027_puzzling_war_machine.sql"]) {
+    const migration = readFileSync(`${drizzleDirectory}${name}`, "utf8");
+    for (const statement of migration.split("--> statement-breakpoint")) {
+      if (statement.trim()) sqlite.exec(statement.trim());
+    }
+  }
+  assert.equal(
+    await productionEmailReconciliationRuntimeInstalled(new SQLiteD1Database(sqlite)),
+    true,
+  );
+  sqlite.close();
+});
+
 test("email readiness matches the scheduled dispatcher configuration exactly", () => {
   const active = {
     ...controlledEnv(),
@@ -332,6 +408,21 @@ test("email readiness matches the scheduled dispatcher configuration exactly", (
   assert.equal(productionEmailDispatchRuntimeConfigured({ ...active, TRANSACTIONAL_REPLY_TO: "invalid mailbox" }), false);
   assert.equal(productionEmailDispatchRuntimeConfigured({ ...active, COMMERCE_MODE: "closed" }), false);
   assert.equal(productionEmailDispatchRuntimeConfigured({ ...active, COMMERCE_MODE: "closed" }, true), true);
+
+  const reconciliation = {
+    ...controlledEnv(),
+    TRANSACTIONAL_EMAIL_DISPATCH_ENABLED: "false",
+    TRANSACTIONAL_EMAIL_RECONCILIATION_ENABLED: "true",
+  };
+  assert.equal(productionEmailReconciliationRuntimeConfigured(reconciliation), true);
+  assert.equal(productionEmailReconciliationRuntimeConfigured({
+    ...reconciliation,
+    COMMERCE_MODE: "closed",
+  }), true);
+  assert.equal(productionEmailReconciliationRuntimeConfigured({
+    ...reconciliation,
+    TRANSACTIONAL_EMAIL_RECONCILIATION_ENABLED: "false",
+  }), false);
 });
 
 test("customer return is bound to an exact guest session, paid delivery and idempotency key", async () => {
@@ -634,6 +725,93 @@ test("owner handover route records one real handover and queues confirmation ide
   assert.equal(liveWithoutMfa.status, 503);
   assert.equal((await liveWithoutMfa.json()).error.code, "OPERATOR_MFA_NOT_ACTIVATED");
   assert.equal(liveWithoutMfaDatabase.queries.length, 0);
+});
+
+test("owner email reconciliation records exact provider evidence and never resends", async () => {
+  const outboxId = "outbox_payment_1";
+  const providerMessageId = "email_delivered_1";
+  const path = `/api/commerce/admin/email-outbox/${outboxId}/reconcile`;
+  const digest = new Uint8Array(await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(`${outboxId}\0${providerMessageId}`),
+  ));
+  const identity = Array.from(
+    digest,
+    (byte) => byte.toString(16).padStart(2, "0"),
+  ).join("");
+  const calls = [];
+  const response = await productionOperationsApiResponse(
+    new Request(`${origin}${path}`, {
+      method: "POST",
+      headers: {
+        ...(await ownerHeaders("POST", path)),
+        ...adminHeaders(),
+        "Content-Type": "application/json",
+        "Idempotency-Key": `email-reconcile:${identity}`,
+      },
+      body: JSON.stringify({ providerMessageId }),
+    }),
+    {
+      ...controlledEnv(),
+      TRANSACTIONAL_EMAIL_DISPATCH_ENABLED: "false",
+      TRANSACTIONAL_EMAIL_RECONCILIATION_ENABLED: "true",
+    },
+    {
+      now: () => "2026-08-31T10:00:00.000Z",
+      authorizeOwner: async () => true,
+      emailReconciliation: {
+        async reconcile(input) {
+          calls.push(input);
+          return {
+            outboxId,
+            kind: "payment_confirmation",
+            providerMessageId,
+            providerLastEvent: "delivered",
+            created: true,
+          };
+        },
+      },
+    },
+  );
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.deepEqual(body, {
+    data: {
+      outboxId,
+      kind: "payment_confirmation",
+      providerMessageId,
+      providerLastEvent: "delivered",
+      evidenceRecorded: true,
+      replayed: false,
+      emailResent: false,
+    },
+  });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].actor.kind, "admin");
+  assert.doesNotMatch(JSON.stringify(body), /@|recipient|payload|secret/i);
+
+  const disabledDatabase = database();
+  const disabled = await productionOperationsApiResponse(
+    new Request(`${origin}${path}`, {
+      method: "POST",
+      headers: {
+        ...(await ownerHeaders("POST", path)),
+        ...adminHeaders(),
+        "Content-Type": "application/json",
+        "Idempotency-Key": `email-reconcile:${identity}`,
+      },
+      body: JSON.stringify({ providerMessageId }),
+    }),
+    {
+      ...controlledEnv(disabledDatabase),
+      TRANSACTIONAL_EMAIL_DISPATCH_ENABLED: "true",
+      TRANSACTIONAL_EMAIL_DISPATCH_MODE: "controlled",
+      TRANSACTIONAL_EMAIL_RECONCILIATION_ENABLED: "false",
+    },
+  );
+  assert.equal(disabled.status, 503);
+  assert.equal((await disabled.json()).error.code, "EMAIL_RECONCILIATION_NOT_ACTIVATED");
+  assert.equal(disabledDatabase.queries.length, 0);
 });
 
 test("reporting is owner-only, aggregate-only and period-bounded", async () => {

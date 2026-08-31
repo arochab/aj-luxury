@@ -207,6 +207,41 @@ test("upstream cookies and request cookies are preserved", async () => {
   ]) assert.equal(response?.headers.get(name), null);
 });
 
+test("the signed Access assertion crosses the bridge only for owner admin routes", async () => {
+  const assertion = `${"a".repeat(32)}.${"b".repeat(32)}.${"c".repeat(32)}`;
+  let adminAssertion;
+  await commerceBackendProxyResponse(
+    new Request(`${publicOrigin}/api/commerce/admin/orders`, {
+      headers: {
+        "Cf-Access-Jwt-Assertion": assertion,
+        "CF-Connecting-IP": "203.0.113.7",
+      },
+    }),
+    frontendEnv(),
+    async (request) => {
+      adminAssertion = request.headers.get("Cf-Access-Jwt-Assertion");
+      return new Response("ok");
+    },
+  );
+  assert.equal(adminAssertion, assertion);
+
+  let publicAssertion;
+  await commerceBackendProxyResponse(
+    new Request(`${publicOrigin}/api/commerce/cart`, {
+      headers: {
+        "Cf-Access-Jwt-Assertion": assertion,
+        "CF-Connecting-IP": "203.0.113.7",
+      },
+    }),
+    frontendEnv(),
+    async (request) => {
+      publicAssertion = request.headers.get("Cf-Access-Jwt-Assertion");
+      return new Response("ok");
+    },
+  );
+  assert.equal(publicAssertion, null);
+});
+
 test("private bridge authenticates the stock-import route without an injected authenticator", async () => {
   const releaseSha = "a".repeat(40);
   const pathname = "/api/commerce/admin/launch-stock-import";

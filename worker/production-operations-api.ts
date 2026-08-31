@@ -12,6 +12,10 @@ import { D1CommerceStore } from "../lib/commerce/d1-commerce-store.ts";
 import { D1FulfillmentStore } from "../lib/commerce/d1-fulfillment-store.ts";
 import type { CommerceD1Database } from "../lib/commerce/d1-port.ts";
 import { D1LatePaymentRefundDispatcher } from "../lib/commerce/d1-late-payment-refunds.ts";
+import {
+  D1EmailDeliveryReconciler,
+  EmailDeliveryReconciliationError,
+} from "../lib/commerce/email-delivery-reconciliation.ts";
 import { D1EmailOutbox } from "../lib/commerce/email-outbox.ts";
 import { dispatchTransactionalEmailBatch } from "../lib/commerce/email-outbox-dispatcher.ts";
 import type { TransactionalEmailProviderPort } from "../lib/commerce/email-outbox.ts";
@@ -33,6 +37,8 @@ import {
 } from "./production-commerce-api.ts";
 import {
   productionEmailDispatchRuntimeConfigured,
+  productionEmailReconciliationRuntimeConfigured,
+  productionEmailReconciliationRuntimeInstalled,
   productionOperationsRuntimeInstalled,
   productionResendRuntimeInstalled,
 } from "./production-operations-runtime.ts";
@@ -46,6 +52,8 @@ const RETURN_ROUTE = "/api/commerce/returns";
 const APPROVE_ROUTE = /^\/api\/commerce\/admin\/returns\/([^/]+)\/approve$/;
 const INSPECT_ROUTE = /^\/api\/commerce\/admin\/returns\/([^/]+)\/inspect$/;
 const HANDOVER_ROUTE = /^\/api\/commerce\/admin\/shipments\/([^/]+)\/handover$/;
+const EMAIL_RECONCILIATION_ROUTE =
+  /^\/api\/commerce\/admin\/email-outbox\/([^/]+)\/reconcile$/;
 const REPORT_ROUTE = "/api/commerce/admin/reporting";
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,191}$/;
 const IDEMPOTENCY = /^[A-Za-z0-9][A-Za-z0-9_.:-]{7,127}$/;
@@ -65,6 +73,7 @@ export type ProductionOperationsEnvironment = ProductionCommerceEnvironment &
   SHIPMENT_HANDOVER_ENABLED?: string;
   TRANSACTIONAL_EMAIL_DISPATCH_ENABLED?: string;
   TRANSACTIONAL_EMAIL_DISPATCH_MODE?: string;
+  TRANSACTIONAL_EMAIL_RECONCILIATION_ENABLED?: string;
   TRANSACTIONAL_FROM_NAME?: string;
   TRANSACTIONAL_REPLY_TO?: string;
   LATE_PAYMENT_REFUND_DISPATCH_ENABLED?: string;
@@ -124,9 +133,25 @@ type ShipmentOperationsPort = Readonly<{
   }>): Promise<{ created: boolean }>;
 }>;
 
+type EmailReconciliationOperationsPort = Readonly<{
+  reconcile(input: Readonly<{
+    outboxId: string;
+    providerMessageId: string;
+    actor: D1MutationActor;
+    now: string;
+  }>): Promise<Readonly<{
+    outboxId: string;
+    kind: "order_confirmation" | "payment_confirmation";
+    providerMessageId: string;
+    providerLastEvent: "delivered" | "opened" | "clicked";
+    created: boolean;
+  }>>;
+}>;
+
 export type ProductionOperationsDependencies = Readonly<{
   returns?: ReturnOperationsPort;
   shipments?: ShipmentOperationsPort;
+  emailReconciliation?: EmailReconciliationOperationsPort;
   authorizeOwner?: (
     actor: D1MutationActor,
     database: CommerceD1Database,
@@ -508,6 +533,24 @@ function mapFulfillmentError(cause: unknown): Response {
   return fail("OPERATIONS_UNAVAILABLE", 503);
 }
 
+function mapEmailReconciliationError(cause: unknown): Response {
+  if (!(cause instanceof EmailDeliveryReconciliationError)) {
+    return fail("EMAIL_RECONCILIATION_UNAVAILABLE", 503);
+  }
+  if (cause.code === "INVALID_INPUT") return fail("INVALID_INPUT", 400);
+  if (cause.code === "OWNER_REQUIRED") return fail("OWNER_ACCESS_REQUIRED", 403);
+  if (cause.code === "OUTBOX_NOT_ELIGIBLE") {
+    return fail("EMAIL_RECONCILIATION_NOT_ELIGIBLE", 409);
+  }
+  if (cause.code === "PROVIDER_EVIDENCE_INCONCLUSIVE") {
+    return fail("EMAIL_PROVIDER_EVIDENCE_INCONCLUSIVE", 409);
+  }
+  if (cause.code === "RECONCILIATION_CONFLICT") {
+    return fail("EMAIL_RECONCILIATION_CONFLICT", 409);
+  }
+  return fail("EMAIL_RECONCILIATION_UNAVAILABLE", 503);
+}
+
 async function authorizedOperatorActor(
   actor: D1MutationActor,
   env: ProductionOperationsEnvironment,
@@ -532,8 +575,10 @@ export async function productionOperationsApiResponse(
   const approveMatch = APPROVE_ROUTE.exec(url.pathname);
   const inspectMatch = INSPECT_ROUTE.exec(url.pathname);
   const handoverMatch = HANDOVER_ROUTE.exec(url.pathname);
+  const emailReconciliationMatch = EMAIL_RECONCILIATION_ROUTE.exec(url.pathname);
   const recognized = url.pathname === RETURN_ROUTE || url.pathname === REPORT_ROUTE ||
-    Boolean(approveMatch) || Boolean(inspectMatch) || Boolean(handoverMatch);
+    Boolean(approveMatch) || Boolean(inspectMatch) || Boolean(handoverMatch) ||
+    Boolean(emailReconciliationMatch);
   if (!recognized) return null;
   if (env?.APP_ENV !== "production") return fail("NOT_FOUND", 404);
   const configuration = exactProductionOperationsConfiguration(env);
@@ -553,7 +598,16 @@ export async function productionOperationsApiResponse(
   if (handoverMatch && env.SHIPMENT_HANDOVER_ENABLED !== "true") {
     return fail("SHIPMENT_HANDOVER_NOT_ACTIVATED", 503);
   }
-  if (!isReporting && !handoverMatch && env.RETURNS_WORKFLOW_ENABLED !== "true") {
+  if (
+    emailReconciliationMatch &&
+    env.TRANSACTIONAL_EMAIL_RECONCILIATION_ENABLED !== "true"
+  ) {
+    return fail("EMAIL_RECONCILIATION_NOT_ACTIVATED", 503);
+  }
+  if (
+    !isReporting && !handoverMatch && !emailReconciliationMatch &&
+    env.RETURNS_WORKFLOW_ENABLED !== "true"
+  ) {
     return fail("OPERATIONS_NOT_ACTIVATED", 503);
   }
   if (
@@ -584,6 +638,13 @@ export async function productionOperationsApiResponse(
   if (!env.DB) return fail("DATABASE_UNAVAILABLE", 503);
   if (!await productionOperationsRuntimeInstalled(env.DB)) {
     return fail("OPERATIONS_SCHEMA_NOT_READY", 503);
+  }
+  if (
+    emailReconciliationMatch &&
+    (!productionEmailReconciliationRuntimeConfigured(env) ||
+      !await productionEmailReconciliationRuntimeInstalled(env.DB))
+  ) {
+    return fail("EMAIL_RECONCILIATION_SCHEMA_NOT_READY", 503);
   }
   const now = dependencies.now?.() ?? new Date().toISOString();
   if (!isCanonicalUtcTimestamp(now)) return fail("CLOCK_UNAVAILABLE", 503);
@@ -711,6 +772,52 @@ export async function productionOperationsApiResponse(
     }
   }
 
+  if (emailReconciliationMatch) {
+    const outboxId = decodeIdentifier(emailReconciliationMatch[1]);
+    const parsed = await boundedJsonBody(request);
+    if (!outboxId || !parsed || !exactObject(parsed, ["providerMessageId"])) {
+      return fail("INVALID_BODY", 400);
+    }
+    const providerMessageId = parsed.providerMessageId;
+    if (typeof providerMessageId !== "string" || !SAFE_ID.test(providerMessageId)) {
+      return fail("INVALID_BODY", 400);
+    }
+    const idem = idempotencyKey(request);
+    const expectedIdem = `email-reconcile:${await sha256Hex(
+      `${outboxId}\0${providerMessageId}`,
+    )}`;
+    if (!idem || idem !== expectedIdem) {
+      return fail("IDEMPOTENCY_KEY_REQUIRED", 400);
+    }
+    let reconciliation = dependencies.emailReconciliation;
+    if (!reconciliation) {
+      const provider = resendEmailProvider(env);
+      if (!provider) return fail("EMAIL_RECONCILIATION_UNAVAILABLE", 503);
+      reconciliation = new D1EmailDeliveryReconciler(env.DB, provider);
+    }
+    try {
+      const result = await reconciliation.reconcile({
+        outboxId,
+        providerMessageId,
+        actor,
+        now,
+      });
+      return json({
+        data: {
+          outboxId: result.outboxId,
+          kind: result.kind,
+          providerMessageId: result.providerMessageId,
+          providerLastEvent: result.providerLastEvent,
+          evidenceRecorded: true,
+          replayed: !result.created,
+          emailResent: false,
+        },
+      });
+    } catch (cause) {
+      return mapEmailReconciliationError(cause);
+    }
+  }
+
   const encodedRequestId = approveMatch?.[1] ?? inspectMatch?.[1];
   const requestId = encodedRequestId ? decodeIdentifier(encodedRequestId) : null;
   if (!requestId) return fail("INVALID_RETURN_REQUEST", 400);
@@ -756,6 +863,12 @@ function emailProvider(
   dependencies: ProductionEmailDispatchDependencies,
 ): TransactionalEmailProviderPort | null {
   if (dependencies.provider) return dependencies.provider;
+  return resendEmailProvider(env);
+}
+
+function resendEmailProvider(
+  env: ProductionOperationsEnvironment,
+): ResendEmailProvider | null {
   if (
     env.EMAIL_PROVIDER !== "resend" || !env.RESEND_API_KEY ||
     !env.TRANSACTIONAL_FROM_EMAIL || !env.TRANSACTIONAL_FROM_NAME

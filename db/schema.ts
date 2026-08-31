@@ -1132,6 +1132,49 @@ export const resendWebhookEvents = sqliteTable(
   ],
 );
 
+export const emailDeliveryProviderEvidence = sqliteTable(
+  "email_delivery_provider_evidence",
+  {
+    id: text("id").primaryKey(),
+    outboxId: text("outbox_id")
+      .notNull()
+      .references(() => emailOutbox.id, { onDelete: "restrict" }),
+    providerMessageId: text("provider_message_id").notNull(),
+    providerLastEvent: text("provider_last_event", {
+      enum: ["delivered", "opened", "clicked"],
+    }).notNull(),
+    providerCreatedAt: text("provider_created_at").notNull(),
+    reconciliationSource: text("reconciliation_source", {
+      enum: ["resend_api"],
+    }).notNull(),
+    reconciledByAdminId: text("reconciled_by_admin_id")
+      .notNull()
+      .references(() => administrators.id, { onDelete: "restrict" }),
+    reconciledAt: text("reconciled_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("ux_email_delivery_provider_evidence_outbox")
+      .on(table.outboxId),
+    uniqueIndex("ux_email_delivery_provider_evidence_message")
+      .on(table.providerMessageId),
+    index("idx_email_delivery_provider_evidence_time")
+      .on(table.reconciledAt),
+    check(
+      "ck_email_delivery_provider_evidence_event",
+      sql`${table.providerLastEvent} IN ('delivered', 'opened', 'clicked')`,
+    ),
+    check(
+      "ck_email_delivery_provider_evidence_source",
+      sql`${table.reconciliationSource} = 'resend_api'`,
+    ),
+    check(
+      "ck_email_delivery_provider_evidence_message",
+      sql`length(${table.providerMessageId}) BETWEEN 1 AND 192
+        AND ${table.providerMessageId} NOT GLOB '*[^A-Za-z0-9_.:-]*'`,
+    ),
+  ],
+);
+
 export const dataRetentionRules = sqliteTable(
   "data_retention_rules",
   {

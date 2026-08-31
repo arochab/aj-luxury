@@ -514,7 +514,11 @@ export async function parseSendcloudShipmentReceipt(
     receiptFingerprint: await sha256Hex(JSON.stringify({
       carrierCode: context.carrier_code,
       externalReferenceId: request.idempotencyKey,
-      label: { dpi: 72, mediaType: "application/pdf", size: "a6" },
+      // Sendcloud proves the carrier-native label as A6 on creation. The
+      // operator download is a separate V3 document request with
+      // `paper_size=A4`; keep both facts explicit so an A4 filename can never
+      // be mistaken for proof of an A4 provider response.
+      label: { dpi: 72, mediaType: "application/pdf", carrierNativeSize: "a6" },
       customs: customsDocumentReference ?? null,
       parcelId: Number(parcel.id),
       sendcloudShipmentId: String(data.id),

@@ -6,6 +6,7 @@ import type {
 
 const verifiedCarrierEvents = new WeakSet<object>();
 const preprodWorkerRegistrars = new WeakSet<object>();
+const sendcloudWorkerRegistrars = new WeakSet<object>();
 
 type NodeTestProcess = Readonly<{
   env?: Readonly<Record<string, string | undefined>>;
@@ -72,6 +73,41 @@ export function issuePreprodWorkerCarrierRegistrar(
           "The synthetic carrier event lacks trusted preproduction provenance.",
         );
       }
+      const event = Object.freeze({ ...claims });
+      verifiedCarrierEvents.add(event);
+      return event as VerifiedCarrierEvent;
+    },
+  });
+}
+
+/**
+ * Request-local capability for the production Sendcloud webhook verifier.
+ *
+ * The caller must still validate Sendcloud's HMAC over the exact raw request
+ * body before using this registrar. Keeping registration behind a one-shot
+ * capability prevents plain application objects from being mistaken for
+ * carrier evidence by the fulfillment store.
+ */
+export function issueSendcloudWorkerCarrierRegistrar(): Readonly<{
+  register(claims: VerifiedCarrierEventClaims): VerifiedCarrierEvent;
+}> {
+  const capability = Object.freeze({});
+  sendcloudWorkerRegistrars.add(capability);
+  let consumed = false;
+  return Object.freeze({
+    register(claims) {
+      if (
+        consumed || !sendcloudWorkerRegistrars.has(capability) ||
+        claims.providerCode !== "sendcloud" ||
+        claims.verificationMethod !== "carrier_signature"
+      ) {
+        throw new FulfillmentError(
+          "TRACKING_VERIFICATION_REQUIRED",
+          "The Sendcloud carrier event lacks trusted production provenance.",
+        );
+      }
+      consumed = true;
+      sendcloudWorkerRegistrars.delete(capability);
       const event = Object.freeze({ ...claims });
       verifiedCarrierEvents.add(event);
       return event as VerifiedCarrierEvent;

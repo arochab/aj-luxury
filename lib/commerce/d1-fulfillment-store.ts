@@ -283,6 +283,34 @@ function carrierReceiptMatches(
   );
 }
 
+/**
+ * A carrier can legitimately retry the exact signed webhook later. Receipt and
+ * verification timestamps are local arrival facts, not part of the provider
+ * event identity. On replay, retain the first persisted timestamps and compare
+ * only the immutable signed event evidence.
+ */
+function persistedCarrierReceiptMatchesReplay(
+  receipt: CarrierEventReceiptRow | null,
+  receiptId: string,
+  verified: VerifiedCarrierEvent,
+): boolean {
+  return Boolean(
+    receipt &&
+    receipt.id === receiptId &&
+    receipt.shipment_id === verified.shipmentId &&
+    receipt.provider_code === verified.providerCode &&
+    receipt.provider_event_id === verified.providerEventId &&
+    receipt.tracking_reference === verified.trackingReference &&
+    receipt.event_type === verified.eventType &&
+    receipt.event_fingerprint === verified.eventFingerprint &&
+    receipt.receipt_fingerprint === verified.receiptFingerprint &&
+    receipt.verification_method === verified.verificationMethod &&
+    receipt.occurred_at === verified.occurredAt &&
+    receipt.status === "consumed" &&
+    receipt.consumed_at === receipt.received_at
+  );
+}
+
 function actorColumns(actor: ResolvedD1Actor): ReturnActorColumns {
   if (actor.kind === "customer") {
     return Object.freeze({
@@ -1364,8 +1392,7 @@ export class D1FulfillmentStore {
         existing.tracking_reference !== candidate.trackingReference ||
         existing.event_fingerprint !== candidate.eventFingerprint ||
         existing.occurred_at !== candidate.occurredAt ||
-        existing.received_at !== receivedAt ||
-        !carrierReceiptMatches(receipt, receiptId, verified, "consumed")
+        !persistedCarrierReceiptMatchesReplay(receipt, receiptId, verified)
       ) {
         throw new FulfillmentError("TRACKING_EVENT_CONFLICT", "The tracking event is divergent.");
       }
@@ -1518,6 +1545,177 @@ export class D1FulfillmentStore {
       }
       return Object.freeze({ created: changed(results[1]) === 1 });
     } catch (error) {
+      mapDatabaseError(error);
+    }
+  }
+
+  /**
+   * Convert the first cryptographically verified carrier scan into the
+   * physical-handover transition when no operator handover was recorded.
+   * This never advances on label creation alone: only a registered production
+   * carrier event can cross this boundary.
+   */
+  async handoverShipmentFromVerifiedCarrierEvent(input: Readonly<{
+    event: VerifiedCarrierEvent;
+    locale: "fr" | "en";
+  }>): Promise<{ created: boolean }> {
+    assertVerifiedCarrierEvent(input.event);
+    assertEmailLocale(input.locale);
+    if (
+      input.event.providerCode !== "sendcloud" ||
+      input.event.verificationMethod !== "carrier_signature" ||
+      !["in_transit", "out_for_delivery", "delivered"].includes(input.event.eventType)
+    ) {
+      throw new FulfillmentError(
+        "TRACKING_VERIFICATION_REQUIRED",
+        "A verified carrier possession event is required.",
+      );
+    }
+    const shipment = await this.#database.prepare(
+      `SELECT shipment.id, shipment.order_id, shipment.status,
+        shipment.tracking_provider_code, shipment.tracking_reference,
+        customer_order.email, customer_order.order_number,
+        configuration.zone, customs.status AS customs_status
+      FROM shipments AS shipment
+      INNER JOIN orders AS customer_order ON customer_order.id = shipment.order_id
+      INNER JOIN shipping_quotes AS quote ON quote.id = shipment.shipping_quote_id
+      INNER JOIN shipping_zone_configurations AS configuration
+        ON configuration.id = quote.configuration_id
+      LEFT JOIN customs_records AS customs ON customs.shipment_id = shipment.id
+      WHERE shipment.id = ?`,
+    ).bind(input.event.shipmentId).first<{
+      id: string;
+      order_id: string;
+      status: string;
+      tracking_provider_code: string | null;
+      tracking_reference: string | null;
+      email: string;
+      order_number: string;
+      zone: string;
+      customs_status: string | null;
+    }>();
+    if (!shipment || shipment.tracking_provider_code !== input.event.providerCode ||
+      shipment.tracking_reference !== input.event.trackingReference) {
+      throw new FulfillmentError(
+        "TRACKING_EVENT_CONFLICT",
+        "The verified carrier event is crossed with another shipment.",
+      );
+    }
+    if (["handed_over", "in_transit", "delivered"].includes(shipment.status)) {
+      return Object.freeze({ created: false });
+    }
+    if (shipment.status !== "label_ready" ||
+      (shipment.zone !== "EU" && shipment.customs_status !== "ready")) {
+      throw new FulfillmentError(
+        shipment.zone !== "EU" && shipment.customs_status !== "ready"
+          ? "CUSTOMS_NOT_READY"
+          : "INVALID_TRANSITION",
+        "The shipment is not ready for carrier possession.",
+      );
+    }
+    const handoverHash = await sha256Hex(
+      `carrier-handover\0${input.event.providerCode}\0${input.event.providerEventId}`,
+    );
+    const handoverEventId = `handover_${handoverHash}`;
+    const handoverFingerprint = await sha256Hex(JSON.stringify([
+      shipment.id,
+      shipment.tracking_reference,
+      "handed_over",
+      input.event.occurredAt,
+      input.event.providerEventId,
+    ]));
+    const shipmentEmail = await buildTransactionalEmail({
+      kind: "shipment-confirmation",
+      eventId: handoverEventId,
+      locale: input.locale,
+      recipientEmail: shipment.email,
+      orderNumber: shipment.order_number,
+      trackingReference: shipment.tracking_reference,
+    });
+    const payloadJson = JSON.stringify({
+      subject: shipmentEmail.subject,
+      text: shipmentEmail.text,
+    });
+    try {
+      const results = await this.#database.batch([
+        this.#database.prepare(
+          `INSERT INTO shipment_tracking_events (
+            id, shipment_id, provider_code, provider_event_id, event_type,
+            tracking_reference, event_fingerprint, occurred_at, received_at
+          ) VALUES (?, ?, 'internal_handover', ?, 'handed_over', ?, ?, ?, ?)`,
+        ).bind(
+          handoverEventId,
+          shipment.id,
+          handoverEventId,
+          shipment.tracking_reference,
+          handoverFingerprint,
+          input.event.occurredAt,
+          input.event.receivedAt,
+        ),
+        this.#database.prepare(
+          `UPDATE shipments SET status='handed_over', handed_over_at=?, updated_at=?
+          WHERE id=? AND status='label_ready'`,
+        ).bind(
+          input.event.occurredAt,
+          input.event.receivedAt,
+          shipment.id,
+        ),
+        this.#database.prepare(
+          `UPDATE orders SET status='shipped', updated_at=?
+          WHERE id=? AND status='preparing'`,
+        ).bind(input.event.receivedAt, shipment.order_id),
+        this.#database.prepare(
+          `INSERT INTO email_outbox (
+            id, kind, transaction_intent, source_event_id, recipient_email,
+            order_id, locale, template_version, payload_json, status,
+            attempts, max_attempts, next_attempt_at, idempotency_key,
+            provider_idempotency_key, created_at, updated_at
+          ) VALUES (?, 'shipment_confirmation', 'shipment_created', ?, ?, ?, ?,
+            'shipment-handover-v1', ?, 'pending', 0, 5, ?, ?, ?, ?, ?)`,
+        ).bind(
+          `outbox_${handoverEventId}`,
+          handoverEventId,
+          shipment.email,
+          shipment.order_id,
+          input.locale,
+          payloadJson,
+          input.event.receivedAt,
+          `email:shipment_handover:${handoverEventId}`,
+          `shipment_confirmation:${handoverEventId}`,
+          input.event.receivedAt,
+          input.event.receivedAt,
+        ),
+        this.#database.prepare(
+          `INSERT INTO audit_log (
+            id, actor_type, actor_id, action, entity_type, entity_id,
+            idempotency_key, metadata_json, created_at
+          ) VALUES (?, 'system', NULL, 'shipment_handed_over', 'shipment', ?, ?, ?, ?)`,
+        ).bind(
+          `audit_${handoverEventId}`,
+          shipment.id,
+          `audit:shipment_handover:${handoverEventId}`,
+          JSON.stringify({
+            eventId: handoverEventId,
+            evidence: "sendcloud_carrier_signature",
+            providerEventId: input.event.providerEventId,
+          }),
+          input.event.receivedAt,
+        ),
+      ]);
+      if (results.some((result) => changed(result) !== 1)) {
+        throw new FulfillmentError(
+          "PERSISTENCE_FAILURE",
+          "The carrier-proven handover was not written atomically.",
+        );
+      }
+      await this.#assertHandoverArtifacts(shipment.id, shipment.order_id, handoverEventId);
+      return Object.freeze({ created: true });
+    } catch (error) {
+      const replay = await this.#trackingEvent("internal_handover", handoverEventId);
+      if (replay?.shipment_id === shipment.id && replay.event_type === "handed_over") {
+        await this.#assertHandoverArtifacts(shipment.id, shipment.order_id, handoverEventId);
+        return Object.freeze({ created: false });
+      }
       mapDatabaseError(error);
     }
   }

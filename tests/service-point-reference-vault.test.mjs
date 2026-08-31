@@ -501,7 +501,7 @@ test("0011 fails closed for a missing, foreign, expired or unsealed service poin
   assert.doesNotMatch(migration, /provider_reference` text|raw_reference|api[_-]?key|secret[_-]?key/i);
 });
 
-test("0011-0026 remain additive and the journal ends at the international foundation", () => {
+test("0011-0027 remain additive and the journal ends at email reconciliation", () => {
   const previous = JSON.parse(readFileSync(`${drizzle}meta/0010_snapshot.json`, "utf8"));
   const snapshot = JSON.parse(readFileSync(`${drizzle}meta/0011_snapshot.json`, "utf8"));
   const pricingSnapshot = JSON.parse(readFileSync(`${drizzle}meta/0012_snapshot.json`, "utf8"));
@@ -511,6 +511,8 @@ test("0011-0026 remain additive and the journal ends at the international founda
   const operationsSnapshot = JSON.parse(readFileSync(`${drizzle}meta/0016_snapshot.json`, "utf8"));
   const packPricingSnapshot = JSON.parse(readFileSync(`${drizzle}meta/0017_snapshot.json`, "utf8"));
   const resendSnapshot = JSON.parse(readFileSync(`${drizzle}meta/0018_snapshot.json`, "utf8"));
+  const internationalSnapshot = JSON.parse(readFileSync(`${drizzle}meta/0026_snapshot.json`, "utf8"));
+  const reconciliationSnapshot = JSON.parse(readFileSync(`${drizzle}meta/0027_snapshot.json`, "utf8"));
   const journal = JSON.parse(readFileSync(`${drizzle}meta/_journal.json`, "utf8"));
   assert.equal(snapshot.version, "6");
   assert.equal(snapshot.dialect, "sqlite");
@@ -585,11 +587,18 @@ test("0011-0026 remain additive and the journal ends at the international founda
     resendSnapshot.tables.email_outbox.columns.provider_message_id.notNull,
     false,
   );
+  assert.equal(reconciliationSnapshot.prevId, internationalSnapshot.id);
+  assert.notEqual(reconciliationSnapshot.id, internationalSnapshot.id);
+  assert.equal(
+    Object.keys(reconciliationSnapshot.tables).length,
+    Object.keys(internationalSnapshot.tables).length + 1,
+  );
+  assert.ok(reconciliationSnapshot.tables.email_delivery_provider_evidence);
   assert.deepEqual(journal.entries.at(-1), {
-    idx: 26,
+    idx: 27,
     version: "6",
-    when: 1788220800000,
-    tag: "0026_international_shipping",
+    when: 1788307200000,
+    tag: "0027_puzzling_war_machine",
     breakpoints: true,
   });
 });

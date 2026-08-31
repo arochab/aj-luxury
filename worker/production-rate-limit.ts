@@ -35,6 +35,8 @@ const exactRoutes = new Map<string, LimitClass>([
   ["/api/commerce/account/marketing", "commerce"],
   ["/api/commerce/returns", "commerce"],
   ["/api/commerce/admin/health", "operator"],
+  ["/api/commerce/admin/session", "operator"],
+  ["/api/commerce/admin/orders", "operator"],
   ["/api/commerce/admin/reporting", "operator"],
   ["/api/commerce/admin/late-payment-refunds/dispatch", "operator"],
   ["/api/commerce/admin/launch-stock-import", "operator"],

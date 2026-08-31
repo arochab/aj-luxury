@@ -11,6 +11,7 @@ import {
 import { createSendcloudShippingLabelProvider } from "../lib/commerce/sendcloud-shipping-label-provider.ts";
 import { createSendcloudProviderPorts } from "../lib/commerce/sendcloud-provider.ts";
 import { controlledOwnerRequestAuthenticated } from "./production-commerce-api.ts";
+import { cloudflareAccessOwnerRequestAuthenticated } from "./cloudflare-access-owner.ts";
 import { productionOutboundShippingRuntimeConfigured } from "./production-shipping-runtime.ts";
 
 const ROUTE = /^\/api\/commerce\/admin\/orders\/([^/]+)\/shipping-label$/;
@@ -35,6 +36,10 @@ export type ProductionShippingLabelEnvironment = ProductionCommerceEnvironment &
 export type ProductionShippingLabelDependencies = Readonly<{
   shippingLabelProvider?: ShippingLabelProviderPort;
   shippingDocuments?: ShippingDocumentProviderPort;
+  authorizeControlledOwner?: (
+    request: Request,
+    env: ProductionShippingLabelEnvironment,
+  ) => Promise<boolean>;
   authorizeOwner?: (
     request: Request,
     database: CommerceD1Database,
@@ -130,25 +135,6 @@ function json(value: unknown, status = 200): Response {
 
 function fail(code: string, status: number): Response {
   return json({ error: { code, requestId: `req_${crypto.randomUUID()}` } }, status);
-}
-
-function fixedTimeEmail(actualValue: string | null, expectedValue: string | undefined): boolean {
-  const actual = actualValue?.trim().toLowerCase() ?? "";
-  const expected = expectedValue?.trim().toLowerCase() ?? "";
-  if (!actual || !expected || actual.length !== expected.length) return false;
-  let difference = 0;
-  for (let index = 0; index < expected.length; index += 1) {
-    difference |= actual.charCodeAt(index) ^ expected.charCodeAt(index);
-  }
-  return difference === 0;
-}
-
-function ownerAuthenticated(request: Request, env: ProductionShippingLabelEnvironment): boolean {
-  const id = request.headers.get("oai-authenticated-user-id")?.trim() ?? "";
-  return id.length > 0 && id.length <= 512 && fixedTimeEmail(
-    request.headers.get("oai-authenticated-user-email"),
-    env.COMMERCE_CONTROLLED_OWNER_EMAIL,
-  );
 }
 
 function cookie(request: Request, name: string): string[] {
@@ -260,8 +246,17 @@ export async function productionShippingLabelAdminReleaseCoreResponse(
 ): Promise<Response> {
   const match = ROUTE.exec(new URL(request.url).pathname);
   if (!match || request.method !== "POST") return fail("NOT_FOUND", 404);
-  if (!ownerAuthenticated(request, env)) return fail("OWNER_ACCESS_REQUIRED", 403);
-  if (!await controlledOwnerRequestAuthenticated(request, env)) {
+  // Cloudflare Access is the production console identity. The legacy
+  // controlled HMAC remains accepted only through this same verifier for the
+  // private controlled-order rehearsal. Requiring the old platform-specific
+  // `oai-*` headers in addition would make a correctly authenticated Access
+  // session unable to retrieve its label.
+  const releaseOwnerAuthenticated = dependencies.authorizeControlledOwner ?? (
+    env.COMMERCE_MODE === "live"
+      ? cloudflareAccessOwnerRequestAuthenticated
+      : controlledOwnerRequestAuthenticated
+  );
+  if (!await releaseOwnerAuthenticated(request, env)) {
     return fail("CONTROLLED_ACCESS_REQUIRED", 403);
   }
   if (env.OUTBOUND_SHIPMENT_CREATION_ENABLED !== "true" ||
@@ -297,7 +292,14 @@ export async function productionShippingLabelAdminReleaseCoreResponse(
   if (!SAFE_ID.test(orderId) || !(await emptyBody(request))) {
     return fail("INVALID_REQUEST", 400);
   }
-  const existing = await env.DB.prepare(
+  // The order is the durable business idempotency boundary. A browser refresh,
+  // a copied operator link or a newly generated request key must always recover
+  // the one existing shipment instead of creating a second Sendcloud parcel.
+  const existingForOrder = await env.DB.prepare(
+    `SELECT id, order_id, status, attempts, provider_shipment_reference,
+      tracking_reference FROM shipments WHERE order_id = ? LIMIT 1`,
+  ).bind(orderId).first<ExistingShipment>();
+  const existing = existingForOrder ?? await env.DB.prepare(
     `SELECT id, order_id, status, attempts, provider_shipment_reference,
       tracking_reference FROM shipments WHERE idempotency_key = ?`,
   ).bind(idempotencyKey).first<ExistingShipment>();

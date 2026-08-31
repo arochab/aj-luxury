@@ -765,6 +765,33 @@ function bytesToHex(bytes: Uint8Array): string {
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
+function assertPrintableA4Pdf(bytes: Uint8Array): void {
+  const text = new TextDecoder().decode(bytes);
+  if (!text.startsWith("%PDF-") || !/%%EOF\s*$/.test(text)) {
+    throw new DeliveryProviderError("MALFORMED_RESPONSE", "Provider PDF envelope is invalid.");
+  }
+  const boxes = Array.from(text.matchAll(
+    /\/MediaBox\s*\[\s*(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s*\]/g,
+  ));
+  if (boxes.length < 1) {
+    throw new DeliveryProviderError("MALFORMED_RESPONSE", "Provider PDF page size is missing.");
+  }
+  const close = (actual: number, expected: number) => Math.abs(actual - expected) <= 3;
+  const everyPageIsA4 = boxes.every((box) => {
+    const x0 = Number(box[1]);
+    const y0 = Number(box[2]);
+    const width = Number(box[3]) - x0;
+    const height = Number(box[4]) - y0;
+    return close(x0, 0) && close(y0, 0) && (
+      (close(width, 595.28) && close(height, 841.89)) ||
+      (close(width, 841.89) && close(height, 595.28))
+    );
+  });
+  if (!everyPageIsA4) {
+    throw new DeliveryProviderError("MALFORMED_RESPONSE", "Provider PDF is not A4.");
+  }
+}
+
 async function boundedDocument(response: Response): Promise<Readonly<{
   content: Blob;
   mediaType: "application/pdf" | "image/png" | "application/zpl";
@@ -1026,6 +1053,10 @@ export function createSendcloudProviderPorts(
           url.href,
           { method: "GET", headers: { Accept: "application/pdf" } },
         ));
+        if (file.mediaType !== "application/pdf") {
+          throw new DeliveryProviderError("MALFORMED_RESPONSE", "Provider label is not a PDF.");
+        }
+        assertPrintableA4Pdf(new Uint8Array(await file.content.arrayBuffer()));
         return Object.freeze({
           providerDocumentReference:
             `sendcloud:parcel:${request.providerParcelReference}:document:${providerKind}`,

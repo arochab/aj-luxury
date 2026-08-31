@@ -12,6 +12,15 @@ import { createSendcloudProviderPorts } from "../lib/commerce/sendcloud-provider
 const parcel = resolveClientValidatedParcelProfile([{ quantity: 1 }]);
 assert.ok(parcel);
 
+function printablePdf(width = 595.28, height = 841.89) {
+  return new TextEncoder().encode(`%PDF-1.7
+1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj
+2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj
+3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 ${width} ${height}] >> endobj
+trailer << /Root 1 0 R >>
+%%EOF`);
+}
+
 function approved(overrides = {}) {
   return {
     returnRequestId: "return_request_1",
@@ -169,9 +178,9 @@ test("launch scope and customs terms fail closed before the provider", async () 
   assert.equal(calls, 0);
 });
 
-test("parcel document retrieval uses V3, validates binary type and returns an immutable Blob", async () => {
+test("outbound label retrieval requests a real A4 PDF from Sendcloud V3", async () => {
   const calls = [];
-  const pdf = new TextEncoder().encode("%PDF-1.7 AJ Luxury test label");
+  const pdf = printablePdf();
   const ports = createSendcloudProviderPorts(
     { publicKey: "public_key", secretKey: "x".repeat(32) },
     async (url, init) => {
@@ -182,7 +191,7 @@ test("parcel document retrieval uses V3, validates binary type and returns an im
   const receipt = await ports.documents.document({
     requestId: "document_attempt_1",
     providerParcelReference: "67880",
-    documentKind: "return_label",
+    documentKind: "label",
   });
   assert.match(calls[0].url, /\/api\/v3\/parcels\/67880\/documents\/label\?/);
   assert.match(calls[0].url, /dpi=72/);
@@ -195,6 +204,23 @@ test("parcel document retrieval uses V3, validates binary type and returns an im
   assert.match(receipt.contentSha256, /^[0-9a-f]{64}$/);
   assert.equal(receipt.content instanceof Blob, true);
   assert.equal(await receipt.content.text(), new TextDecoder().decode(pdf));
+});
+
+test("outbound label retrieval rejects a provider-native A6 PDF instead of mislabelling it A4", async () => {
+  const ports = createSendcloudProviderPorts(
+    { publicKey: "public_key", secretKey: "x".repeat(32) },
+    async () => new Response(printablePdf(297.64, 419.53), {
+      headers: { "Content-Type": "application/pdf" },
+    }),
+  );
+  await assert.rejects(
+    () => ports.documents.document({
+      requestId: "document_attempt_a6",
+      providerParcelReference: "67880",
+      documentKind: "label",
+    }),
+    (error) => error instanceof DeliveryProviderError && error.code === "MALFORMED_RESPONSE",
+  );
 });
 
 test("document retrieval rejects injection, oversized content and unexpected media without leaking details", async () => {

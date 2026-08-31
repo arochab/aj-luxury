@@ -4,6 +4,14 @@ export type CloudflareAccessOwnerEnvironment = Readonly<{
   COMMERCE_CONTROLLED_OWNER_EMAIL?: string;
 }>;
 
+export type CloudflareAccessOwnerIdentity = Readonly<{
+  issuer: string;
+  subject: string;
+  email: string;
+  authenticatedAt: string;
+  assertion: string;
+}>;
+
 const TEAM_HOST = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.cloudflareaccess\.com$/;
 const AUDIENCE = /^[A-Za-z0-9_-]{16,256}$/;
 const JWT_SEGMENT = /^[A-Za-z0-9_-]+$/;
@@ -161,15 +169,15 @@ function validAudience(value: unknown, expected: string): boolean {
       value.some((candidate) => typeof candidate === "string" && exactText(candidate, expected));
 }
 
-export async function cloudflareAccessOwnerRequestAuthenticated(
+export async function cloudflareAccessOwnerIdentity(
   request: Request,
   env: CloudflareAccessOwnerEnvironment,
-): Promise<boolean> {
+): Promise<CloudflareAccessOwnerIdentity | null> {
   const configuration = readConfiguration(env);
   const assertion = request.headers.get("Cf-Access-Jwt-Assertion")?.trim() ?? "";
-  if (!configuration || !assertion || assertion.length > MAX_JWT_BYTES) return false;
+  if (!configuration || !assertion || assertion.length > MAX_JWT_BYTES) return null;
   const segments = assertion.split(".");
-  if (segments.length !== 3) return false;
+  if (segments.length !== 3) return null;
   const header = decodeJsonSegment(segments[0]);
   const claims = decodeJsonSegment(segments[1]);
   const signature = decodeSignature(segments[2]);
@@ -177,9 +185,9 @@ export async function cloudflareAccessOwnerRequestAuthenticated(
   if (!header || header.alg !== "RS256" ||
     (header.typ !== undefined && header.typ !== "JWT") ||
     typeof kid !== "string" || kid.length < 1 || kid.length > 256 ||
-    !claims || !signature) return false;
+    !claims || !signature) return null;
   const key = await resolveVerificationKey(configuration.issuer, kid);
-  if (!key) return false;
+  if (!key) return null;
   let validSignature = false;
   try {
     validSignature = await crypto.subtle.verify(
@@ -189,9 +197,9 @@ export async function cloudflareAccessOwnerRequestAuthenticated(
       ownedArrayBuffer(new TextEncoder().encode(`${segments[0]}.${segments[1]}`)),
     );
   } catch {
-    return false;
+    return null;
   }
-  if (!validSignature) return false;
+  if (!validSignature) return null;
 
   const now = Math.floor(Date.now() / 1000);
   const issuer = claims.iss;
@@ -200,7 +208,7 @@ export async function cloudflareAccessOwnerRequestAuthenticated(
   const expiresAt = claims.exp;
   const notBefore = claims.nbf;
   const issuedAt = claims.iat;
-  return typeof issuer === "string" && exactText(issuer, configuration.issuer) &&
+  const valid = typeof issuer === "string" && exactText(issuer, configuration.issuer) &&
     validAudience(claims.aud, configuration.audience) &&
     typeof subject === "string" && subject.length >= 1 && subject.length <= 512 &&
     exactText(email, configuration.ownerEmail) &&
@@ -208,6 +216,21 @@ export async function cloudflareAccessOwnerRequestAuthenticated(
     expiresAt > now - CLOCK_SKEW_SECONDS &&
     (notBefore === undefined || (typeof notBefore === "number" &&
       Number.isSafeInteger(notBefore) && notBefore <= now + CLOCK_SKEW_SECONDS)) &&
-    (issuedAt === undefined || (typeof issuedAt === "number" &&
-      Number.isSafeInteger(issuedAt) && issuedAt <= now + CLOCK_SKEW_SECONDS));
+    typeof issuedAt === "number" && Number.isSafeInteger(issuedAt) &&
+    issuedAt <= now + CLOCK_SKEW_SECONDS;
+  if (!valid) return null;
+  return Object.freeze({
+    issuer: configuration.issuer,
+    subject,
+    email,
+    authenticatedAt: new Date(issuedAt * 1_000).toISOString(),
+    assertion,
+  });
+}
+
+export async function cloudflareAccessOwnerRequestAuthenticated(
+  request: Request,
+  env: CloudflareAccessOwnerEnvironment,
+): Promise<boolean> {
+  return await cloudflareAccessOwnerIdentity(request, env) !== null;
 }

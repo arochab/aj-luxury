@@ -7,8 +7,10 @@ import type {
 const RESEND_EMAILS_ENDPOINT = "https://api.resend.com/emails";
 const MAX_TRANSPORT_ATTEMPTS = 3;
 const MAX_RESPONSE_BYTES = 64 * 1024;
+const PROVIDER_LOOKUP_TIMEOUT_MS = 5_000;
 const SAFE_IDEMPOTENCY_KEY = /^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,255}$/;
 const SAFE_MAILBOX = /^[\x21-\x7e]+@[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$/;
+const SAFE_TAG_VALUE = /^[A-Za-z0-9_-]{1,256}$/;
 
 export class ResendEmailProviderError extends Error {
   readonly outcome: "invalid-config" | "rejected" | "ambiguous";
@@ -29,10 +31,25 @@ export type ResendEmailProviderConfig = Readonly<{
   fromName: string;
   replyTo?: string;
   fetchImpl?: typeof fetch;
+  lookupTimeoutMs?: number;
 }>;
 
 type EmailContent = Readonly<{ subject: string; text: string }>;
 const SAFE_PROVIDER_MESSAGE_ID = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,191}$/;
+
+export type ResendExpectedEmail = Readonly<{
+  outboxId: string;
+  kind: string;
+  locale: "fr" | "en";
+  recipientEmail: string;
+  payloadJson: string;
+}>;
+
+export type ResendDeliveredEmailEvidence = Readonly<{
+  providerMessageId: string;
+  providerLastEvent: "delivered" | "opened" | "clicked";
+  providerCreatedAt: string;
+}>;
 
 function escapeHtml(value: string): string {
   return value
@@ -98,15 +115,92 @@ async function boundedJson(response: Response): Promise<unknown> {
   if (Number.isFinite(declared) && declared > MAX_RESPONSE_BYTES) {
     throw new ResendEmailProviderError("ambiguous", "Email provider response is too large.");
   }
-  const bytes = new Uint8Array(await response.arrayBuffer());
-  if (bytes.byteLength > MAX_RESPONSE_BYTES) {
-    throw new ResendEmailProviderError("ambiguous", "Email provider response is too large.");
+  if (!response.body) {
+    throw new ResendEmailProviderError("ambiguous", "Email provider response is invalid.");
+  }
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let length = 0;
+  try {
+    while (true) {
+      const next = await reader.read();
+      if (next.done) break;
+      length += next.value.byteLength;
+      if (length > MAX_RESPONSE_BYTES) {
+        await reader.cancel();
+        throw new ResendEmailProviderError(
+          "ambiguous",
+          "Email provider response is too large.",
+        );
+      }
+      chunks.push(next.value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const bytes = new Uint8Array(length);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
   }
   try {
     return JSON.parse(new TextDecoder().decode(bytes));
   } catch {
     throw new ResendEmailProviderError("ambiguous", "Email provider response is invalid.");
   }
+}
+
+function tagValue(value: string): string {
+  const safe = value.replaceAll(/[^A-Za-z0-9_-]/g, "_").slice(0, 256);
+  if (!SAFE_TAG_VALUE.test(safe)) {
+    throw new ResendEmailProviderError("rejected", "Email tag is invalid.");
+  }
+  return safe;
+}
+
+function mailboxList(value: unknown): string[] | null {
+  if (typeof value === "string") return [value];
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) return null;
+  return value as string[];
+}
+
+function exactOptionalMailboxList(value: unknown, expected?: string): boolean {
+  if (value === undefined || value === null || (Array.isArray(value) && value.length === 0)) {
+    return expected === undefined;
+  }
+  const actual = mailboxList(value);
+  return actual !== null && actual.length === 1 && actual[0] === expected;
+}
+
+function emptyMailboxList(value: unknown): boolean {
+  return value === undefined || value === null ||
+    (Array.isArray(value) && value.length === 0);
+}
+
+function exactTags(value: unknown, expected: ResendExpectedEmail): boolean {
+  if (!Array.isArray(value)) return false;
+  const tags = new Map<string, string>();
+  for (const candidate of value) {
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return false;
+    const entry = candidate as Record<string, unknown>;
+    if (
+      typeof entry.name !== "string" || typeof entry.value !== "string" ||
+      tags.has(entry.name)
+    ) return false;
+    tags.set(entry.name, entry.value);
+  }
+  if (tags.get("kind") !== expected.kind || tags.get("locale") !== expected.locale) {
+    return false;
+  }
+  const historicalOutboxTag = tags.get("outbox_id");
+  return historicalOutboxTag === undefined || historicalOutboxTag === tagValue(expected.outboxId);
+}
+
+function canonicalProviderTimestamp(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const milliseconds = Date.parse(value);
+  return Number.isFinite(milliseconds) ? new Date(milliseconds).toISOString() : null;
 }
 
 /** Resend HTTP adapter with provider-side 24-hour idempotency. */
@@ -116,6 +210,7 @@ export class ResendEmailProvider implements TransactionalEmailProviderPort {
   readonly #fromName: string;
   readonly #replyTo: string | undefined;
   readonly #fetch: typeof fetch;
+  readonly #lookupTimeoutMs: number;
 
   constructor(config: ResendEmailProviderConfig) {
     if (!config.apiKey.startsWith("re_") || config.apiKey.length < 6) {
@@ -131,6 +226,11 @@ export class ResendEmailProvider implements TransactionalEmailProviderPort {
       ? requireMailbox(config.replyTo, "replyTo")
       : undefined;
     this.#fetch = config.fetchImpl ?? fetch;
+    this.#lookupTimeoutMs = config.lookupTimeoutMs ?? PROVIDER_LOOKUP_TIMEOUT_MS;
+    if (!Number.isInteger(this.#lookupTimeoutMs) ||
+      this.#lookupTimeoutMs < 10 || this.#lookupTimeoutMs > 10_000) {
+      throw new ResendEmailProviderError("invalid-config", "lookupTimeoutMs is invalid.");
+    }
   }
 
   async deliver(
@@ -161,6 +261,7 @@ export class ResendEmailProvider implements TransactionalEmailProviderPort {
         tags: [
           { name: "kind", value: delivery.message.kind },
           { name: "locale", value: delivery.message.locale },
+          { name: "outbox_id", value: tagValue(delivery.message.id) },
         ],
       }),
     };
@@ -218,5 +319,73 @@ export class ResendEmailProvider implements TransactionalEmailProviderPort {
       "ambiguous",
       "Email provider request failed.",
     );
+  }
+
+  /**
+   * Reads one immutable provider record and returns proof only when the exact
+   * AJ Luxury message is already delivered. A 404, a merely accepted message,
+   * or any content mismatch is inconclusive and can never authorize a replay.
+   */
+  async retrieveDeliveredEvidence(
+    providerMessageId: string,
+    expected: ResendExpectedEmail,
+  ): Promise<ResendDeliveredEmailEvidence> {
+    if (!SAFE_PROVIDER_MESSAGE_ID.test(providerMessageId)) {
+      throw new ResendEmailProviderError("rejected", "Email provider id is invalid.");
+    }
+    if (
+      !SAFE_IDEMPOTENCY_KEY.test(expected.outboxId) ||
+      !SAFE_TAG_VALUE.test(expected.kind) ||
+      !["fr", "en"].includes(expected.locale) ||
+      expected.recipientEmail.length > 254 || !SAFE_MAILBOX.test(expected.recipientEmail)
+    ) {
+      throw new ResendEmailProviderError("rejected", "Expected email is invalid.");
+    }
+    const content = parseContent(expected.payloadJson);
+    let response: Response;
+    try {
+      response = await this.#fetch(
+        `${RESEND_EMAILS_ENDPOINT}/${encodeURIComponent(providerMessageId)}`,
+        {
+          method: "GET",
+          headers: { Authorization: `Bearer ${this.#apiKey}` },
+          redirect: "error",
+          signal: AbortSignal.timeout(this.#lookupTimeoutMs),
+        },
+      );
+    } catch {
+      throw new ResendEmailProviderError("ambiguous", "Email lookup failed.");
+    }
+    if (!response.ok) {
+      await response.body?.cancel();
+      throw new ResendEmailProviderError("ambiguous", "Email lookup is inconclusive.");
+    }
+    const payload = await boundedJson(response);
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+      throw new ResendEmailProviderError("ambiguous", "Email lookup is inconclusive.");
+    }
+    const record = payload as Record<string, unknown>;
+    const to = mailboxList(record.to);
+    const createdAt = canonicalProviderTimestamp(record.created_at);
+    const lastEvent = record.last_event;
+    const exactMessage = record.id === providerMessageId &&
+      record.from === `${this.#fromName} <${this.#fromEmail}>` &&
+      to?.length === 1 && to[0] === expected.recipientEmail &&
+      record.subject === content.subject && record.text === content.text &&
+      record.html === brandedHtml(content) && emptyMailboxList(record.cc) &&
+      emptyMailboxList(record.bcc) &&
+      exactOptionalMailboxList(record.reply_to, this.#replyTo) &&
+      (record.attachments === undefined ||
+        (Array.isArray(record.attachments) && record.attachments.length === 0)) &&
+      exactTags(record.tags, expected) && createdAt !== null;
+    if (!exactMessage || !["delivered", "opened", "clicked"].includes(String(lastEvent))) {
+      throw new ResendEmailProviderError("ambiguous", "Email delivery is inconclusive.");
+    }
+    const providerLastEvent = lastEvent as "delivered" | "opened" | "clicked";
+    return Object.freeze({
+      providerMessageId,
+      providerLastEvent,
+      providerCreatedAt: createdAt,
+    });
   }
 }

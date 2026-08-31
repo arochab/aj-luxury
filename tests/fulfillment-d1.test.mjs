@@ -18,8 +18,14 @@ import {
 } from "../lib/commerce/fulfillment-domain.ts";
 import { resolveClientValidatedParcelProfile } from "../lib/commerce/parcel-profiles.ts";
 import { assertVerifiedCarrierEvent } from "../lib/commerce/verified-carrier-event.ts";
+import {
+  createVerifiedSendcloudTrackingPort,
+  sendcloudTrackingCandidate,
+  verifySendcloudTrackingWebhook,
+} from "../lib/commerce/sendcloud-tracking-webhook.ts";
 import { verifyTestCarrierEvent } from "./support/test-carrier-event.ts";
 import { verifyTestPaymentEvent } from "./support/test-payment-event.ts";
+import { productionCommerceApiResponse } from "../worker/production-commerce-api.ts";
 
 const drizzleDirectory = fileURLToPath(new URL("../drizzle/", import.meta.url));
 const migrations = readdirSync(drizzleDirectory)
@@ -1325,6 +1331,203 @@ test("selected quotes survive later payment while unpaid orders never reach the 
   assert.equal(context.database.prepare(
     "SELECT COUNT(*) AS count FROM shipments WHERE id='shipment_unpaid_rejected'",
   ).get().count, 0);
+  context.database.close();
+});
+
+test("the first signed Sendcloud possession scan proves handover exactly once", async () => {
+  let verifiedTrackingPort;
+  const context = fixture({
+    shippingLabel: {
+      async createLabel(request) {
+        return {
+          shipmentId: request.shipmentId,
+          orderId: request.orderId,
+          idempotencyKey: request.idempotencyKey,
+          providerCode: "sendcloud",
+          providerShipmentReference: "383707309",
+          trackingReference: "8NLAJ123456789",
+          receiptFingerprint: "c".repeat(64),
+        };
+      },
+    },
+    tracking: {
+      verifyEvent(candidate) {
+        assert.ok(verifiedTrackingPort, "the signed carrier port must be installed first");
+        return verifiedTrackingPort.verifyEvent(candidate);
+      },
+    },
+  });
+  activateConfiguration(context, "EU", "schandover");
+  const order = await createPaidOrder(context, {
+    suffix: "schandover",
+    zone: "EU",
+    lines: [{ variantId: "variant_boxer_pourpre_m", quantity: 1 }],
+  });
+  const shipment = await context.fulfillment.createShipmentLabel({
+    shipmentId: "shipment_sendcloud_handover",
+    orderId: order.orderId,
+    idempotencyKey: "shipment:sendcloud-handover",
+    leaseToken: "lease_sendcloud_handover",
+    leaseExpiresAt: "2026-08-31T12:05:00.000Z",
+    now: "2026-08-31T11:58:00.000Z",
+  });
+  assert.equal(shipment.status, "label_ready");
+
+  const rawBody = new TextEncoder().encode(JSON.stringify({
+    action: "parcel_status_changed",
+    timestamp: 1788177540,
+    carrier_status_change_timestamp: 1788177540,
+    parcel: {
+      id: 383707309,
+      tracking_number: "8NLAJ123456789",
+      status: { id: 11, message: "Shipment picked up by driver" },
+    },
+  }));
+  const secret = "sendcloud-webhook-secret-value-2026";
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const signature = Buffer.from(
+    await crypto.subtle.sign("HMAC", key, rawBody),
+  ).toString("hex");
+  const receivedAt = "2026-08-31T12:00:00.000Z";
+  const signal = await verifySendcloudTrackingWebhook({
+    rawBody,
+    signature,
+    secret,
+    receivedAt,
+  });
+  verifiedTrackingPort = createVerifiedSendcloudTrackingPort(signal, shipment.id);
+  const candidate = sendcloudTrackingCandidate(signal, shipment.id);
+  const verified = await verifiedTrackingPort.verifyEvent({ ...candidate, receivedAt });
+
+  assert.deepEqual(await context.fulfillment.handoverShipmentFromVerifiedCarrierEvent({
+    event: verified,
+    locale: "fr",
+  }), { created: true });
+  assert.deepEqual(await context.fulfillment.recordTrackingEvent(
+    candidate,
+    receivedAt,
+  ), { created: true });
+  assert.deepEqual(await context.fulfillment.handoverShipmentFromVerifiedCarrierEvent({
+    event: verified,
+    locale: "fr",
+  }), { created: false });
+
+  const replayReceivedAt = "2026-08-31T12:10:00.000Z";
+  const replaySignal = await verifySendcloudTrackingWebhook({
+    rawBody,
+    signature,
+    secret,
+    receivedAt: replayReceivedAt,
+  });
+  verifiedTrackingPort = createVerifiedSendcloudTrackingPort(replaySignal, shipment.id);
+  assert.deepEqual(await context.fulfillment.recordTrackingEvent(
+    sendcloudTrackingCandidate(replaySignal, shipment.id),
+    replayReceivedAt,
+  ), { created: false });
+  assert.deepEqual({ ...context.database.prepare(`SELECT shipment.status AS shipment_status,
+    customer_order.status AS order_status FROM shipments AS shipment
+    INNER JOIN orders AS customer_order ON customer_order.id=shipment.order_id
+    WHERE shipment.id=?`).get(shipment.id) }, {
+    shipment_status: "in_transit",
+    order_status: "shipped",
+  });
+  assert.equal(context.database.prepare(`SELECT COUNT(*) AS count FROM email_outbox
+    WHERE order_id=? AND kind='shipment_confirmation'`).get(order.orderId).count, 1);
+  assert.equal(context.database.prepare(`SELECT COUNT(*) AS count FROM audit_log
+    WHERE entity_id=? AND action='shipment_handed_over'
+      AND actor_type='system'`).get(shipment.id).count, 1);
+  context.database.close();
+});
+
+test("the production Sendcloud route applies one signed possession scan and returns duplicate on retry", async () => {
+  const context = fixture({
+    shippingLabel: {
+      async createLabel(request) {
+        return {
+          shipmentId: request.shipmentId,
+          orderId: request.orderId,
+          idempotencyKey: request.idempotencyKey,
+          providerCode: "sendcloud",
+          providerShipmentReference: "383707310",
+          trackingReference: "8NLAJ123456790",
+          receiptFingerprint: "d".repeat(64),
+        };
+      },
+    },
+  });
+  activateConfiguration(context, "EU", "routehandover");
+  const order = await createPaidOrder(context, {
+    suffix: "routehandover",
+    zone: "EU",
+    lines: [{ variantId: "variant_boxer_pourpre_l", quantity: 1 }],
+  });
+  const shipment = await context.fulfillment.createShipmentLabel({
+    shipmentId: "shipment_sendcloud_route",
+    orderId: order.orderId,
+    idempotencyKey: "shipment:sendcloud-route",
+    leaseToken: "lease_sendcloud_route",
+    leaseExpiresAt: "2026-08-31T12:05:00.000Z",
+    now: "2026-08-31T11:58:00.000Z",
+  });
+  assert.equal(shipment.status, "label_ready");
+
+  const rawBody = new TextEncoder().encode(JSON.stringify({
+    action: "parcel_status_changed",
+    timestamp: Math.floor(Date.now() / 1_000) - 30,
+    carrier_status_change_timestamp: Math.floor(Date.now() / 1_000) - 30,
+    parcel: {
+      id: 383707310,
+      tracking_number: "8NLAJ123456790",
+      status: { id: 11, message: "Shipment picked up by driver" },
+    },
+  }));
+  const secret = "sendcloud-route-webhook-secret-2026";
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const signature = Buffer.from(await crypto.subtle.sign("HMAC", key, rawBody)).toString("hex");
+  const env = {
+    APP_ENV: "production",
+    COMMERCE_ORIGIN: "https://ajluxurystore.com",
+    SENDCLOUD_SECRET_KEY: secret,
+    DB: context.d1,
+  };
+  const request = () => new Request(
+    "https://ajluxurystore.com/api/commerce/webhooks/sendcloud",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Sendcloud-Signature": signature,
+      },
+      body: rawBody,
+    },
+  );
+  const first = await productionCommerceApiResponse(request(), env);
+  assert.equal(first.status, 200);
+  assert.deepEqual(await first.json(), { received: true, disposition: "applied" });
+  const replay = await productionCommerceApiResponse(request(), env);
+  assert.equal(replay.status, 200);
+  assert.deepEqual(await replay.json(), { received: true, disposition: "duplicate" });
+  assert.deepEqual({ ...context.database.prepare(`SELECT shipment.status AS shipment_status,
+    customer_order.status AS order_status FROM shipments AS shipment
+    INNER JOIN orders AS customer_order ON customer_order.id=shipment.order_id
+    WHERE shipment.id=?`).get(shipment.id) }, {
+    shipment_status: "in_transit",
+    order_status: "shipped",
+  });
+  assert.equal(context.database.prepare(`SELECT COUNT(*) AS count FROM email_outbox
+    WHERE order_id=? AND kind='shipment_confirmation'`).get(order.orderId).count, 1);
   context.database.close();
 });
 

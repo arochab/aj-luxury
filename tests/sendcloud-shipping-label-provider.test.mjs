@@ -29,6 +29,9 @@ class Statement {
   bind(...values) { return new Statement(this.database, this.query, values); }
   async first() {
     if (this.query.includes("FROM shipments AS shipment")) return this.database.context;
+    if (this.query.includes("FROM shipments WHERE order_id")) {
+      return this.database.existingByOrder ?? this.database.existing ?? null;
+    }
     if (this.query.includes("FROM shipments WHERE idempotency_key")) return this.database.existing ?? null;
     throw new Error(`unexpected first query: ${this.query}`);
   }
@@ -46,6 +49,7 @@ class Database {
     this.context = context;
     this.lines = lines;
     this.existing = null;
+    this.existingByOrder = null;
   }
   prepare(query) { return new Statement(this, query); }
   async batch() { throw new Error("unexpected batch"); }
@@ -160,7 +164,7 @@ function receipt(overrides = {}) {
   };
 }
 
-test("Sendcloud v3 announces one EU parcel with exact external id and proves one A6 PDF label", async () => {
+test("Sendcloud v3 proves one carrier-native A6 label before the separate A4 download", async () => {
   const context = await fixture();
   let captured;
   const provider = createSendcloudShippingLabelProvider(
@@ -446,6 +450,54 @@ test("platform owner headers alone cannot bypass the durable owner session and C
   assert.equal((await response.json()).error.code, "OWNER_SESSION_REQUIRED");
 });
 
+test("a Cloudflare Access owner plus the durable AAL2 session can recover the unique A4 label without legacy oai headers", async () => {
+  const DB = new Database(null, []);
+  DB.existing = {
+    id: "shipment_test_1",
+    order_id: "order_test_1",
+    status: "label_ready",
+    attempts: 1,
+    provider_shipment_reference: "383707309",
+    tracking_reference: "3S123456789",
+  };
+  const pdf = new Blob([
+    new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x37]),
+  ], { type: "application/pdf" });
+  const request = new Request(
+    "https://ajluxurystore.com/api/commerce/admin/orders/order_test_1/shipping-label",
+    {
+      method: "POST",
+      headers: {
+        Origin: "https://ajluxurystore.com",
+        "Sec-Fetch-Site": "same-origin",
+        "Idempotency-Key": "operator-label:order_test_1",
+      },
+    },
+  );
+  const response = await productionShippingLabelAdminReleaseCoreResponse(
+    request,
+    { ...adminEnv, DB },
+    "https://ajluxurystore.com",
+    {
+      authorizeControlledOwner: async () => true,
+      authorizeOwner: async () => true,
+      shippingDocuments: {
+        async document() {
+          return {
+            providerDocumentReference: "sendcloud:parcel:383707309:document:label",
+            mediaType: "application/pdf",
+            contentSha256: "c".repeat(64),
+            byteLength: pdf.size,
+            content: pdf,
+          };
+        },
+      },
+    },
+  );
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("Content-Type"), "application/pdf");
+});
+
 test("controlled labels defer MFA but live labels keep it mandatory", async () => {
   const DB = { prepare() { throw new Error("D1 must not be touched without cookies"); }, batch() { throw new Error("D1 must not be touched"); } };
   const controlled = await productionShippingLabelAdminReleaseCoreResponse(
@@ -461,8 +513,29 @@ test("controlled labels defer MFA but live labels keep it mandatory", async () =
     { ...adminEnv, COMMERCE_MODE: "live", OPERATOR_ADMIN_MFA_ENABLED: undefined, DB },
     "https://ajluxurystore.com",
   );
-  assert.equal(live.status, 503);
-  assert.equal((await live.json()).error.code, "OUTBOUND_SHIPPING_NOT_ENABLED");
+  assert.equal(live.status, 403);
+  assert.equal((await live.json()).error.code, "CONTROLLED_ACCESS_REQUIRED");
+});
+
+test("live label actions require a signed Access identity and reject the legacy controlled HMAC", async () => {
+  const DB = {
+    prepare() { throw new Error("D1 must not be touched without Access"); },
+    batch() { throw new Error("D1 must not be touched without Access"); },
+  };
+  const response = await productionShippingLabelAdminReleaseCoreResponse(
+    await adminRequest(),
+    {
+      ...adminEnv,
+      COMMERCE_MODE: "live",
+      OPERATOR_ADMIN_MFA_ENABLED: "true",
+      CLOUDFLARE_ACCESS_TEAM_DOMAIN: "https://aj-luxury.cloudflareaccess.com",
+      CLOUDFLARE_ACCESS_AUD: "accessAudience_1234567890",
+      DB,
+    },
+    "https://ajluxurystore.com",
+  );
+  assert.equal(response.status, 403);
+  assert.equal((await response.json()).error.code, "CONTROLLED_ACCESS_REQUIRED");
 });
 
 test("release health and the operator route share the exact outbound enablement flag", async () => {
@@ -504,7 +577,7 @@ test("operator route hard-stops an already claimed shipment for manual reconcili
   assert.equal(providerCalls, 0);
 });
 
-test("an idempotent label-ready replay returns the exact printable A4 PDF", async () => {
+test("an order-level label-ready replay with a new request key returns the same printable A4 PDF", async () => {
   const DB = new Database(null, []);
   DB.existing = {
     id: "shipment_test_1",
@@ -519,7 +592,7 @@ test("an idempotent label-ready replay returns the exact printable A4 PDF", asyn
   });
   let requestInput;
   const response = await productionShippingLabelAdminReleaseCoreResponse(
-    await adminRequest(),
+    await adminRequest({ "Idempotency-Key": "shipment:new:0002" }),
     { ...adminEnv, DB },
     "https://ajluxurystore.com",
     {

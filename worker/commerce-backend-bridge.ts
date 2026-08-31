@@ -8,6 +8,7 @@ const PROXY_ACTOR_HEADER = "X-AJ-Proxy-Actor";
 const TRUSTED_RATE_LIMIT_ACTOR_HEADER = "X-AJ-Trusted-Rate-Limit-Actor";
 const OWNER_EMAIL_HEADER = "oai-authenticated-user-email";
 const OWNER_ID_HEADER = "oai-authenticated-user-id";
+const ACCESS_ASSERTION_HEADER = "Cf-Access-Jwt-Assertion";
 const CONTROLLED_AUTH_WINDOW_SECONDS = 300;
 
 export type CommerceBackendBridgeEnvironment = Readonly<{
@@ -183,6 +184,14 @@ function filteredHeaders(headers: Headers): Headers {
   return output;
 }
 
+function forwardAccessAssertion(request: Request, pathname: string, headers: Headers): void {
+  if (!pathname.startsWith("/api/commerce/admin/")) return;
+  const assertion = request.headers.get(ACCESS_ASSERTION_HEADER)?.trim() ?? "";
+  if (assertion.length < 32 || assertion.length > 16 * 1024 ||
+    !/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(assertion)) return;
+  headers.set(ACCESS_ASSERTION_HEADER, assertion);
+}
+
 const commerceCookieNames = new Set([
   "__Host-aj_cart", "__Host-aj_cart_csrf",
   "__Host-aj_guest_order", "__Host-aj_guest_order_csrf",
@@ -345,6 +354,7 @@ export async function commerceBackendProxyResponse(
   }
 
   const headers = filteredHeaders(request.headers);
+  forwardAccessAssertion(request, url.pathname, headers);
   const cookies = commerceCookieHeader(request.headers.get("Cookie"));
   if (cookies) headers.set("Cookie", cookies);
   headers.set(PROXY_SECRET_HEADER, proxySecret);
@@ -429,6 +439,7 @@ export function prepareBackendOnlyCommerceRequest(
   }
 
   const headers = filteredHeaders(request.headers);
+  forwardAccessAssertion(request, url.pathname, headers);
   const cookies = commerceCookieHeader(request.headers.get("Cookie"));
   if (cookies) headers.set("Cookie", cookies);
   headers.set("Origin", canonicalOrigin);

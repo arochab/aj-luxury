@@ -76,6 +76,8 @@ import {
   runProductionScheduledOperations,
 } from "./production-operations-api.ts";
 import { productionShippingLabelAdminResponse } from "./production-shipping-label-admin-api.ts";
+import { productionOperatorConsoleApiResponse } from "./production-operator-console-api.ts";
+import { cloudflareAccessOwnerRequestAuthenticated } from "./cloudflare-access-owner.ts";
 import { productionCommerceRateLimitResponse } from "./production-rate-limit.ts";
 
 interface Fetcher {
@@ -109,6 +111,11 @@ interface Env {
   COMMERCE_SITES_OWNER_AUTH_ORIGIN?: string;
   COMMERCE_CONTROLLED_OWNER_EMAIL?: string;
   COMMERCE_CONTROLLED_AUTH_HMAC_SECRET?: string;
+  OPERATOR_ADMIN_MFA_ENABLED?: string;
+  OPERATOR_CONSOLE_ENABLED?: string;
+  CLOUDFLARE_ACCESS_TEAM_DOMAIN?: string;
+  CLOUDFLARE_ACCESS_AUD?: string;
+  CLOUDFLARE_ACCESS_MFA_ATTESTATION?: string;
   IMAGES: {
     input(stream: ReadableStream): {
       transform(options: Record<string, unknown>): {
@@ -3025,6 +3032,18 @@ const worker = {
       );
     }
 
+    const productionOperatorConsoleResponse = await productionOperatorConsoleApiResponse(
+      effectiveRequest,
+      env,
+    );
+    if (productionOperatorConsoleResponse) {
+      return withSecurityHeaders(
+        productionOperatorConsoleResponse,
+        url.pathname,
+        env?.APP_ENV,
+      );
+    }
+
     const productionShippingResponse = await productionShippingLabelAdminResponse(effectiveRequest, env);
     if (productionShippingResponse) {
       return withSecurityHeaders(
@@ -3084,6 +3103,21 @@ const worker = {
     const preprodResponse = await preprodApiResponse(effectiveRequest, env);
     if (preprodResponse) {
       return withSecurityHeaders(await preprodResponse, url.pathname, env?.APP_ENV);
+    }
+
+    if (url.pathname === "/operations" && env?.APP_ENV === "production") {
+      if (
+        env.OPERATOR_CONSOLE_ENABLED !== "true" ||
+        env.OPERATOR_ADMIN_MFA_ENABLED !== "true" ||
+        env.CLOUDFLARE_ACCESS_MFA_ATTESTATION !== "independent-mfa:required-every-login" ||
+        !await cloudflareAccessOwnerRequestAuthenticated(effectiveRequest, env)
+      ) {
+        return withSecurityHeaders(
+          new Response("Not Found", { status: 404 }),
+          url.pathname,
+          env.APP_ENV,
+        );
+      }
     }
 
     if (isStaticAsset(url.pathname)) {

@@ -1,6 +1,7 @@
 import { accessTokenHashContexts, createOpaqueAccessToken, hashOneTimeAccessToken, isOpaqueAccessToken } from "../lib/commerce/account-security.ts";
 import { CommerceError } from "../lib/commerce/backend-domain.ts";
 import { D1CommerceStore } from "../lib/commerce/d1-commerce-store.ts";
+import { D1FulfillmentStore } from "../lib/commerce/d1-fulfillment-store.ts";
 import type { CommerceD1Database } from "../lib/commerce/d1-port.ts";
 import {
   CustomerAccountError,
@@ -23,6 +24,7 @@ import {
   type DeliveryProviderPorts,
 } from "../lib/commerce/delivery-provider.ts";
 import { DeliveryReferenceVault } from "../lib/commerce/delivery-reference-vault.ts";
+import { FulfillmentError } from "../lib/commerce/fulfillment-domain.ts";
 import { authorizeBrowserMutation, buildCsrfCookie, buildPendingCustomerCookie, buildSessionCookie, clearCsrfCookie, clearPendingCustomerCookie, clearSessionCookie, isTrustedMutationOrigin } from "../lib/commerce/identity-access-policy.ts";
 import { PaymentProviderError, verifyAndDeliverPaymentWebhook, type PaymentProviderPorts, type PaymentWebhookDeliveryResult, type PaymentWebhookEffectsPort } from "../lib/commerce/payment-provider.ts";
 import { validateLaunchStockImport } from "../lib/commerce/launch-stock-import.ts";
@@ -40,6 +42,12 @@ import { evaluateWiredProductionReleaseGate, internationalShippingConfigured, pr
 import { recordVerifiedResendWebhook, ResendWebhookError } from "../lib/commerce/resend-webhook.ts";
 import { ResendIdentityDelivery } from "../lib/commerce/resend-identity-delivery.ts";
 import { createSendcloudProviderPorts } from "../lib/commerce/sendcloud-provider.ts";
+import {
+  createVerifiedSendcloudTrackingPort,
+  sendcloudTrackingCandidate,
+  SendcloudTrackingWebhookError,
+  verifySendcloudTrackingWebhook,
+} from "../lib/commerce/sendcloud-tracking-webhook.ts";
 import { createStripePaymentProviderPorts } from "../lib/commerce/stripe-payment-provider.ts";
 import { LEGAL_VERSION } from "../lib/legal.ts";
 import {
@@ -48,6 +56,7 @@ import {
 } from "./production-rate-limit.ts";
 import {
   productionEmailDispatchRuntimeConfigured,
+  productionEmailReconciliationRuntimeInstalled,
   productionOperationsRuntimeInstalled,
   productionResendRuntimeInstalled,
 } from "./production-operations-runtime.ts";
@@ -68,6 +77,7 @@ const routes = Object.freeze({
   order: `${PREFIX}checkout/order`, payment: `${PREFIX}checkout/payment-session`,
   deliveryChange: `${PREFIX}checkout/order/delivery-change`,
   webhook: `${PREFIX}webhooks/stripe`, resendWebhook: `${PREFIX}webhooks/resend`,
+  sendcloudWebhook: `${PREFIX}webhooks/sendcloud`,
   currentOrder: `${PREFIX}orders/current`,
   refundDispatch: `${PREFIX}admin/late-payment-refunds/dispatch`,
   account: `${PREFIX}account/current`, adminHealth: `${PREFIX}admin/health`,
@@ -104,8 +114,11 @@ export type ProductionCommerceRuntimeEnvironment = ProductionCommerceEnvironment
   SENDCLOUD_SENDER_ADDRESS_ID?: string;
   SENDCLOUD_SENDER_ADDRESS_ATTESTATION?: string;
   OPERATOR_ADMIN_MFA_ENABLED?: string;
+  OPERATOR_CONSOLE_ENABLED?: string;
+  CLOUDFLARE_ACCESS_MFA_ATTESTATION?: string;
   TRANSACTIONAL_EMAIL_DISPATCH_ENABLED?: string;
   TRANSACTIONAL_EMAIL_DISPATCH_MODE?: string;
+  TRANSACTIONAL_EMAIL_RECONCILIATION_ENABLED?: string;
   TRANSACTIONAL_FROM_NAME?: string;
   TRANSACTIONAL_FROM_EMAIL?: string;
   TRANSACTIONAL_REPLY_TO?: string;
@@ -440,7 +453,9 @@ export function productionCommerceRuntimeBlockers(
     ...(!productionRateLimitBindingsReady(env) ? ["production-rate-limits-not-configured"] : []),
     ...(mode === "sandbox" && !accessConfigured && !controlledAuthConfigured(env)
       ? ["controlled-owner-auth-not-configured"] : []),
-    ...(["controlled", "live"].includes(mode) && !accessConfigured && !controlledAuthConfigured(env)
+    ...(mode === "controlled" && !accessConfigured && !controlledAuthConfigured(env)
+      ? ["cloudflare-access-owner-not-configured"] : []),
+    ...(mode === "live" && !accessConfigured
       ? ["cloudflare-access-owner-not-configured"] : []),
     ...(settlementMode(env) !== expectedSettlement ? ["stripe-settlement-mode-mismatch"] : []),
     ...(["controlled", "live"].includes(mode)
@@ -462,6 +477,13 @@ export function productionCommerceRuntimeBlockers(
         // controlled acceptance order to run before the admin console opens.
         ...(mode !== "controlled" && env.OPERATOR_ADMIN_MFA_ENABLED !== "true"
           ? ["operator-admin-mfa-not-enabled"]
+          : []),
+        ...(mode !== "controlled" && env.OPERATOR_CONSOLE_ENABLED !== "true"
+          ? ["operator-console-not-enabled"]
+          : []),
+        ...(mode !== "controlled" &&
+          env.CLOUDFLARE_ACCESS_MFA_ATTESTATION !== "independent-mfa:required-every-login"
+          ? ["operator-access-mfa-policy-not-attested"]
           : []),
         ...(productionEmailDispatchRuntimeConfigured(env)
           ? []
@@ -917,6 +939,7 @@ export async function productionStockRuntimeAttested(
   const promotionReleaseSha = productionEvidenceReleaseSha(env);
   const promotionVersionId = productionEvidenceVersionId(env);
   if (!await productionStockManifestRuntimeAttested(env) || !env.DB ||
+    !await productionEmailReconciliationRuntimeInstalled(env.DB) ||
     !env.STOCK_MANIFEST_ID || !evidenceReleaseSha ||
     !env.COMMERCE_CONTROLLED_ORDER_PROOF_ID || !metadata?.id || !metadata.tag ||
     metadata.tag !== env.COMMERCE_RELEASE_SHA ||
@@ -939,7 +962,6 @@ export async function productionStockRuntimeAttested(
           SELECT 1 FROM orders AS customer_order
           INNER JOIN payments AS payment ON payment.order_id=customer_order.id
           INNER JOIN shipments AS shipment ON shipment.order_id=customer_order.id
-          INNER JOIN email_outbox AS message ON message.order_id=customer_order.id
           WHERE customer_order.id=release.controlled_order_id
             AND customer_order.status IN ('paid','preparing','shipped')
             AND customer_order.paid_at IS NOT NULL
@@ -952,8 +974,44 @@ export async function productionStockRuntimeAttested(
             AND shipment.tracking_reference IS NOT NULL
             AND shipment.provider_receipt_fingerprint IS NOT NULL
             AND shipment.label_created_at IS NOT NULL
-            AND message.kind='payment_confirmation'
-            AND message.status='sent' AND message.sent_at IS NOT NULL
+            AND EXISTS (
+              SELECT 1 FROM email_outbox AS message
+              WHERE message.order_id=customer_order.id
+                AND message.kind='order_confirmation'
+                AND (
+                  (message.status='sent' AND message.sent_at IS NOT NULL)
+                  OR (
+                    message.status='failed'
+                    AND message.last_error_code='delivery_ambiguous'
+                    AND message.provider_message_id IS NULL
+                    AND EXISTS (
+                      SELECT 1 FROM email_delivery_provider_evidence AS evidence
+                      WHERE evidence.outbox_id=message.id
+                        AND evidence.provider_last_event IN ('delivered','opened','clicked')
+                        AND evidence.reconciliation_source='resend_api'
+                    )
+                  )
+                )
+            )
+            AND EXISTS (
+              SELECT 1 FROM email_outbox AS message
+              WHERE message.order_id=customer_order.id
+                AND message.kind='payment_confirmation'
+                AND (
+                  (message.status='sent' AND message.sent_at IS NOT NULL)
+                  OR (
+                    message.status='failed'
+                    AND message.last_error_code='delivery_ambiguous'
+                    AND message.provider_message_id IS NULL
+                    AND EXISTS (
+                      SELECT 1 FROM email_delivery_provider_evidence AS evidence
+                      WHERE evidence.outbox_id=message.id
+                        AND evidence.provider_last_event IN ('delivered','opened','clicked')
+                        AND evidence.reconciliation_source='resend_api'
+                    )
+                  )
+                )
+            )
         ) THEN 1 ELSE 0 END AS controlled_order_proven
       FROM production_release_attestations AS release
       INNER JOIN production_launch_stock_manifests AS manifest
@@ -1079,6 +1137,67 @@ export async function productionCommerceApiResponse(
       return fail("EMAIL_WEBHOOK_UNAVAILABLE", 503);
     }
   }
+  if (url.pathname === routes.sendcloudWebhook) {
+    if (request.method !== "POST") return fail("METHOD_NOT_ALLOWED", 405);
+    if (!env.DB || !env.SENDCLOUD_SECRET_KEY || !env.COMMERCE_ORIGIN ||
+      url.origin !== env.COMMERCE_ORIGIN) {
+      return fail("TRACKING_WEBHOOK_UNAVAILABLE", 503);
+    }
+    const raw = await bytes(request, 64 * 1024);
+    if (!raw) return fail("INVALID_WEBHOOK", 400);
+    const receivedAt = new Date().toISOString();
+    try {
+      const signal = await verifySendcloudTrackingWebhook({
+        rawBody: raw,
+        signature: request.headers.get("Sendcloud-Signature"),
+        secret: env.SENDCLOUD_SECRET_KEY,
+        receivedAt,
+      });
+      const shipment = await env.DB.prepare(
+        `SELECT id, status FROM shipments
+        WHERE provider_shipment_reference=?
+          AND tracking_provider_code='sendcloud' AND tracking_reference=?`,
+      ).bind(
+        signal.providerShipmentReference,
+        signal.trackingReference,
+      ).first<{ id: string; status: string }>();
+      if (!shipment) return fail("TRACKING_SHIPMENT_NOT_READY", 503);
+      const candidate = sendcloudTrackingCandidate(signal, shipment.id);
+      const tracking = createVerifiedSendcloudTrackingPort(signal, shipment.id);
+      const verified = await tracking.verifyEvent({ ...candidate, receivedAt });
+      const fulfillment = new D1FulfillmentStore(env.DB, { tracking });
+      if (shipment.status === "label_ready" &&
+        ["in_transit", "out_for_delivery", "delivered"].includes(candidate.eventType)) {
+        await fulfillment.handoverShipmentFromVerifiedCarrierEvent({
+          event: verified,
+          locale: "fr",
+        });
+      }
+      const recorded = await fulfillment.recordTrackingEvent(candidate, receivedAt);
+      return json({
+        received: true,
+        disposition: recorded.created ? "applied" : "duplicate",
+      });
+    } catch (cause) {
+      if (cause instanceof SendcloudTrackingWebhookError) {
+        if (cause.code === "IGNORED_STATUS") {
+          return json({ received: true, disposition: "ignored" });
+        }
+        if (cause.code === "UNSUPPORTED_STATUS") {
+          return fail("TRACKING_STATUS_UNSUPPORTED", 503);
+        }
+        return fail("INVALID_WEBHOOK", 400);
+      }
+      if (cause instanceof FulfillmentError && [
+        "TRACKING_EVENT_CONFLICT",
+        "PROVIDER_RECEIPT_MISMATCH",
+        "TRACKING_VERIFICATION_REQUIRED",
+      ].includes(cause.code)) {
+        return fail("TRACKING_WEBHOOK_CONFLICT", 409);
+      }
+      return fail("TRACKING_WEBHOOK_UNAVAILABLE", 503);
+    }
+  }
   if (url.pathname === routes.webhook) {
     if (request.method !== "POST") return fail("METHOD_NOT_ALLOWED", 405);
     const configuredOrigin = env.COMMERCE_ORIGIN;
@@ -1128,6 +1247,12 @@ export async function productionCommerceApiResponse(
       !await productionResendRuntimeInstalled(env.DB)) {
       blockers.push("resend-email-schema-0018-not-installed");
     }
+    if (
+      ["controlled", "live"].includes(gate.mode) &&
+      !await productionEmailReconciliationRuntimeInstalled(env.DB)
+    ) {
+      blockers.push("email-delivery-reconciliation-schema-0027-not-installed");
+    }
     if (gate.mode !== "closed" && !await productionCustomerAccountRuntimeInstalled(env.DB)) {
       blockers.push("customer-account-schema-0022-not-installed");
     }
@@ -1143,7 +1268,7 @@ export async function productionCommerceApiResponse(
       blockers.push("stock-runtime-attestation-not-verified");
     }
     const ready = gate.ready && blockers.length === 0;
-    return json({ status: ready ? "ready" : "closed", environment: "production", mode: gate.mode, releaseSha: gate.releaseSha, origin: gate.origin, launchZones: gate.launchZones, blockers: [...gate.blockers, ...blockers], capabilities: { sandboxCheckout: ready && gate.mode === "sandbox", realPayment: ready && ["controlled", "live"].includes(gate.mode), realDelivery: ready && ["controlled", "live"].includes(gate.mode), transactionalEmail: ready && productionEmailDispatchRuntimeConfigured(env), returns: ready && gate.mode === "live" && env.RETURNS_WORKFLOW_ENABLED === "true", controlledOrder: ready && gate.mode === "controlled", publicCommerce: ready && gate.mode === "live" }, routes: { cart: "wired", homeDelivery: "wired-provider-priced", order: "wired", paymentSession: "sandbox-controlled-or-live-behind-release-gate", servicePoint: "wired-encrypted", stripeWebhook: "atomic-d1-effects-and-late-refund-obligation", resendWebhook: "svix-signed-idempotent-audit", lateRefundDispatch: "wired-bounded-owner-only", returns: "workflow-gated" } }, ready ? 200 : 503);
+    return json({ status: ready ? "ready" : "closed", environment: "production", mode: gate.mode, releaseSha: gate.releaseSha, origin: gate.origin, launchZones: gate.launchZones, blockers: [...gate.blockers, ...blockers], capabilities: { sandboxCheckout: ready && gate.mode === "sandbox", realPayment: ready && ["controlled", "live"].includes(gate.mode), realDelivery: ready && ["controlled", "live"].includes(gate.mode), transactionalEmail: ready && productionEmailDispatchRuntimeConfigured(env), emailDeliveryReconciliation: ready && env.TRANSACTIONAL_EMAIL_RECONCILIATION_ENABLED === "true", returns: ready && gate.mode === "live" && env.RETURNS_WORKFLOW_ENABLED === "true", controlledOrder: ready && gate.mode === "controlled", publicCommerce: ready && gate.mode === "live" }, routes: { cart: "wired", homeDelivery: "wired-provider-priced", order: "wired", paymentSession: "sandbox-controlled-or-live-behind-release-gate", servicePoint: "wired-encrypted", stripeWebhook: "atomic-d1-effects-and-late-refund-obligation", resendWebhook: "svix-signed-idempotent-audit", sendcloudWebhook: "hmac-signed-idempotent-tracking", emailDeliveryReconciliation: "owner-only-read-provider-append-proof-no-replay", lateRefundDispatch: "wired-bounded-owner-only", returns: "workflow-gated" } }, ready ? 200 : 503);
   }
   if (!gate.ready || !gate.origin || url.origin !== gate.origin) {
     console.warn(JSON.stringify({

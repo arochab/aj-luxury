@@ -314,6 +314,8 @@ test("live runtime opens only after the manual returns label and refund process 
     LATE_PAYMENT_REFUND_DISPATCH_ENABLED: "true",
     OUTBOUND_SHIPMENT_CREATION_ENABLED: "true",
     OPERATOR_ADMIN_MFA_ENABLED: "true",
+    OPERATOR_CONSOLE_ENABLED: "true",
+    CLOUDFLARE_ACCESS_MFA_ATTESTATION: "independent-mfa:required-every-login",
     TRANSACTIONAL_EMAIL_DISPATCH_ENABLED: "true",
     TRANSACTIONAL_EMAIL_DISPATCH_MODE: "resend",
     RETURNS_WORKFLOW_ENABLED: "true",
@@ -341,6 +343,22 @@ test("public live runtime still requires operator admin MFA", () => {
   };
   assert.ok(productionCommerceRuntimeBlockers(live, "live")
     .includes("operator-admin-mfa-not-enabled"));
+  assert.ok(productionCommerceRuntimeBlockers(live, "live")
+    .includes("operator-console-not-enabled"));
+  assert.ok(productionCommerceRuntimeBlockers(live, "live")
+    .includes("operator-access-mfa-policy-not-attested"));
+});
+
+test("public live never accepts the legacy controlled HMAC in place of a valid Access owner configuration", () => {
+  const live = {
+    ...controlled,
+    COMMERCE_MODE: "live",
+    CLOUDFLARE_ACCESS_TEAM_DOMAIN: undefined,
+    CLOUDFLARE_ACCESS_AUD: undefined,
+    COMMERCE_CONTROLLED_AUTH_HMAC_SECRET: "x".repeat(32),
+  };
+  assert.ok(productionCommerceRuntimeBlockers(live, "live")
+    .includes("cloudflare-access-owner-not-configured"));
 });
 
 test("controlled cart reaches origin validation after public-only legal gates are deferred", async () => {
@@ -418,7 +436,27 @@ test("delivery runtime proof rejects missing and prefix-colliding 0013 objects",
   assert.equal(await productionDeliveryRuntimeInstalled(database([...exact, { ...exact[1], name: "delivery_provider_reference_vault_shadow" }])), false);
 });
 
-function stockProofDatabase(proof, lines, releaseProof, providerProof) {
+function stockProofDatabase(
+  proof,
+  lines,
+  releaseProof,
+  providerProof,
+  emailKinds = ["order_confirmation", "payment_confirmation"],
+) {
+  const reconciliationObjects = [
+    { type: "index", name: "idx_email_delivery_provider_evidence_time", table_name: "email_delivery_provider_evidence" },
+    { type: "index", name: "ux_email_delivery_provider_evidence_message", table_name: "email_delivery_provider_evidence" },
+    { type: "index", name: "ux_email_delivery_provider_evidence_outbox", table_name: "email_delivery_provider_evidence" },
+    { type: "table", name: "email_delivery_provider_evidence", table_name: "email_delivery_provider_evidence" },
+    { type: "trigger", name: "trg_email_delivery_provider_evidence_immutable_update", table_name: "email_delivery_provider_evidence" },
+    { type: "trigger", name: "trg_email_delivery_provider_evidence_retain_delete", table_name: "email_delivery_provider_evidence" },
+    { type: "trigger", name: "trg_email_delivery_provider_evidence_validate_insert", table_name: "email_delivery_provider_evidence" },
+  ];
+  const reconciliationColumns = [
+    "id", "outbox_id", "provider_created_at", "provider_last_event",
+    "provider_message_id", "reconciled_at", "reconciled_by_admin_id",
+    "reconciliation_source",
+  ].map((name) => ({ name }));
   return {
     prepare(query) {
       return {
@@ -426,10 +464,22 @@ function stockProofDatabase(proof, lines, releaseProof, providerProof) {
         async first() {
           if (query.includes("FROM production_launch_stock_manifests")) return proof;
           if (query.includes("FROM production_provider_configuration_attestations")) return providerProof;
-          if (query.includes("FROM production_release_attestations")) return releaseProof;
+          if (query.includes("FROM production_release_attestations")) {
+            const bothConfirmations = emailKinds.includes("order_confirmation") &&
+              emailKinds.includes("payment_confirmation");
+            return { ...releaseProof, controlled_order_proven: bothConfirmations ? 1 : 0 };
+          }
           return null;
         },
-        async all() { return { results: lines }; },
+        async all() {
+          if (query.includes("idx_email_delivery_provider_evidence_time")) {
+            return { results: reconciliationObjects };
+          }
+          if (query.includes("pragma_table_info('email_delivery_provider_evidence')")) {
+            return { results: reconciliationColumns };
+          }
+          return { results: lines };
+        },
       };
     },
   };
@@ -531,6 +581,16 @@ test("live stock attestation recomputes the exact 12-line manifest and controlle
     },
   };
   assert.equal(await productionStockRuntimeAttested(env), true);
+  assert.equal(await productionStockRuntimeAttested({
+    ...env,
+    DB: stockProofDatabase(
+      proof,
+      lines,
+      releaseProof,
+      providerProof,
+      ["payment_confirmation"],
+    ),
+  }), false, "payment proof alone must never promote without order confirmation");
   const redistributed = lines.map((line, index) => index === 0
     ? { ...line, live_physical_quantity: line.live_physical_quantity + 1 }
     : line);
@@ -654,6 +714,41 @@ test("webhook provider misconfiguration remains retryable 503", async () => {
   );
   assert.equal(response.status, 503);
   assert.equal((await response.json()).error.code, "PAYMENT_EFFECTS_UNAVAILABLE");
+});
+
+test("Sendcloud tracking webhook is wired and rejects tampering before D1", async () => {
+  let databaseReads = 0;
+  const body = JSON.stringify({
+    action: "parcel_status_changed",
+    timestamp: 1788177600,
+    parcel: {
+      id: 123,
+      tracking_number: "TRACK123",
+      status: { id: 11, message: "En route to sorting center" },
+    },
+  });
+  const response = await productionCommerceApiResponse(
+    new Request("https://ajluxurystore.com/api/commerce/webhooks/sendcloud", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Sendcloud-Signature": "0".repeat(64),
+      },
+      body,
+    }),
+    {
+      ...controlled,
+      DB: {
+        prepare() {
+          databaseReads += 1;
+          throw new Error("must-not-read-before-signature");
+        },
+      },
+    },
+  );
+  assert.equal(response.status, 400);
+  assert.equal((await response.json()).error.code, "INVALID_WEBHOOK");
+  assert.equal(databaseReads, 0);
 });
 
 test("a signed existing payment settles after commerce is closed without owner headers", async () => {

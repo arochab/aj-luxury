@@ -57,6 +57,109 @@ test("Resend receives one bounded branded email with the durable idempotency key
   assert.match(body.html, /AJ LUXURY/);
   assert.match(body.html, /Paiement confirmé AJ-1/);
   assert.equal(body.text, "Merci.");
+  assert.deepEqual(body.tags, [
+    { name: "kind", value: "payment_confirmation" },
+    { name: "locale", value: "fr" },
+    { name: "outbox_id", value: "outbox_12345678" },
+  ]);
+});
+
+test("exact delivered Resend record becomes minimal evidence without exposing content", async () => {
+  let sentBody;
+  const adapter = provider(async (url, init) => {
+    if (init.method === "POST") {
+      sentBody = JSON.parse(init.body);
+      return Response.json({ id: "email_delivered_123" });
+    }
+    assert.equal(url, "https://api.resend.com/emails/email_delivered_123");
+    assert.equal(init.method, "GET");
+    assert.equal(init.redirect, "error");
+    return Response.json({
+      ...sentBody,
+      id: "email_delivered_123",
+      created_at: "2026-08-28T19:25:00.000Z",
+      last_event: "delivered",
+      cc: [],
+      bcc: [],
+      attachments: [],
+    });
+  });
+  await adapter.deliver(delivery());
+  const evidence = await adapter.retrieveDeliveredEvidence(
+    "email_delivered_123",
+    {
+      outboxId: delivery().message.id,
+      kind: delivery().message.kind,
+      locale: delivery().message.locale,
+      recipientEmail: delivery().message.recipientEmail,
+      payloadJson: delivery().message.payloadJson,
+    },
+  );
+  assert.deepEqual(evidence, {
+    providerMessageId: "email_delivered_123",
+    providerLastEvent: "delivered",
+    providerCreatedAt: "2026-08-28T19:25:00.000Z",
+  });
+  assert.doesNotMatch(JSON.stringify(evidence), /client@|Merci|Paiement confirmé/);
+});
+
+test("provider lookup is aborted within its bounded incident-read timeout", async () => {
+  const adapter = new ResendEmailProvider({
+    apiKey: "re_redacted",
+    fromEmail: "commandes@ajluxurystore.com",
+    fromName: "AJ Luxury",
+    replyTo: "contact@ajluxurystore.com",
+    lookupTimeoutMs: 20,
+    fetchImpl: async (_url, init) => new Promise((_resolve, reject) => {
+      init.signal.addEventListener("abort", () => reject(init.signal.reason), { once: true });
+    }),
+  });
+  await assert.rejects(
+    adapter.retrieveDeliveredEvidence("email_timeout_1", {
+      outboxId: delivery().message.id,
+      kind: delivery().message.kind,
+      locale: delivery().message.locale,
+      recipientEmail: delivery().message.recipientEmail,
+      payloadJson: delivery().message.payloadJson,
+    }),
+    (error) => error instanceof ResendEmailProviderError && error.outcome === "ambiguous",
+  );
+});
+
+test("lookup never treats 404, accepted-only or crossed content as delivery proof", async () => {
+  const expected = {
+    outboxId: delivery().message.id,
+    kind: delivery().message.kind,
+    locale: delivery().message.locale,
+    recipientEmail: delivery().message.recipientEmail,
+    payloadJson: delivery().message.payloadJson,
+  };
+  for (const response of [
+    new Response(null, { status: 404 }),
+    Response.json({
+      id: "email_accepted_only",
+      from: "AJ Luxury <commandes@ajluxurystore.com>",
+      to: ["client@example.com"],
+      subject: "Paiement confirmé AJ-1",
+      text: "Merci.",
+      html: "crossed",
+      reply_to: "contact@ajluxurystore.com",
+      tags: [
+        { name: "kind", value: "payment_confirmation" },
+        { name: "locale", value: "fr" },
+      ],
+      created_at: "2026-08-28T19:25:00.000Z",
+      last_event: "sent",
+    }),
+  ]) {
+    const messageId = response.status === 404 ? "email_missing" : "email_accepted_only";
+    const adapter = provider(async () => response);
+    await assert.rejects(
+      adapter.retrieveDeliveredEvidence(messageId, expected),
+      (error) => error instanceof ResendEmailProviderError &&
+        error.outcome === "ambiguous",
+    );
+  }
 });
 
 test("Resend sends the detailed durable order proof in text and linked HTML", async () => {
