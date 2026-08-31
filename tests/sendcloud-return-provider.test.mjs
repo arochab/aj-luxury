@@ -186,7 +186,7 @@ test("parcel document retrieval uses V3, validates binary type and returns an im
   });
   assert.match(calls[0].url, /\/api\/v3\/parcels\/67880\/documents\/label\?/);
   assert.match(calls[0].url, /dpi=72/);
-  assert.match(calls[0].url, /paper_size=A6/);
+  assert.match(calls[0].url, /paper_size=A4/);
   assert.equal(calls[0].init.method, "GET");
   assert.equal(calls[0].init.redirect, "manual");
   assert.equal(receipt.providerDocumentReference, "sendcloud:parcel:67880:document:label");

@@ -14,15 +14,15 @@ const [homeCss, storyPage, storyCss] = await Promise.all([
   ),
 ]);
 
-test("phone hero preserves the complete supplied composition without a dead band", () => {
+test("phone hero fills the viewport with the approved native vertical film", () => {
   const phoneRules = homeCss.slice(homeCss.indexOf("@media (max-width: 560px)"));
   assert.match(
     phoneRules,
-    /\.home :global\(\.aj-film__hero-stage\)\s*\{[^}]*left:\s*0;/s,
+    /\.home :global\(\.aj-film__hero-stage\)\s*\{[^}]*inset:\s*0;[^}]*width:\s*100%;[^}]*height:\s*100%;/s,
   );
   assert.match(
     phoneRules,
-    /\.home :global\(\.aj-film__hero-poster img\),\s*\.home :global\(\.aj-film__hero-video\)\s*\{[^}]*object-fit:\s*contain;[^}]*object-position:\s*center;/s,
+    /\.home :global\(\.aj-film__hero-poster img\),\s*\.home :global\(\.aj-film__hero-video\)\s*\{[^}]*object-fit:\s*cover;[^}]*object-position:\s*center;/s,
   );
 });
 
@@ -32,6 +32,23 @@ test("story sections expose headings without visible act numbers", () => {
   for (const heading of ["origin-title", "people-title", "definition-title"]) {
     assert.match(storyPage, new RegExp(`<h2 id="${heading}">`));
   }
+});
+
+test("the story hero never crops the approved duo at any breakpoint", () => {
+  assert.equal(
+    (storyPage.match(/style=\{\{ objectFit: "contain", objectPosition: "center" \}\}/g) ?? []).length,
+    3,
+    "the hero and both founder portraits override the fill-image cover default",
+  );
+  assert.match(
+    storyCss,
+    /\.heroImage img\s*\{[^}]*object-fit:\s*contain;[^}]*object-position:\s*center;/s,
+  );
+  assert.match(
+    storyCss,
+    /@media \(max-width:\s*760px\)[\s\S]*?\.heroImage\s*\{[^}]*aspect-ratio:\s*2\s*\/\s*3;/s,
+  );
+  assert.doesNotMatch(storyCss, /\.heroImage img\s*\{[^}]*object-fit:\s*cover/s);
 });
 
 test("the story page delegates its only closing collection CTA to the shared footer", () => {

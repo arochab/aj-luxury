@@ -155,7 +155,8 @@ export async function productionCommerceRateLimitResponse(
 export type ScheduledProductionOperation =
   | "late-payment-refund-dispatch"
   | "transactional-email-dispatch"
-  | "reservation-expiry";
+  | "reservation-expiry"
+  | "outbound-shipment-dispatch";
 
 /**
  * The scheduled path has no HTTP request, but it shares the same bounded

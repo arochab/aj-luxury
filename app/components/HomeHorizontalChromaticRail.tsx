@@ -86,7 +86,6 @@ export default function HomeHorizontalChromaticRail() {
 
     const compact = window.matchMedia("(max-width: 900px)");
     const root = viewport.closest<HTMLElement>(`.${styles.sequence}`);
-    const progress = root?.querySelector<HTMLElement>(`.${styles.progressFill}`);
     const panels = Array.from(
       viewport.querySelectorAll<HTMLElement>(`.${styles.panel}`),
     );
@@ -95,7 +94,6 @@ export default function HomeHorizontalChromaticRail() {
 
     const sync = () => {
       frame = 0;
-      const maxScroll = Math.max(viewport.scrollWidth - viewport.clientWidth, 1);
       const next = panels.length
         ? panels.reduce(
             (closest, panel, index) =>
@@ -110,10 +108,6 @@ export default function HomeHorizontalChromaticRail() {
       if (next !== lastActive.current) {
         lastActive.current = next;
         setActiveIndex(next);
-      }
-
-      if (progress) {
-        progress.style.transform = `scaleX(${Math.min(1, viewport.scrollLeft / maxScroll)})`;
       }
     };
 
@@ -137,7 +131,6 @@ export default function HomeHorizontalChromaticRail() {
       if (frame) window.cancelAnimationFrame(frame);
       frame = 0;
       viewport.scrollLeft = 0;
-      progress?.style.removeProperty("transform");
       root?.classList.remove(styles.motionReady);
       lastActive.current = 0;
       setActiveIndex(0);
@@ -160,7 +153,6 @@ export default function HomeHorizontalChromaticRail() {
   const root = useAjMotion<HTMLElement>(({ gsap, mm, racine }) => {
     const stage = racine.querySelector<HTMLElement>(`.${styles.stage}`);
     const track = racine.querySelector<HTMLElement>(`.${styles.track}`);
-    const progress = racine.querySelector<HTMLElement>(`.${styles.progressFill}`);
     const panels = Array.from(
       racine.querySelectorAll<HTMLElement>(`.${styles.panel}`),
     );
@@ -200,8 +192,6 @@ export default function HomeHorizontalChromaticRail() {
 
         syncPanelWidth();
         gsap.set(track, { x: 0 });
-        if (progress) gsap.set(progress, { scaleX: 0, transformOrigin: "left center" });
-
         frames.slice(1).forEach((pair) => {
           const [product, model] = pair;
           if (product) gsap.set(product, { xPercent: -4, opacity: 0.78 });
@@ -294,10 +284,6 @@ export default function HomeHorizontalChromaticRail() {
           );
         });
 
-        if (progress) {
-          timeline.to(progress, { scaleX: 1, duration: timeline.duration() }, 0);
-        }
-
         /* A horizontal trackpad gesture advances the same scroll-linked scene
            as the vertical wheel. We only intercept genuinely horizontal input
            while the rail is pinned; ordinary vertical page scrolling remains
@@ -330,7 +316,6 @@ export default function HomeHorizontalChromaticRail() {
           frames.flat().forEach((frame) =>
             gsap.set(frame, { clearProps: "transform,opacity" }),
           );
-          if (progress) gsap.set(progress, { clearProps: "transform" });
           racine.style.removeProperty("--rail-panel-width");
           track.style.willChange = "";
           lastActive.current = 0;
@@ -436,9 +421,6 @@ export default function HomeHorizontalChromaticRail() {
             {String(activeIndex + 1).padStart(2, "0")} / {String(CHAPTERS.length).padStart(2, "0")} ·{" "}
             {t(CHAPTERS[activeIndex]?.nameKey ?? CHAPTERS[0].nameKey)}
           </span>
-          <div className={styles.progressTrack}>
-            <span className={styles.progressFill} />
-          </div>
         </div>
       </div>
     </section>

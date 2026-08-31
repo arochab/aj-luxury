@@ -501,7 +501,7 @@ test("0011 fails closed for a missing, foreign, expired or unsealed service poin
   assert.doesNotMatch(migration, /provider_reference` text|raw_reference|api[_-]?key|secret[_-]?key/i);
 });
 
-test("0011-0025 remain additive and the journal ends at the scrypt password profile", () => {
+test("0011-0026 remain additive and the journal ends at the international foundation", () => {
   const previous = JSON.parse(readFileSync(`${drizzle}meta/0010_snapshot.json`, "utf8"));
   const snapshot = JSON.parse(readFileSync(`${drizzle}meta/0011_snapshot.json`, "utf8"));
   const pricingSnapshot = JSON.parse(readFileSync(`${drizzle}meta/0012_snapshot.json`, "utf8"));
@@ -586,10 +586,10 @@ test("0011-0025 remain additive and the journal ends at the scrypt password prof
     false,
   );
   assert.deepEqual(journal.entries.at(-1), {
-    idx: 25,
+    idx: 26,
     version: "6",
-    when: 1788134400000,
-    tag: "0025_customer_password_scrypt_profile",
+    when: 1788220800000,
+    tag: "0026_international_shipping",
     breakpoints: true,
   });
 });

@@ -218,7 +218,7 @@
 
 .mediaPair {
   display: grid;
-  width: min(62vw, 1050px);
+  width: min(62vw, 1050px, calc((100svh - 184px) * 4 / 3));
   grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: center;
   justify-self: end;
@@ -274,24 +274,7 @@
   bottom: 0;
   min-height: 54px;
   gap: 24px;
-  border-top: 1px solid rgba(255, 255, 255, 0.2);
   color: rgba(255, 255, 255, 0.72);
-}
-
-.progressTrack {
-  position: relative;
-  width: min(34vw, 460px);
-  height: 1px;
-  overflow: hidden;
-  background: rgba(255, 255, 255, 0.22);
-}
-
-.progressFill {
-  position: absolute;
-  inset: 0;
-  background: rgba(255, 255, 255, 0.92);
-  transform: scaleX(0);
-  transform-origin: left center;
 }
 
 .compactCopy {
@@ -332,7 +315,7 @@
   }
 
   .mediaPair {
-    width: min(100%, calc((100svh - 220px) * 4 / 3));
+    width: min(100%, calc((100svh - 320px) * 4 / 3));
     justify-self: stretch;
     gap: clamp(8px, 1.6vw, 14px);
   }
@@ -483,9 +466,6 @@
     font-size: var(--t0);
   }
 
-  .progressTrack {
-    width: 44vw;
-  }
 }
 
 @keyframes compact-copy-in {
@@ -506,7 +486,7 @@
   .track,
   .panel,
   .frame,
-  .progressFill {
+  .stageFooter {
     animation: none !important;
     scroll-behavior: auto !important;
     transition: none !important;

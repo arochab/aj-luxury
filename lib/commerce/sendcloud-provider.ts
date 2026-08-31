@@ -1016,7 +1016,10 @@ export function createSendcloudProviderPorts(
           `${PANEL_ORIGIN}/api/v3/parcels/${request.providerParcelReference}/documents/${providerKind}`,
         );
         url.searchParams.set("dpi", "72");
-        url.searchParams.set("paper_size", request.documentKind === "customs" ? "A4" : "A6");
+        // Jérémy operates with a standard office printer. Sendcloud creates
+        // carrier-native A6 labels, then converts them to an A4 printable PDF
+        // at retrieval time.
+        url.searchParams.set("paper_size", "A4");
         const file = await boundedDocument(await providerResponse(
           fetchImpl,
           auth,

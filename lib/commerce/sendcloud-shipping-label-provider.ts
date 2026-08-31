@@ -9,6 +9,7 @@ import {
   type ShippingLabelReceipt,
   type ShippingLabelRequest,
 } from "./fulfillment-domain.ts";
+import { EORI_NUMBER } from "../legal.ts";
 
 const PANEL_ORIGIN = "https://panel.sendcloud.sc";
 const ANNOUNCE_URL = `${PANEL_ORIGIN}/api/v3/shipments/announce`;
@@ -17,6 +18,7 @@ const REQUEST_TIMEOUT_MS = 8_000;
 const SAFE_CODE = /^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,190}$/;
 const SAFE_IDENTIFIER = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,190}$/;
 const SAFE_EMAIL = /^[^\s@]{1,64}@[^\s@]{1,189}$/;
+const STRICT_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 const BELMONT_ORIGIN_ATTESTATION = "3 A rue Principale|67130|Belmont|FR";
 
 export type SendcloudShippingLabelConfiguration = Readonly<{
@@ -44,7 +46,9 @@ type ShipmentContextRow = Readonly<{
   status: string;
   currency: string;
   subtotal_cents: number;
+  shipping_cents: number;
   total_cents: number;
+  paid_at: string;
   shipping_address_json: string;
   shipping_address_fingerprint: string;
   option_id: string;
@@ -53,7 +57,10 @@ type ShipmentContextRow = Readonly<{
   service_code: string;
   delivery_mode: "home" | "service_point";
   selected_service_point_id: string | null;
-  zone: "EU" | "UK" | "US" | "CA";
+  zone: "EU" | "UK" | "US" | "CA" | "GCC";
+  duties_terms: "EU_INCLUDED" | "DAP";
+  origin_country_code: string | null;
+  customs_hs_code: string | null;
   profile_code: string;
   source_version: string;
   item_count: number;
@@ -83,6 +90,7 @@ type StoredAddress = Readonly<{
   city: string;
   regionCode: string | null;
   countryCode: string;
+  phone: string | null;
 }>;
 
 type ProviderCredentials = Readonly<{
@@ -197,16 +205,21 @@ function parseStoredAddress(value: string): StoredAddress {
   if (!record(parsed)) {
     throw new FulfillmentProviderError("rejected", "The paid order address is invalid.");
   }
-  const keys = ["recipient", "company", "line1", "line2", "postalCode", "city", "regionCode", "countryCode"];
+  const legacyKeys = ["recipient", "company", "line1", "line2", "postalCode", "city", "regionCode", "countryCode"];
+  const internationalKeys = [...legacyKeys, "phone"];
+  const actualKeys = Object.keys(parsed).sort().join("\0");
   if (
-    Object.keys(parsed).sort().join("\0") !== keys.sort().join("\0") ||
+    ![legacyKeys, internationalKeys].some((keys) =>
+      actualKeys === [...keys].sort().join("\0")) ||
     !safeString(parsed.recipient, 120) ||
     !(parsed.company === null || safeString(parsed.company, 120)) ||
     !safeString(parsed.line1, 160) ||
     !(parsed.line2 === null || safeString(parsed.line2, 160)) ||
-    !safeString(parsed.postalCode, 16) || !safeString(parsed.city, 120) ||
+    !((parsed.postalCode === "" && ["AE", "QA"].includes(String(parsed.countryCode))) ||
+      safeString(parsed.postalCode, 16)) || !safeString(parsed.city, 120) ||
     !(parsed.regionCode === null || safeString(parsed.regionCode, 2)) ||
-    !safeString(parsed.countryCode, 2)
+    !safeString(parsed.countryCode, 2) ||
+    !(parsed.phone === undefined || safeString(parsed.phone, 24))
   ) {
     throw new FulfillmentProviderError("rejected", "The paid order address is invalid.");
   }
@@ -219,6 +232,7 @@ function parseStoredAddress(value: string): StoredAddress {
     city: parsed.city,
     regionCode: parsed.regionCode,
     countryCode: parsed.countryCode,
+    phone: typeof parsed.phone === "string" ? parsed.phone : null,
   });
 }
 
@@ -234,11 +248,18 @@ async function verifiedAddress(row: ShipmentContextRow) {
       city: stored.city,
       ...(stored.regionCode === null ? {} : { regionCode: stored.regionCode }),
       countryCode: stored.countryCode,
+      ...(stored.phone === null ? {} : { phone: stored.phone }),
     });
     if (
       proof.canonicalJson !== row.shipping_address_json ||
       proof.fingerprint !== row.shipping_address_fingerprint ||
-      proof.zone !== "EU" || row.zone !== "EU"
+      proof.zone !== row.zone ||
+      (row.zone === "EU" && row.duties_terms !== "EU_INCLUDED") ||
+      (row.zone !== "EU" && (
+        row.duties_terms !== "DAP" ||
+        row.origin_country_code !== "CN" ||
+        row.customs_hs_code !== "61071200"
+      ))
     ) {
       throw new Error("mismatch");
     }
@@ -246,7 +267,7 @@ async function verifiedAddress(row: ShipmentContextRow) {
   } catch {
     throw new FulfillmentProviderError(
       "rejected",
-      "Only an authenticated EU address is enabled; customs destinations remain closed.",
+      "The paid delivery address or customs policy cannot be authenticated.",
     );
   }
 }
@@ -282,11 +303,12 @@ function providerAddress(address: Awaited<ReturnType<typeof verifiedAddress>>, e
     ...(address.company ? { company_name: address.company } : {}),
     address_line_1: address.line1,
     ...(address.line2 ? { address_line_2: address.line2 } : {}),
-    postal_code: address.postalCode,
+    ...(address.postalCode ? { postal_code: address.postalCode } : {}),
     city: address.city,
     ...(address.regionCode ? { state_province_code: address.regionCode } : {}),
     country_code: address.countryCode,
     email,
+    ...(address.phone ? { phone_number: address.phone } : {}),
   });
 }
 
@@ -297,7 +319,13 @@ export function buildSendcloudShipmentPayload(input: Readonly<{
   shippingOptionCode: string;
   senderAddressId: number;
   servicePointReference: string | null;
+  lines: readonly OrderLineRow[];
 }>): Record<string, unknown> {
+  const paidAt = new Date(input.context.paid_at);
+  if (!STRICT_UTC.test(input.context.paid_at) || Number.isNaN(paidAt.getTime()) ||
+    paidAt.toISOString() !== input.context.paid_at) {
+    throw new FulfillmentProviderError("rejected", "The paid order timestamp is invalid.");
+  }
   let toServicePoint: Readonly<{ id: number }> | null = null;
   if (input.context.delivery_mode === "service_point") {
     if (!input.servicePointReference || !/^[1-9]\d{0,17}$/.test(input.servicePointReference)) {
@@ -307,6 +335,21 @@ export function buildSendcloudShipmentPayload(input: Readonly<{
   } else if (input.context.selected_service_point_id !== null || input.servicePointReference !== null) {
     throw new FulfillmentProviderError("rejected", "The home-delivery snapshot is inconsistent.");
   }
+  const international = input.context.zone !== "EU";
+  const parcelItems = input.lines.map((line) => ({
+    item_id: line.id,
+    description: "Men's knitted boxer briefs, 94% modal, 6% elastane",
+    quantity: line.quantity,
+    weight: { value: "0.100", unit: "kg" },
+    price: { value: exactMoney(line.unit_price_cents), currency: "EUR" },
+    hs_code: "61071200",
+    origin_country: "CN",
+    sku: line.internal_reference,
+    product_id: line.internal_reference,
+    material_content: "94% modal, 6% elastane",
+    intended_use: "Personal use",
+    properties: { color: line.color_name, size: line.size },
+  }));
   return {
     label_details: { mime_type: "application/pdf", dpi: 72 },
     to_address: providerAddress(input.address, input.context.email),
@@ -331,10 +374,27 @@ export function buildSendcloudShipmentPayload(input: Readonly<{
         value: (input.context.weight_grams / 1_000).toFixed(3),
         unit: "kg",
       },
+      ...(international ? { parcel_items: parcelItems } : {}),
     }],
     reference: input.request.shipmentId,
     external_reference_id: input.request.idempotencyKey,
     ...(toServicePoint ? { to_service_point: toServicePoint } : {}),
+    ...(international ? {
+      customs_information: {
+        invoice_number: `AJL-${input.context.order_number}`,
+        export_reason: "commercial_goods",
+        export_type: "private",
+        invoice_date: input.context.paid_at.slice(0, 10),
+        freight_costs: {
+          value: exactMoney(input.context.shipping_cents),
+          currency: "EUR",
+        },
+        goods_description: "Men's knitted boxer briefs, 94% modal, 6% elastane",
+        tax_numbers: {
+          sender: [{ name: "EORI", country_code: "FR", value: EORI_NUMBER }],
+        },
+      },
+    } : {}),
   };
 }
 
@@ -370,7 +430,11 @@ export async function parseSendcloudShipmentReceipt(
     throw new FulfillmentProviderError("ambiguous", "Sendcloud parcel receipt is malformed.");
   }
   const labels = parcel.documents.filter((document) =>
-    record(document) && document.type === "label" && document.size === "a6"
+    record(document) &&
+    (document.document_type === "label" ||
+      (document.document_type === undefined && document.type === "label")) &&
+    (document.type === undefined || document.type === "label") &&
+    document.size === "a6"
   );
   if (labels.length !== 1 || !record(labels[0]) || !safeString(labels[0].link, 512)) {
     throw new FulfillmentProviderError("ambiguous", "Sendcloud did not prove one A6 label.");
@@ -388,6 +452,52 @@ export async function parseSendcloudShipmentReceipt(
   ) {
     throw new FulfillmentProviderError("ambiguous", "Sendcloud label metadata is malformed.");
   }
+  const customsDocuments = parcel.documents.filter((document) =>
+    record(document) &&
+    (document.document_type === "customs-declaration" ||
+      (document.document_type === undefined &&
+        ["commercial-invoice", "cn22", "cn23", "cn23-default", "cp71"].includes(
+          String(document.type),
+        ))) &&
+    (document.type === undefined ||
+      ["commercial-invoice", "cn22", "cn23", "cn23-default", "cp71"].includes(
+        String(document.type),
+      )) &&
+    document.size === "a4"
+  );
+  let customsDocumentReference: string | undefined;
+  if (context.zone !== "EU") {
+    if (
+      customsDocuments.length !== 1 || !record(customsDocuments[0]) ||
+      !safeString(customsDocuments[0].link, 512)
+    ) {
+      throw new FulfillmentProviderError(
+        "ambiguous",
+        "Sendcloud did not prove one A4 customs declaration.",
+      );
+    }
+    let customsUrl: URL;
+    try {
+      customsUrl = new URL(String(customsDocuments[0].link));
+    } catch {
+      throw new FulfillmentProviderError("ambiguous", "Sendcloud customs metadata is malformed.");
+    }
+    if (
+      customsUrl.origin !== PANEL_ORIGIN ||
+      customsUrl.pathname !==
+        `/api/v3/parcels/${String(parcel.id)}/documents/customs-declaration` ||
+      customsUrl.search || customsUrl.hash || customsUrl.username || customsUrl.password
+    ) {
+      throw new FulfillmentProviderError("ambiguous", "Sendcloud customs metadata is malformed.");
+    }
+    customsDocumentReference =
+      `sendcloud:parcel:${String(parcel.id)}:document:customs-declaration:a4`;
+  } else if (customsDocuments.length !== 0) {
+    throw new FulfillmentProviderError(
+      "ambiguous",
+      "An EU shipment unexpectedly contains customs metadata.",
+    );
+  }
   // Persist the parcel reference because Sendcloud's printable-document API is
   // parcel-scoped. The parent shipment id remains covered by the immutable
   // receipt fingerprint and the external idempotency reference.
@@ -400,10 +510,12 @@ export async function parseSendcloudShipmentReceipt(
     providerCode: "sendcloud",
     providerShipmentReference,
     trackingReference,
+    ...(customsDocumentReference ? { customsDocumentReference } : {}),
     receiptFingerprint: await sha256Hex(JSON.stringify({
       carrierCode: context.carrier_code,
       externalReferenceId: request.idempotencyKey,
       label: { dpi: 72, mediaType: "application/pdf", size: "a6" },
+      customs: customsDocumentReference ?? null,
       parcelId: Number(parcel.id),
       sendcloudShipmentId: String(data.id),
       providerShipmentReference,
@@ -438,13 +550,16 @@ class D1SendcloudShippingLabelProvider implements ShippingLabelProviderPort {
     const context = await this.#database.prepare(
       `SELECT shipment.attempts, customer_order.order_number,
         customer_order.email, customer_order.status, customer_order.currency,
-        customer_order.subtotal_cents, customer_order.total_cents,
+        customer_order.subtotal_cents, customer_order.shipping_cents,
+        customer_order.total_cents, customer_order.paid_at,
         customer_order.shipping_address_json,
         customer_order.shipping_address_fingerprint,
         option.id AS option_id, option.provider_code, option.carrier_code,
         option.service_code, option.delivery_mode,
         option.selected_service_point_id,
-        configuration.zone, parcel.profile_code, parcel.source_version,
+        configuration.zone, configuration.duties_terms,
+        configuration.origin_country_code, configuration.customs_hs_code,
+        parcel.profile_code, parcel.source_version,
         parcel.item_count, parcel.weight_grams, parcel.length_mm,
         parcel.width_mm, parcel.height_mm
       FROM shipments AS shipment
@@ -523,6 +638,7 @@ class D1SendcloudShippingLabelProvider implements ShippingLabelProviderPort {
       shippingOptionCode,
       senderAddressId: this.#credentials.senderAddressId,
       servicePointReference,
+      lines: lineResult.results,
     });
     let response: Response;
     try {

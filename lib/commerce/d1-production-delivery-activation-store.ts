@@ -12,6 +12,7 @@ import {
 import { resolveClientValidatedParcelProfile } from "./parcel-profiles.ts";
 import { ProductionDeliveryError } from "./d1-production-delivery-store.ts";
 import { calculateAjPackPricing } from "./pack-pricing.ts";
+import { resolveLaunchShippingCountryZone } from "./shipping-policy.ts";
 
 type CartRow = Readonly<{
   id: string;
@@ -88,9 +89,23 @@ function assertIdempotencyKey(value: string): void {
   }
 }
 
-async function normalizeProductionLaunchAddress(input: ShippingAddressInput) {
+async function normalizeProductionLaunchAddress(
+  input: ShippingAddressInput,
+  internationalShippingEnabled: boolean,
+) {
+  const requestedZone = resolveLaunchShippingCountryZone(input.countryCode);
+  if (
+    !internationalShippingEnabled &&
+    requestedZone !== null &&
+    requestedZone !== "EU"
+  ) {
+    throw new ProductionDeliveryError(
+      "INVALID_INPUT",
+      "Production delivery is available only in the European Union.",
+    );
+  }
   const address = await normalizeShippingAddress(input);
-  if (address.zone !== "EU") {
+  if (address.zone !== "EU" && !internationalShippingEnabled) {
     throw new ProductionDeliveryError(
       "INVALID_INPUT",
       "Production delivery is available only in the European Union.",
@@ -99,12 +114,13 @@ async function normalizeProductionLaunchAddress(input: ShippingAddressInput) {
   return address;
 }
 
-function routingProof(zone: "EU" | "UK" | "US" | "CA"): string {
+function routingProof(zone: "EU" | "UK" | "US" | "CA" | "GCC"): string {
   switch (zone) {
     case "EU": return JSON.stringify({ countryCode: "FR", postalCode: "00000", regionCode: null });
     case "UK": return JSON.stringify({ countryCode: "GB", postalCode: "AA0", regionCode: null });
     case "US": return JSON.stringify({ countryCode: "US", postalCode: "00000", regionCode: "NY" });
     case "CA": return JSON.stringify({ countryCode: "CA", postalCode: "A0A", regionCode: null });
+    case "GCC": return JSON.stringify({ countryCode: "AE", postalCode: "00000", regionCode: null });
   }
 }
 
@@ -147,16 +163,19 @@ export class D1ProductionDeliveryActivationStore {
   readonly #provider: DeliveryProviderPorts;
   readonly #vault: DeliveryReferenceVault;
   readonly #references: D1DeliveryReferenceStore;
+  readonly #internationalShippingEnabled: boolean;
 
   constructor(
     database: CommerceD1Database,
     provider: DeliveryProviderPorts,
     vault: DeliveryReferenceVault,
+    internationalShippingEnabled = false,
   ) {
     this.#database = database;
     this.#provider = provider;
     this.#vault = vault;
     this.#references = new D1DeliveryReferenceStore(database, vault);
+    this.#internationalShippingEnabled = internationalShippingEnabled;
   }
 
   async quoteOptions(input: Readonly<{
@@ -166,7 +185,10 @@ export class D1ProductionDeliveryActivationStore {
     now: string;
   }>): Promise<readonly PublicProductionDeliveryOptionV1[]> {
     assertIdempotencyKey(input.idempotencyKey);
-    const address = await normalizeProductionLaunchAddress(input.address);
+    const address = await normalizeProductionLaunchAddress(
+      input.address,
+      this.#internationalShippingEnabled,
+    );
     const replayKey = `delivery-options:${await sha256Hex(`${input.cartId}\0${input.idempotencyKey}`)}`;
     const replay = await this.#database.prepare(
       `SELECT metadata_json FROM audit_log WHERE idempotency_key = ?`,
@@ -235,11 +257,25 @@ export class D1ProductionDeliveryActivationStore {
     // The provider response is the price/ETA authority. D1 continues to govern
     // launch zone, currency, duties policy and the validated parcel profile;
     // no synthetic/demo amount is ever promoted into a commercial quote.
-    const acceptedOffers = offers.filter((offer) =>
+    let acceptedOffers = offers.filter((offer) =>
       (offer.deliveryMode === "home" || offer.deliveryMode === "service_point") &&
       offer.currency === "EUR" && offer.dutiesTerms === expectedDuties &&
       offer.expiresAt > input.now && offer.expiresAt <= cart.expires_at
     ).slice(0, 20);
+    if (address.zone !== "EU") {
+      const allowedCarriers = new Set(["colissimo", "fedex", "chronopost"]);
+      const cheapestByCarrier = new Map<string, DeliveryQuoteOffer>();
+      for (const offer of acceptedOffers) {
+        const carrier = offer.carrierCode.toLowerCase();
+        if (offer.deliveryMode !== "home" || !allowedCarriers.has(carrier)) continue;
+        const current = cheapestByCarrier.get(carrier);
+        if (!current || offer.amountCents < current.amountCents) {
+          cheapestByCarrier.set(carrier, offer);
+        }
+      }
+      acceptedOffers = [...cheapestByCarrier.values()]
+        .sort((left, right) => left.amountCents - right.amountCents);
+    }
     if (acceptedOffers.length < 1) {
       throw new ProductionDeliveryError("NO_HOME_OPTION", "No reviewed delivery option is available.");
     }
@@ -344,7 +380,10 @@ export class D1ProductionDeliveryActivationStore {
     now: string;
   }>): Promise<readonly PublicProductionServicePointV1[]> {
     assertIdempotencyKey(input.idempotencyKey);
-    const address = await normalizeProductionLaunchAddress(input.address);
+    const address = await normalizeProductionLaunchAddress(
+      input.address,
+      this.#internationalShippingEnabled,
+    );
     const option = await this.#readCurrentOption(
       input.optionId,
       input.cartId,
@@ -464,7 +503,10 @@ export class D1ProductionDeliveryActivationStore {
     address: ShippingAddressInput;
     now: string;
   }>): Promise<PublicProductionDeliveryOptionV1> {
-    const address = await normalizeProductionLaunchAddress(input.address);
+    const address = await normalizeProductionLaunchAddress(
+      input.address,
+      this.#internationalShippingEnabled,
+    );
     const option = await new D1DeliveryOptionsStore(this.#database).selectOption({
       optionId: input.optionId,
       cartId: input.cartId,

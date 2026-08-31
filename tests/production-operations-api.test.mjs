@@ -5,7 +5,9 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { D1CommerceStore } from "../lib/commerce/d1-commerce-store.ts";
+import { FulfillmentError } from "../lib/commerce/fulfillment-domain.ts";
 import {
+  dispatchProductionOutboundShipments,
   dispatchProductionVerifiedPaidOrderEmails,
   dispatchProductionTransactionalEmails,
   dispatchProductionLatePaymentRefunds,
@@ -213,6 +215,20 @@ function controlledEnv(db = database()) {
       async limit() { return { success: true }; },
     },
     DB: db,
+  };
+}
+
+function automaticShippingEnv(db = database()) {
+  return {
+    ...controlledEnv(db),
+    OUTBOUND_SHIPMENT_CREATION_ENABLED: "true",
+    AUTOMATIC_OUTBOUND_SHIPMENT_ENABLED: "true",
+    SENDCLOUD_SECRET_KEY: "sendcloud-secret-redacted-0001",
+    SENDCLOUD_SENDER_ADDRESS_ID: "123456",
+    SENDCLOUD_SENDER_ADDRESS_ATTESTATION: "3 A rue Principale|67130|Belmont|FR",
+    DELIVERY_REFERENCE_ENCRYPTION_KEY_BASE64: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+    DELIVERY_REFERENCE_KEY_VERSION: "1",
+    DELIVERY_REFERENCE_DECRYPTION_KEYS_JSON: "{}",
   };
 }
 
@@ -747,6 +763,129 @@ test("verified paid-order dispatch isolates one confirmation failure from the ot
     queueDrained: false,
   });
   assert.doesNotMatch(JSON.stringify(result), /@|recipient|payload|secret/i);
+});
+
+test("automatic outbound shipment stays closed until both explicit activation flags are true", async () => {
+  const db = database();
+  const result = await dispatchProductionOutboundShipments(
+    controlledEnv(db),
+    { now: "2026-08-15T09:00:00.000Z", orderId: "order_paid_signal_1" },
+    {
+      fulfillment: {
+        async createShipmentLabel() {
+          throw new Error("must-not-create-a-label");
+        },
+      },
+    },
+  );
+  assert.deepEqual(result, {
+    closed: true,
+    reason: "production-shipping-dispatch-not-activated",
+    candidates: 0,
+    created: 0,
+    alreadyReady: 0,
+    attentionRequired: 0,
+  });
+  assert.equal(db.queries.length, 0);
+});
+
+test("automatic outbound shipment uses a deterministic idempotency identity for one paid order", async () => {
+  const queries = [];
+  const db = {
+    prepare(query) {
+      queries.push(query);
+      return {
+        bind(...values) {
+          assert.deepEqual(values, ["order_paid_signal_1", "order_paid_signal_1"]);
+          return {
+            async all() {
+              return { success: true, results: [{ id: "order_paid_signal_1" }] };
+            },
+          };
+        },
+      };
+    },
+  };
+  const calls = [];
+  const dependencies = {
+    fulfillment: {
+      async createShipmentLabel(input) {
+        calls.push(input);
+        return { status: "label_ready" };
+      },
+    },
+  };
+  const first = await dispatchProductionOutboundShipments(
+    automaticShippingEnv(db),
+    { now: "2026-08-15T09:00:00.000Z", orderId: "order_paid_signal_1" },
+    dependencies,
+  );
+  const replay = await dispatchProductionOutboundShipments(
+    automaticShippingEnv(db),
+    { now: "2026-08-15T09:01:00.000Z", orderId: "order_paid_signal_1" },
+    dependencies,
+  );
+  assert.deepEqual(first, {
+    closed: false,
+    reason: null,
+    candidates: 1,
+    created: 1,
+    alreadyReady: 0,
+    attentionRequired: 0,
+  });
+  assert.deepEqual(replay, first);
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].shipmentId, calls[1].shipmentId);
+  assert.equal(calls[0].idempotencyKey, calls[1].idempotencyKey);
+  assert.match(calls[0].shipmentId, /^shipment_[a-f0-9]{64}$/);
+  assert.match(calls[0].idempotencyKey, /^outbound-label:[a-f0-9]{64}$/);
+  assert.equal(calls[0].orderId, "order_paid_signal_1");
+  assert.notEqual(calls[0].leaseToken, calls[1].leaseToken);
+  assert.equal(queries.length, 2);
+  assert.match(queries[0], /status = 'paid'/);
+  assert.match(queries[0], /payment\.status = 'succeeded'/);
+  assert.match(queries[0], /NOT EXISTS[\s\S]*FROM shipments/);
+});
+
+test("ambiguous carrier outcome is isolated for manual attention and never blindly retried", async () => {
+  const db = {
+    prepare() {
+      return {
+        bind() {
+          return {
+            async all() {
+              return { success: true, results: [{ id: "order_paid_signal_2" }] };
+            },
+          };
+        },
+      };
+    },
+  };
+  let attempts = 0;
+  const result = await dispatchProductionOutboundShipments(
+    automaticShippingEnv(db),
+    { now: "2026-08-15T09:00:00.000Z", orderId: "order_paid_signal_2" },
+    {
+      fulfillment: {
+        async createShipmentLabel() {
+          attempts += 1;
+          throw new FulfillmentError(
+            "PROVIDER_OUTCOME_UNKNOWN",
+            "provider result requires reconciliation",
+          );
+        },
+      },
+    },
+  );
+  assert.deepEqual(result, {
+    closed: false,
+    reason: null,
+    candidates: 1,
+    created: 0,
+    alreadyReady: 0,
+    attentionRequired: 1,
+  });
+  assert.equal(attempts, 1);
 });
 
 test("scheduled late-refund recovery stays closed before activation without touching D1", async () => {

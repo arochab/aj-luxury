@@ -78,6 +78,7 @@ export function buildPaidOrderEmail(
       text: [
         `Le paiement de la commande ${orderNumber} est confirmé.`,
         `Montant payé : ${money(snapshot.totalCents)}`,
+        "Votre commande passe en préparation. Vous recevrez le suivi dès sa remise au transporteur.",
         `TVA : ${money(snapshot.taxCents)}`,
         "TVA non applicable, article 293 B du Code général des impôts.",
         "Le récapitulatif détaillé et le snapshot des conditions acceptées sont conservés dans la confirmation de commande envoyée séparément.",

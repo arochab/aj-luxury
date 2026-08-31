@@ -418,21 +418,26 @@ test("production UI wiring contains no synthetic payment or hostname switch", as
   assert.match(joined, /MAX_POLLS = 90/);
 });
 
-test("production checkout exposes the 27 EU countries and no non-EU destination", async () => {
+test("production checkout preserves all EU countries and gates the reviewed international set", async () => {
   const source = await readFile(
     new URL("../app/checkout/ProductionCheckoutClient.tsx", import.meta.url),
     "utf8",
   );
-  const block = source.match(/const launchCountries = Object\.freeze\(\[([\s\S]*?)\] as const\)/)?.[1] ?? "";
-  const countryCodes = [...block.matchAll(/\["([A-Z]{2})",/g)].map((match) => match[1]);
-  assert.equal(countryCodes.length, 27);
-  assert.equal(new Set(countryCodes).size, 27);
-  assert.ok(countryCodes.includes("FR"));
-  assert.ok(countryCodes.includes("DE"));
-  assert.ok(countryCodes.includes("IE"));
-  assert.ok(!countryCodes.includes("GB"));
-  assert.ok(!countryCodes.includes("US"));
-  assert.ok(!countryCodes.includes("CA"));
+  const euBlock = source.match(/const euLaunchCountries = Object\.freeze\(\[([\s\S]*?)\] as const\)/)?.[1] ?? "";
+  const internationalBlock = source.match(/const internationalLaunchCountries = Object\.freeze\(\[([\s\S]*?)\] as const\)/)?.[1] ?? "";
+  const euCodes = [...euBlock.matchAll(/\["([A-Z]{2})",/g)].map((match) => match[1]);
+  const internationalCodes = [...internationalBlock.matchAll(/\["([A-Z]{2})",/g)].map((match) => match[1]);
+  assert.equal(euCodes.length, 27);
+  assert.equal(new Set(euCodes).size, 27);
+  assert.deepEqual(internationalCodes, ["GB", "US", "CA", "AE", "QA", "SA"]);
+  assert.ok(euCodes.includes("FR"));
+  assert.ok(euCodes.includes("DE"));
+  assert.ok(euCodes.includes("IE"));
+  assert.match(source, /NEXT_PUBLIC_INTERNATIONAL_SHIPPING_ENABLED === "true"/);
+  assert.match(
+    source,
+    /const launchCountries = internationalCheckoutEnabled\s*\? Object\.freeze\(\[\.\.\.euLaunchCountries, \.\.\.internationalLaunchCountries\]\)\s*:\s*euLaunchCountries/,
+  );
 });
 
 test("production checkout binds every new order to a customer account", async () => {

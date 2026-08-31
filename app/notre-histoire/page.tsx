@@ -38,6 +38,7 @@ export default function NotreHistoirePage() {
               alt="AJ Luxury — Alex et Jérémy — collection Apollon"
               fill
               sizes="(max-width: 760px) 100vw, 62vw"
+              style={{ objectFit: "contain", objectPosition: "center" }}
             />
           </figure>
         </div>
@@ -78,6 +79,7 @@ export default function NotreHistoirePage() {
               src="/images/client/raw/product-lilas-model.webp"
               fill
               sizes="(max-width: 760px) 50vw, 44vw"
+              style={{ objectFit: "contain", objectPosition: "center" }}
             />
             <figcaption>Alex</figcaption>
           </figure>
@@ -89,6 +91,7 @@ export default function NotreHistoirePage() {
               src="/images/client/story-jeremy-retouched.jpeg"
               fill
               sizes="(max-width: 760px) 50vw, 44vw"
+              style={{ objectFit: "contain", objectPosition: "center" }}
             />
             <figcaption>Jérémy</figcaption>
           </figure>

@@ -17,6 +17,8 @@ import { dispatchTransactionalEmailBatch } from "../lib/commerce/email-outbox-di
 import type { TransactionalEmailProviderPort } from "../lib/commerce/email-outbox.ts";
 import type { RefundPaymentProviderPort } from "../lib/commerce/payment-provider.ts";
 import { FulfillmentError, sha256Hex } from "../lib/commerce/fulfillment-domain.ts";
+import type { ShippingLabelProviderPort } from "../lib/commerce/fulfillment-domain.ts";
+import { createSendcloudShippingLabelProvider } from "../lib/commerce/sendcloud-shipping-label-provider.ts";
 import {
   authorizeBrowserMutation,
   isTrustedMutationOrigin,
@@ -38,6 +40,7 @@ import {
   productionScheduledRateLimit,
   type ProductionRateLimitEnvironment,
 } from "./production-rate-limit.ts";
+import { productionOutboundShippingRuntimeConfigured } from "./production-shipping-runtime.ts";
 
 const RETURN_ROUTE = "/api/commerce/returns";
 const APPROVE_ROUTE = /^\/api\/commerce\/admin\/returns\/([^/]+)\/approve$/;
@@ -66,6 +69,13 @@ export type ProductionOperationsEnvironment = ProductionCommerceEnvironment &
   TRANSACTIONAL_REPLY_TO?: string;
   LATE_PAYMENT_REFUND_DISPATCH_ENABLED?: string;
   STRIPE_SETTLEMENT_MODE?: string;
+  OUTBOUND_SHIPMENT_CREATION_ENABLED?: string;
+  AUTOMATIC_OUTBOUND_SHIPMENT_ENABLED?: string;
+  SENDCLOUD_SENDER_ADDRESS_ID?: string;
+  SENDCLOUD_SENDER_ADDRESS_ATTESTATION?: string;
+  DELIVERY_REFERENCE_ENCRYPTION_KEY_BASE64?: string;
+  DELIVERY_REFERENCE_KEY_VERSION?: string;
+  DELIVERY_REFERENCE_DECRYPTION_KEYS_JSON?: string;
 }>;
 
 type ReturnRequestResult = Readonly<{
@@ -137,9 +147,12 @@ export type ProductionEmailDispatchDependencies = Readonly<{
 export type ProductionScheduledOperationsDependencies =
   ProductionEmailDispatchDependencies & Readonly<{
     refundProvider?: RefundPaymentProviderPort;
+    shippingLabelProvider?: ShippingLabelProviderPort;
+    fulfillment?: Pick<D1FulfillmentStore, "createShipmentLabel">;
   }>;
 
 type ExpiredReservationCandidate = Readonly<{ id: string }>;
+type PaidShipmentCandidate = Readonly<{ id: string }>;
 
 type ReturnEligibilityRow = Readonly<{
   status: string;
@@ -1042,6 +1055,127 @@ export async function dispatchProductionVerifiedPaidOrderEmails(
   });
 }
 
+export async function dispatchProductionOutboundShipments(
+  env: ProductionOperationsEnvironment | undefined,
+  input: Readonly<{ now: string; orderId?: string }>,
+  dependencies: Readonly<{
+    shippingLabelProvider?: ShippingLabelProviderPort;
+    fulfillment?: Pick<D1FulfillmentStore, "createShipmentLabel">;
+  }> = {},
+): Promise<Readonly<{
+  closed: boolean;
+  reason: string | null;
+  candidates: number;
+  created: number;
+  alreadyReady: number;
+  attentionRequired: number;
+}>> {
+  const closed = (reason: string) => Object.freeze({
+    closed: true,
+    reason,
+    candidates: 0,
+    created: 0,
+    alreadyReady: 0,
+    attentionRequired: 0,
+  });
+  if (!env || env.APP_ENV !== "production" || !env.DB) {
+    return closed("production-shipping-runtime-not-configured");
+  }
+  if (!isCanonicalUtcTimestamp(input.now) ||
+    (input.orderId !== undefined && !SAFE_ID.test(input.orderId))) {
+    return closed("production-shipping-input-invalid");
+  }
+  if (!exactProductionOperationsConfiguration(env) ||
+    env.OUTBOUND_SHIPMENT_CREATION_ENABLED !== "true" ||
+    env.AUTOMATIC_OUTBOUND_SHIPMENT_ENABLED !== "true" ||
+    !productionOutboundShippingRuntimeConfigured(env)) {
+    return closed("production-shipping-dispatch-not-activated");
+  }
+  const rateLimit = await productionScheduledRateLimit(env, "outbound-shipment-dispatch");
+  if (rateLimit !== "allowed") {
+    return closed(`production-shipping-rate-limit-${rateLimit}`);
+  }
+  let fulfillment = dependencies.fulfillment;
+  if (!fulfillment) {
+    try {
+      const provider = dependencies.shippingLabelProvider ?? createSendcloudShippingLabelProvider(
+        env.DB,
+        {
+          publicKey: env.SENDCLOUD_PUBLIC_KEY,
+          secretKey: env.SENDCLOUD_SECRET_KEY,
+          senderAddressId: env.SENDCLOUD_SENDER_ADDRESS_ID,
+          originAddressAttestation: env.SENDCLOUD_SENDER_ADDRESS_ATTESTATION,
+          referenceVault: {
+            encryptionKeyBase64: env.DELIVERY_REFERENCE_ENCRYPTION_KEY_BASE64,
+            keyVersion: env.DELIVERY_REFERENCE_KEY_VERSION,
+            decryptionKeysBase64: env.DELIVERY_REFERENCE_DECRYPTION_KEYS_JSON
+              ? JSON.parse(env.DELIVERY_REFERENCE_DECRYPTION_KEYS_JSON) as Record<string, string>
+              : {},
+          },
+        },
+      );
+      fulfillment = new D1FulfillmentStore(env.DB, { shippingLabel: provider });
+    } catch {
+      return closed("production-shipping-provider-not-configured");
+    }
+  }
+  const candidates = await env.DB.prepare(
+    `SELECT customer_order.id
+    FROM orders AS customer_order
+    WHERE customer_order.status = 'paid' AND customer_order.paid_at IS NOT NULL
+      AND (? IS NULL OR customer_order.id = ?)
+      AND EXISTS (
+        SELECT 1 FROM payments AS payment
+        WHERE payment.order_id = customer_order.id
+          AND payment.status = 'succeeded'
+          AND payment.amount_cents = customer_order.total_cents
+          AND payment.currency = customer_order.currency
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM shipments WHERE shipments.order_id = customer_order.id
+      )
+    ORDER BY customer_order.paid_at, customer_order.id LIMIT 3`,
+  ).bind(input.orderId ?? null, input.orderId ?? null).all<PaidShipmentCandidate>();
+  let created = 0;
+  let alreadyReady = 0;
+  let attentionRequired = 0;
+  for (const candidate of candidates.results) {
+    try {
+      const hash = await sha256Hex(`outbound-shipment\0${candidate.id}`);
+      const shipment = await fulfillment.createShipmentLabel({
+        shipmentId: `shipment_${hash}`,
+        orderId: candidate.id,
+        idempotencyKey: `outbound-label:${hash}`,
+        leaseToken: `lease_${crypto.randomUUID()}`,
+        leaseExpiresAt: new Date(Date.parse(input.now) + 120_000).toISOString(),
+        now: input.now,
+      });
+      if (shipment.status === "label_ready") created += 1;
+      else alreadyReady += 1;
+    } catch (cause) {
+      // An ambiguous provider boundary is intentionally never retried here.
+      // Sendcloud must be reconciled manually before any new mutation.
+      if (cause instanceof FulfillmentError && [
+        "PROVIDER_OUTCOME_UNKNOWN",
+        "LEASE_UNAVAILABLE",
+        "INVALID_TRANSITION",
+      ].includes(cause.code)) {
+        attentionRequired += 1;
+        continue;
+      }
+      throw cause;
+    }
+  }
+  return Object.freeze({
+    closed: false,
+    reason: null,
+    candidates: candidates.results.length,
+    created,
+    alreadyReady,
+    attentionRequired,
+  });
+}
+
 export async function dispatchProductionLatePaymentRefunds(
   env: ProductionOperationsEnvironment | undefined,
   input: Readonly<{ now: string }>,
@@ -1103,8 +1237,16 @@ export async function runProductionScheduledOperations(
   reservations: Awaited<ReturnType<typeof expireProductionReservations>>;
   email: Awaited<ReturnType<typeof dispatchProductionTransactionalEmails>>;
   lateRefunds: Awaited<ReturnType<typeof dispatchProductionLatePaymentRefunds>>;
+  shipments: Awaited<ReturnType<typeof dispatchProductionOutboundShipments>>;
 }>> {
-  const [lateRefunds, reservations, email] = await Promise.all([
+  // Confirmation messages are claimed before an order can advance to
+  // `preparing`, preserving the immediate paid-order path.
+  const email = await dispatchProductionTransactionalEmails(env, input, dependencies).catch(() => Object.freeze({
+    closed: true, reason: "production-email-dispatch-unavailable",
+    staleLeasesRecovered: 0, claimed: 0, sent: 0,
+    retryScheduled: 0, failed: 0, queueDrained: false,
+  }));
+  const [lateRefunds, reservations, shipments] = await Promise.all([
     dispatchProductionLatePaymentRefunds(env, input, dependencies).catch(() => Object.freeze({
       closed: true, reason: "production-late-refund-dispatch-unavailable",
       claimed: 0, succeeded: 0, rejected: 0, unknown: 0, attentionRequired: 0,
@@ -1113,11 +1255,10 @@ export async function runProductionScheduledOperations(
       closed: true, reason: "production-reservation-dispatch-unavailable",
       candidates: 0, expired: 0, raced: 0, queueDrained: false,
     })),
-    dispatchProductionTransactionalEmails(env, input, dependencies).catch(() => Object.freeze({
-      closed: true, reason: "production-email-dispatch-unavailable",
-      staleLeasesRecovered: 0, claimed: 0, sent: 0,
-      retryScheduled: 0, failed: 0, queueDrained: false,
+    dispatchProductionOutboundShipments(env, input, dependencies).catch(() => Object.freeze({
+      closed: true, reason: "production-shipping-dispatch-unavailable",
+      candidates: 0, created: 0, alreadyReady: 0, attentionRequired: 0,
     })),
   ]);
-  return Object.freeze({ reservations, email, lateRefunds });
+  return Object.freeze({ reservations, email, lateRefunds, shipments });
 }

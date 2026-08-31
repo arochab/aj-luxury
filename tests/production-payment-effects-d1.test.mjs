@@ -80,7 +80,7 @@ async function fixture(
   return { sqlite, d1, event, expiry, request, effects: new D1StripePaymentEffectsStore(failEffectsAt === null ? d1 : new D1(sqlite, failEffectsAt), livemode) };
 }
 
-test("production delivery accepts the EU and fails closed outside it or in excluded territories", async () => {
+test("production delivery keeps EU live and fails closed outside it while the international gate is off", async () => {
   const eu = await fixture(null, true, 1, {
     postalCode: "10115", city: "Berlin", countryCode: "DE",
   });

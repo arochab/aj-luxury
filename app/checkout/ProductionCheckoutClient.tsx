@@ -30,11 +30,12 @@ import LocalizedPrice from "../components/LocalizedPrice";
 import {
   CustomerAccountApiError,
   getCustomerAccount,
+  loginCustomerAccount,
   registerCustomerAccount,
 } from "../../lib/commerce/customer-account-client.ts";
 import styles from "../cart/CommerceShell.module.css";
 
-const launchCountries = Object.freeze([
+const euLaunchCountries = Object.freeze([
   ["AT", "Autriche"], ["BE", "Belgique"], ["BG", "Bulgarie"],
   ["HR", "Croatie"], ["CY", "Chypre"], ["CZ", "Tchéquie"],
   ["DK", "Danemark"], ["EE", "Estonie"], ["FI", "Finlande"],
@@ -45,6 +46,17 @@ const launchCountries = Object.freeze([
   ["PT", "Portugal"], ["RO", "Roumanie"], ["SK", "Slovaquie"],
   ["SI", "Slovénie"], ["ES", "Espagne"], ["SE", "Suède"],
 ] as const);
+const internationalLaunchCountries = Object.freeze([
+  ["GB", "Royaume-Uni"], ["US", "États-Unis"], ["CA", "Canada"],
+  ["AE", "Émirats arabes unis"], ["QA", "Qatar"], ["SA", "Arabie saoudite"],
+] as const);
+const internationalCheckoutEnabled =
+  process.env.NEXT_PUBLIC_INTERNATIONAL_SHIPPING_ENABLED === "true";
+const launchCountries = internationalCheckoutEnabled
+  ? Object.freeze([...euLaunchCountries, ...internationalLaunchCountries])
+  : euLaunchCountries;
+
+const internationalCountries = new Set(["GB", "US", "CA", "AE", "QA", "SA"]);
 
 function accountAccessHref(view: "login" | "forgot", email: string): string {
   const params = new URLSearchParams({ view, returnTo: "/checkout" });
@@ -62,6 +74,7 @@ type AddressForm = {
   city: string;
   regionCode: string;
   countryCode: string;
+  phone: string;
 };
 
 const initialAddress: AddressForm = {
@@ -73,6 +86,7 @@ const initialAddress: AddressForm = {
   city: "",
   regionCode: "",
   countryCode: "FR",
+  phone: "",
 };
 
 function shippingAddress(value: AddressForm): ShippingAddress {
@@ -87,6 +101,7 @@ function shippingAddress(value: AddressForm): ShippingAddress {
       ? { regionCode: value.regionCode.trim().toUpperCase() }
       : {}),
     countryCode: value.countryCode,
+    ...(value.phone.trim() ? { phone: value.phone.trim() } : {}),
   });
 }
 
@@ -102,6 +117,7 @@ export default function ProductionCheckoutClient() {
   const [selectedPoint, setSelectedPoint] = useState<PublicProductionServicePoint | null>(null);
   const [order, setOrder] = useState<PublicProductionOrder | null>(null);
   const [legalAccepted, setLegalAccepted] = useState(false);
+  const [dutiesAccepted, setDutiesAccepted] = useState(false);
   const [signedInEmail, setSignedInEmail] = useState<string | null>(null);
   const [accountPassword, setAccountPassword] = useState("");
   const [accountPasswordConfirmation, setAccountPasswordConfirmation] = useState("");
@@ -267,7 +283,8 @@ export default function ProductionCheckoutClient() {
   }
 
   async function confirmOrder() {
-    if (!selected || !legalAccepted || !email || submitting) return;
+    const international = internationalCountries.has(form.countryCode);
+    if (!selected || !legalAccepted || (international && !dutiesAccepted) || !email || submitting) return;
     setSubmitting(true);
     setErrorCode(null);
     try {
@@ -276,12 +293,20 @@ export default function ProductionCheckoutClient() {
           setErrorCode("ACCOUNT_PASSWORD_INVALID");
           return;
         }
-        await registerCustomerAccount({
-          email,
-          password: accountPassword,
-          acceptsMarketing,
-          source: "checkout",
-        });
+        try {
+          await loginCustomerAccount(email, accountPassword);
+          setSignedInEmail(email);
+        } catch (error) {
+          if (!(error instanceof CustomerAccountApiError) || error.code !== "INVALID_CREDENTIALS") {
+            throw error;
+          }
+          await registerCustomerAccount({
+            email,
+            password: accountPassword,
+            acceptsMarketing,
+            source: "checkout",
+          });
+        }
         setAccountPrepared(true);
       }
       const key = orderAttempt.current ?? crypto.randomUUID();
@@ -338,6 +363,7 @@ export default function ProductionCheckoutClient() {
       setPoints(null);
       setSelectedPoint(null);
       setLegalAccepted(false);
+      setDutiesAccepted(false);
       quoteAttempt.current = null;
       selectAttempt.current = null;
       pointsAttempt.current = null;
@@ -368,6 +394,8 @@ export default function ProductionCheckoutClient() {
             ? "Choisissez deux mots de passe identiques d’au moins 12 caractères."
             : errorCode === "INVALID_ACCOUNT_INPUT"
               ? "Vérifiez votre e-mail et votre mot de passe."
+              : errorCode === "ACCOUNT_AUTHENTICATION_REQUIRED"
+                ? "Cette adresse possède déjà un compte. Connectez-vous ou utilisez « Mot de passe oublié » avant de confirmer la commande."
               : t("checkout.unavailable");
 
   if (!loading && cart && cart.lines.length === 0) {
@@ -415,9 +443,10 @@ export default function ProductionCheckoutClient() {
             <label>{t("checkout.companyOptional")}<input autoComplete="organization" value={form.company} onChange={(e) => updateField("company", e.currentTarget.value)} /></label>
             <label>{t("checkout.address")}<input required autoComplete="address-line1" value={form.line1} onChange={(e) => updateField("line1", e.currentTarget.value)} /></label>
             <label>{t("checkout.addressLine2Optional")}<input autoComplete="address-line2" value={form.line2} onChange={(e) => updateField("line2", e.currentTarget.value)} /></label>
-            <label>{t("checkout.postalCode")}<input required autoComplete="postal-code" value={form.postalCode} onChange={(e) => updateField("postalCode", e.currentTarget.value)} /></label>
+            <label>{t("checkout.postalCode")}{["AE", "QA"].includes(form.countryCode) ? " (facultatif)" : ""}<input required={!['AE', 'QA'].includes(form.countryCode)} autoComplete="postal-code" value={form.postalCode} onChange={(e) => updateField("postalCode", e.currentTarget.value)} /></label>
             <label>{t("checkout.city")}<input required autoComplete="address-level2" value={form.city} onChange={(e) => updateField("city", e.currentTarget.value)} /></label>
-            <label>{t("checkout.usState")}<input maxLength={3} autoComplete="address-level1" value={form.regionCode} onChange={(e) => updateField("regionCode", e.currentTarget.value)} /></label>
+            {["US", "CA"].includes(form.countryCode) ? <label>{form.countryCode === "US" ? "État (code à 2 lettres)" : "Province (code à 2 lettres)"}<input required maxLength={2} autoComplete="address-level1" value={form.regionCode} onChange={(e) => updateField("regionCode", e.currentTarget.value)} /></label> : null}
+            {internationalCountries.has(form.countryCode) ? <label>Téléphone international<input required type="tel" inputMode="tel" autoComplete="tel" placeholder="+33612345678" value={form.phone} onChange={(e) => updateField("phone", e.currentTarget.value)} /></label> : null}
             <label>{t("checkout.country")}<select required autoComplete="country" value={form.countryCode} onChange={(e) => updateField("countryCode", e.currentTarget.value)}>{launchCountries.map(([code, label]) => <option key={code} value={code}>{label}</option>)}</select></label>
             <button className={styles.button} type="submit" disabled={submitting}>{submitting ? t("checkout.calculatingShipping") : t("checkout.calculateShipping")}</button>
           </form>
@@ -461,7 +490,7 @@ export default function ProductionCheckoutClient() {
           ) : null}
 
           {selected && !order ? (
-            <div className={styles.testCheckout}>
+            <form className={styles.testCheckout} onSubmit={(event) => { event.preventDefault(); void confirmOrder(); }}>
               {signedInEmail ? (
                 <section className={styles.accountCheckoutFields} aria-labelledby="checkout-account-title">
                   <div className={styles.accountCheckoutHeading}>
@@ -495,8 +524,9 @@ export default function ProductionCheckoutClient() {
                 </section>
               )}
               <label className={styles.checkbox}><input type="checkbox" checked={legalAccepted} onChange={(e) => setLegalAccepted(e.currentTarget.checked)} /><span>J’accepte les <Link href="/terms">conditions de vente</Link> et la <Link href="/privacy">politique de confidentialité</Link>.</span></label>
-              <button className={styles.button} type="button" disabled={submitting || !legalAccepted || !email || (!signedInEmail && (!accountPassword || !accountPasswordConfirmation))} onClick={() => void confirmOrder()}>{signedInEmail ? "Confirmer la commande" : "Créer mon compte et continuer"}</button>
-            </div>
+              {internationalCountries.has(form.countryCode) ? <label className={styles.checkbox}><input type="checkbox" required checked={dutiesAccepted} onChange={(e) => setDutiesAccepted(e.currentTarget.checked)} /><span>Je comprends que cette livraison est expédiée en DAP : les droits, taxes et frais d’importation éventuels restent à ma charge à l’arrivée.</span></label> : null}
+              <button className={styles.button} type="submit" disabled={submitting || !legalAccepted || (internationalCountries.has(form.countryCode) && !dutiesAccepted) || !email || (!signedInEmail && (!accountPassword || !accountPasswordConfirmation))}>{signedInEmail ? "Confirmer la commande" : "Créer mon compte et continuer"}</button>
+            </form>
           ) : null}
 
           {order ? (

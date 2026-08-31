@@ -5,6 +5,7 @@ export const launchShippingZones = Object.freeze([
   "UK",
   "US",
   "CA",
+  "GCC",
 ] as const);
 export type LaunchShippingZone = (typeof launchShippingZones)[number];
 
@@ -140,6 +141,19 @@ function normalizeCountryCode(value: unknown): string | null {
   return isIso3166Alpha2CountryCode(normalized) ? normalized : null;
 }
 
+export function resolveLaunchShippingCountryZone(
+  value: unknown,
+): LaunchShippingZone | null {
+  const country = normalizeCountryCode(value);
+  if (!country) return null;
+  if (euCountryCodes.has(country)) return "EU";
+  if (country === "GB") return "UK";
+  if (country === "US") return "US";
+  if (country === "CA") return "CA";
+  if (country === "AE" || country === "QA" || country === "SA") return "GCC";
+  return null;
+}
+
 const shippingAddressInputKeys = new Set([
   "countryCode",
   "postalCode",
@@ -177,6 +191,7 @@ const postalCodePatterns: Readonly<Record<string, RegExp>> = Object.freeze({
   SI: /^(?:SI-?)?\d{4}$/i,
   SK: /^\d{3} ?\d{2}$/,
   US: /^\d{5}(?:-\d{4})?$/,
+  SA: /^\d{5}(?:-\d{4})?$/,
 });
 
 // PR/VI, military mail, American Samoa, US minor islands and 969xx Pacific areas.
@@ -187,7 +202,9 @@ function normalizePostalCode(
   value: string | undefined,
   country: string,
 ): string | undefined | null {
-  if (value === undefined) return undefined;
+  if (value === undefined || value.trim().length === 0) {
+    return country === "AE" || country === "QA" ? undefined : null;
+  }
   if (
     value.length === 0 ||
     value.length > 16 ||
@@ -332,20 +349,12 @@ export function resolveLaunchShippingScope(
     };
   }
 
-  const zone = euCountryCodes.has(country)
-    ? "EU"
-    : country === "GB"
-      ? "UK"
-      : country === "US"
-        ? "US"
-        : country === "CA"
-          ? "CA"
-          : null;
+  const zone = resolveLaunchShippingCountryZone(country);
   const postal = normalizePostalCode(snapshot.postalCode, country);
   const region = normalizeRegionCode(snapshot.regionCode);
   if (
     postal === null ||
-    (zone !== null && postal === undefined) ||
+    (zone !== null && postal === undefined && country !== "AE" && country !== "QA") ||
     (snapshot.regionCode !== undefined && region === null) ||
     (country === "US" &&
       (region === null ||

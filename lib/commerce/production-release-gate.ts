@@ -40,6 +40,9 @@ export type ProductionCommerceEnvironment = Readonly<{
   RETURNS_POLICY_APPROVED?: string;
   BACKUP_RESTORE_DRILL_APPROVED?: string;
   MONITORING_ALERTS_APPROVED?: string;
+  INTERNATIONAL_SHIPPING_ENABLED?: string;
+  INTERNATIONAL_SHIPPING_COUNTRIES?: string;
+  INTERNATIONAL_CUSTOMS_POLICY?: string;
   CF_VERSION_METADATA?: Readonly<{
     id?: string;
     tag?: string;
@@ -79,7 +82,7 @@ export type ProductionReleaseGate = Readonly<{
   mode: ProductionCommerceMode;
   releaseSha: string | null;
   origin: string | null;
-  launchZones: readonly ["EU"];
+  launchZones: readonly ("EU" | "UK" | "US" | "CA" | "GCC")[];
   blockers: readonly ProductionReleaseBlocker[];
   capabilities: Readonly<{
     sandboxCheckout: boolean;
@@ -96,7 +99,16 @@ const SHA_256_PATTERN = /^[a-f0-9]{64}$/;
 const WORKER_VERSION_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SAFE_REFERENCE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.:-]{7,127}$/;
 const AJ_EMAIL_PATTERN = /^[^@\s]+@ajluxurystore\.com$/i;
-const launchZones = Object.freeze(["EU"] as const);
+const euLaunchZones = Object.freeze(["EU"] as const);
+const internationalLaunchZones = Object.freeze(["EU", "UK", "US", "CA", "GCC"] as const);
+
+export function internationalShippingConfigured(
+  env: ProductionCommerceEnvironment,
+): boolean {
+  return env.INTERNATIONAL_SHIPPING_ENABLED === "true" &&
+    env.INTERNATIONAL_SHIPPING_COUNTRIES === "GB,US,CA,AE,QA,SA" &&
+    env.INTERNATIONAL_CUSTOMS_POLICY === "DAP|CN|61071200|FR944996487";
+}
 
 function isApproved(value: string | undefined): boolean {
   return value === "true";
@@ -317,7 +329,9 @@ function evaluateProductionReleaseGateInternal(
     mode,
     releaseSha,
     origin,
-    launchZones,
+    launchZones: internationalShippingConfigured(env)
+      ? internationalLaunchZones
+      : euLaunchZones,
     blockers: Object.freeze(blockers),
     capabilities: Object.freeze({
       sandboxCheckout: ready && mode === "sandbox",

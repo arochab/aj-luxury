@@ -93,7 +93,7 @@ async function printableLabelResponse(
       status,
       headers: {
         "Cache-Control": "no-store",
-        "Content-Disposition": `attachment; filename="AJL-${shipment.order_id}-A6.pdf"`,
+        "Content-Disposition": `attachment; filename="AJL-${shipment.order_id}-A4.pdf"`,
         "Content-Length": String(document.byteLength),
         "Content-Type": "application/pdf",
         "X-AJ-Document-SHA256": document.contentSha256,

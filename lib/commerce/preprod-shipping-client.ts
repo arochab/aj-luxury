@@ -23,13 +23,14 @@ export type ShippingAddress = Readonly<{
   city: string;
   regionCode?: string;
   countryCode: string;
+  phone?: string;
 }>;
 
 export type PublicShippingQuote = Readonly<{
   quoteId: string;
   simulation: true;
   carrierConnected: false;
-  zone: "EU" | "UK" | "US" | "CA";
+  zone: "EU" | "UK" | "US" | "CA" | "GCC";
   amountCents: number;
   currency: "EUR";
   estimatedDaysMin: number;
@@ -50,7 +51,7 @@ export type PublicDeliveryOption = Readonly<{
   serviceCode: string;
   displayName: string;
   deliveryMode: "home" | "service_point";
-  zone: "EU" | "UK" | "US" | "CA";
+  zone: "EU" | "UK" | "US" | "CA" | "GCC";
   amountCents: number;
   currency: "EUR";
   estimatedDaysMin: number;

@@ -36,7 +36,7 @@ import {
   productionLaunchStockCurrentGridContractSha256,
   productionReleaseSchemaContractSha256,
 } from "../lib/commerce/production-schema-contract.ts";
-import { evaluateWiredProductionReleaseGate, productionEvidenceReleaseSha, productionEvidenceVersionId, productionStockEvidenceReleaseSha, productionStockEvidenceVersionId, type ProductionCommerceEnvironment } from "../lib/commerce/production-release-gate.ts";
+import { evaluateWiredProductionReleaseGate, internationalShippingConfigured, productionEvidenceReleaseSha, productionEvidenceVersionId, productionStockEvidenceReleaseSha, productionStockEvidenceVersionId, type ProductionCommerceEnvironment } from "../lib/commerce/production-release-gate.ts";
 import { recordVerifiedResendWebhook, ResendWebhookError } from "../lib/commerce/resend-webhook.ts";
 import { ResendIdentityDelivery } from "../lib/commerce/resend-identity-delivery.ts";
 import { createSendcloudProviderPorts } from "../lib/commerce/sendcloud-provider.ts";
@@ -371,6 +371,9 @@ function map(cause: unknown): Response {
     return fail("CART_UNAVAILABLE", 409);
   }
   if (cause instanceof ProductionCheckoutError) {
+    if (cause.code === "ACCOUNT_AUTHENTICATION_REQUIRED") {
+      return fail("ACCOUNT_AUTHENTICATION_REQUIRED", 401);
+    }
     if (cause.code === "INVALID_INPUT") return fail("INVALID_INPUT", 400);
     if (cause.code === "ORDER_NOT_FOUND") return fail("ORDER_NOT_FOUND", 404);
     if (["ORDER_CONFLICT", "PAYMENT_CONFLICT"].includes(cause.code)) {
@@ -1514,7 +1517,7 @@ export async function productionCommerceApiResponse(
     try {
       const provider = dependencies.deliveryProvider ?? createSendcloudProviderPorts({ publicKey: env.SENDCLOUD_PUBLIC_KEY, secretKey: env.SENDCLOUD_SECRET_KEY });
       const vault = deliveryVault(env); if (!vault) return fail("DELIVERY_REFERENCE_VAULT_UNAVAILABLE", 503);
-      return json({ data: await new D1ProductionDeliveryActivationStore(env.DB, provider, vault).quoteOptions({ cartId: current.cartId, address: parsed.address as never, idempotencyKey: key(request)!, now: now() }) });
+      return json({ data: await new D1ProductionDeliveryActivationStore(env.DB, provider, vault, internationalShippingConfigured(env)).quoteOptions({ cartId: current.cartId, address: parsed.address as never, idempotencyKey: key(request)!, now: now() }) });
     } catch (cause) {
       console.warn(JSON.stringify({
         event: "production_delivery_quote_failed",
@@ -1537,7 +1540,7 @@ export async function productionCommerceApiResponse(
     try {
       const provider = dependencies.deliveryProvider ?? createSendcloudProviderPorts({ publicKey: env.SENDCLOUD_PUBLIC_KEY, secretKey: env.SENDCLOUD_SECRET_KEY });
       const vault = deliveryVault(env); if (!vault) return fail("DELIVERY_REFERENCE_VAULT_UNAVAILABLE", 503);
-      return json({ data: await new D1ProductionDeliveryActivationStore(env.DB, provider, vault).servicePoints({ cartId: current.cartId, optionId: parsed.optionId, address: parsed.address as never, idempotencyKey: key(request)!, now: now() }) });
+      return json({ data: await new D1ProductionDeliveryActivationStore(env.DB, provider, vault, internationalShippingConfigured(env)).servicePoints({ cartId: current.cartId, optionId: parsed.optionId, address: parsed.address as never, idempotencyKey: key(request)!, now: now() }) });
     } catch (cause) { return map(cause); }
   }
   if (url.pathname === routes.select) {
@@ -1547,7 +1550,7 @@ export async function productionCommerceApiResponse(
     try {
       const provider = dependencies.deliveryProvider ?? createSendcloudProviderPorts({ publicKey: env.SENDCLOUD_PUBLIC_KEY, secretKey: env.SENDCLOUD_SECRET_KEY });
       const vault = deliveryVault(env); if (!vault) return fail("DELIVERY_REFERENCE_VAULT_UNAVAILABLE", 503);
-      return json({ data: await new D1ProductionDeliveryActivationStore(env.DB, provider, vault).selectOption({ cartId: current.cartId, optionId: parsed.optionId, servicePointId: typeof parsed.servicePointId === "string" ? parsed.servicePointId : null, address: parsed.address as never, now: now() }) });
+      return json({ data: await new D1ProductionDeliveryActivationStore(env.DB, provider, vault, internationalShippingConfigured(env)).selectOption({ cartId: current.cartId, optionId: parsed.optionId, servicePointId: typeof parsed.servicePointId === "string" ? parsed.servicePointId : null, address: parsed.address as never, now: now() }) });
     } catch (cause) { return map(cause); }
   }
   if (url.pathname === routes.order) {
@@ -1566,7 +1569,7 @@ export async function productionCommerceApiResponse(
           checkoutToken: singleCookie(request, "__Host-aj_pending_customer"),
           now: orderNow,
         });
-      return json({ data: await new D1ProductionCheckoutStore(env.DB).createOrder({
+      return json({ data: await new D1ProductionCheckoutStore(env.DB, internationalShippingConfigured(env), true).createOrder({
         cartId: current.cartId,
         quoteId: parsed.quoteId,
         optionId: parsed.optionId,

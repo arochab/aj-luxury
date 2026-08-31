@@ -157,6 +157,8 @@ test("the hero hands its measured plum floor to the horizontal chromatic rail", 
   assert.doesNotMatch(css, /\.panel::(?:before|after)/);
   assert.match(css, /\.frame\s*\{[\s\S]*border:\s*1px solid rgba\(255, 255, 255, 0\.78\)/);
   assert.match(css, /object-fit:\s*contain/);
+  assert.doesNotMatch(rail, /progressTrack|progressFill/);
+  assert.doesNotMatch(css, /\.stageFooter\s*\{[^}]*border-top/);
   assert.match(
     css,
     /@media \(max-width: 560px\)[\s\S]*\.panelInner\s*\{[\s\S]*width:\s*min\(calc\(100vw - 18px\), 440px\)[\s\S]*\.frame\s*\{[\s\S]*aspect-ratio:\s*8 \/ 15[\s\S]*\.frame img\s*\{[\s\S]*object-fit:\s*cover/,

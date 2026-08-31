@@ -183,6 +183,13 @@
       "when": 1788134400000,
       "tag": "0025_customer_password_scrypt_profile",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "6",
+      "when": 1788220800000,
+      "tag": "0026_international_shipping",
+      "breakpoints": true
     }
   ]
 }

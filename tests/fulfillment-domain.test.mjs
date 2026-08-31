@@ -22,6 +22,7 @@ const addresses = Object.freeze({
     postalCode: "SW1A 1AA",
     city: "London",
     countryCode: "GB",
+    phone: "+447700900123",
   },
   US: {
     recipient: "Grace Hopper",
@@ -30,6 +31,7 @@ const addresses = Object.freeze({
     city: "New York",
     regionCode: "NY",
     countryCode: "US",
+    phone: "+12025550123",
   },
   CA: {
     recipient: "James Gosling",
@@ -38,10 +40,11 @@ const addresses = Object.freeze({
     city: "Toronto",
     regionCode: "ON",
     countryCode: "CA",
+    phone: "+14165550123",
   },
 });
 
-test("address normalization resolves only EU, UK, US and Canada deterministically", async () => {
+test("address normalization resolves the controlled EU and international scope deterministically", async () => {
   for (const [zone, input] of Object.entries(addresses)) {
     const first = await normalizeShippingAddress(input);
     const second = await normalizeShippingAddress({ ...input });
@@ -59,6 +62,13 @@ test("address normalization resolves only EU, UK, US and Canada deterministicall
       countryCode: "AU",
     }),
     (error) => error?.code === "DESTINATION_UNAVAILABLE",
+  );
+  await assert.rejects(
+    () => normalizeShippingAddress({
+      ...addresses.US,
+      phone: undefined,
+    }),
+    (error) => error?.code === "INVALID_INPUT",
   );
   await assert.rejects(
     () => normalizeShippingAddress({

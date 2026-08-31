@@ -86,8 +86,8 @@
 }
 
 .heroImage img {
-  object-fit: cover;
-  object-position: 50% 25%;
+  object-fit: contain;
+  object-position: center;
 }
 
 .origin {
@@ -281,11 +281,11 @@
   .heroImage {
     order: 1;
     width: 100%;
-    aspect-ratio: 4 / 5;
+    aspect-ratio: 2 / 3;
   }
 
   .heroImage img {
-    object-position: 50% 25%;
+    object-position: center;
   }
 
   .heroCopy {

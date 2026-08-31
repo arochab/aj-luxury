@@ -18,6 +18,7 @@ import {
 import { prepareProductionDeliveryOrderSelection } from "./production-delivery-order-selection.ts";
 import { calculateAjPackPricing } from "./pack-pricing.ts";
 import { SELLER_TAX_STATUS } from "../legal.ts";
+import { resolveLaunchShippingCountryZone } from "./shipping-policy.ts";
 
 export type ProductionCheckoutErrorCode =
   | "INVALID_INPUT"
@@ -25,6 +26,7 @@ export type ProductionCheckoutErrorCode =
   | "ORDER_EXPIRED"
   | "ORDER_CONFLICT"
   | "PAYMENT_CONFLICT"
+  | "ACCOUNT_AUTHENTICATION_REQUIRED"
   | "CHECKOUT_UNAVAILABLE";
 
 export class ProductionCheckoutError extends Error {
@@ -184,9 +186,23 @@ function normalizeEmail(value: unknown): string {
   return email;
 }
 
-async function normalizeProductionLaunchAddress(input: ShippingAddressInput) {
+async function normalizeProductionLaunchAddress(
+  input: ShippingAddressInput,
+  internationalShippingEnabled: boolean,
+) {
+  const requestedZone = resolveLaunchShippingCountryZone(input.countryCode);
+  if (
+    !internationalShippingEnabled &&
+    requestedZone !== null &&
+    requestedZone !== "EU"
+  ) {
+    throw new ProductionCheckoutError(
+      "INVALID_INPUT",
+      "Production checkout is available only in the European Union.",
+    );
+  }
   const address = await normalizeShippingAddress(input);
-  if (address.zone !== "EU") {
+  if (address.zone !== "EU" && !internationalShippingEnabled) {
     throw new ProductionCheckoutError(
       "INVALID_INPUT",
       "Production checkout is available only in the European Union.",
@@ -226,9 +242,17 @@ function assertLegalVersion(value: string, label: string): void {
 
 export class D1ProductionCheckoutStore {
   readonly #database: CommerceD1Database;
+  readonly #internationalShippingEnabled: boolean;
+  readonly #requireCustomerAccount: boolean;
 
-  constructor(database: CommerceD1Database) {
+  constructor(
+    database: CommerceD1Database,
+    internationalShippingEnabled = false,
+    requireCustomerAccount = false,
+  ) {
     this.#database = database;
+    this.#internationalShippingEnabled = internationalShippingEnabled;
+    this.#requireCustomerAccount = requireCustomerAccount;
   }
 
   async currentOrder(cartId: string): Promise<ProductionOrderSnapshot | null> {
@@ -501,11 +525,18 @@ export class D1ProductionCheckoutStore {
         input.settlementMode !== "live")) {
       throw new ProductionCheckoutError("INVALID_INPUT", "Commerce settlement provenance is invalid.");
     }
+    if (this.#requireCustomerAccount &&
+      (input.customerId === undefined || input.customerId === null)) {
+      throw new ProductionCheckoutError(
+        "ACCOUNT_AUTHENTICATION_REQUIRED",
+        "An authenticated or pending customer account is required.",
+      );
+    }
     if (input.customerId !== undefined && input.customerId !== null) {
       assertFulfillmentIdentifier(input.customerId, "customerId");
     }
     const [address, email] = await Promise.all([
-      normalizeProductionLaunchAddress(input.address),
+      normalizeProductionLaunchAddress(input.address, this.#internationalShippingEnabled),
       Promise.resolve(normalizeEmail(input.email)),
     ]);
     assertFulfillmentFingerprint(address.fingerprint, "addressFingerprint");

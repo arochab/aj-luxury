@@ -55,6 +55,7 @@ export type ShippingAddressInput = Readonly<{
   city: string;
   regionCode?: string;
   countryCode: string;
+  phone?: string;
 }>;
 
 export type NormalizedShippingAddress = Readonly<{
@@ -66,6 +67,7 @@ export type NormalizedShippingAddress = Readonly<{
   city: string;
   regionCode: string | null;
   countryCode: string;
+  phone?: string;
 }>;
 
 export type NormalizedShippingAddressProof = Readonly<{
@@ -100,6 +102,8 @@ export type ShippingLabelReceipt = Readonly<{
   providerCode: string;
   providerShipmentReference: string;
   trackingReference: string;
+  /** Present only when the carrier proved a generated customs declaration. */
+  customsDocumentReference?: string;
   receiptFingerprint: string;
 }>;
 
@@ -179,6 +183,7 @@ const addressKeys = new Set([
   "city",
   "regionCode",
   "countryCode",
+  "phone",
 ]);
 
 export function assertFulfillmentIdentifier(
@@ -294,9 +299,12 @@ export async function normalizeShippingAddress(
 ): Promise<NormalizedShippingAddressProof> {
   const snapshot = snapshotAddress(input);
   const countryCode = normalizeText(snapshot.countryCode, "countryCode", 2).toUpperCase();
-  const postalCode = normalizeText(snapshot.postalCode, "postalCode", 16)
-    .toUpperCase()
-    .replace(/\s+/g, " ");
+  const postalCode = (countryCode === "AE" || countryCode === "QA") &&
+      (snapshot.postalCode === undefined || snapshot.postalCode === "")
+    ? ""
+    : normalizeText(snapshot.postalCode, "postalCode", 16)
+      .toUpperCase()
+      .replace(/\s+/g, " ");
   const regionCode = snapshot.regionCode === undefined
     ? null
     : normalizeText(snapshot.regionCode, "regionCode", 2).toUpperCase();
@@ -311,6 +319,18 @@ export async function normalizeShippingAddress(
       "The destination is outside the configured launch scope.",
     );
   }
+  const phone = snapshot.phone === undefined
+    ? null
+    : normalizeText(snapshot.phone, "phone", 24).replace(/[\s().-]/g, "");
+  if (scope.zone !== "EU" && (phone === null || !/^\+[1-9]\d{7,14}$/.test(phone))) {
+    throw new FulfillmentError(
+      "INVALID_INPUT",
+      "A valid international phone number is required.",
+    );
+  }
+  if (scope.zone === "EU" && phone !== null && !/^\+[1-9]\d{7,14}$/.test(phone)) {
+    throw new FulfillmentError("INVALID_INPUT", "phone is invalid.");
+  }
   const address = Object.freeze({
     recipient: normalizeText(snapshot.recipient, "recipient", 120),
     company: normalizeOptionalText(snapshot.company, "company", 120),
@@ -320,6 +340,7 @@ export async function normalizeShippingAddress(
     city: normalizeText(snapshot.city, "city", 120),
     regionCode,
     countryCode,
+    ...(phone === null ? {} : { phone }),
   });
   const canonicalJson = JSON.stringify(address);
   return Object.freeze({

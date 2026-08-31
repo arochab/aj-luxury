@@ -39,7 +39,7 @@ import { buildTransactionalEmail } from "./transactional-email.ts";
 
 type QuoteConfigurationRow = {
   id: string;
-  zone: "EU" | "UK" | "US" | "CA";
+  zone: "EU" | "UK" | "US" | "CA" | "GCC";
   service_code: string;
   price_cents: number;
   estimated_days_min: number;
@@ -828,6 +828,42 @@ export class D1FulfillmentStore {
         "The label provider receipt does not match the claim.",
       );
     }
+    const zoneProof = await this.#database
+      .prepare(
+        `SELECT configuration.zone
+        FROM shipments AS shipment
+        INNER JOIN shipping_quotes AS quote ON quote.id = shipment.shipping_quote_id
+        INNER JOIN shipping_zone_configurations AS configuration
+          ON configuration.id = quote.configuration_id
+        WHERE shipment.id = ?`,
+      )
+      .bind(shipment.id)
+      .first<{ zone: string }>();
+    if (!zoneProof || !["EU", "UK", "US", "CA", "GCC"].includes(zoneProof.zone)) {
+      throw new FulfillmentError(
+        "PROVIDER_RECEIPT_MISMATCH",
+        "The shipment zone proof is missing.",
+      );
+    }
+    const international = zoneProof.zone !== "EU";
+    if (international) {
+      assertFulfillmentIdentifier(
+        receipt.customsDocumentReference,
+        "customsDocumentReference",
+      );
+    } else if (receipt.customsDocumentReference !== undefined) {
+      throw new FulfillmentError(
+        "PROVIDER_RECEIPT_MISMATCH",
+        "An EU label receipt cannot carry a customs declaration.",
+      );
+    }
+    const customsFingerprint = international
+      ? await sha256Hex(JSON.stringify([
+        shipment.id,
+        receipt.providerCode,
+        receipt.customsDocumentReference,
+      ]))
+      : null;
     try {
       const results = await this.#database.batch([
         this.#database
@@ -853,19 +889,83 @@ export class D1FulfillmentStore {
         this.#database
           .prepare(
             `INSERT OR IGNORE INTO customs_records (
-              id, shipment_id, status, created_at, updated_at
+              id, shipment_id, status, manual_reference, record_fingerprint,
+              ready_at, created_at, updated_at
             )
-            SELECT 'customs_' || shipment.id, shipment.id, 'pending', ?, ?
+            SELECT 'customs_' || shipment.id, shipment.id, 'ready', ?, ?, ?, ?, ?
             FROM shipments AS shipment
             INNER JOIN shipping_quotes AS quote ON quote.id = shipment.shipping_quote_id
             INNER JOIN shipping_zone_configurations AS configuration
               ON configuration.id = quote.configuration_id
             WHERE shipment.id = ? AND configuration.zone <> 'EU'`,
           )
-          .bind(input.now, input.now, shipment.id),
+          .bind(
+            receipt.customsDocumentReference ?? null,
+            customsFingerprint,
+            input.now,
+            input.now,
+            input.now,
+            shipment.id,
+          ),
+        this.#database
+          .prepare(
+            `UPDATE orders SET status = 'preparing', updated_at = ?
+            WHERE id = ? AND status = 'paid'
+              AND EXISTS (
+                SELECT 1 FROM shipments
+                WHERE shipments.order_id = orders.id
+                  AND shipments.id = ? AND shipments.status = 'label_ready'
+              )`,
+          )
+          .bind(input.now, shipment.order_id, shipment.id),
+        this.#database
+          .prepare(
+            `INSERT INTO audit_log (
+              id, actor_type, actor_id, action, entity_type, entity_id,
+              idempotency_key, metadata_json, created_at
+            ) VALUES (?, 'system', NULL, 'shipment_label_ready', 'shipment', ?, ?, ?, ?)`
+          )
+          .bind(
+            `audit_label_${shipment.id}`,
+            shipment.id,
+            `audit:shipment_label_ready:${shipment.id}`,
+            JSON.stringify({ orderId: shipment.order_id, status: "preparing" }),
+            input.now,
+          ),
+        this.#database
+          .prepare(
+            `INSERT INTO audit_log (
+              id, actor_type, actor_id, action, entity_type, entity_id,
+              idempotency_key, metadata_json, created_at
+            )
+            SELECT ?, 'system', NULL, 'customs_ready', 'shipment', ?, ?, ?, ?
+            WHERE ? = 1`,
+          )
+          .bind(
+            `audit_customs_ready_${shipment.id}`,
+            shipment.id,
+            `audit:customs_ready:${shipment.id}`,
+            JSON.stringify({
+              status: "ready",
+              source: receipt.providerCode,
+              document: receipt.customsDocumentReference ?? null,
+            }),
+            input.now,
+            international ? 1 : 0,
+          ),
       ]);
       if (changed(results[0]) !== 1) {
         throw new FulfillmentError("LEASE_UNAVAILABLE", "The shipment lease was lost.");
+      }
+      if (
+        changed(results[2]) !== 1 || changed(results[3]) !== 1 ||
+        changed(results[1]) !== (international ? 1 : 0) ||
+        changed(results[4]) !== (international ? 1 : 0)
+      ) {
+        throw new FulfillmentError(
+          "PERSISTENCE_FAILURE",
+          "The preparing-order evidence was not written atomically.",
+        );
       }
     } catch (error) {
       mapDatabaseError(error);
@@ -1116,6 +1216,12 @@ export class D1FulfillmentStore {
               updated_at = ? WHERE id = ? AND status = 'label_ready'`,
           )
           .bind(input.now, input.now, shipment.id),
+        this.#database
+          .prepare(
+            `UPDATE orders SET status = 'shipped', updated_at = ?
+            WHERE id = ? AND status = 'preparing'`,
+          )
+          .bind(input.now, shipment.order_id),
         this.#database
           .prepare(
             `INSERT INTO email_outbox (
@@ -2074,7 +2180,7 @@ export class D1FulfillmentStore {
       }>();
     if (
       !context ||
-      context.order_status !== "paid" ||
+      !["paid", "preparing", "shipped"].includes(context.order_status) ||
       context.payment_status !== "succeeded" ||
       !(
         context.request_status === "inspected" ||
@@ -2278,7 +2384,7 @@ export class D1FulfillmentStore {
       audit.idempotency_key !== `audit:refund_succeeded:${refund.id}` ||
       sale?.request_status !== "resolved" ||
       sale.resolution !== "refund" ||
-      sale?.order_status !== "paid" ||
+      !sale || !["paid", "preparing", "shipped"].includes(sale.order_status) ||
       sale.payment_status !== "succeeded"
     ) {
       throw new FulfillmentError(

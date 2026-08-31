@@ -87,7 +87,9 @@ async function fixture(overrides = {}) {
     status: "paid",
     currency: "EUR",
     subtotal_cents: 2999,
+    shipping_cents: 700,
     total_cents: 3699,
+    paid_at: "2026-08-28T18:00:00.000Z",
     shipping_address_json: address.canonicalJson,
     shipping_address_fingerprint: address.fingerprint,
     option_id: "delivery_option_1",
@@ -97,6 +99,9 @@ async function fixture(overrides = {}) {
     delivery_mode: "home",
     selected_service_point_id: null,
     zone: address.zone,
+    duties_terms: address.zone === "EU" ? "EU_INCLUDED" : "DAP",
+    origin_country_code: address.zone === "EU" ? "FR" : "CN",
+    customs_hs_code: address.zone === "EU" ? "61071200" : "61071200",
     profile_code: "AJL_ENVELOPE_1_ITEM_V1",
     source_version: "client-validated-2026-08-13",
     item_count: 1,
@@ -122,6 +127,20 @@ async function fixture(overrides = {}) {
 function receipt(overrides = {}) {
   const parcelId = overrides.parcelId ?? 383707309;
   const tracking = overrides.tracking ?? "3S123456789";
+  const documents = [{
+    document_type: "label",
+    type: "label",
+    size: "a6",
+    link: `https://panel.sendcloud.sc/api/v3/parcels/${parcelId}/documents/label`,
+  }];
+  if (overrides.customs === true) {
+    documents.unshift({
+      document_type: "customs-declaration",
+      type: "commercial-invoice",
+      size: "a4",
+      link: `https://panel.sendcloud.sc/api/v3/parcels/${parcelId}/documents/customs-declaration`,
+    });
+  }
   return {
     data: {
       id: "sendcloud-shipment-1",
@@ -130,11 +149,7 @@ function receipt(overrides = {}) {
       parcels: [{
         id: parcelId,
         status: { code: "READY_TO_SEND", message: "Ready" },
-        documents: [{
-          type: "label",
-          size: "a6",
-          link: `https://panel.sendcloud.sc/api/v3/parcels/${parcelId}/documents/label`,
-        }],
+        documents,
         tracking_number: tracking,
         tracking_numbers: [{ tracking_number: tracking }],
       }],
@@ -203,7 +218,7 @@ test("relay delivery decrypts and sends only the exact selected Sendcloud point"
   assert.deepEqual(body.to_service_point, { id: 98765 });
 });
 
-test("UK, US and Canada remain hard-closed before any carrier call", async () => {
+test("international shipment sends the exact locked customs data to Sendcloud", async () => {
   const context = await fixture({
     address: {
       recipient: "Ada Client",
@@ -211,20 +226,46 @@ test("UK, US and Canada remain hard-closed before any carrier call", async () =>
       postalCode: "SW1A 1AA",
       city: "London",
       countryCode: "GB",
+      phone: "+447700900123",
     },
   });
-  let calls = 0;
+  let body;
   const provider = createSendcloudShippingLabelProvider(
     context.database,
     configuration,
-    async () => { calls += 1; throw new Error("must not call"); },
+    async (_url, init) => {
+      body = JSON.parse(init.body);
+      return Response.json(receipt({ customs: true }), { status: 201 });
+    },
     references(),
   );
-  await assert.rejects(
-    () => provider.createLabel(request),
-    (error) => error instanceof FulfillmentProviderError && error.outcome === "rejected",
-  );
-  assert.equal(calls, 0);
+  await provider.createLabel(request);
+  assert.deepEqual(body.to_address.phone_number, "+447700900123");
+  assert.deepEqual(body.parcels[0].parcel_items, [{
+    item_id: "order_line_1",
+    description: "Men's knitted boxer briefs, 94% modal, 6% elastane",
+    quantity: 1,
+    weight: { value: "0.100", unit: "kg" },
+    price: { value: "29.99", currency: "EUR" },
+    hs_code: "61071200",
+    origin_country: "CN",
+    sku: "AJL-BOXER-POURPRE-M",
+    product_id: "AJL-BOXER-POURPRE-M",
+    material_content: "94% modal, 6% elastane",
+    intended_use: "Personal use",
+    properties: { color: "Pourpre", size: "M" },
+  }]);
+  assert.deepEqual(body.customs_information, {
+    invoice_number: "AJL-AJ-TEST-0001",
+    export_reason: "commercial_goods",
+    export_type: "private",
+    invoice_date: "2026-08-28",
+    freight_costs: { value: "7.00", currency: "EUR" },
+    goods_description: "Men's knitted boxer briefs, 94% modal, 6% elastane",
+    tax_numbers: {
+      sender: [{ name: "EORI", country_code: "FR", value: "FR944996487" }],
+    },
+  });
 });
 
 test("a second lease after an unknown outcome never performs a blind retry", async () => {
@@ -463,7 +504,7 @@ test("operator route hard-stops an already claimed shipment for manual reconcili
   assert.equal(providerCalls, 0);
 });
 
-test("an idempotent label-ready replay returns the exact printable A6 PDF", async () => {
+test("an idempotent label-ready replay returns the exact printable A4 PDF", async () => {
   const DB = new Database(null, []);
   DB.existing = {
     id: "shipment_test_1",
@@ -499,7 +540,7 @@ test("an idempotent label-ready replay returns the exact printable A6 PDF", asyn
   );
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("Content-Type"), "application/pdf");
-  assert.equal(response.headers.get("Content-Disposition"), 'attachment; filename="AJL-order_test_1-A6.pdf"');
+  assert.equal(response.headers.get("Content-Disposition"), 'attachment; filename="AJL-order_test_1-A4.pdf"');
   assert.equal(response.headers.get("X-AJ-Document-SHA256"), "c".repeat(64));
   assert.deepEqual(requestInput, {
     requestId: "shipment_test_1",

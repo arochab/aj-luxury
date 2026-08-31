@@ -120,6 +120,23 @@ function applyMigrations(database) {
       if (statement.trim()) database.exec(statement.trim());
     }
   }
+  // This focused store suite deliberately installs only the fulfillment-era
+  // schema. Mirror the current order-state guard so label creation is exercised
+  // against the production paid -> preparing contract as well.
+  database.exec(`DROP TRIGGER trg_orders_guard_payment_state;
+    CREATE TRIGGER trg_orders_guard_payment_state
+    BEFORE UPDATE OF status ON orders
+    WHEN OLD.status <> NEW.status AND NOT (
+      (OLD.status='pending_payment' AND NEW.status='paid')
+      OR (OLD.status='pending_payment' AND NEW.status='cancelled'
+        AND NOT EXISTS (SELECT 1 FROM payments WHERE order_id=OLD.id AND status IN ('succeeded','refunded'))
+        AND NOT EXISTS (SELECT 1 FROM stock_reservations WHERE cart_id=OLD.cart_id AND status IN ('active','converted')))
+      OR (OLD.status='paid' AND NEW.status='preparing'
+        AND EXISTS (SELECT 1 FROM shipments WHERE order_id=OLD.id AND status='label_ready'))
+      OR (OLD.status='preparing' AND NEW.status='shipped'
+        AND EXISTS (SELECT 1 FROM shipments WHERE order_id=OLD.id AND status IN ('handed_over','in_transit','delivered')))
+    )
+    BEGIN SELECT RAISE(ABORT,'commerce_invalid_order_transition'); END;`);
 }
 
 function parcelProfileForCart(context, cartId) {
@@ -210,6 +227,7 @@ function address(zone) {
       city: "New York",
       regionCode: "NY",
       countryCode: "US",
+      phone: "+12025550123",
     };
   }
   return {
@@ -1343,7 +1361,7 @@ test("withdrawal is acknowledged before any shipment or delivery exists", async 
   context.database.close();
 });
 
-test("full fulfillment flow is leased, append-only, mixed-unit safe and keeps paid truth", async () => {
+test("full fulfillment flow is leased, append-only, mixed-unit safe and keeps payment truth", async () => {
   const labelCalls = [];
   let labelMode = "ambiguous";
   const refundCalls = [];
@@ -1360,6 +1378,7 @@ test("full fulfillment flow is leased, append-only, mixed-unit safe and keeps pa
           providerCode: "carrier_test",
           providerShipmentReference: "provider_shipment_flow",
           trackingReference: "tracking_flow",
+          customsDocumentReference: "carrier_test:customs:shipment_flow:a4",
           receiptFingerprint: "1".repeat(64),
         };
       },
@@ -1458,18 +1477,10 @@ test("full fulfillment flow is leased, append-only, mixed-unit safe and keeps pa
     tracking_reference: null,
   });
   const admin = await createAdminActor(context);
-  await rejectsCode(() => context.fulfillment.handoverShipment({
-    shipmentId: shipment.id,
-    eventId: "handover_flow",
-    actor: admin,
-    locale: "fr",
-    now: "2026-08-11T12:12:00.000Z",
-  }), "CUSTOMS_NOT_READY");
-  await context.fulfillment.markCustomsReady({
-    shipmentId: shipment.id,
-    manualReference: "CUSTOMS-FLOW-1",
-    actor: admin,
-    now: "2026-08-11T12:12:10.000Z",
+  assert.deepEqual({ ...context.database.prepare(`SELECT status, manual_reference
+    FROM customs_records WHERE shipment_id=?`).get(shipment.id) }, {
+    status: "ready",
+    manual_reference: "carrier_test:customs:shipment_flow:a4",
   });
   assert.deepEqual(await context.fulfillment.handoverShipment({
     shipmentId: shipment.id,
@@ -1811,7 +1822,7 @@ test("full fulfillment flow is leased, append-only, mixed-unit safe and keeps pa
   assert.deepEqual({ ...context.database.prepare(`SELECT orders.status AS order_status,
     payments.status AS payment_status FROM orders INNER JOIN payments
       ON payments.order_id=orders.id WHERE orders.id=?`).get(order.orderId) }, {
-    order_status: "paid",
+    order_status: "shipped",
     payment_status: "succeeded",
   });
 

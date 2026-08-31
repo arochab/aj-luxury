@@ -70,6 +70,7 @@ import {
 } from "./commerce-backend-bridge.ts";
 import {
   dispatchProductionVerifiedPaidOrderEmails,
+  dispatchProductionOutboundShipments,
   productionOperationsApiResponse,
   runProductionScheduledOperations,
 } from "./production-operations-api.ts";
@@ -2959,6 +2960,7 @@ const worker = {
             reservations: result.reservations,
             email: result.email,
             lateRefunds: result.lateRefunds,
+            shipments: result.shipments,
           }));
         })
         .catch(() => {
@@ -3037,11 +3039,20 @@ const worker = {
             dispatchProductionVerifiedPaidOrderEmails(env, {
               now: new Date().toISOString(),
               orderId: delivery.event.orderId,
-            }).then((result) => {
+            }).then(async (result) => {
               console.log(JSON.stringify({
                 event: "verified_paid_order_email_dispatch",
                 paymentDisposition: delivery.disposition,
                 email: result,
+              }));
+              const shipment = await dispatchProductionOutboundShipments(env, {
+                now: new Date().toISOString(),
+                orderId: delivery.event.orderId,
+              });
+              console.log(JSON.stringify({
+                event: "verified_paid_order_shipment_dispatch",
+                paymentDisposition: delivery.disposition,
+                shipment,
               }));
             }).catch(() => {
               console.error(JSON.stringify({
