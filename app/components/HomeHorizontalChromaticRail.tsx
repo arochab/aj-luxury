@@ -17,6 +17,8 @@ type Chapter = {
   productAlt: string;
   model: string;
   modelAlt: string;
+  modelWidth: 1200 | 1731;
+  modelHeight: 1803 | 2600;
   accent: string;
 };
 
@@ -30,8 +32,10 @@ const CHAPTERS: readonly Chapter[] = [
     productAlt:
       "Apollon Pourpre Impérial en lévitation sur son décor de marbre",
     model:
-      "/images/client/apollon-world/apollon-pourpre-duo-full-v1.webp",
-    modelAlt: "Apollon Pourpre Impérial porté par Jérémy et Alex",
+      "/images/client/apollon-world/apollon-pourpre-alex-bordeaux-v1.webp",
+    modelAlt: "Apollon Pourpre Impérial porté par Alex",
+    modelWidth: 1200,
+    modelHeight: 1803,
     accent: "#5b1233",
   },
   {
@@ -43,6 +47,8 @@ const CHAPTERS: readonly Chapter[] = [
     productAlt: "Apollon Lilas Céleste en lévitation sur son décor de marbre",
     model: "/images/client/apollon-world/apollon-lilas-model-color-v2.webp",
     modelAlt: "Apollon Lilas Céleste porté par Alex",
+    modelWidth: 1731,
+    modelHeight: 2600,
     accent: "#777a9d",
   },
   {
@@ -53,6 +59,8 @@ const CHAPTERS: readonly Chapter[] = [
     productAlt: "Apollon Rose Velours en lévitation sur son décor de marbre",
     model: "/images/client/apollon-world/apollon-rose-model-color-v2.webp",
     modelAlt: "Apollon Rose Velours porté par Jérémy",
+    modelWidth: 1731,
+    modelHeight: 2600,
     accent: "#ad777c",
   },
 ] as const;
@@ -60,7 +68,7 @@ const CHAPTERS: readonly Chapter[] = [
 const RAIL_IMAGE_SIZES =
   "(max-width: 560px) 46vw, (max-width: 1024px) 45vw, 31vw";
 
-function responsiveSrcSet(src: string, sourceWidth: 1024 | 1731) {
+function responsiveSrcSet(src: string, sourceWidth: 1024 | 1200 | 1731) {
   const variant = (width: number) => src.replace(/\.webp$/, `-${width}.webp`);
   const widths = sourceWidth === 1024 ? [360, 720] : [360, 720, 1080];
   return [
@@ -389,11 +397,14 @@ export default function HomeHorizontalChromaticRail() {
                       <figure className={styles.frame}>
                         <img
                           src={chapter.model}
-                          srcSet={responsiveSrcSet(chapter.model, 1731)}
+                          srcSet={responsiveSrcSet(
+                            chapter.model,
+                            chapter.modelWidth,
+                          )}
                           sizes={RAIL_IMAGE_SIZES}
                           alt={chapter.modelAlt}
-                          width={1731}
-                          height={2600}
+                          width={chapter.modelWidth}
+                          height={chapter.modelHeight}
                           loading="eager"
                           fetchPriority={index === 0 ? "auto" : "low"}
                           decoding="async"
