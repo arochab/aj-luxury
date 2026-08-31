@@ -386,7 +386,7 @@ export default function HomeHorizontalChromaticRail() {
                           decoding="async"
                         />
                       </figure>
-                      <figure className={styles.frame}>
+                      <figure className={`${styles.frame} ${styles.modelFrame}`}>
                         <img
                           src={chapter.model}
                           srcSet={responsiveSrcSet(chapter.model, 1731)}

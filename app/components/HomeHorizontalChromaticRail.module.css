@@ -244,6 +244,27 @@
   object-position: center;
 }
 
+/* The retained model masters end inside the legs. A colour-matched optical
+   dissolve makes that source boundary read as an intentional editorial fade,
+   never as a hard amputation against the frame. It changes no face, body,
+   garment or source pixel above the low-information lower edge. */
+.modelFrame::after {
+  position: absolute;
+  z-index: 1;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: clamp(52px, 15%, 94px);
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    color-mix(in srgb, var(--chapter-accent) 74%, transparent) 50%,
+    color-mix(in srgb, var(--chapter-accent) 94%, #09080b) 100%
+  );
+  content: "";
+  pointer-events: none;
+}
+
 .stageHeader,
 .stageFooter {
   position: absolute;

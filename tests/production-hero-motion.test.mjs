@@ -159,6 +159,9 @@ test("the hero hands its measured plum floor to the horizontal chromatic rail", 
   assert.match(css, /object-fit:\s*contain/);
   assert.doesNotMatch(rail, /progressTrack|progressFill/);
   assert.doesNotMatch(css, /\.stageFooter\s*\{[^}]*border-top/);
+  assert.match(rail, /styles\.modelFrame/);
+  assert.match(css, /\.modelFrame::after/);
+  assert.match(css, /color-mix\(in srgb, var\(--chapter-accent\)/);
   assert.match(
     css,
     /@media \(max-width: 560px\)[\s\S]*\.panelInner\s*\{[\s\S]*width:\s*min\(calc\(100vw - 18px\), 440px\)[\s\S]*\.frame\s*\{[\s\S]*aspect-ratio:\s*8 \/ 15[\s\S]*\.frame img\s*\{[\s\S]*object-fit:\s*cover/,
