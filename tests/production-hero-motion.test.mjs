@@ -159,9 +159,9 @@ test("the hero hands its measured plum floor to the horizontal chromatic rail", 
   assert.match(css, /object-fit:\s*contain/);
   assert.doesNotMatch(rail, /progressTrack|progressFill/);
   assert.doesNotMatch(css, /\.stageFooter\s*\{[^}]*border-top/);
-  assert.match(rail, /styles\.modelFrame/);
-  assert.match(css, /\.modelFrame::after/);
-  assert.match(css, /color-mix\(in srgb, var\(--chapter-accent\)/);
+  assert.doesNotMatch(rail, /styles\.modelFrame/);
+  assert.doesNotMatch(css, /\.modelFrame::after/);
+  assert.match(rail, /apollon-pourpre-duo-full-v1\.webp/);
   assert.match(
     css,
     /@media \(max-width: 560px\)[\s\S]*\.panelInner\s*\{[\s\S]*width:\s*min\(calc\(100vw - 18px\), 440px\)[\s\S]*\.frame\s*\{[\s\S]*aspect-ratio:\s*8 \/ 15[\s\S]*\.frame img\s*\{[\s\S]*object-fit:\s*cover/,
@@ -185,9 +185,9 @@ test("the hero hands its measured plum floor to the horizontal chromatic rail", 
     "public/images/editorial/isabelle-apollon/apollon-lilas-lyre-v1-720.webp",
     "public/images/editorial/isabelle-apollon/apollon-rose-lyre-v1-360.webp",
     "public/images/editorial/isabelle-apollon/apollon-rose-lyre-v1-720.webp",
-    "public/images/client/apollon-world/apollon-pourpre-model-color-v2-360.webp",
-    "public/images/client/apollon-world/apollon-pourpre-model-color-v2-720.webp",
-    "public/images/client/apollon-world/apollon-pourpre-model-color-v2-1080.webp",
+    "public/images/client/apollon-world/apollon-pourpre-duo-full-v1-360.webp",
+    "public/images/client/apollon-world/apollon-pourpre-duo-full-v1-720.webp",
+    "public/images/client/apollon-world/apollon-pourpre-duo-full-v1-1080.webp",
     "public/images/client/apollon-world/apollon-lilas-model-color-v2-360.webp",
     "public/images/client/apollon-world/apollon-lilas-model-color-v2-720.webp",
     "public/images/client/apollon-world/apollon-lilas-model-color-v2-1080.webp",

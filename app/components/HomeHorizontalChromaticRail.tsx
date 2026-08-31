@@ -30,8 +30,8 @@ const CHAPTERS: readonly Chapter[] = [
     productAlt:
       "Apollon Pourpre Impérial en lévitation sur son décor de marbre",
     model:
-      "/images/client/apollon-world/apollon-pourpre-model-color-v2.webp",
-    modelAlt: "Apollon Pourpre Impérial porté par Jérémy",
+      "/images/client/apollon-world/apollon-pourpre-duo-full-v1.webp",
+    modelAlt: "Apollon Pourpre Impérial porté par Jérémy et Alex",
     accent: "#5b1233",
   },
   {
@@ -386,7 +386,7 @@ export default function HomeHorizontalChromaticRail() {
                           decoding="async"
                         />
                       </figure>
-                      <figure className={`${styles.frame} ${styles.modelFrame}`}>
+                      <figure className={styles.frame}>
                         <img
                           src={chapter.model}
                           srcSet={responsiveSrcSet(chapter.model, 1731)}
