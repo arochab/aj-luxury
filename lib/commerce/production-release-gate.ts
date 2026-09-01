@@ -40,6 +40,7 @@ export type ProductionCommerceEnvironment = Readonly<{
   RETURNS_POLICY_APPROVED?: string;
   BACKUP_RESTORE_DRILL_APPROVED?: string;
   MONITORING_ALERTS_APPROVED?: string;
+  COMMERCE_PUBLIC_LAUNCH_RISK_ACCEPTANCE_ID?: string;
   INTERNATIONAL_SHIPPING_ENABLED?: string;
   INTERNATIONAL_SHIPPING_COUNTRIES?: string;
   INTERNATIONAL_CUSTOMS_POLICY?: string;
@@ -289,7 +290,10 @@ function evaluateProductionReleaseGateInternal(
   // The private controlled checkout is already owner-only and is the narrow
   // acceptance path for the first real order. Every other mode keeps the
   // explicit monitoring approval gate.
-  if (mode !== "controlled" && !isApproved(env.MONITORING_ALERTS_APPROVED)) {
+  const explicitPublicLaunchRiskAcceptance = mode === "live" &&
+    SAFE_REFERENCE_PATTERN.test(env.COMMERCE_PUBLIC_LAUNCH_RISK_ACCEPTANCE_ID ?? "");
+  if (mode !== "controlled" && !isApproved(env.MONITORING_ALERTS_APPROVED) &&
+    !explicitPublicLaunchRiskAcceptance) {
     blockers.push("monitoring-alerts-unapproved");
   }
   // Owner decision recorded on 2026-08-26: defer this formality only for the

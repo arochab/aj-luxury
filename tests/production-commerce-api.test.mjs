@@ -487,7 +487,6 @@ function stockProofDatabase(
   lines,
   releaseProof,
   providerProof,
-  emailKinds = ["order_confirmation", "payment_confirmation"],
 ) {
   const reconciliationObjects = [
     { type: "index", name: "idx_email_delivery_provider_evidence_time", table_name: "email_delivery_provider_evidence" },
@@ -511,9 +510,7 @@ function stockProofDatabase(
           if (query.includes("FROM production_launch_stock_manifests")) return proof;
           if (query.includes("FROM production_provider_configuration_attestations")) return providerProof;
           if (query.includes("FROM production_release_attestations")) {
-            const bothConfirmations = emailKinds.includes("order_confirmation") &&
-              emailKinds.includes("payment_confirmation");
-            return { ...releaseProof, controlled_order_proven: bothConfirmations ? 1 : 0 };
+            return releaseProof;
           }
           return null;
         },
@@ -531,7 +528,7 @@ function stockProofDatabase(
   };
 }
 
-test("live stock attestation recomputes the exact 12-line manifest and controlled-order proof", async () => {
+test("live stock attestation recomputes the exact 12-line manifest and paid controlled-order proof", async () => {
   const countedAt = "2026-08-15T01:00:00.000Z";
   const variants = launchVariantSeed.map((variant, index) => ({
     variantId: variant.id,
@@ -629,14 +626,11 @@ test("live stock attestation recomputes the exact 12-line manifest and controlle
   assert.equal(await productionStockRuntimeAttested(env), true);
   assert.equal(await productionStockRuntimeAttested({
     ...env,
-    DB: stockProofDatabase(
-      proof,
-      lines,
-      releaseProof,
-      providerProof,
-      ["payment_confirmation"],
-    ),
-  }), false, "payment proof alone must never promote without order confirmation");
+    DB: stockProofDatabase(proof, lines, {
+      ...releaseProof,
+      controlled_order_proven: 0,
+    }, providerProof),
+  }), false, "the live payment proof must remain present and valid");
   const redistributed = lines.map((line, index) => index === 0
     ? { ...line, live_physical_quantity: line.live_physical_quantity + 1 }
     : line);

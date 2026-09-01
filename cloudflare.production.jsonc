@@ -121,6 +121,12 @@
     //   RETURNS_LABEL_AND_REFUND_PROCESS_APPROVED
     //   BACKUP_RESTORE_DRILL_APPROVED
     //   MONITORING_ALERTS_APPROVED
+    //   COMMERCE_PUBLIC_LAUNCH_RISK_ACCEPTANCE_ID
+    //                                  décision explicite, traçable et liée à
+    //                                  la promotion live lorsqu'Adam choisit
+    //                                  d'ouvrir avant la recette des alertes ;
+    //                                  elle ne prétend jamais que les alertes
+    //                                  ont été testées
   },
 
   // LES SECRETS NE SONT JAMAIS DANS CE FICHIER, ni dans aucun fichier.

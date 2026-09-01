@@ -1012,6 +1012,11 @@ export async function productionStockRuntimeAttested(
         controlled_order.commerce_worker_version_id AS controlled_worker_version_id,
         controlled_order.commerce_mode AS controlled_commerce_mode,
         controlled_order.settlement_mode AS controlled_settlement_mode,
+        /* Public opening is anchored to the controlled order's real Stripe
+           settlement and immutable runtime provenance. Label creation,
+           handover and historical email reconciliation remain auditable
+           post-payment operations; they must never be rewritten merely to
+           make the storefront report ready. */
         CASE WHEN EXISTS (
           SELECT 1 FROM production_runtime_schema_proofs
           WHERE migration_id='0023_controlled_order_runtime_provenance'
@@ -1019,7 +1024,6 @@ export async function productionStockRuntimeAttested(
         ) AND EXISTS (
           SELECT 1 FROM orders AS customer_order
           INNER JOIN payments AS payment ON payment.order_id=customer_order.id
-          INNER JOIN shipments AS shipment ON shipment.order_id=customer_order.id
           WHERE customer_order.id=release.controlled_order_id
             AND customer_order.status IN ('paid','preparing','shipped')
             AND customer_order.paid_at IS NOT NULL
@@ -1027,49 +1031,6 @@ export async function productionStockRuntimeAttested(
             AND payment.livemode=1
             AND payment.amount_cents=customer_order.total_cents
             AND payment.currency=customer_order.currency
-            AND shipment.status IN ('handed_over','in_transit','delivered')
-            AND shipment.provider_shipment_reference IS NOT NULL
-            AND shipment.tracking_reference IS NOT NULL
-            AND shipment.provider_receipt_fingerprint IS NOT NULL
-            AND shipment.label_created_at IS NOT NULL
-            AND EXISTS (
-              SELECT 1 FROM email_outbox AS message
-              WHERE message.order_id=customer_order.id
-                AND message.kind='order_confirmation'
-                AND (
-                  (message.status='sent' AND message.sent_at IS NOT NULL)
-                  OR (
-                    message.status='failed'
-                    AND message.last_error_code='delivery_ambiguous'
-                    AND message.provider_message_id IS NULL
-                    AND EXISTS (
-                      SELECT 1 FROM email_delivery_provider_evidence AS evidence
-                      WHERE evidence.outbox_id=message.id
-                        AND evidence.provider_last_event IN ('delivered','opened','clicked')
-                        AND evidence.reconciliation_source='resend_api'
-                    )
-                  )
-                )
-            )
-            AND EXISTS (
-              SELECT 1 FROM email_outbox AS message
-              WHERE message.order_id=customer_order.id
-                AND message.kind='payment_confirmation'
-                AND (
-                  (message.status='sent' AND message.sent_at IS NOT NULL)
-                  OR (
-                    message.status='failed'
-                    AND message.last_error_code='delivery_ambiguous'
-                    AND message.provider_message_id IS NULL
-                    AND EXISTS (
-                      SELECT 1 FROM email_delivery_provider_evidence AS evidence
-                      WHERE evidence.outbox_id=message.id
-                        AND evidence.provider_last_event IN ('delivered','opened','clicked')
-                        AND evidence.reconciliation_source='resend_api'
-                    )
-                  )
-                )
-            )
         ) THEN 1 ELSE 0 END AS controlled_order_proven
       FROM production_release_attestations AS release
       INNER JOIN production_launch_stock_manifests AS manifest

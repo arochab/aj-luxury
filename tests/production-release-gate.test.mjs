@@ -186,6 +186,21 @@ test("private controlled checkout defers monitoring while published legal terms 
     "commerce-router-not-wired",
   ]);
   assert.equal(liveGate.evidenceComplete, false);
+
+  const ownerAcceptedLaunch = evaluateProductionReleaseGate({
+    ...base,
+    COMMERCE_MODE: "live",
+    STRIPE_SECRET_KEY: "sk_live_redacted",
+    MONITORING_ALERTS_APPROVED: undefined,
+    COMMERCE_PUBLIC_LAUNCH_RISK_ACCEPTANCE_ID:
+      "AJL-PUBLIC-LAUNCH-RISK-ACCEPTED-20260901",
+    COMMERCE_CONTROLLED_ORDER_PROOF_ID: "proof-controlled-order-0001",
+    COMMERCE_PROMOTED_FROM_RELEASE_SHA: releaseSha,
+    COMMERCE_PROMOTED_FROM_VERSION_ID: candidateVersionId,
+    CF_VERSION_METADATA: { ...base.CF_VERSION_METADATA, id: liveVersionId },
+  });
+  assert.deepEqual(ownerAcceptedLaunch.blockers, ["commerce-router-not-wired"]);
+  assert.equal(ownerAcceptedLaunch.evidenceComplete, true);
 });
 
 test("approvals and exact origin are bound to the release", () => {

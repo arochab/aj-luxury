@@ -28,9 +28,10 @@ commande historique. Sa migration additive, sa santé runtime, ses accès et ses
 | Console Admin | `/operations`, protégée par Cloudflare Access et session applicative |
 | Accès anonyme Admin/API | refusé avant accès aux données |
 
-Conséquence : ne pas annoncer une ouverture publique ni démarrer une campagne
-commerciale tant qu’une promotion distincte n’a pas été prouvée avec
-`mode=live` et `publicCommerce=true` sur le même SHA.
+Conséquence : le commerce n’est annoncé ouvert qu’après une promotion distincte
+prouvée avec `mode=live` et `publicCommerce=true` sur le même SHA. La décision
+du 1er septembre autorise une ouverture anticipée traçable sans transformer les
+alertes non encore recettées ni l’expédition historique en faux résultats PASS.
 
 ## Première commande réelle
 
@@ -43,6 +44,15 @@ commerciale tant qu’une promotion distincte n’a pas été prouvée avec
 | Expédition | échec fournisseur historique, sans référence colis, tracking ni étiquette |
 | Cause opératoire | téléphone destinataire absent du snapshot historique |
 | Correction déployée | saisie E.164 par Jérémy, autorisation unique consommable une fois, même shipment et même clé d’idempotence |
+
+Repères à ne jamais mélanger :
+
+- téléphone public AJ Luxury / Jérémy : `+33 6 88 42 40 62` (`+33688424062`) ;
+- téléphone acheteur/destinataire d’Adam pour cette commande uniquement :
+  `06 59 00 60 25` (`+33659006025`).
+
+Le numéro de Jérémy ne doit jamais remplacer le numéro du destinataire sur
+l’étiquette de cette commande.
 
 La correction ne modifie jamais l’adresse payée. Elle fournit uniquement le
 téléphone exigé par le transporteur. Si le résultat fournisseur devient ambigu,
@@ -100,7 +110,8 @@ n’achètent aucune étiquette. La preuve terrain reste donc distincte.
 1. Jérémy se connecte à `https://ajluxurystore.com/operations` avec une identité
    admise par Cloudflare Access ;
 2. il ouvre `AJ-41B58D96CCAAE37F00B8`, vérifie la commande et saisit une seule
-   fois le téléphone acheteur `+33659006025` ;
+   fois le téléphone de l’acheteur/destinataire Adam `+33659006025` ; ce n’est
+   pas son propre numéro professionnel `+33688424062` ;
 3. il déclenche l’unique relance, télécharge l’étiquette et l’imprime en A4 ;
 4. après dépôt physique, il conserve la preuve et confirme la remise dans Admin ;
 5. il vérifie ensuite le premier scan et le suivi transporteur ;
