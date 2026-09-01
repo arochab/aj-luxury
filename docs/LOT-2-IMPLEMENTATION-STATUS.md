@@ -1,5 +1,8 @@
 # AJ Luxury | Vue dirigeant du Lot 2
 
+> `SUPERSEDED — conservé comme photographie du 11 août 2026 — remplacé par
+> docs/SYSTEM-STATUS.md pour l’état opérationnel courant.`
+
 **FRONT `.COM` LIVE | LOT 2 EN TEST LOCAL | VENTES RÉELLES DÉSACTIVÉES | `.FR` REPORTÉ**
 
 Dernière mise à jour : 11 août 2026

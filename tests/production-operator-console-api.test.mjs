@@ -107,12 +107,65 @@ test("fresh allowlisted Cloudflare Access creates an owner session and lists no-
     assert.equal(orders.status, 200);
     assert.deepEqual((await orders.json()).data, []);
 
+    const inventory = await productionOperatorConsoleApiResponse(new Request(
+      "https://ajluxurystore.com/api/commerce/admin/inventory",
+      { headers: { Cookie: cookies(session) } },
+    ), env, { now: () => now, accessIdentity: async () => identity });
+    assert.equal(inventory.status, 200);
+    assert.deepEqual((await inventory.json()).data, {
+      totals: {
+        physicalQuantity: 0,
+        giftReserveQuantity: 0,
+        safetyReserveQuantity: 0,
+        activeReservedQuantity: 0,
+        soldQuantity: 0,
+        availableQuantity: 0,
+      },
+      items: [],
+    });
+
     const missingDetail = await productionOperatorConsoleApiResponse(new Request(
       "https://ajluxurystore.com/api/commerce/admin/orders/order_missing",
       { headers: { Cookie: cookies(session) } },
     ), env, { now: () => now, accessIdentity: async () => identity });
     assert.equal(missingDetail.status, 404);
     assert.equal((await missingDetail.json()).error.code, "ORDER_NOT_FOUND");
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("owner inventory view reconciles physical, protected and available quantities", async () => {
+  const { sqlite, env } = context();
+  try {
+    sqlite.exec(`
+      INSERT INTO products (id,slug,name,status,price_cents,currency,created_at,updated_at)
+      VALUES ('product_apollon','apollon','Apollon','active',2999,'EUR','2026-09-01T08:00:00.000Z','2026-09-01T08:00:00.000Z');
+      INSERT INTO variants (id,product_id,internal_reference,color_key,color_name,size,swatch,image_url,active,sort_order,created_at,updated_at)
+      VALUES ('variant_pourpre_s','product_apollon','AJL-APO-PUR-S','pourpre','Pourpre Impérial','S','#6b1238','/images/pourpre.jpg',1,1,'2026-09-01T08:00:00.000Z','2026-09-01T08:00:00.000Z');
+      INSERT INTO inventory (variant_id,physical_quantity,gift_reserve_quantity,safety_reserve_quantity,active_reserved_quantity,sold_quantity,reserves_validated,version,updated_at)
+      VALUES ('variant_pourpre_s',70,2,1,0,0,1,0,'2026-09-01T08:00:00.000Z');
+    `);
+    const session = await productionOperatorConsoleApiResponse(new Request(
+      "https://ajluxurystore.com/api/commerce/admin/session",
+      { method: "POST", headers: { Origin: "https://ajluxurystore.com", "Sec-Fetch-Site": "same-origin" } },
+    ), env, { now: () => now, accessIdentity: async () => identity });
+    const response = await productionOperatorConsoleApiResponse(new Request(
+      "https://ajluxurystore.com/api/commerce/admin/inventory",
+      { headers: { Cookie: cookies(session) } },
+    ), env, { now: () => now, accessIdentity: async () => identity });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.data.items[0].internalReference, "AJL-APO-PUR-S");
+    assert.equal(body.data.items[0].availableQuantity, 67);
+    assert.deepEqual(body.data.totals, {
+      physicalQuantity: 70,
+      giftReserveQuantity: 2,
+      safetyReserveQuantity: 1,
+      activeReservedQuantity: 0,
+      soldQuantity: 0,
+      availableQuantity: 67,
+    });
   } finally {
     sqlite.close();
   }

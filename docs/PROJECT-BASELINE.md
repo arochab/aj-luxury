@@ -1,5 +1,8 @@
 # AJ Luxury — base de projet
 
+> `BASELINE DE PÉRIMÈTRE — PAS UNE SOURCE DE STATUT RUNTIME`. Pour savoir ce qui
+> est réellement déployé ou encore bloqué, consulter `docs/SYSTEM-STATUS.md`.
+
 ## Statut
 
 Au 7 août 2026, le périmètre contractuel du premier socle e-commerce est fixé

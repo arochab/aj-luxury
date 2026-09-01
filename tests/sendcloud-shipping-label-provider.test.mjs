@@ -339,6 +339,28 @@ test("a second lease after an unknown outcome never performs a blind retry", asy
   assert.equal(calls, 0);
 });
 
+test("the one consumed legacy retry supplies only the missing recipient phone", async () => {
+  const context = await fixture({
+    context: {
+      attempts: 2,
+      retry_recipient_phone: "+33659006025",
+    },
+  });
+  let body;
+  const provider = createSendcloudShippingLabelProvider(
+    context.database,
+    configuration,
+    async (_url, init) => {
+      body = JSON.parse(init.body);
+      return Response.json(receipt(), { status: 201 });
+    },
+    references(),
+  );
+  await provider.createLabel(request);
+  assert.equal(body.to_address.phone_number, "+33659006025");
+  assert.equal(body.to_address.address_line_1, "1 rue du Test");
+});
+
 test("timeout, 5xx, unparsed 409 and malformed success all require manual reconciliation", async (t) => {
   for (const [name, fetchImpl] of [
     ["timeout", async () => { throw new DOMException("timeout", "TimeoutError"); }],
@@ -457,7 +479,7 @@ test("public live label route passes resolved legal gates but still requires sig
   assert.equal((await response.json()).error.code, "CONTROLLED_ACCESS_REQUIRED");
 });
 
-async function adminRequest(headers = {}) {
+async function adminRequest(headers = {}, body) {
   const pathname = "/api/commerce/admin/orders/order_test_1/shipping-label";
   const timestamp = Math.floor(Date.now() / 1000);
   return new Request(
@@ -477,6 +499,7 @@ async function adminRequest(headers = {}) {
         ),
         ...headers,
       },
+      body,
     },
   );
 }
@@ -629,6 +652,37 @@ test("operator route hard-stops an already claimed shipment for manual reconcili
   );
   assert.equal(response.status, 409);
   assert.equal((await response.json()).error.code, "MANUAL_RECONCILIATION_REQUIRED");
+  assert.equal(providerCalls, 0);
+});
+
+test("a rejected historical shipment requires an explicit E.164 phone before any provider call", async () => {
+  const DB = new Database(null, []);
+  DB.existing = {
+    id: "shipment_test_1",
+    order_id: "order_test_1",
+    order_status: "preparing",
+    status: "failed",
+    attempts: 1,
+    max_attempts: 5,
+    idempotency_key: "shipment:test:0001",
+    last_error_code: "provider_rejected",
+    provider_shipment_reference: null,
+    tracking_provider_code: null,
+    tracking_reference: null,
+    provider_receipt_fingerprint: null,
+  };
+  let providerCalls = 0;
+  const response = await productionShippingLabelAdminReleaseCoreResponse(
+    await adminRequest(),
+    { ...adminEnv, DB },
+    "https://ajluxurystore.com",
+    {
+      authorizeOwner: async () => ({ administratorId: "admin_owner_1", sessionId: "session_owner_1" }),
+      shippingLabelProvider: { async createLabel() { providerCalls += 1; throw new Error("must not call"); } },
+    },
+  );
+  assert.equal(response.status, 400);
+  assert.equal((await response.json()).error.code, "RECIPIENT_PHONE_REQUIRED");
   assert.equal(providerCalls, 0);
 });
 

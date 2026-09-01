@@ -2134,6 +2134,52 @@ export const shipments = sqliteTable(
   ],
 );
 
+/**
+ * Explicit, owner-authenticated recovery for a provider-rejected label.
+ *
+ * It exists only for legacy paid orders whose immutable checkout snapshot did
+ * not yet require a telephone number. New checkouts always persist the phone
+ * in the signed shipping snapshot and never need this path.
+ */
+export const shipmentRetryAuthorizations = sqliteTable(
+  "shipment_retry_authorizations",
+  {
+    id: text("id").primaryKey(),
+    shipmentId: text("shipment_id").notNull().references(
+      () => shipments.id,
+      { onDelete: "restrict" },
+    ),
+    administratorId: text("administrator_id").notNull().references(
+      () => administrators.id,
+      { onDelete: "restrict" },
+    ),
+    recipientPhone: text("recipient_phone").notNull(),
+    createdAt: text("created_at").notNull(),
+    consumedAt: text("consumed_at"),
+  },
+  (table) => [
+    uniqueIndex("ux_shipment_retry_authorizations_shipment").on(table.shipmentId),
+    index("idx_shipment_retry_authorizations_admin_created").on(
+      table.administratorId,
+      table.createdAt,
+    ),
+    check(
+      "ck_shipment_retry_authorizations_phone",
+      sql`length(${table.recipientPhone}) BETWEEN 9 AND 16
+        AND substr(${table.recipientPhone},1,1) = '+'
+        AND substr(${table.recipientPhone},2) NOT GLOB '*[^0-9]*'
+        AND substr(${table.recipientPhone},2,1) <> '0'`,
+    ),
+    check(
+      "ck_shipment_retry_authorizations_timestamps",
+      sql`strftime('%Y-%m-%dT%H:%M:%fZ',${table.createdAt}) IS ${table.createdAt}
+        AND (${table.consumedAt} IS NULL
+          OR (strftime('%Y-%m-%dT%H:%M:%fZ',${table.consumedAt}) IS ${table.consumedAt}
+            AND ${table.consumedAt} >= ${table.createdAt}))`,
+    ),
+  ],
+);
+
 export const shippingDocumentMetadata = sqliteTable(
   "shipping_document_metadata",
   {

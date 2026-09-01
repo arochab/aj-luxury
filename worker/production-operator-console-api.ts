@@ -26,6 +26,7 @@ import {
 
 const SESSION_ROUTE = "/api/commerce/admin/session";
 const ORDERS_ROUTE = "/api/commerce/admin/orders";
+const INVENTORY_ROUTE = "/api/commerce/admin/inventory";
 const PROMOTIONS_ROUTE = "/api/commerce/admin/promotions";
 const ORDER_DETAIL_ROUTE = /^\/api\/commerce\/admin\/orders\/([^/]+)$/;
 const ORDER_INVOICE_ROUTE =
@@ -65,6 +66,16 @@ type OrderRow = Readonly<{
   created_at: string;
   shipment_id: string | null;
   shipment_status: string | null;
+  shipment_attempts: number | null;
+  shipment_max_attempts: number | null;
+  shipment_last_error_code: string | null;
+  shipment_provider_reference: string | null;
+  shipment_tracking_provider_code: string | null;
+  shipment_tracking_reference: string | null;
+  shipment_receipt_fingerprint: string | null;
+  shipping_phone_type: string | null;
+  retry_authorization_id: string | null;
+  retry_authorization_consumed_at: string | null;
   order_email_status: string | null;
   payment_email_status: string | null;
 }>;
@@ -108,6 +119,20 @@ type PromotionListRow = Readonly<{
   ends_at: string | null;
   reserved_count: number;
   redeemed_count: number;
+}>;
+
+type InventoryRow = Readonly<{
+  internal_reference: string;
+  product_name: string;
+  color_name: string;
+  size: string;
+  physical_quantity: number;
+  gift_reserve_quantity: number;
+  safety_reserve_quantity: number;
+  active_reserved_quantity: number;
+  sold_quantity: number;
+  available_quantity: number;
+  updated_at: string;
 }>;
 
 type OperatorShippingAddress = Readonly<{
@@ -353,7 +378,16 @@ async function listOrders(
       `SELECT customer_order.id, customer_order.order_number, customer_order.status,
         customer_order.currency, customer_order.total_cents, customer_order.paid_at,
         customer_order.created_at, shipment.id AS shipment_id,
-        shipment.status AS shipment_status,
+        shipment.status AS shipment_status, shipment.attempts AS shipment_attempts,
+        shipment.max_attempts AS shipment_max_attempts,
+        shipment.last_error_code AS shipment_last_error_code,
+        shipment.provider_shipment_reference AS shipment_provider_reference,
+        shipment.tracking_provider_code AS shipment_tracking_provider_code,
+        shipment.tracking_reference AS shipment_tracking_reference,
+        shipment.provider_receipt_fingerprint AS shipment_receipt_fingerprint,
+        json_type(customer_order.shipping_address_json, '$.phone') AS shipping_phone_type,
+        retry_authorization.id AS retry_authorization_id,
+        retry_authorization.consumed_at AS retry_authorization_consumed_at,
         (SELECT CASE WHEN message.status='sent' OR EXISTS (
           SELECT 1 FROM email_delivery_provider_evidence AS evidence
           WHERE evidence.outbox_id=message.id
@@ -370,6 +404,8 @@ async function listOrders(
           ORDER BY message.created_at DESC LIMIT 1) AS payment_email_status
       FROM orders AS customer_order
       LEFT JOIN shipments AS shipment ON shipment.order_id=customer_order.id
+      LEFT JOIN shipment_retry_authorizations AS retry_authorization
+        ON retry_authorization.shipment_id=shipment.id
       WHERE customer_order.status IN ('paid','preparing','shipped','refunded')
       ORDER BY COALESCE(customer_order.paid_at, customer_order.created_at) DESC,
         customer_order.id DESC LIMIT 50`,
@@ -386,6 +422,17 @@ async function listOrders(
         shipment: row.shipment_id ? {
           id: row.shipment_id,
           status: row.shipment_status,
+          retryAllowed: row.shipment_status === "failed" &&
+            row.shipment_last_error_code === "provider_rejected" &&
+            (row.shipment_attempts ?? 0) >= 1 &&
+            (row.shipment_attempts ?? 0) < (row.shipment_max_attempts ?? 0) &&
+            row.shipment_provider_reference === null &&
+            row.shipment_tracking_provider_code === null &&
+            row.shipment_tracking_reference === null &&
+            row.shipment_receipt_fingerprint === null &&
+            row.shipping_phone_type === null &&
+            row.retry_authorization_id === null &&
+            row.retry_authorization_consumed_at === null,
         } : null,
         emails: {
           orderConfirmation: row.order_email_status,
@@ -395,6 +442,66 @@ async function listOrders(
     });
   } catch {
     return fail("ORDERS_UNAVAILABLE", 503);
+  }
+}
+
+async function listInventory(
+  request: Request,
+  database: CommerceD1Database,
+  now: string,
+): Promise<Response> {
+  if (!(await adminActor(request, database, now))) return fail("OWNER_SESSION_REQUIRED", 403);
+  if (request.headers.get("Origin") !== null &&
+    request.headers.get("Origin") !== new URL(request.url).origin) {
+    return fail("ORIGIN_REJECTED", 403);
+  }
+  try {
+    const result = await database.prepare(
+      `SELECT variant.internal_reference, product.name AS product_name,
+        variant.color_name, variant.size, inventory.physical_quantity,
+        inventory.gift_reserve_quantity, inventory.safety_reserve_quantity,
+        inventory.active_reserved_quantity, inventory.sold_quantity,
+        inventory.physical_quantity - inventory.gift_reserve_quantity -
+          inventory.safety_reserve_quantity - inventory.active_reserved_quantity -
+          inventory.sold_quantity AS available_quantity,
+        inventory.updated_at
+      FROM inventory
+      INNER JOIN variants AS variant ON variant.id=inventory.variant_id
+      INNER JOIN products AS product ON product.id=variant.product_id
+      WHERE variant.active=1 AND product.status='active'
+      ORDER BY variant.sort_order, variant.color_name, variant.size, variant.internal_reference`,
+    ).all<InventoryRow>();
+    const items = result.results.map((row) => ({
+      internalReference: row.internal_reference,
+      productName: row.product_name,
+      colorName: row.color_name,
+      size: row.size,
+      physicalQuantity: row.physical_quantity,
+      giftReserveQuantity: row.gift_reserve_quantity,
+      safetyReserveQuantity: row.safety_reserve_quantity,
+      activeReservedQuantity: row.active_reserved_quantity,
+      soldQuantity: row.sold_quantity,
+      availableQuantity: row.available_quantity,
+      updatedAt: row.updated_at,
+    }));
+    const totals = items.reduce((summary, item) => ({
+      physicalQuantity: summary.physicalQuantity + item.physicalQuantity,
+      giftReserveQuantity: summary.giftReserveQuantity + item.giftReserveQuantity,
+      safetyReserveQuantity: summary.safetyReserveQuantity + item.safetyReserveQuantity,
+      activeReservedQuantity: summary.activeReservedQuantity + item.activeReservedQuantity,
+      soldQuantity: summary.soldQuantity + item.soldQuantity,
+      availableQuantity: summary.availableQuantity + item.availableQuantity,
+    }), {
+      physicalQuantity: 0,
+      giftReserveQuantity: 0,
+      safetyReserveQuantity: 0,
+      activeReservedQuantity: 0,
+      soldQuantity: 0,
+      availableQuantity: 0,
+    });
+    return json({ data: { totals, items } });
+  } catch {
+    return fail("INVENTORY_UNAVAILABLE", 503);
   }
 }
 
@@ -745,7 +852,7 @@ export async function productionOperatorConsoleApiResponse(
   const orderInvoiceMatch = ORDER_INVOICE_ROUTE.exec(url.pathname);
   const orderCreditNoteMatch = ORDER_CREDIT_NOTE_ROUTE.exec(url.pathname);
   const promotionStatusMatch = PROMOTION_STATUS_ROUTE.exec(url.pathname);
-  if (![SESSION_ROUTE, ORDERS_ROUTE, PROMOTIONS_ROUTE].includes(url.pathname) &&
+  if (![SESSION_ROUTE, ORDERS_ROUTE, INVENTORY_ROUTE, PROMOTIONS_ROUTE].includes(url.pathname) &&
     !orderDetailMatch && !orderInvoiceMatch && !orderCreditNoteMatch &&
     !promotionStatusMatch) return null;
   if (!configured(env, url)) return fail("OPERATOR_CONSOLE_CLOSED", 503);
@@ -756,6 +863,10 @@ export async function productionOperatorConsoleApiResponse(
   if (url.pathname === ORDERS_ROUTE) {
     if (request.method !== "GET") return fail("METHOD_NOT_ALLOWED", 405);
     return listOrders(request, env.DB, now);
+  }
+  if (url.pathname === INVENTORY_ROUTE) {
+    if (request.method !== "GET") return fail("METHOD_NOT_ALLOWED", 405);
+    return listInventory(request, env.DB, now);
   }
   if (url.pathname === PROMOTIONS_ROUTE) {
     if (request.method === "GET") return listPromotions(request, env.DB, now);

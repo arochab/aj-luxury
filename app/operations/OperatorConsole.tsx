@@ -10,7 +10,11 @@ type Order = Readonly<{
   currency: string;
   totalCents: number;
   paidAt: string | null;
-  shipment: Readonly<{ id: string; status: string | null }> | null;
+  shipment: Readonly<{
+    id: string;
+    status: string | null;
+    retryAllowed: boolean;
+  }> | null;
   emails: Readonly<{
     orderConfirmation: string | null;
     paymentConfirmation: string | null;
@@ -66,12 +70,39 @@ type Promotion = Readonly<{
   redeemedCount: number;
 }>;
 
+type InventoryItem = Readonly<{
+  internalReference: string;
+  productName: string;
+  colorName: string;
+  size: string;
+  physicalQuantity: number;
+  giftReserveQuantity: number;
+  safetyReserveQuantity: number;
+  activeReservedQuantity: number;
+  soldQuantity: number;
+  availableQuantity: number;
+  updatedAt: string;
+}>;
+
+type Inventory = Readonly<{
+  totals: Readonly<{
+    physicalQuantity: number;
+    giftReserveQuantity: number;
+    safetyReserveQuantity: number;
+    activeReservedQuantity: number;
+    soldQuantity: number;
+    availableQuantity: number;
+  }>;
+  items: readonly InventoryItem[];
+}>;
+
 type ConsoleState =
   | Readonly<{ kind: "loading" }>
   | Readonly<{
     kind: "ready";
     orders: readonly Order[];
     promotions: readonly Promotion[];
+    inventory: Inventory;
     csrfToken: string;
   }>
   | Readonly<{ kind: "error"; message: string }>;
@@ -164,6 +195,7 @@ export default function OperatorConsole() {
   const [promotionMaximumDiscount, setPromotionMaximumDiscount] = useState("");
   const [promotionMaximumRedemptions, setPromotionMaximumRedemptions] = useState("");
   const [promotionEndsAt, setPromotionEndsAt] = useState("");
+  const [recipientPhones, setRecipientPhones] = useState<Record<string, string>>({});
 
   const load = useCallback(async () => {
     setState({ kind: "loading" });
@@ -197,8 +229,17 @@ export default function OperatorConsole() {
       setState({ kind: "error", message: operatorMessage(await parseError(promotionsResponse)) });
       return;
     }
+    const inventoryResponse = await fetch("/api/commerce/admin/inventory", {
+      credentials: "same-origin",
+      cache: "no-store",
+    });
+    if (!inventoryResponse.ok) {
+      setState({ kind: "error", message: operatorMessage(await parseError(inventoryResponse)) });
+      return;
+    }
     const payload = await response.json() as { data: readonly Order[] };
     const promotionsPayload = await promotionsResponse.json() as { data: readonly Promotion[] };
+    const inventoryPayload = await inventoryResponse.json() as { data: Inventory };
     const csrfToken = readCookie("__Host-aj_admin_csrf");
     if (!csrfToken) {
       setState({ kind: "error", message: "La session opérateur est incomplète. Aucune action n’est possible." });
@@ -208,6 +249,7 @@ export default function OperatorConsole() {
       kind: "ready",
       orders: payload.data,
       promotions: promotionsPayload.data,
+      inventory: inventoryPayload.data,
       csrfToken,
     });
   }, []);
@@ -217,8 +259,12 @@ export default function OperatorConsole() {
     return () => window.clearTimeout(task);
   }, [load]);
 
-  async function downloadLabel(order: Order, csrfToken: string) {
-    if (!labelReadyForFulfillment(order)) return;
+  async function downloadLabel(order: Order, csrfToken: string, recipientPhone?: string) {
+    const retrying = Boolean(recipientPhone);
+    if (retrying ? !order.shipment?.retryAllowed : !labelReadyForFulfillment(order)) return;
+    if (retrying && !window.confirm(
+      `Créer une seule étiquette pour ${order.orderNumber} avec ce téléphone destinataire ? Cette action peut facturer l’affranchissement sélectionné par le client.`,
+    )) return;
     setBusyOrder(order.orderId);
     setActionError(null);
     try {
@@ -231,7 +277,9 @@ export default function OperatorConsole() {
             "X-CSRF-Token": csrfToken,
             "Idempotency-Key": `operator-label:${order.orderId}`,
             "X-AJ-Download-Request-Id": `label-download:${crypto.randomUUID()}`,
+            ...(retrying ? { "Content-Type": "application/json" } : {}),
           },
+          ...(retrying ? { body: JSON.stringify({ recipientPhone }) } : {}),
         },
       );
       if (!response.ok) throw new Error(await parseError(response));
@@ -248,7 +296,9 @@ export default function OperatorConsole() {
       const code = cause instanceof Error ? cause.message : "SHIPPING_DOCUMENT_UNAVAILABLE";
       setActionError(code === "MANUAL_RECONCILIATION_REQUIRED"
         ? "Résultat transporteur à vérifier. Ne recliquez pas : aucune deuxième étiquette ne doit être créée."
-        : "L’étiquette n’a pas pu être récupérée. Aucune deuxième création n’a été lancée.");
+        : code === "SHIPMENT_RETRY_ALREADY_USED"
+          ? "La relance unique a déjà été consommée. Vérifiez le transporteur avant toute autre action."
+          : "L’étiquette n’a pas pu être récupérée. Aucune deuxième création n’a été lancée.");
     } finally {
       setBusyOrder(null);
     }
@@ -417,6 +467,7 @@ export default function OperatorConsole() {
 
   const orders = state.kind === "ready" ? state.orders : [];
   const promotions = state.kind === "ready" ? state.promotions : [];
+  const inventory = state.kind === "ready" ? state.inventory : null;
   const actionableOrders = orders.filter((order) => ["paid", "preparing"].includes(order.status));
 
   return (
@@ -513,6 +564,41 @@ export default function OperatorConsole() {
                           {busyOrder === order.orderId ? "Récupération…" : "Télécharger l’étiquette transporteur A4"}
                         </button>
                       ) : null}
+                      {order.shipment?.retryAllowed ? (
+                        <span className={styles.labelRetry}>
+                          <label htmlFor={`recipient-phone-${order.orderId}`}>
+                            Téléphone du destinataire au format international
+                          </label>
+                          <input
+                            id={`recipient-phone-${order.orderId}`}
+                            autoComplete="tel"
+                            inputMode="tel"
+                            pattern="\+[1-9][0-9]{7,14}"
+                            placeholder="ex. +33612345678"
+                            value={recipientPhones[order.orderId] ?? ""}
+                            onChange={(event) => setRecipientPhones((current) => ({
+                              ...current,
+                              [order.orderId]: event.currentTarget.value.replaceAll(" ", ""),
+                            }))}
+                          />
+                          <button
+                            className={styles.download}
+                            type="button"
+                            disabled={busyOrder !== null ||
+                              !/^\+[1-9]\d{7,14}$/.test(recipientPhones[order.orderId] ?? "")}
+                            onClick={() => void downloadLabel(
+                              order,
+                              state.csrfToken,
+                              recipientPhones[order.orderId],
+                            )}
+                          >
+                            {busyOrder === order.orderId
+                              ? "Création contrôlée…"
+                              : "Créer puis télécharger l’étiquette A4"}
+                          </button>
+                          <small>Une seule relance est autorisée. En cas de doute transporteur, ne pas recliquer.</small>
+                        </span>
+                      ) : null}
                       {labelReadyForFulfillment(order) ? (
                         <button
                           className={styles.secondary}
@@ -567,6 +653,48 @@ export default function OperatorConsole() {
             ))}
             {orders.length === 0 ? <p className={styles.empty}>Aucune commande payée à suivre.</p> : null}
           </div>
+        ) : null}
+
+        {state.kind === "ready" ? (
+          <section className={styles.inventory} aria-labelledby="inventory-title">
+            <div className={styles.sectionHeading}>
+              <div>
+                <p>Disponibilité réelle</p>
+                <h2 id="inventory-title">Stock</h2>
+              </div>
+              <span>{inventory?.totals.availableQuantity ?? 0} vendable(s)</span>
+            </div>
+            <div className={styles.inventoryTotals}>
+              <div><span>Physique</span><strong>{inventory?.totals.physicalQuantity ?? 0}</strong></div>
+              <div><span>Cadeaux</span><strong>{inventory?.totals.giftReserveQuantity ?? 0}</strong></div>
+              <div><span>Réservé panier</span><strong>{inventory?.totals.activeReservedQuantity ?? 0}</strong></div>
+              <div><span>Vendu</span><strong>{inventory?.totals.soldQuantity ?? 0}</strong></div>
+              <div><span>Disponible</span><strong>{inventory?.totals.availableQuantity ?? 0}</strong></div>
+            </div>
+            <div className={styles.inventoryTable} role="table" aria-label="Stock par coloris et taille">
+              <div className={styles.inventoryHeader} role="row">
+                <span role="columnheader">Référence</span>
+                <span role="columnheader">Coloris</span>
+                <span role="columnheader">Taille</span>
+                <span role="columnheader">Physique</span>
+                <span role="columnheader">Vendu</span>
+                <span role="columnheader">Disponible</span>
+              </div>
+              {inventory?.items.map((item) => (
+                <div className={styles.inventoryRow} role="row" key={item.internalReference}>
+                  <span role="cell" data-label="Référence">{item.internalReference}</span>
+                  <span role="cell" data-label="Coloris">{item.colorName}</span>
+                  <span role="cell" data-label="Taille">{item.size}</span>
+                  <span role="cell" data-label="Physique">{item.physicalQuantity}</span>
+                  <span role="cell" data-label="Vendu">{item.soldQuantity}</span>
+                  <strong role="cell" data-label="Disponible">{item.availableQuantity}</strong>
+                </div>
+              ))}
+            </div>
+            <p className={styles.stockNote}>
+              Le paiement confirmé décrémente automatiquement la variante achetée. Les quantités internes ne sont jamais publiées côté client.
+            </p>
+          </section>
         ) : null}
 
         {state.kind === "ready" ? (

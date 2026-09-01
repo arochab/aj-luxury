@@ -68,6 +68,7 @@ type ShipmentContextRow = Readonly<{
   length_mm: number;
   width_mm: number;
   height_mm: number;
+  retry_recipient_phone: string | null;
 }>;
 
 type OrderLineRow = Readonly<{
@@ -263,7 +264,16 @@ async function verifiedAddress(row: ShipmentContextRow) {
     ) {
       throw new Error("mismatch");
     }
-    return proof.address;
+    const recoveryPhone = row.retry_recipient_phone ?? null;
+    if (recoveryPhone !== null && (
+      !/^\+[1-9]\d{7,14}$/.test(recoveryPhone) ||
+      (stored.phone !== null && stored.phone !== recoveryPhone)
+    )) {
+      throw new Error("recovery-phone-mismatch");
+    }
+    return recoveryPhone && stored.phone === null
+      ? Object.freeze({ ...proof.address, phone: recoveryPhone })
+      : proof.address;
   } catch {
     throw new FulfillmentProviderError(
       "rejected",
@@ -565,7 +575,8 @@ class D1SendcloudShippingLabelProvider implements ShippingLabelProviderPort {
         configuration.origin_country_code, configuration.customs_hs_code,
         parcel.profile_code, parcel.source_version,
         parcel.item_count, parcel.weight_grams, parcel.length_mm,
-        parcel.width_mm, parcel.height_mm
+        parcel.width_mm, parcel.height_mm,
+        retry_authorization.recipient_phone AS retry_recipient_phone
       FROM shipments AS shipment
       INNER JOIN orders AS customer_order ON customer_order.id = shipment.order_id
       INNER JOIN shipping_quotes AS quote ON quote.id = shipment.shipping_quote_id
@@ -575,6 +586,9 @@ class D1SendcloudShippingLabelProvider implements ShippingLabelProviderPort {
         ON option.shipping_quote_id = quote.id AND option.selected_at IS NOT NULL
       INNER JOIN shipping_quote_parcel_snapshots AS parcel
         ON parcel.quote_id = quote.id
+      LEFT JOIN shipment_retry_authorizations AS retry_authorization
+        ON retry_authorization.shipment_id = shipment.id
+        AND retry_authorization.consumed_at = shipment.leased_at
       WHERE shipment.id = ? AND shipment.order_id = ?
         AND shipment.shipping_quote_id = ? AND shipment.idempotency_key = ?
         AND shipment.status = 'label_claimed'`,
@@ -591,7 +605,9 @@ class D1SendcloudShippingLabelProvider implements ShippingLabelProviderPort {
     // A second network attempt after a lost receipt can duplicate a shipment.
     // The API's documented 409 is not accepted without an independently parsed
     // associated-object contract, so retries are manual-reconciliation only.
-    if (context.attempts !== 1) {
+    if (context.attempts !== 1 && !(
+      context.attempts === 2 && (context.retry_recipient_phone ?? null) !== null
+    )) {
       throw new FulfillmentProviderError("ambiguous", "Manual Sendcloud reconciliation is required.");
     }
     const lineResult = await this.#database.prepare(

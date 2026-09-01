@@ -790,17 +790,57 @@ export class D1FulfillmentStore {
     ) {
       return shipment;
     }
-    try {
-      const claim = await this.#database
+    const retryAuthorization = shipment.status === "failed"
+      ? await this.#database
         .prepare(
+          `SELECT recipient_phone
+          FROM shipment_retry_authorizations
+          WHERE shipment_id = ? AND consumed_at IS NULL`,
+        )
+        .bind(shipment.id)
+        .first<{ recipient_phone: string }>()
+      : null;
+    try {
+      const claimChanges = retryAuthorization
+        ? await this.#database.batch([
+          this.#database.prepare(
+            `UPDATE shipment_retry_authorizations SET consumed_at = ?
+            WHERE shipment_id = ? AND consumed_at IS NULL`,
+          ).bind(input.now, shipment.id),
+          this.#database.prepare(
+            `UPDATE shipments SET status = 'label_claimed', lease_token_hash = ?,
+              leased_at = ?, lease_expires_at = ?, attempts = attempts + 1,
+              last_error_code = NULL, updated_at = ?
+            WHERE id = ? AND idempotency_key = ? AND attempts < max_attempts
+              AND status = 'failed' AND last_error_code = 'provider_rejected'
+              AND provider_shipment_reference IS NULL
+              AND tracking_provider_code IS NULL AND tracking_reference IS NULL
+              AND provider_receipt_fingerprint IS NULL
+              AND EXISTS (
+                SELECT 1 FROM shipment_retry_authorizations AS authorization
+                WHERE authorization.shipment_id = shipments.id
+                  AND authorization.consumed_at = ?
+              )`,
+          ).bind(
+            leaseTokenHash,
+            input.now,
+            input.leaseExpiresAt,
+            input.now,
+            input.shipmentId,
+            input.idempotencyKey,
+            input.now,
+          ),
+        ]).then((results) =>
+          changed(results[0] ?? {}) === 1 && changed(results[1] ?? {}) === 1 ? 1 : 0
+        )
+        : changed(await this.#database.prepare(
           `UPDATE shipments SET status = 'label_claimed', lease_token_hash = ?,
             leased_at = ?, lease_expires_at = ?, attempts = attempts + 1,
             last_error_code = NULL, updated_at = ?
           WHERE id = ? AND idempotency_key = ? AND attempts < max_attempts
             AND (status = 'label_pending'
               OR (status = 'label_claimed' AND lease_expires_at <= ?))`,
-        )
-        .bind(
+        ).bind(
           leaseTokenHash,
           input.now,
           input.leaseExpiresAt,
@@ -808,9 +848,8 @@ export class D1FulfillmentStore {
           input.shipmentId,
           input.idempotencyKey,
           input.now,
-        )
-        .run();
-      if (changed(claim) !== 1) {
+        ).run());
+      if (claimChanges !== 1) {
         throw new FulfillmentError("LEASE_UNAVAILABLE", "The shipment lease is unavailable.");
       }
     } catch (error) {

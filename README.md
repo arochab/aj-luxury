@@ -10,7 +10,12 @@ Source privée et gouvernée du site e-commerce AJ Luxury.
 - Backend Lot 2 : développé sur des branches dédiées, non connecté et non déployé tant que les gates ne sont pas passés
 - Shopify : explicitement exclu
 
-Les règles permanentes sont dans [`AGENTS.md`](./AGENTS.md). La baseline et l'état détaillé restent dans [`docs/PROJECT-BASELINE.md`](./docs/PROJECT-BASELINE.md) et [`docs/LOT-2-IMPLEMENTATION-STATUS.md`](./docs/LOT-2-IMPLEMENTATION-STATUS.md).
+Les règles permanentes sont dans [`AGENTS.md`](./AGENTS.md). Le point d'entrée
+unique de la documentation est [`docs/README.md`](./docs/README.md) ; l'état
+opérationnel courant est consigné dans
+[`docs/SYSTEM-STATUS.md`](./docs/SYSTEM-STATUS.md). La baseline reste dans
+[`docs/PROJECT-BASELINE.md`](./docs/PROJECT-BASELINE.md) et ne doit pas être
+confondue avec le statut du runtime.
 
 ## Dépôts GitHub
 

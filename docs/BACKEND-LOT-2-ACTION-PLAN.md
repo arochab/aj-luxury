@@ -1,5 +1,9 @@
 # AJ Luxury — plan d’action lean du socle 2 commerce
 
+> `PLAN HISTORIQUE DU 10 AOÛT 2026 — ne décrit pas le runtime courant`. Consulter
+> `docs/TECHNICAL-ARCHITECTURE.md` pour l’architecture réalisée et
+> `docs/SYSTEM-STATUS.md` pour le statut de production.
+
 Statut : `CURRENT PLAN — PRÉPRODUCTION UNIQUEMENT — AUCUNE OUVERTURE DES VENTES`
 
 Date : 10 août 2026

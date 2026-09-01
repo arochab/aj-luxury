@@ -78,7 +78,10 @@ function referenceVaultConfiguration(env: ProductionShippingLabelEnvironment): R
 async function printableLabelResponse(
   env: ProductionShippingLabelEnvironment,
   dependencies: ProductionShippingLabelDependencies,
-  shipment: ExistingShipment,
+  shipment: Pick<
+    ExistingShipment,
+    "id" | "order_id" | "provider_shipment_reference" | "tracking_reference"
+  >,
   actor: ShippingLabelAdminActor,
   downloadRequestId: string,
   now: string,
@@ -234,8 +237,13 @@ type ExistingShipment = Readonly<{
   order_id: string;
   status: string;
   attempts: number;
+  max_attempts: number;
+  idempotency_key: string;
+  last_error_code: string | null;
   provider_shipment_reference: string | null;
+  tracking_provider_code: string | null;
   tracking_reference: string | null;
+  provider_receipt_fingerprint: string | null;
   order_status?: string;
 }>;
 
@@ -291,25 +299,58 @@ async function authorizeD1Owner(
     : null;
 }
 
-async function emptyBody(request: Request): Promise<boolean> {
+type LabelRequestBody = Readonly<
+  { kind: "empty" } | { kind: "failed-retry"; recipientPhone: string }
+>;
+
+async function labelRequestBody(request: Request): Promise<LabelRequestBody | null> {
   const encoding = request.headers.get("Content-Encoding");
   const declared = request.headers.get("Content-Length");
-  if ((encoding && encoding.toLowerCase() !== "identity") ||
-    (declared && (!/^\d+$/.test(declared) || Number(declared) > 0))) {
+  if (encoding && encoding.toLowerCase() !== "identity") {
     await request.body?.cancel();
-    return false;
+    return null;
   }
-  if (!request.body) return true;
+  if (declared && (!/^\d+$/.test(declared) || Number(declared) > 256)) {
+    await request.body?.cancel();
+    return null;
+  }
+  if (!request.body) return { kind: "empty" };
   const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let length = 0;
   try {
-    const first = await reader.read();
-    if (!first.done && first.value.byteLength > 0) {
-      await reader.cancel();
-      return false;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      length += value.byteLength;
+      if (length > 256) {
+        await reader.cancel();
+        return null;
+      }
+      chunks.push(value);
     }
-    return first.done;
   } finally {
     reader.releaseLock();
+  }
+  if (length === 0) return { kind: "empty" };
+  if (request.headers.get("Content-Type")?.split(";", 1)[0].trim().toLowerCase() !==
+    "application/json") return null;
+  const bytes = new Uint8Array(length);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  try {
+    const parsed: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+    const record = parsed as Record<string, unknown>;
+    if (Object.keys(record).length !== 1 ||
+      typeof record.recipientPhone !== "string" ||
+      !/^\+[1-9]\d{7,14}$/.test(record.recipientPhone)) return null;
+    return { kind: "failed-retry", recipientPhone: record.recipientPhone };
+  } catch {
+    return null;
   }
 }
 
@@ -434,7 +475,8 @@ async function productionShippingLabelAdminAuthorizedResponse(
   } catch {
     return fail("INVALID_ORDER", 400);
   }
-  if (!SAFE_ID.test(orderId) || !(await emptyBody(request))) {
+  const body = await labelRequestBody(request);
+  if (!SAFE_ID.test(orderId) || !body) {
     return fail("INVALID_REQUEST", 400);
   }
   // The order is the durable business idempotency boundary. A browser refresh,
@@ -442,7 +484,9 @@ async function productionShippingLabelAdminAuthorizedResponse(
   // the one existing shipment instead of creating a second Sendcloud parcel.
   const existingForOrder = await env.DB.prepare(
     `SELECT shipment.id, shipment.order_id, shipment.status, shipment.attempts,
-      shipment.provider_shipment_reference, shipment.tracking_reference,
+      shipment.max_attempts, shipment.idempotency_key, shipment.last_error_code,
+      shipment.provider_shipment_reference, shipment.tracking_provider_code,
+      shipment.tracking_reference, shipment.provider_receipt_fingerprint,
       customer_order.status AS order_status
     FROM shipments AS shipment
     INNER JOIN orders AS customer_order ON customer_order.id=shipment.order_id
@@ -450,7 +494,9 @@ async function productionShippingLabelAdminAuthorizedResponse(
   ).bind(orderId).first<ExistingShipment>();
   const existing = existingForOrder ?? await env.DB.prepare(
     `SELECT shipment.id, shipment.order_id, shipment.status, shipment.attempts,
-      shipment.provider_shipment_reference, shipment.tracking_reference,
+      shipment.max_attempts, shipment.idempotency_key, shipment.last_error_code,
+      shipment.provider_shipment_reference, shipment.tracking_provider_code,
+      shipment.tracking_reference, shipment.provider_receipt_fingerprint,
       customer_order.status AS order_status
     FROM shipments AS shipment
     INNER JOIN orders AS customer_order ON customer_order.id=shipment.order_id
@@ -463,6 +509,7 @@ async function productionShippingLabelAdminAuthorizedResponse(
     return fail("SHIPMENT_LABEL_UNAVAILABLE", 409);
   }
   if (existing?.status === "label_ready") {
+    if (body.kind !== "empty") return fail("INVALID_REQUEST", 400);
     return printableLabelResponse(
       env,
       dependencies,
@@ -473,13 +520,95 @@ async function productionShippingLabelAdminAuthorizedResponse(
       200,
     );
   }
-  if (existing && existing.status !== "label_pending") {
+  const authorizedFailedRetry = Boolean(
+    existing?.status === "failed" &&
+    existing.last_error_code === "provider_rejected" &&
+    existing.attempts >= 1 && existing.attempts < existing.max_attempts &&
+    existing.provider_shipment_reference === null &&
+    existing.tracking_provider_code === null &&
+    existing.tracking_reference === null &&
+    existing.provider_receipt_fingerprint === null,
+  );
+  if (authorizedFailedRetry && body.kind !== "failed-retry") {
+    return fail("RECIPIENT_PHONE_REQUIRED", 400);
+  }
+  if (existing && existing.status !== "label_pending" && !authorizedFailedRetry) {
     return fail(
       existing.status === "label_claimed"
         ? "MANUAL_RECONCILIATION_REQUIRED"
         : "SHIPMENT_LABEL_UNAVAILABLE",
       409,
     );
+  }
+  if ((!existing || existing.status === "label_pending") && body.kind !== "empty") {
+    return fail("INVALID_REQUEST", 400);
+  }
+  if (existing && authorizedFailedRetry && body.kind === "failed-retry") {
+    const authorizationIdentity = await sha256Hex(
+      `${existing.id}\0${actor.administratorId}\0${body.recipientPhone}`,
+    );
+    const authorizationId = `shipment_retry_${authorizationIdentity}`;
+    const auditId = `audit_shipment_retry_${authorizationIdentity}`;
+    const auditKey = `audit:shipment_retry_authorized:${authorizationIdentity}`;
+    const metadata = JSON.stringify({
+      administratorSessionId: actor.sessionId,
+      previousAttempts: existing.attempts,
+      reason: "legacy_missing_recipient_phone",
+    });
+    try {
+      await env.DB.batch([
+        env.DB.prepare(
+          `INSERT OR IGNORE INTO shipment_retry_authorizations (
+            id, shipment_id, administrator_id, recipient_phone, created_at, consumed_at
+          ) VALUES (?, ?, ?, ?, ?, NULL)`,
+        ).bind(
+          authorizationId,
+          existing.id,
+          actor.administratorId,
+          body.recipientPhone,
+          now,
+        ),
+        env.DB.prepare(
+          `INSERT OR IGNORE INTO audit_log (
+            id, actor_type, actor_id, action, entity_type, entity_id,
+            idempotency_key, metadata_json, created_at
+          ) SELECT ?, 'admin', ?, 'shipment_retry_authorized', 'shipment', ?, ?, ?, ?
+          WHERE EXISTS (
+            SELECT 1 FROM shipment_retry_authorizations
+            WHERE id = ? AND shipment_id = ? AND administrator_id = ?
+              AND recipient_phone = ? AND consumed_at IS NULL
+          )`,
+        ).bind(
+          auditId,
+          actor.administratorId,
+          existing.id,
+          auditKey,
+          metadata,
+          now,
+          authorizationId,
+          existing.id,
+          actor.administratorId,
+          body.recipientPhone,
+        ),
+      ]);
+      const persisted = await env.DB.prepare(
+        `SELECT shipment_id, administrator_id, recipient_phone, consumed_at
+        FROM shipment_retry_authorizations WHERE id = ?`,
+      ).bind(authorizationId).first<{
+        shipment_id: string;
+        administrator_id: string;
+        recipient_phone: string;
+        consumed_at: string | null;
+      }>();
+      if (persisted?.shipment_id !== existing.id ||
+        persisted.administrator_id !== actor.administratorId ||
+        persisted.recipient_phone !== body.recipientPhone ||
+        persisted.consumed_at !== null) {
+        return fail("SHIPMENT_RETRY_ALREADY_USED", 409);
+      }
+    } catch {
+      return fail("SHIPMENT_RETRY_UNAVAILABLE", 409);
+    }
   }
   let provider: ShippingLabelProviderPort;
   try {
@@ -498,13 +627,15 @@ async function productionShippingLabelAdminAuthorizedResponse(
   } catch {
     return fail("SHIPPING_PROVIDER_UNAVAILABLE", 503);
   }
-  const shipmentId = `shipment_${await sha256Hex(`${orderId}\0${idempotencyKey}`)}`;
+  const shipmentId = existing?.id ??
+    `shipment_${await sha256Hex(`${orderId}\0${idempotencyKey}`)}`;
+  const shipmentIdempotencyKey = existing?.idempotency_key ?? idempotencyKey;
   const fulfillment = new D1FulfillmentStore(env.DB, { shippingLabel: provider });
   try {
     const shipment = await fulfillment.createShipmentLabel({
       shipmentId,
       orderId,
-      idempotencyKey,
+      idempotencyKey: shipmentIdempotencyKey,
       leaseToken: leaseToken(),
       leaseExpiresAt: new Date(Date.parse(now) + 120_000).toISOString(),
       now,

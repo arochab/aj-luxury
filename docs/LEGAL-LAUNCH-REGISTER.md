@@ -74,7 +74,7 @@ un health check sans blocker.
 | Bloquant si activé | Bandeau et gestionnaire de consentement avant analytics/marketing | Adam | Recette avant/après consentement |
 | Vérification produit | Étiquette de composition fixée au boxer | AJ Luxury | Confirmation oui/non ; aucune photo d’emballage requise |
 | Après démarrage | Ajout de l’activité de vente en ligne au RNE | AJ Luxury | Dépôt au guichet unique dans le mois suivant le changement |
-| Gate de release, non juridique | Déployer migrations `0029` et `0030`, Worker et Assets sur le même SHA approuvé | Adam + Jérémy | Health `ready=true`, mode `live`, `publicCommerce=true`, aucun blocker |
+| Gate de release, non juridique | Déployer les migrations jusqu’à `0031`, Worker et Assets sur le même SHA approuvé | Adam + Jérémy | Health `ready=true`, mode `live`, `publicCommerce=true`, aucun blocker |
 | Recommandé | Relecture par un professionnel du droit avant ouverture internationale | AJ Luxury | Avis et corrections tracés |
 
 ## Tests juridiques à inclure dans la recette commerce

@@ -1,5 +1,9 @@
 # Call Jérémy, commerce contrôlé
 
+> `SUPPORT DE CALL DATÉ — pas une source de statut`. Le statut courant est dans
+> `docs/SYSTEM-STATUS.md` et le geste opérateur dans
+> `docs/JEREMY-ADMIN-GUIDE.md`.
+
 Date : 1er septembre 2026  
 Durée maximale : 15 minutes  
 Objectif : montrer les faits, fermer les derniers risques et décider de la prochaine recette.  

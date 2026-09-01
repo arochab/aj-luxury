@@ -29,7 +29,7 @@ import { productionCommerceApiResponse } from "../worker/production-commerce-api
 
 const drizzleDirectory = fileURLToPath(new URL("../drizzle/", import.meta.url));
 const migrations = readdirSync(drizzleDirectory)
-  .filter((name) => /^(?:000(?:[0-5]|9)|001[67]|002[89]|0030)_.+\.sql$/.test(name))
+  .filter((name) => /^(?:000(?:[0-5]|9)|001[67]|002[89]|003[01])_.+\.sql$/.test(name))
   .sort()
   .map((name) => `${drizzleDirectory}${name}`);
 const liveClockBase = Date.now();
@@ -1324,13 +1324,92 @@ test("selected quotes survive later payment while unpaid orders never reach the 
     orderId: unpaidOrder.orderId,
     idempotencyKey: "shipment:unpaid-rejected",
     leaseToken: "lease_unpaid_rejected",
-    leaseExpiresAt: liveIso(64_000),
-    now: liveIso(4_000),
+    leaseExpiresAt: liveIso(50_000),
+    now: liveIso(-10_000),
   }), "ORDER_NOT_PAID");
   assert.equal(labelCalls.length, 1);
   assert.equal(context.database.prepare(
     "SELECT COUNT(*) AS count FROM shipments WHERE id='shipment_unpaid_rejected'",
   ).get().count, 0);
+  context.database.close();
+});
+
+test("a proven provider rejection permits exactly one owner-authorized legacy-phone retry", async () => {
+  let reject = true;
+  let calls = 0;
+  const context = fixture({
+    shippingLabel: {
+      async createLabel(request) {
+        calls += 1;
+        if (reject) throw new FulfillmentProviderError("rejected", "recipient phone missing");
+        return {
+          shipmentId: request.shipmentId,
+          orderId: request.orderId,
+          idempotencyKey: request.idempotencyKey,
+          providerCode: "sendcloud",
+          providerShipmentReference: "383707310",
+          trackingReference: "8NLAJ123456790",
+          receiptFingerprint: "d".repeat(64),
+        };
+      },
+    },
+  });
+  activateConfiguration(context, "EU", "legacy_phone_retry");
+  const order = await createPaidOrder(context, {
+    suffix: "legacy_phone_retry",
+    zone: "EU",
+    lines: [{ variantId: "variant_boxer_pourpre_m", quantity: 1 }],
+  });
+  const input = {
+    shipmentId: "shipment_legacy_phone_retry",
+    orderId: order.orderId,
+    idempotencyKey: "shipment:legacy-phone-retry",
+  };
+  await rejectsCode(() => context.fulfillment.createShipmentLabel({
+    ...input,
+    leaseToken: "lease_legacy_phone_first",
+    leaseExpiresAt: liveIso(50_000),
+    now: liveIso(-10_000),
+  }), "INVALID_TRANSITION");
+  assert.deepEqual({ ...context.database.prepare(
+    "SELECT status, attempts, last_error_code FROM shipments WHERE id=?",
+  ).get(input.shipmentId) }, {
+    status: "failed",
+    attempts: 1,
+    last_error_code: "provider_rejected",
+  });
+  context.database.prepare(`INSERT INTO administrators (
+    id, external_subject_hash, role, enabled, authz_version, created_at, updated_at
+  ) VALUES ('admin_retry_owner', ?, 'owner', 1, 1, ?, ?)`).run(
+    "a".repeat(64),
+    liveIso(-9_000),
+    liveIso(-9_000),
+  );
+  context.database.prepare(`INSERT INTO shipment_retry_authorizations (
+    id, shipment_id, administrator_id, recipient_phone, created_at, consumed_at
+  ) VALUES ('shipment_retry_legacy_phone', ?, 'admin_retry_owner', '+33659006025', ?, NULL)`).run(
+    input.shipmentId,
+    liveIso(-8_000),
+  );
+  reject = false;
+  const completed = await context.fulfillment.createShipmentLabel({
+    ...input,
+    leaseToken: "lease_legacy_phone_retry",
+    leaseExpiresAt: liveIso(52_000),
+    now: liveIso(-7_000),
+  });
+  assert.equal(completed.status, "label_ready");
+  assert.equal(completed.attempts, 2);
+  assert.equal(calls, 2);
+  assert.equal(context.database.prepare(
+    "SELECT consumed_at FROM shipment_retry_authorizations WHERE shipment_id=?",
+  ).get(input.shipmentId).consumed_at, liveIso(-7_000));
+  await assert.rejects(
+    () => context.d1.prepare(
+      "UPDATE shipment_retry_authorizations SET consumed_at=NULL WHERE shipment_id=?",
+    ).bind(input.shipmentId).run(),
+    /shipment_retry_not_authorized/,
+  );
   context.database.close();
 });
 
