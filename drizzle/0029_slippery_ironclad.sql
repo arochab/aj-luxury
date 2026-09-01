@@ -321,10 +321,11 @@ BEGIN
       WHERE order_line.`order_id` = NEW.`id`
     );
 
-  SELECT CASE WHEN NOT EXISTS (
+  SELECT RAISE(ABORT, 'commerce_invoice_generation_failed')
+  WHERE NOT EXISTS (
     SELECT 1 FROM `order_invoices` AS invoice
     WHERE invoice.`order_id` = NEW.`id`
-  ) THEN RAISE(ABORT, 'commerce_invoice_generation_failed') END;
+  );
 END;--> statement-breakpoint
 
 PRAGMA foreign_key_check;--> statement-breakpoint
