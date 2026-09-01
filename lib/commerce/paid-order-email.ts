@@ -69,7 +69,8 @@ export function buildPaidOrderEmail(
   ) throw new Error("Incoherent paid-order totals.");
 
   const title = kind === "order-confirmation" ? "Commande confirmée" : "Paiement confirmé";
-  if (snapshot.termsVersion !== DURABLE_TERMS_VERSION) {
+  const durableTerms = durableTermsSnapshotFor(termsVersion);
+  if (!durableTerms) {
     throw new Error("Unsupported paid-order terms version.");
   }
   if (kind === "payment-confirmation") {
@@ -110,15 +111,13 @@ export function buildPaidOrderEmail(
       "",
       "TVA non applicable, article 293 B du Code général des impôts.",
       `Conditions générales de vente, version ${termsVersion} : ${termsUrl}`,
-      `Empreinte SHA-256 du snapshot contractuel : ${DURABLE_TERMS_SHA256}`,
+      `Empreinte SHA-256 du snapshot contractuel : ${durableTerms.sha256}`,
       "",
       "SNAPSHOT CONTRACTUEL CONSERVÉ AVEC CETTE COMMANDE",
-      DURABLE_TERMS_TEXT,
+      durableTerms.text,
     ].join("\n"),
   });
 }
 import {
-  DURABLE_TERMS_SHA256,
-  DURABLE_TERMS_TEXT,
-  DURABLE_TERMS_VERSION,
+  durableTermsSnapshotFor,
 } from "../legal-terms-snapshot.ts";

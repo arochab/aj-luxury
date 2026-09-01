@@ -31,11 +31,11 @@ const CHAPTERS: readonly Chapter[] = [
       "/images/editorial/isabelle-apollon/apollon-pourpre-lyre-v1.webp",
     productAlt:
       "Apollon Pourpre Impérial en lévitation sur son décor de marbre",
-    // Identité confirmée par Adam le 31/08/2026 : Alex est le modèle aux
-    // cheveux courts ondulés, au bouc et au collier. Cette prise le montre
-    // seul, sur le fond pourpre validé, sans rogner la tête ni le boxer.
+    // Identité confirmée par Adam : Alex est le modèle aux cheveux attachés et
+    // à la barbe pleine. Le master 2:3 est rendu en entier (`contain`) sur le
+    // fond pourpre, sans recadrage supplémentaire par l'interface.
     model:
-      "/images/client/apollon-world/apollon-pourpre-alex-bordeaux-v1.webp",
+      "/images/client/apollon-world/apollon-pourpre-model-color-v2.webp",
     modelAlt: "Apollon Pourpre Impérial porté par Alex",
     modelWidth: 1731,
     modelHeight: 2600,

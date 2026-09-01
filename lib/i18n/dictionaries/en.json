@@ -189,6 +189,7 @@
   "checkout.companyOptional": "Company (optional)",
   "checkout.addressLine2Optional": "Address line 2 (optional)",
   "checkout.country": "Country",
+  "checkout.mobilePhone": "Mobile phone (required by the carrier)",
   "checkout.syntheticQualifier": "fictitious, non-commercial",
   "checkout.fixtureEU": "European Union",
   "checkout.fixtureUK": "United Kingdom",

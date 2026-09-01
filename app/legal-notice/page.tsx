@@ -66,15 +66,12 @@ export default function LegalNoticePage() {
               <a href={`mailto:${LEGAL_CONTACT.email}`}>{LEGAL_CONTACT.email}</a>
             </dd>
           </div>
-          {/* La ligne n'existe que si le numéro existe. Voir LEGAL_CONTACT
-              dans lib/legal.ts : afficher un texte d'attente ne satisferait
-              pas davantage la LCEN et signalerait une marque non prête. */}
-          {LEGAL_CONTACT.phone ? (
-            <div>
-              <dt>Téléphone</dt>
-              <dd>{LEGAL_CONTACT.phone}</dd>
-            </div>
-          ) : null}
+          <div>
+            <dt>Téléphone</dt>
+            <dd>
+              <a href={`tel:${LEGAL_CONTACT.phoneHref}`}>{LEGAL_CONTACT.phone}</a>
+            </dd>
+          </div>
         </dl>
       </section>
 

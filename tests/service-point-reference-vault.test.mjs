@@ -373,6 +373,7 @@ test("production relay quotes and point snapshots are atomically replayable with
     postalCode: "75001",
     city: "Paris",
     countryCode: "FR",
+    phone: "+33612345678",
   };
   const options = await store.quoteOptions({
     cartId: "cart_production_relay",

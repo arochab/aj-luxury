@@ -55,8 +55,9 @@ const internationalCheckoutEnabled =
 const launchCountries = internationalCheckoutEnabled
   ? Object.freeze([...euLaunchCountries, ...internationalLaunchCountries])
   : euLaunchCountries;
-
-const internationalCountries = new Set(["GB", "US", "CA", "AE", "QA", "SA"]);
+const internationalCountries: ReadonlySet<string> = new Set(
+  internationalLaunchCountries.map(([countryCode]) => countryCode),
+);
 
 function accountAccessHref(view: "login" | "forgot", email: string): string {
   const params = new URLSearchParams({ view, returnTo: "/checkout" });
@@ -446,7 +447,7 @@ export default function ProductionCheckoutClient() {
             <label>{t("checkout.postalCode")}{["AE", "QA"].includes(form.countryCode) ? " (facultatif)" : ""}<input required={!['AE', 'QA'].includes(form.countryCode)} autoComplete="postal-code" value={form.postalCode} onChange={(e) => updateField("postalCode", e.currentTarget.value)} /></label>
             <label>{t("checkout.city")}<input required autoComplete="address-level2" value={form.city} onChange={(e) => updateField("city", e.currentTarget.value)} /></label>
             {["US", "CA"].includes(form.countryCode) ? <label>{form.countryCode === "US" ? "État (code à 2 lettres)" : "Province (code à 2 lettres)"}<input required maxLength={2} autoComplete="address-level1" value={form.regionCode} onChange={(e) => updateField("regionCode", e.currentTarget.value)} /></label> : null}
-            {internationalCountries.has(form.countryCode) ? <label>Téléphone international<input required type="tel" inputMode="tel" autoComplete="tel" placeholder="+33612345678" value={form.phone} onChange={(e) => updateField("phone", e.currentTarget.value)} /></label> : null}
+            <label>{t("checkout.mobilePhone")}<input required type="tel" inputMode="tel" autoComplete="tel" pattern="\+[1-9][0-9]{7,14}" title="Format international, par exemple +33612345678" placeholder="+33612345678" value={form.phone} onChange={(e) => updateField("phone", e.currentTarget.value)} /></label>
             <label>{t("checkout.country")}<select required autoComplete="country" value={form.countryCode} onChange={(e) => updateField("countryCode", e.currentTarget.value)}>{launchCountries.map(([code, label]) => <option key={code} value={code}>{label}</option>)}</select></label>
             <button className={styles.button} type="submit" disabled={submitting}>{submitting ? t("checkout.calculatingShipping") : t("checkout.calculateShipping")}</button>
           </form>

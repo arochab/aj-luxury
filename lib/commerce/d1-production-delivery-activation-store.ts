@@ -105,6 +105,12 @@ async function normalizeProductionLaunchAddress(
     );
   }
   const address = await normalizeShippingAddress(input);
+  if (!address.address.phone) {
+    throw new ProductionDeliveryError(
+      "INVALID_INPUT",
+      "A valid mobile phone number is required for carrier delivery.",
+    );
+  }
   if (address.zone !== "EU" && !internationalShippingEnabled) {
     throw new ProductionDeliveryError(
       "INVALID_INPUT",

@@ -1,5 +1,6 @@
 import InfoPage from "../components/InfoPage";
 import { T } from "../../lib/i18n/TranslatedText";
+import { LEGAL_CONTACT } from "../../lib/legal";
 import styles from "../components/InfoPage.module.css";
 
 export const metadata = { title: "Contact | AJ Luxury" };
@@ -39,6 +40,16 @@ export default function ContactPage() {
 
       <p>
         <T id="contact.responseTime" />
+      </p>
+
+      <p>
+        Téléphone :{" "}
+        <a
+          className={styles.actionMail}
+          href={`tel:${LEGAL_CONTACT.phoneHref}`}
+        >
+          {LEGAL_CONTACT.phone}
+        </a>
       </p>
 
       <p>

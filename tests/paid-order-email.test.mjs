@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildPaidOrderEmail } from "../lib/commerce/paid-order-email.ts";
-import { DURABLE_TERMS_SHA256, DURABLE_TERMS_TEXT } from "../lib/legal-terms-snapshot.ts";
+import {
+  DURABLE_TERMS_SHA256,
+  DURABLE_TERMS_TEXT,
+  durableTermsSnapshotFor,
+} from "../lib/legal-terms-snapshot.ts";
 
 test("durable terms hash identifies the exact embedded snapshot", async () => {
   const digest = new Uint8Array(await crypto.subtle.digest(
@@ -12,6 +16,20 @@ test("durable terms hash identifies the exact embedded snapshot", async () => {
     Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join(""),
     DURABLE_TERMS_SHA256,
   );
+});
+
+test("the previous contractual snapshot remains immutable and replayable", async () => {
+  const legacy = durableTermsSnapshotFor("2026-08-26");
+  assert.ok(legacy);
+  const digest = new Uint8Array(await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(legacy.text),
+  ));
+  assert.equal(
+    Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join(""),
+    legacy.sha256,
+  );
+  assert.equal(legacy.sha256, "f36436387b875dfeee3e538cf9b51005e04bbea5bbb7e809e870e52c81e4ea82");
 });
 
 test("order confirmation embeds line, delivery, zero VAT and the immutable terms snapshot", () => {

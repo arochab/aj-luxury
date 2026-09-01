@@ -43,9 +43,9 @@ export const wearerByAsset: Readonly<Record<string, Wearer | "duo">> =
     "apollon-world/apollon-lilas-model-color-v2.webp": "alex",
     // Identité confirmée par Adam le 31/08/2026 : cheveux attachés + barbe.
     "apollon-world/apollon-pourpre-model-color-v2.webp": "alex",
-    // Identité confirmée par Adam le 31/08/2026 : Alex seul, cheveux courts
-    // ondulés, bouc et collier, sur le fond pourpre validé pour l'écran 2.
-    "apollon-world/apollon-pourpre-alex-bordeaux-v1.webp": "alex",
+    // Adam a corrigé l'identité le 01/09/2026 : cette prise sombre montre
+    // Jérémy. Elle ne doit plus servir de portrait d'Alex dans le rail.
+    "apollon-world/apollon-pourpre-alex-bordeaux-v1.webp": "jeremy",
     // Le film d'ouverture : les deux dans le même plan. Les posters v6 sont
     // tirés des deux images validées par Adam le 21/08 — même duo.
     "hero-v6-desktop-1920x1080-poster.webp": "duo",

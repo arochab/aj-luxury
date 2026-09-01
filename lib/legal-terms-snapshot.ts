@@ -5,13 +5,13 @@ import { LEGAL_VERSION } from "./legal.ts";
  * Keep the version and SHA in sync whenever this contractual text changes.
  */
 export const DURABLE_TERMS_VERSION = LEGAL_VERSION;
-export const DURABLE_TERMS_SHA256 = "f36436387b875dfeee3e538cf9b51005e04bbea5bbb7e809e870e52c81e4ea82";
+export const DURABLE_TERMS_SHA256 = "f90633c3c43de0fbb7b43d55723243b482e574f870824d8942aae0cdfcb9bb85";
 
 export const DURABLE_TERMS_TEXT = `CONDITIONS GÉNÉRALES DE VENTE AJ LUXURY
 Version ${DURABLE_TERMS_VERSION}
 
 1. Vendeur et champ d'application
-Les présentes conditions régissent les ventes à distance de produits AJ Luxury conclues avec des consommateurs sur ajluxurystore.com. Le vendeur est Jérémy Scheppler, entrepreneur individuel, nom commercial AJ Luxury, 3 A rue Principale, 67130 Belmont, France, SIREN 944 996 487, SIRET 944 996 487 00038, immatriculé au Registre national des entreprises. Contact écrit : contact@ajluxurystore.com. Le client déclare être majeur et disposer de la capacité juridique nécessaire. La version acceptée lors de la commande demeure applicable à cette commande.
+Les présentes conditions régissent les ventes à distance de produits AJ Luxury conclues avec des consommateurs sur ajluxurystore.com. Le vendeur est Jérémy Scheppler, entrepreneur individuel, nom commercial AJ Luxury, 3 A rue Principale, 67130 Belmont, France, SIREN 944 996 487, SIRET 944 996 487 00038, immatriculé au Registre national des entreprises. Contact : contact@ajluxurystore.com ou +33 6 88 42 40 62. Le client déclare être majeur et disposer de la capacité juridique nécessaire. La version acceptée lors de la commande demeure applicable à cette commande.
 
 2. Produits et disponibilité
 Les caractéristiques essentielles, la composition, les tailles, les coloris et le prix figurent sur chaque fiche produit. Les photographies sont présentées avec soin, sans garantir une restitution identique des couleurs sur tous les écrans. Les offres restent valables tant qu'elles sont visibles et disponibles. En cas d'indisponibilité après commande, le client est informé sans délai et remboursé des sommes versées.
@@ -48,3 +48,38 @@ Toute réclamation doit d'abord être adressée à contact@ajluxurystore.com. Ap
 
 13. Modèle de formulaire de rétractation
 À l'attention d'AJ Luxury, 3 A rue Principale, 67130 Belmont, France, contact@ajluxurystore.com : « Je vous notifie ma rétractation du contrat portant sur la vente du bien suivant : [produit]. Commandé le [date] et reçu le [date]. Numéro de commande : [numéro]. Nom et adresse du client : [à compléter]. Date et signature, uniquement en cas d'envoi papier. »`;
+
+/* Une confirmation ou un renvoi Stripe peut être rejoué longtemps après la
+   commande. Le snapshot accepté à l'époque doit donc rester disponible même
+   après une nouvelle version des CGV. Ces remplacements reconstruisent
+   exactement la version 2026-08-26 ; son hash historique verrouille le résultat
+   dans les tests et empêche toute modification rétroactive silencieuse. */
+const LEGACY_DURABLE_TERMS_TEXT_2026_08_26 = DURABLE_TERMS_TEXT
+  .replace("Version 2026-09-01", "Version 2026-08-26")
+  .replace(
+    "Contact : contact@ajluxurystore.com ou +33 6 88 42 40 62.",
+    "Contact écrit : contact@ajluxurystore.com.",
+  );
+
+const DURABLE_TERMS_BY_VERSION = Object.freeze({
+  "2026-08-26": Object.freeze({
+    version: "2026-08-26",
+    sha256: "f36436387b875dfeee3e538cf9b51005e04bbea5bbb7e809e870e52c81e4ea82",
+    text: LEGACY_DURABLE_TERMS_TEXT_2026_08_26,
+  }),
+  [DURABLE_TERMS_VERSION]: Object.freeze({
+    version: DURABLE_TERMS_VERSION,
+    sha256: DURABLE_TERMS_SHA256,
+    text: DURABLE_TERMS_TEXT,
+  }),
+} as const);
+
+export function durableTermsSnapshotFor(version: string): Readonly<{
+  version: string;
+  sha256: string;
+  text: string;
+}> | null {
+  return DURABLE_TERMS_BY_VERSION[
+    version as keyof typeof DURABLE_TERMS_BY_VERSION
+  ] ?? null;
+}

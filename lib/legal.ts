@@ -1,4 +1,4 @@
-export const LEGAL_VERSION = "2026-08-26";
+export const LEGAL_VERSION = "2026-09-01";
 
 /*
   La même date, mais avec des traits d'union INSÉCABLES (U+2011) pour
@@ -13,28 +13,15 @@ export const LEGAL_VERSION = "2026-08-26";
 export const LEGAL_VERSION_DISPLAY = LEGAL_VERSION.replace(/-/g, "‑");
 
 
-/*
-  LE TÉLÉPHONE EST `null`, ET C'EST UN CHOIX ASSUMÉ, PAS UN OUBLI.
-
-  Adam confirme le 22/08/2026 qu'aucune ligne n'est ouverte à ce jour.
-
-  L'article 6 III 1 a) de la LCEN demande, pour un éditeur personne physique,
-  « nom, prénoms, domicile et numéro de téléphone ». Il manque donc une mention
-  légale, et aucun code ne peut la fabriquer : inventer un numéro serait une
-  faute bien plus grave que l'absence.
-
-  Restait à choisir entre afficher un texte d'attente et ne rien afficher.
-  Un « à compléter avant l'ouverture des ventes » sur des mentions légales en
-  ligne ne satisfait pas davantage la loi ET signale au visiteur que la marque
-  n'est pas prête. La ligne est donc omise tant que la valeur est `null`, et le
-  L'absence est temporairement acceptée par décision d'Adam pour ce candidat.
-
-  Dès qu'un numéro existe, il suffit de le poser ici : la ligne réapparaît.
-*/
+/* Numéro professionnel communiqué par Adam le 01/09/2026. Il est publié sur
+   les surfaces où un consommateur cherche réellement à joindre le vendeur :
+   contact, mentions légales et CGV. Il ne doit pas être injecté dans le footer,
+   le compte client, le checkout ou les données destinées au transporteur. */
 export const LEGAL_CONTACT = {
   brand: "AJ Luxury",
   email: "contact@ajluxurystore.com",
-  phone: null as string | null,
+  phone: "+33 6 88 42 40 62",
+  phoneHref: "+33688424062",
 } as const;
 
 /* ==========================================================================

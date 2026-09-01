@@ -38,6 +38,12 @@ export default function TermsPage() {
           <strong>{SELLER_IDENTITY.registeredOffice}</strong>.
         </p>
         <p>
+          Le vendeur peut être joint à{" "}
+          <a href={`mailto:${LEGAL_CONTACT.email}`}>{LEGAL_CONTACT.email}</a> ou
+          au{" "}
+          <a href={`tel:${LEGAL_CONTACT.phoneHref}`}>{LEGAL_CONTACT.phone}</a>.
+        </p>
+        <p>
           Le client déclare être majeur et disposer de la capacité juridique
           nécessaire. Toute commande implique l’acceptation des CGV en vigueur
           au moment de sa validation. Elles peuvent être conservées ou

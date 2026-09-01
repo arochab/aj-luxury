@@ -66,7 +66,12 @@ async function fixture(
     activated_at=?,updated_at=? WHERE id='config_prod'`).run(iso(base, 20), iso(base, 20));
   await commerce.createCart({ id: "cart_prod", expiresAt: iso(base, 3_600_000), now: iso(base, 30) });
   await commerce.setCartLineQuantity({ cartId: "cart_prod", variantId: "variant_boxer_pourpre_m", quantity, now: iso(base, 40) });
-  const address = { recipient: "Ada Test", line1: "1 rue du Test", ...destination };
+  const address = {
+    recipient: "Ada Test",
+    line1: "1 rue du Test",
+    phone: "+33612345678",
+    ...destination,
+  };
   const expiry = iso(base, 900_000);
   const delivery = new D1ProductionDeliveryActivationStore(d1, { quotes: { async quote() { return [{ providerCode: "sendcloud", providerQuoteReference: "provider-ref-home", carrierCode: "colissimo", serviceCode: "home", displayName: "Livraison domicile", deliveryMode: "home", amountCents: 900, currency: "EUR", estimatedDaysMin: 2, estimatedDaysMax: 5, dutiesTerms: "EU_INCLUDED", expiresAt: expiry, responseFingerprint: "c".repeat(64) }]; } }, servicePoints: { async servicePoints() { return []; } }, documents: { async document() { throw new Error("closed"); } }, returns: { async validate() { throw new Error("closed"); }, async create() { throw new Error("closed"); } } }, new DeliveryReferenceVault({ encryptionKeyBase64: Buffer.alloc(32, 7).toString("base64"), keyVersion: 1 }));
   const [option] = await delivery.quoteOptions({ cartId: "cart_prod", address, idempotencyKey: "delivery-idem-0001", now: iso(base, 50) });
@@ -96,6 +101,18 @@ test("production delivery keeps EU live and fails closed outside it while the in
       postalCode: "97100", city: "Basse-Terre", countryCode: "FR",
     }),
     (error) => error?.name === "FulfillmentError" && error.code === "DESTINATION_UNAVAILABLE",
+  );
+});
+
+test("production delivery rejects a carrier quote before payment when the mobile number is missing", async () => {
+  await assert.rejects(
+    () => fixture(null, true, 1, {
+      postalCode: "75001",
+      city: "Paris",
+      countryCode: "FR",
+      phone: undefined,
+    }),
+    (error) => error?.name === "ProductionDeliveryError" && error.code === "INVALID_INPUT",
   );
 });
 

@@ -440,6 +440,21 @@ test("production checkout preserves all EU countries and gates the reviewed inte
   );
 });
 
+test("production checkout requires one E.164 mobile number before any carrier quote", async () => {
+  const source = await readFile(
+    new URL("../app/checkout/ProductionCheckoutClient.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /checkout\.mobilePhone/);
+  assert.match(source, /required type="tel"/);
+  assert.match(source, /pattern="\\\+\[1-9\]\[0-9\]\{7,14\}"/);
+  assert.doesNotMatch(
+    source,
+    /internationalCountries\.has\(form\.countryCode\)[\s\S]{0,160}checkout\.mobilePhone/,
+    "le téléphone de livraison ne doit pas être limité aux destinations hors UE",
+  );
+});
+
 test("production checkout binds every new order to a customer account", async () => {
   const source = await readFile(
     new URL("../app/checkout/ProductionCheckoutClient.tsx", import.meta.url),

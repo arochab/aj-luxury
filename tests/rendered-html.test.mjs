@@ -640,6 +640,11 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
   const html = await response.text();
   assert.match(html, /<html lang="fr">/i);
   assert.match(html, /<title>AJ Luxury \| Reveal Your Inner Beauty<\/title>/i);
+  assert.doesNotMatch(
+    html,
+    /\+33 6 88 42 40 62|tel:\+33688424062/,
+    "le téléphone professionnel ne doit pas envahir l’accueil ou son footer",
+  );
   assert.match(
     html,
     /<link rel="icon" href="(?:https:\/\/ajluxurystore\.com)?\/favicon\.png"[^>]*sizes="512x512"[^>]*type="image\/png"/i,
@@ -668,7 +673,7 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
   assert.match(html, /aj-luxury-hero-openart-mobile-poster-540\.webp 540w/);
   assert.match(html, /aj-luxury-hero-openart-mobile-poster-1080\.webp 1080w/);
   assert.match(html, /apollon-pourpre-lyre-v1\.webp/);
-  assert.match(html, /apollon-pourpre-alex-bordeaux-v1\.webp/);
+  assert.match(html, /apollon-pourpre-model-color-v2\.webp/);
   assert.match(html, /Apollon Pourpre Impérial porté par Alex/);
   assert.doesNotMatch(html, /Pourpre Impérial porté par Jérémy et Alex/);
   assert.match(html, /apollon-lilas-lyre-v1\.webp/);
@@ -698,7 +703,7 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
     [
       "/images/client/aj-luxury-hero-openart-desktop-poster.webp",
       "/images/editorial/isabelle-apollon/apollon-pourpre-lyre-v1.webp",
-      "/images/client/apollon-world/apollon-pourpre-alex-bordeaux-v1.webp",
+      "/images/client/apollon-world/apollon-pourpre-model-color-v2.webp",
       "/images/editorial/isabelle-apollon/apollon-lilas-lyre-v1.webp",
       "/images/client/apollon-world/apollon-lilas-model-color-v2.webp",
       "/images/editorial/isabelle-apollon/apollon-rose-lyre-v1.webp",
@@ -954,6 +959,15 @@ for (const [pathname, marker] of informationCases) {
   });
 }
 
+test("contact publishes the business phone as an actionable link", async () => {
+  const response = await render("/contact");
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /tel:\+33688424062/);
+  assert.match(html, /\+33 6 88 42 40 62/);
+  assert.match(html, /mailto:contact@ajluxurystore\.com/);
+});
+
 test("legal notice publishes the sourced seller identity and never the closed establishment", async () => {
   const response = await render("/legal-notice");
   assert.equal(response.status, 200);
@@ -989,24 +1003,22 @@ test("legal notice publishes the sourced seller identity and never the closed es
   assert.doesNotMatch(html, /\bTTC\b/);
   assert.match(html, /TVA non applicable, article 293 B/);
 
-  /* La ligne editeur reste omise quand le telephone est null, sans attirer
-     l'attention du client sur cette decision temporaire. Aucun statut public
-     ne doit annoncer une activation future de la vente. */
+  /* Le numéro professionnel confirmé doit apparaître comme coordonnée de
+     l'éditeur sans texte d'attente. */
   assert.doesNotMatch(html, /À compléter/);
   assert.doesNotMatch(html, /Aucun numéro de téléphone|ligne professionnelle/i);
   assert.match(html, /Informations juridiques applicables à la boutique en ligne/i);
   assert.doesNotMatch(html, /vente en ligne activée après|avant l’ouverture/i);
 
-  /* Attention au faux positif : l'hebergeur AFFICHE un telephone, celui de
-     Cloudflare France. Interdire la chaine « Telephone » ferait echouer le
-     test pour la mauvaise raison. Ce qui doit etre vrai, c'est qu'il n'en
-     reste QU'UN sur la page, et que c'est celui de l'hebergeur. */
+  /* Deux lignes et seulement deux : vendeur puis hébergeur. */
   const lignesTelephone = html.match(/<dt[^>]*>Téléphone<\/dt>/g) ?? [];
   assert.equal(
     lignesTelephone.length,
-    1,
-    "seul l’hébergeur doit porter un téléphone tant que l’éditeur n’en a pas",
+    2,
+    "le vendeur et l’hébergeur doivent chacun porter leur téléphone",
   );
+  assert.match(html, /tel:\+33688424062/);
+  assert.match(html, /\+33 6 88 42 40 62/);
   assert.match(html, /\+33 1 73 01 52 44/);
 });
 
@@ -1020,6 +1032,8 @@ test("terms cover the 2026 consumer baseline without a blanket underwear exclusi
   assert.match(html, /renouvelée pour deux ans/i);
   assert.match(html, /modèle ci-dessous/);
   assert.match(html, /mailto:contact@ajluxurystore\.com/);
+  assert.match(html, /tel:\+33688424062/);
+  assert.match(html, /\+33 6 88 42 40 62/);
   assert.doesNotMatch(html, /accéder au formulaire de rétractation/);
   assert.match(html, /accusé de réception/i);
   assert.match(html, /n’exclut pas le droit de rétractation au seul motif que le\s+produit est un sous-vêtement/i);

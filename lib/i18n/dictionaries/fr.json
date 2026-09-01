@@ -189,6 +189,7 @@
   "checkout.companyOptional": "Société (facultatif)",
   "checkout.addressLine2Optional": "Complément d’adresse (facultatif)",
   "checkout.country": "Pays",
+  "checkout.mobilePhone": "Téléphone mobile (requis par le transporteur)",
   "checkout.syntheticQualifier": "fictif, non commercial",
   "checkout.fixtureEU": "Union européenne",
   "checkout.fixtureUK": "Royaume-Uni",

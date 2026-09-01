@@ -351,14 +351,19 @@
 
 @media (max-width: 560px) {
   .motionReady .stage {
-    height: min(100svh, 760px);
-    min-height: min(100svh, 620px);
+    /* Le rail restait artificiellement haut sur les grands téléphones : les
+       masters s'arrêtaient vers 75 % de l'écran et laissaient une tablette
+       sombre vide sous les images. 620 px conserve l'en-tête, le titre et les
+       deux cadres 2:3 sans chevauchement, tout en rendant la suite du récit
+       immédiatement perceptible. Les petits écrans gardent leur hauteur utile. */
+    height: min(100svh, 620px);
+    min-height: min(100svh, 560px);
   }
 
   .panelInner {
     width: min(calc(100vw - 12px), 440px);
     gap: clamp(14px, 2.3vh, 20px);
-    padding: clamp(222px, 31svh, 242px) 0 48px;
+    padding: clamp(222px, 31svh, 242px) 0 24px;
     transform: none;
   }
 

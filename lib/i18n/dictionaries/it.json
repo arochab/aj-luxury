@@ -189,6 +189,7 @@
   "checkout.companyOptional": "Azienda (facoltativo)",
   "checkout.addressLine2Optional": "Seconda riga indirizzo (facoltativo)",
   "checkout.country": "Paese",
+  "checkout.mobilePhone": "Cellulare (richiesto dal corriere)",
   "checkout.syntheticQualifier": "fittizio, non commerciale",
   "checkout.fixtureEU": "Unione europea",
   "checkout.fixtureUK": "Regno Unito",

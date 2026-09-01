@@ -189,6 +189,7 @@
   "checkout.companyOptional": "Empresa (opcional)",
   "checkout.addressLine2Optional": "Segunda línea de dirección (opcional)",
   "checkout.country": "País",
+  "checkout.mobilePhone": "Teléfono móvil (obligatorio para el transportista)",
   "checkout.syntheticQualifier": "ficticio, no comercial",
   "checkout.fixtureEU": "Unión Europea",
   "checkout.fixtureUK": "Reino Unido",
