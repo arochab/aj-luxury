@@ -7,10 +7,10 @@ Dernière vérification consignée : 1er septembre 2026
 ## Verdict
 
 La production actuellement prouvée reste en mode **contrôlé**, pas en ouverture
-publique commerce. Le candidat local ajoute le stock dans Admin et la relance
-unique, protégée et traçable de l’étiquette de la première commande historique.
-Sa recette locale complète est passée ; il n’est pas déployé tant que son commit
-exact n’a pas été gelé et approuvé par Adam puis Jérémy.
+publique commerce. La release `af95e25` est déployée : elle ajoute le stock dans
+Admin et la relance unique, protégée et traçable de l’étiquette de la première
+commande historique. Sa migration additive, sa santé runtime, ses accès et ses
+218 tests de dernière ligne ont été prouvés le 1er septembre 2026.
 
 ## Production actuellement prouvée
 
@@ -18,7 +18,10 @@ exact n’a pas été gelé et approuvé par Adam puis Jérémy.
 |---|---|
 | Domaine | `https://ajluxurystore.com` |
 | Endpoint de santé | `https://ajluxurystore.com/api/commerce/health` |
-| SHA déclaré | `917033289e73afa03c19cc6c741601a5570797ca` |
+| SHA déclaré | `af95e25d21aad7f4d5e32565c49a7e8809bf288e` |
+| Worker/Assets | `ff6a9c55-b4de-4533-8a84-ecfc09f332d1` |
+| Déploiement Cloudflare | `4a975427-08d9-4c44-9968-267a147d6895` |
+| Proof ID | `AJL-AF95E25-CONTROLLED-20260901T173332Z` |
 | Mode commerce | `controlled` |
 | Commande publique | `false` |
 | Création automatique d’expédition | activée dans la santé du runtime contrôlé |
@@ -39,7 +42,7 @@ commerciale tant qu’une promotion distincte n’a pas été prouvée avec
 | Stock | 2 unités vendues comptabilisées dans la base courante |
 | Expédition | échec fournisseur historique, sans référence colis, tracking ni étiquette |
 | Cause opératoire | téléphone destinataire absent du snapshot historique |
-| Correction candidate | saisie E.164 par Jérémy, autorisation unique consommable une fois, même shipment et même clé d’idempotence |
+| Correction déployée | saisie E.164 par Jérémy, autorisation unique consommable une fois, même shipment et même clé d’idempotence |
 
 La correction ne modifie jamais l’adresse payée. Elle fournit uniquement le
 téléphone exigé par le transporteur. Si le résultat fournisseur devient ambigu,
@@ -59,7 +62,7 @@ Le détail des douze variantes se trouve dans le manifeste stock. Après
 déploiement du candidat, l’écran Admin lit ces valeurs directement depuis D1 ;
 il devient alors la source opérationnelle quotidienne.
 
-## Contenu du candidat local
+## Fonctions désormais déployées
 
 - tableau Stock global et par référence dans Admin ;
 - détails commande, paiement, e-mails, facture et avoirs conservés ;
@@ -70,7 +73,7 @@ il devient alors la source opérationnelle quotidienne.
 - tests d’idempotence, de transitions D1 et de protection du retry ;
 - documentation opérateur et release alignée sur la migration 0031.
 
-## Dernière recette locale
+## Dernière recette contrôlée
 
 | Contrôle | Résultat |
 |---|---|
@@ -82,21 +85,29 @@ il devient alors la source opérationnelle quotidienne.
 | Fulfillment, retry historique et Sendcloud simulé | PASS |
 | Rendu desktop/mobile, i18n et cadrage produits | PASS |
 | `git diff --check` | PASS |
+| Migration D1 `0031` | PASS, appliquée seule |
+| Santé canonique | PASS, `ready`, `controlled`, aucun blocker |
+| Accès anonyme | commerce `403`, Admin et API Admin `302` Access |
+| Routes publiques essentielles | PASS, toutes en `200` |
+| Tests après déploiement | PASS, 218/218 |
+| Vérification visuelle | PASS desktop et mobile 390×844, aucune erreur console |
 
 Ces tests n’appellent pas les comptes réels Stripe, Sendcloud ou Resend et
 n’achètent aucune étiquette. La preuve terrain reste donc distincte.
 
 ## Ce qui reste à faire, dans l’ordre
 
-1. geler un commit unique et publier son SHA ;
-2. recueillir les deux approbations exactes Adam et Jérémy pour ce SHA ;
-3. sauvegarder D1 et appliquer la migration 0031 ;
-4. déployer Worker puis Assets depuis le même SHA en mode contrôlé ;
-5. prouver la santé, l’accès Admin, les commandes, le stock et les promotions ;
-6. laisser Jérémy créer/télécharger une seule fois l’étiquette de la première
-   commande puis l’imprimer en A4 ;
-7. après dépôt réel, conserver la preuve et confirmer la remise dans Admin ;
-8. ne promouvoir `live` qu’avec un nouveau reçu complet et les accords dédiés.
+1. Jérémy se connecte à `https://ajluxurystore.com/operations` avec une identité
+   admise par Cloudflare Access ;
+2. il ouvre `AJ-41B58D96CCAAE37F00B8`, vérifie la commande et saisit une seule
+   fois le téléphone acheteur `+33659006025` ;
+3. il déclenche l’unique relance, télécharge l’étiquette et l’imprime en A4 ;
+4. après dépôt physique, il conserve la preuve et confirme la remise dans Admin ;
+5. il vérifie ensuite le premier scan et le suivi transporteur ;
+6. ne promouvoir `live` qu’avec un nouveau reçu complet et les accords dédiés.
+
+Le reçu technique complet est conservé sous
+`docs/internal/evidence/af95e25d21aad7f4d5e32565c49a7e8809bf288e/`.
 
 ## Hors périmètre de l’ouverture France/UE
 
