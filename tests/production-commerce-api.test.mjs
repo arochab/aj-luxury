@@ -7,6 +7,7 @@ import {
   productionCommerceApiResponse,
   productionDeliveryRuntimeInstalled,
   productionLatePaymentRefundRuntimeReady,
+  productionPromotionRuntimeInstalled,
   productionStockRuntimeAttested,
 } from "../worker/production-commerce-api.ts";
 import { launchVariantSeed } from "../db/seed.ts";
@@ -334,7 +335,7 @@ test("live runtime opens only after the manual returns label and refund process 
   }, "live").includes("returns-label-and-refund-process-unapproved"), false);
 });
 
-test("public live runtime still requires operator admin MFA", () => {
+test("public live runtime requires the operator console but not a forced MFA challenge", () => {
   const live = {
     ...controlled,
     COMMERCE_MODE: "live",
@@ -347,11 +348,9 @@ test("public live runtime still requires operator admin MFA", () => {
     RESERVATION_EXPIRY_ENABLED: "true",
   };
   assert.ok(productionCommerceRuntimeBlockers(live, "live")
-    .includes("operator-admin-mfa-not-enabled"));
-  assert.ok(productionCommerceRuntimeBlockers(live, "live")
     .includes("operator-console-not-enabled"));
-  assert.ok(productionCommerceRuntimeBlockers(live, "live")
-    .includes("operator-access-mfa-policy-not-attested"));
+  assert.equal(productionCommerceRuntimeBlockers(live, "live")
+    .some((blocker) => blocker.includes("mfa")), false);
 });
 
 test("public live never accepts the legacy controlled HMAC in place of a valid Access owner configuration", () => {
@@ -451,6 +450,36 @@ test("delivery runtime proof rejects missing and prefix-colliding 0013 objects",
   assert.equal(await productionDeliveryRuntimeInstalled(database(exact)), true);
   assert.equal(await productionDeliveryRuntimeInstalled(database(exact.slice(1))), false);
   assert.equal(await productionDeliveryRuntimeInstalled(database([...exact, { ...exact[1], name: "delivery_provider_reference_vault_shadow" }])), false);
+});
+
+test("promotion runtime proof rejects missing and prefix-colliding 0028 objects", async () => {
+  const exact = [
+    { type: "column", name: "promotion_code", table_name: "orders" },
+    { type: "column", name: "promotion_code_id", table_name: "orders" },
+    { type: "column", name: "promotion_discount_cents", table_name: "orders" },
+    { type: "index", name: "idx_promotion_codes_active_window", table_name: "promotion_codes" },
+    { type: "index", name: "idx_promotion_redemptions_code_status", table_name: "promotion_redemptions" },
+    { type: "index", name: "ux_promotion_codes_code", table_name: "promotion_codes" },
+    { type: "index", name: "ux_promotion_redemptions_order", table_name: "promotion_redemptions" },
+    { type: "table", name: "promotion_codes", table_name: "promotion_codes" },
+    { type: "table", name: "promotion_redemptions", table_name: "promotion_redemptions" },
+    { type: "trigger", name: "trg_orders_promotion_redeem", table_name: "orders" },
+    { type: "trigger", name: "trg_orders_promotion_release", table_name: "orders" },
+    { type: "trigger", name: "trg_orders_promotion_reserve", table_name: "orders" },
+    { type: "trigger", name: "trg_orders_promotion_snapshot_immutable", table_name: "orders" },
+    { type: "trigger", name: "trg_orders_promotion_validate_insert", table_name: "orders" },
+    { type: "trigger", name: "trg_promotion_codes_lock_rule", table_name: "promotion_codes" },
+    { type: "trigger", name: "trg_promotion_codes_status_update", table_name: "promotion_codes" },
+    { type: "trigger", name: "trg_promotion_codes_timestamp_insert", table_name: "promotion_codes" },
+    { type: "trigger", name: "trg_promotion_redemptions_transition", table_name: "promotion_redemptions" },
+  ];
+  const database = (results) => ({ prepare() { return { async all() { return { results }; } }; } });
+  assert.equal(await productionPromotionRuntimeInstalled(database(exact)), true);
+  assert.equal(await productionPromotionRuntimeInstalled(database(exact.slice(1))), false);
+  assert.equal(await productionPromotionRuntimeInstalled(database([
+    ...exact,
+    { ...exact[3], name: "idx_promotion_codes_active_window_shadow" },
+  ])), false);
 });
 
 function stockProofDatabase(

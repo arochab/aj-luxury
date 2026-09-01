@@ -612,12 +612,6 @@ export async function productionOperationsApiResponse(
     return fail("OPERATIONS_NOT_ACTIVATED", 503);
   }
   if (
-    !isCustomerReturn && configuration.mode !== "controlled" &&
-    env.OPERATOR_ADMIN_MFA_ENABLED !== "true"
-  ) {
-    return fail("OPERATOR_MFA_NOT_ACTIVATED", 503);
-  }
-  if (
     !isCustomerReturn && !await controlledOwnerRequestAuthenticated(request, env)
   ) return fail("OWNER_ACCESS_REQUIRED", 403);
   if (

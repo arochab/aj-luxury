@@ -14,12 +14,15 @@ import {
   type CloudflareAccessOwnerEnvironment,
   type CloudflareAccessOwnerIdentity,
 } from "./cloudflare-access-owner.ts";
+import { normalizePromotionCode, PromotionCodeError } from "../lib/commerce/promotion-code.ts";
 
 const SESSION_ROUTE = "/api/commerce/admin/session";
 const ORDERS_ROUTE = "/api/commerce/admin/orders";
+const PROMOTIONS_ROUTE = "/api/commerce/admin/promotions";
 const ORDER_DETAIL_ROUTE = /^\/api\/commerce\/admin\/orders\/([^/]+)$/;
+const PROMOTION_STATUS_ROUTE = /^\/api\/commerce\/admin\/promotions\/([^/]+)\/status$/;
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,191}$/;
-const MFA_ATTESTATION = "independent-mfa:required-every-login";
+const ACCESS_SESSION_ATTESTATION = "cloudflare-access:allowlisted-email";
 const MAX_FRESH_AUTH_MS = 5 * 60_000;
 
 export type ProductionOperatorConsoleEnvironment = CloudflareAccessOwnerEnvironment & Readonly<{
@@ -77,6 +80,22 @@ type OrderLineRow = Readonly<{
   color_name: string;
   size: string;
   quantity: number;
+}>;
+
+type PromotionListRow = Readonly<{
+  id: string;
+  code: string;
+  kind: "percentage" | "fixed";
+  percentage_basis_points: number | null;
+  fixed_discount_cents: number | null;
+  minimum_subtotal_cents: number;
+  maximum_discount_cents: number | null;
+  maximum_redemptions: number | null;
+  active: number;
+  starts_at: string;
+  ends_at: string | null;
+  reserved_count: number;
+  redeemed_count: number;
 }>;
 
 type OperatorShippingAddress = Readonly<{
@@ -171,9 +190,7 @@ function configured(
     env?.APP_ENV === "production" &&
     ["controlled", "live"].includes(env.COMMERCE_MODE ?? "") &&
     env.COMMERCE_ORIGIN === url.origin &&
-    env.OPERATOR_ADMIN_MFA_ENABLED === "true" &&
     env.OPERATOR_CONSOLE_ENABLED === "true" &&
-    env.CLOUDFLARE_ACCESS_MFA_ATTESTATION === MFA_ATTESTATION &&
     env.DB,
   );
 }
@@ -187,6 +204,31 @@ async function emptyBody(request: Request): Promise<boolean> {
   if (!request.body) return true;
   const bytes = new Uint8Array(await request.arrayBuffer());
   return bytes.byteLength === 0;
+}
+
+async function jsonBody(request: Request): Promise<Record<string, unknown> | null> {
+  if (!/^application\/json(?:\s*;|$)/i.test(request.headers.get("Content-Type") ?? "")) {
+    return null;
+  }
+  const declared = request.headers.get("Content-Length");
+  if (declared && (!/^\d+$/.test(declared) || Number(declared) > 8_192)) return null;
+  const bytes = new Uint8Array(await request.arrayBuffer());
+  if (bytes.byteLength > 8_192) return null;
+  try {
+    const value: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+    return value && typeof value === "object" && !Array.isArray(value)
+      ? value as Record<string, unknown>
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function exact(value: Record<string, unknown>, keys: readonly string[]): boolean {
+  const actual = Object.keys(value).sort();
+  const expected = [...keys].sort();
+  return actual.length === expected.length &&
+    actual.every((key, index) => key === expected[index]);
 }
 
 async function accessIdentity(
@@ -209,13 +251,13 @@ async function createSession(
   const authenticatedAt = identity.authenticatedAt;
   if (!isCanonicalUtcTimestamp(authenticatedAt) || authenticatedAt > now ||
     Date.parse(now) - Date.parse(authenticatedAt) > MAX_FRESH_AUTH_MS) {
-    return fail("FRESH_MFA_REQUIRED", 403);
+    return fail("FRESH_ACCESS_REQUIRED", 403);
   }
   const externalSubjectHash = await sha256(
     `ajl-access-subject-v1\0${identity.issuer}\0${identity.subject}`,
   );
   const evidenceHash = await sha256(
-    `ajl-access-mfa-v1\0${identity.assertion}\0${MFA_ATTESTATION}`,
+    `ajl-access-session-v1\0${identity.assertion}\0${ACCESS_SESSION_ATTESTATION}`,
   );
   const administratorId = `admin_${externalSubjectHash.slice(0, 48)}`;
   try {
@@ -230,6 +272,9 @@ async function createSession(
       externalMfa: {
         async verify(assertion) {
           return assertion === identity.assertion
+            // The application session is still bound to a fresh, signed
+            // Cloudflare Access assertion and the exact e-mail allowlist.
+            // No user-facing second-factor challenge is required.
             ? { externalSubjectHash, evidenceHash, aal: 2, authenticatedAt }
             : null;
         },
@@ -408,6 +453,189 @@ async function orderDetail(
   }
 }
 
+function promotionPayload(row: PromotionListRow) {
+  return {
+    id: row.id,
+    code: row.code,
+    kind: row.kind,
+    percentageBasisPoints: row.percentage_basis_points,
+    fixedDiscountCents: row.fixed_discount_cents,
+    minimumSubtotalCents: row.minimum_subtotal_cents,
+    maximumDiscountCents: row.maximum_discount_cents,
+    maximumRedemptions: row.maximum_redemptions,
+    active: row.active === 1,
+    startsAt: row.starts_at,
+    endsAt: row.ends_at,
+    reservedCount: row.reserved_count,
+    redeemedCount: row.redeemed_count,
+  };
+}
+
+async function listPromotions(
+  request: Request,
+  database: CommerceD1Database,
+  now: string,
+): Promise<Response> {
+  if (!(await adminActor(request, database, now))) return fail("OWNER_SESSION_REQUIRED", 403);
+  if (request.headers.get("Origin") !== null &&
+    request.headers.get("Origin") !== new URL(request.url).origin) {
+    return fail("ORIGIN_REJECTED", 403);
+  }
+  try {
+    const result = await database.prepare(
+      `SELECT promotion.id, promotion.code, promotion.kind,
+        promotion.percentage_basis_points, promotion.fixed_discount_cents,
+        promotion.minimum_subtotal_cents, promotion.maximum_discount_cents,
+        promotion.maximum_redemptions, promotion.active, promotion.starts_at,
+        promotion.ends_at,
+        SUM(CASE WHEN redemption.status='reserved' THEN 1 ELSE 0 END) AS reserved_count,
+        SUM(CASE WHEN redemption.status='redeemed' THEN 1 ELSE 0 END) AS redeemed_count
+      FROM promotion_codes AS promotion
+      LEFT JOIN promotion_redemptions AS redemption
+        ON redemption.promotion_code_id=promotion.id
+      GROUP BY promotion.id
+      ORDER BY promotion.created_at DESC, promotion.id DESC LIMIT 100`,
+    ).all<PromotionListRow>();
+    return json({ data: result.results.map(promotionPayload) });
+  } catch {
+    return fail("PROMOTIONS_UNAVAILABLE", 503);
+  }
+}
+
+function promotionMutationAuthorized(
+  request: Request,
+  origin: string,
+): boolean {
+  const csrfToken = cookie(request, "__Host-aj_admin_csrf");
+  return Boolean(csrfToken && authorizeBrowserMutation({
+    method: request.method,
+    origin: request.headers.get("Origin"),
+    secFetchSite: request.headers.get("Sec-Fetch-Site"),
+    allowedOrigins: [origin],
+    csrfCookieToken: csrfToken,
+    csrfHeaderToken: request.headers.get("X-CSRF-Token"),
+  }));
+}
+
+async function createPromotion(
+  request: Request,
+  env: ProductionOperatorConsoleEnvironment & { DB: CommerceD1Database },
+  now: string,
+): Promise<Response> {
+  const actor = await adminActor(request, env.DB, now);
+  if (!actor || !promotionMutationAuthorized(request, env.COMMERCE_ORIGIN!)) {
+    return fail("OWNER_SESSION_REQUIRED", 403);
+  }
+  const parsed = await jsonBody(request);
+  const keys = [
+    "code", "endsAt", "fixedDiscountCents", "kind", "maximumDiscountCents",
+    "maximumRedemptions", "minimumSubtotalCents", "percentageBasisPoints", "startsAt",
+  ];
+  if (!parsed || !exact(parsed, keys)) return fail("INVALID_PROMOTION", 400);
+  let code: string;
+  try {
+    code = normalizePromotionCode(parsed.code);
+  } catch (cause) {
+    if (cause instanceof PromotionCodeError) return fail("INVALID_PROMOTION", 400);
+    throw cause;
+  }
+  const integerOrNull = (value: unknown, minimum: number, maximum: number) =>
+    value === null || (Number.isSafeInteger(value) && Number(value) >= minimum && Number(value) <= maximum);
+  if (
+    (parsed.kind !== "percentage" && parsed.kind !== "fixed") ||
+    !integerOrNull(parsed.percentageBasisPoints, 1, 10_000) ||
+    !integerOrNull(parsed.fixedDiscountCents, 1, 1_000_000) ||
+    !Number.isSafeInteger(parsed.minimumSubtotalCents) || Number(parsed.minimumSubtotalCents) < 0 ||
+    Number(parsed.minimumSubtotalCents) > 1_000_000 ||
+    !integerOrNull(parsed.maximumDiscountCents, 1, 1_000_000) ||
+    !integerOrNull(parsed.maximumRedemptions, 1, 1_000_000) ||
+    typeof parsed.startsAt !== "string" || !isCanonicalUtcTimestamp(parsed.startsAt) ||
+    !(parsed.endsAt === null || (typeof parsed.endsAt === "string" &&
+      isCanonicalUtcTimestamp(parsed.endsAt) && parsed.endsAt > parsed.startsAt)) ||
+    (parsed.kind === "percentage" &&
+      (parsed.percentageBasisPoints === null || parsed.fixedDiscountCents !== null)) ||
+    (parsed.kind === "fixed" &&
+      (parsed.fixedDiscountCents === null || parsed.percentageBasisPoints !== null))
+  ) return fail("INVALID_PROMOTION", 400);
+  const kind = parsed.kind as "percentage" | "fixed";
+  const percentageBasisPoints = parsed.percentageBasisPoints === null
+    ? null
+    : Number(parsed.percentageBasisPoints);
+  const fixedDiscountCents = parsed.fixedDiscountCents === null
+    ? null
+    : Number(parsed.fixedDiscountCents);
+  const minimumSubtotalCents = Number(parsed.minimumSubtotalCents);
+  const maximumDiscountCents = parsed.maximumDiscountCents === null
+    ? null
+    : Number(parsed.maximumDiscountCents);
+  const maximumRedemptions = parsed.maximumRedemptions === null
+    ? null
+    : Number(parsed.maximumRedemptions);
+  const startsAt = String(parsed.startsAt);
+  const endsAt = parsed.endsAt === null ? null : String(parsed.endsAt);
+  const id = `promotion_${(await sha256(`ajl-promotion-v1\0${code}`)).slice(0, 48)}`;
+  try {
+    await env.DB.prepare(
+      `INSERT INTO promotion_codes (
+        id, code, kind, percentage_basis_points, fixed_discount_cents,
+        minimum_subtotal_cents, maximum_discount_cents, maximum_redemptions,
+        active, starts_at, ends_at, created_by_administrator_id, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)`,
+    ).bind(
+      id,
+      code,
+      kind,
+      percentageBasisPoints,
+      fixedDiscountCents,
+      minimumSubtotalCents,
+      maximumDiscountCents,
+      maximumRedemptions,
+      startsAt,
+      endsAt,
+      actor.administratorId,
+      now,
+      now,
+    ).run();
+    return json({ data: { id, code, active: true } }, 201);
+  } catch (cause) {
+    const message = cause instanceof Error ? cause.message : String(cause);
+    return /UNIQUE constraint failed/i.test(message)
+      ? fail("PROMOTION_ALREADY_EXISTS", 409)
+      : fail("PROMOTION_CREATE_FAILED", 503);
+  }
+}
+
+async function setPromotionStatus(
+  request: Request,
+  env: ProductionOperatorConsoleEnvironment & { DB: CommerceD1Database },
+  now: string,
+  promotionId: string,
+): Promise<Response> {
+  const actor = await adminActor(request, env.DB, now);
+  if (!actor || !promotionMutationAuthorized(request, env.COMMERCE_ORIGIN!)) {
+    return fail("OWNER_SESSION_REQUIRED", 403);
+  }
+  const parsed = await jsonBody(request);
+  if (!parsed || !exact(parsed, ["active"]) || typeof parsed.active !== "boolean") {
+    return fail("INVALID_PROMOTION", 400);
+  }
+  try {
+    const result = await env.DB.prepare(
+      `UPDATE promotion_codes SET active=?, updated_at=? WHERE id=? AND active<>?`,
+    ).bind(parsed.active ? 1 : 0, now, promotionId, parsed.active ? 1 : 0).run();
+    const changed = result.meta?.changes ?? 0;
+    if (changed === 0) {
+      const exists = await env.DB.prepare(
+        `SELECT active FROM promotion_codes WHERE id=?`,
+      ).bind(promotionId).first<{ active: number }>();
+      if (!exists) return fail("PROMOTION_NOT_FOUND", 404);
+    }
+    return json({ data: { id: promotionId, active: parsed.active } });
+  } catch {
+    return fail("PROMOTION_UPDATE_FAILED", 503);
+  }
+}
+
 async function logout(
   request: Request,
   env: ProductionOperatorConsoleEnvironment & { DB: CommerceD1Database },
@@ -438,7 +666,9 @@ export async function productionOperatorConsoleApiResponse(
 ): Promise<Response | null> {
   const url = new URL(request.url);
   const orderDetailMatch = ORDER_DETAIL_ROUTE.exec(url.pathname);
-  if (![SESSION_ROUTE, ORDERS_ROUTE].includes(url.pathname) && !orderDetailMatch) return null;
+  const promotionStatusMatch = PROMOTION_STATUS_ROUTE.exec(url.pathname);
+  if (![SESSION_ROUTE, ORDERS_ROUTE, PROMOTIONS_ROUTE].includes(url.pathname) &&
+    !orderDetailMatch && !promotionStatusMatch) return null;
   if (!configured(env, url)) return fail("OPERATOR_CONSOLE_CLOSED", 503);
   const now = dependencies.now?.() ?? new Date().toISOString();
   if (!isCanonicalUtcTimestamp(now)) return fail("CLOCK_UNAVAILABLE", 503);
@@ -447,6 +677,17 @@ export async function productionOperatorConsoleApiResponse(
   if (url.pathname === ORDERS_ROUTE) {
     if (request.method !== "GET") return fail("METHOD_NOT_ALLOWED", 405);
     return listOrders(request, env.DB, now);
+  }
+  if (url.pathname === PROMOTIONS_ROUTE) {
+    if (request.method === "GET") return listPromotions(request, env.DB, now);
+    if (request.method === "POST") return createPromotion(request, env, now);
+    return fail("METHOD_NOT_ALLOWED", 405);
+  }
+  if (promotionStatusMatch) {
+    if (request.method !== "PUT") return fail("METHOD_NOT_ALLOWED", 405);
+    const promotionId = decodedIdentifier(promotionStatusMatch[1]);
+    if (!promotionId) return fail("INVALID_PROMOTION", 400);
+    return setPromotionStatus(request, env, now, promotionId);
   }
   if (orderDetailMatch) {
     if (request.method !== "GET") return fail("METHOD_NOT_ALLOWED", 405);

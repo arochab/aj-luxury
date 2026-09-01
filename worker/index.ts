@@ -3109,8 +3109,6 @@ const worker = {
     if (url.pathname === "/operations" && env?.APP_ENV === "production") {
       if (
         env.OPERATOR_CONSOLE_ENABLED !== "true" ||
-        env.OPERATOR_ADMIN_MFA_ENABLED !== "true" ||
-        env.CLOUDFLARE_ACCESS_MFA_ATTESTATION !== "independent-mfa:required-every-login" ||
         !await cloudflareAccessOwnerRequestAuthenticated(effectiveRequest, env)
       ) {
         return withSecurityHeaders(

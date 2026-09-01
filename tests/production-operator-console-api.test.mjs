@@ -85,7 +85,7 @@ function cookies(response) {
   return response.headers.getSetCookie().map((value) => value.split(";", 1)[0]).join("; ");
 }
 
-test("fresh Cloudflare Access MFA creates an AAL2 owner session and lists no-PII order summaries", async () => {
+test("fresh allowlisted Cloudflare Access creates an owner session and lists no-PII order summaries", async () => {
   const { sqlite, env } = context();
   try {
     const session = await productionOperatorConsoleApiResponse(new Request(
@@ -118,13 +118,13 @@ test("fresh Cloudflare Access MFA creates an AAL2 owner session and lists no-PII
   }
 });
 
-test("the operator console fails closed without explicit MFA policy attestation or fresh authentication", async () => {
+test("the operator console fails closed when disabled or without fresh Access authentication", async () => {
   const { sqlite, env } = context();
   try {
     const closed = await productionOperatorConsoleApiResponse(new Request(
       "https://ajluxurystore.com/api/commerce/admin/session",
       { method: "POST" },
-    ), { ...env, CLOUDFLARE_ACCESS_MFA_ATTESTATION: undefined }, {
+    ), { ...env, OPERATOR_CONSOLE_ENABLED: undefined }, {
       now: () => now,
       accessIdentity: async () => identity,
     });
@@ -139,8 +139,65 @@ test("the operator console fails closed without explicit MFA policy attestation 
       accessIdentity: async () => ({ ...identity, authenticatedAt: "2026-09-01T08:50:00.000Z" }),
     });
     assert.equal(stale.status, 403);
-    assert.equal((await stale.json()).error.code, "FRESH_MFA_REQUIRED");
+    assert.equal((await stale.json()).error.code, "FRESH_ACCESS_REQUIRED");
     assert.equal(sqlite.prepare("SELECT COUNT(*) AS count FROM admin_sessions").get().count, 0);
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("owner creates, lists and deactivates a promotion without exposing it publicly", async () => {
+  const { sqlite, env } = context();
+  try {
+    const session = await productionOperatorConsoleApiResponse(new Request(
+      "https://ajluxurystore.com/api/commerce/admin/session",
+      { method: "POST", headers: { Origin: "https://ajluxurystore.com", "Sec-Fetch-Site": "same-origin" } },
+    ), env, { now: () => now, accessIdentity: async () => identity });
+    const sessionBody = await session.clone().json();
+    const headers = {
+      Cookie: cookies(session),
+      Origin: "https://ajluxurystore.com",
+      "Sec-Fetch-Site": "same-origin",
+      "Content-Type": "application/json",
+      "X-CSRF-Token": sessionBody.data.csrfToken,
+    };
+    const created = await productionOperatorConsoleApiResponse(new Request(
+      "https://ajluxurystore.com/api/commerce/admin/promotions",
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          code: "BIENVENUE10",
+          kind: "percentage",
+          percentageBasisPoints: 1000,
+          fixedDiscountCents: null,
+          minimumSubtotalCents: 5000,
+          maximumDiscountCents: 1000,
+          maximumRedemptions: 20,
+          startsAt: now,
+          endsAt: null,
+        }),
+      },
+    ), env, { now: () => now, accessIdentity: async () => identity });
+    assert.equal(created.status, 201);
+    const promotion = (await created.json()).data;
+
+    const listed = await productionOperatorConsoleApiResponse(new Request(
+      "https://ajluxurystore.com/api/commerce/admin/promotions",
+      { headers: { Cookie: cookies(session) } },
+    ), env, { now: () => now, accessIdentity: async () => identity });
+    assert.equal(listed.status, 200);
+    assert.equal((await listed.json()).data[0].code, "BIENVENUE10");
+
+    const deactivated = await productionOperatorConsoleApiResponse(new Request(
+      `https://ajluxurystore.com/api/commerce/admin/promotions/${promotion.id}/status`,
+      { method: "PUT", headers, body: JSON.stringify({ active: false }) },
+    ), env, {
+      now: () => "2026-09-01T09:01:00.000Z",
+      accessIdentity: async () => identity,
+    });
+    assert.equal(deactivated.status, 200);
+    assert.equal(sqlite.prepare("SELECT active FROM promotion_codes").get().active, 0);
   } finally {
     sqlite.close();
   }

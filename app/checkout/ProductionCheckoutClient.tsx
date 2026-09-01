@@ -22,7 +22,9 @@ import {
   createProductionOrder,
   createProductionPaymentSession,
   getCurrentProductionOrder,
+  quoteProductionPromotion,
   ProductionOrderApiError,
+  type PublicPromotionQuote,
   type PublicProductionOrder,
 } from "../../lib/commerce/production-order-client";
 import { useI18n } from "../../lib/i18n/I18nProvider";
@@ -117,6 +119,8 @@ export default function ProductionCheckoutClient() {
   const [points, setPoints] = useState<readonly PublicProductionServicePoint[] | null>(null);
   const [selectedPoint, setSelectedPoint] = useState<PublicProductionServicePoint | null>(null);
   const [order, setOrder] = useState<PublicProductionOrder | null>(null);
+  const [promotionInput, setPromotionInput] = useState("");
+  const [promotion, setPromotion] = useState<PublicPromotionQuote | null>(null);
   const [legalAccepted, setLegalAccepted] = useState(false);
   const [dutiesAccepted, setDutiesAccepted] = useState(false);
   const [signedInEmail, setSignedInEmail] = useState<string | null>(null);
@@ -131,6 +135,7 @@ export default function ProductionCheckoutClient() {
   const selectAttempt = useRef<{ optionId: string; key: string } | null>(null);
   const pointsAttempt = useRef<{ optionId: string; key: string } | null>(null);
   const orderAttempt = useRef<string | null>(null);
+  const promotionAttempt = useRef<{ code: string; key: string } | null>(null);
   const paymentAttempt = useRef<string | null>(null);
   const deliveryChangeAttempt = useRef<string | null>(null);
   const errorRef = useRef<HTMLDivElement>(null);
@@ -318,10 +323,38 @@ export default function ProductionCheckoutClient() {
         address: shippingAddress(form),
         email,
         idempotencyKey: key,
+        ...(promotion ? { promotionCode: promotion.code } : {}),
         ...(selectedPoint ? { servicePointId: selectedPoint.servicePointId } : {}),
       }));
     } catch (error) {
       setErrorCode(error instanceof ProductionOrderApiError || error instanceof CustomerAccountApiError
+        ? error.code
+        : "CHECKOUT_UNAVAILABLE");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function applyPromotion() {
+    const code = promotionInput.trim().toUpperCase();
+    if (!code || submitting || order) return;
+    const key = promotionAttempt.current?.code === code
+      ? promotionAttempt.current.key
+      : crypto.randomUUID();
+    promotionAttempt.current = { code, key };
+    setSubmitting(true);
+    setErrorCode(null);
+    try {
+      const quoted = await quoteProductionPromotion(code, key);
+      setPromotionInput(quoted.code);
+      setPromotion(quoted);
+      orderAttempt.current = null;
+    } catch (error) {
+      setPromotion(null);
+      if (error instanceof ProductionOrderApiError && error.code === "PROMOTION_REJECTED") {
+        promotionAttempt.current = null;
+      }
+      setErrorCode(error instanceof ProductionOrderApiError
         ? error.code
         : "CHECKOUT_UNAVAILABLE");
     } finally {
@@ -363,12 +396,15 @@ export default function ProductionCheckoutClient() {
       setRelayOption(null);
       setPoints(null);
       setSelectedPoint(null);
+      setPromotion(null);
+      setPromotionInput("");
       setLegalAccepted(false);
       setDutiesAccepted(false);
       quoteAttempt.current = null;
       selectAttempt.current = null;
       pointsAttempt.current = null;
       orderAttempt.current = null;
+      promotionAttempt.current = null;
       paymentAttempt.current = null;
       deliveryChangeAttempt.current = null;
     } catch (error) {
@@ -380,7 +416,11 @@ export default function ProductionCheckoutClient() {
     }
   }
 
-  const subtotal = order?.subtotalCents ?? cart?.subtotalCents ?? 0;
+  const merchandiseSubtotal = order
+    ? order.subtotalCents + order.promotionDiscountCents
+    : cart?.subtotalCents ?? 0;
+  const promotionDiscount = order?.promotionDiscountCents ?? promotion?.discountCents ?? 0;
+  const subtotal = order?.subtotalCents ?? promotion?.subtotalAfterDiscountCents ?? merchandiseSubtotal;
   const shipping = order?.shippingCents ?? selected?.amountCents ?? 0;
   const total = order?.totalCents ?? subtotal + shipping;
   const errorMessage = errorCode === "DESTINATION_UNAVAILABLE"
@@ -396,7 +436,9 @@ export default function ProductionCheckoutClient() {
             : errorCode === "INVALID_ACCOUNT_INPUT"
               ? "Vérifiez votre e-mail et votre mot de passe."
               : errorCode === "ACCOUNT_AUTHENTICATION_REQUIRED"
-                ? "Cette adresse possède déjà un compte. Connectez-vous ou utilisez « Mot de passe oublié » avant de confirmer la commande."
+              ? "Cette adresse possède déjà un compte. Connectez-vous ou utilisez « Mot de passe oublié » avant de confirmer la commande."
+              : errorCode === "PROMOTION_REJECTED"
+                ? "Ce code promo n’est pas valide, n’est plus actif ou ne s’applique pas à ce panier."
               : t("checkout.unavailable");
 
   if (!loading && cart && cart.lines.length === 0) {
@@ -463,7 +505,13 @@ export default function ProductionCheckoutClient() {
               <LocalizedPrice amountCents={line.lineTotalCents} />
             </div>
           ))}
-          <div className={styles.row}><span>{t("cart.subtotal")}</span><LocalizedPrice amountCents={subtotal} /></div>
+          <div className={styles.row}><span>{t("cart.subtotal")}</span><LocalizedPrice amountCents={merchandiseSubtotal} /></div>
+          {promotionDiscount > 0 ? (
+            <div className={`${styles.row} ${styles.promotionDiscount}`}>
+              <span>Code {order?.promotionCode ?? promotion?.code}</span>
+              <span>−<LocalizedPrice amountCents={promotionDiscount} /></span>
+            </div>
+          ) : null}
           <div className={styles.row}><span>{t("cart.shipping")}</span><span>{selected || order ? <LocalizedPrice amountCents={shipping} /> : t("cart.toDefine")}</span></div>
           <div className={`${styles.row} ${styles.total}`}><span>{t("checkout.provisionalTotal")}</span><LocalizedPrice amountCents={total} /></div>
 
@@ -492,6 +540,37 @@ export default function ProductionCheckoutClient() {
 
           {selected && !order ? (
             <form className={styles.testCheckout} onSubmit={(event) => { event.preventDefault(); void confirmOrder(); }}>
+              <section className={styles.promotion} aria-labelledby="checkout-promotion-title">
+                <div>
+                  <p className={styles.accountCheckoutEyebrow}>Avantage</p>
+                  <h2 id="checkout-promotion-title">Code promo</h2>
+                </div>
+                <div className={styles.promotionEntry}>
+                  <label>
+                    <span className={styles.srOnly}>Code promo</span>
+                    <input
+                      autoCapitalize="characters"
+                      autoComplete="off"
+                      inputMode="text"
+                      maxLength={32}
+                      name="promotionCode"
+                      placeholder="VOTRE CODE…"
+                      spellCheck={false}
+                      value={promotionInput}
+                      onChange={(event) => {
+                        setPromotionInput(event.currentTarget.value.toUpperCase());
+                        setPromotion(null);
+                        promotionAttempt.current = null;
+                        orderAttempt.current = null;
+                      }}
+                    />
+                  </label>
+                  <button type="button" disabled={submitting || !promotionInput.trim()} onClick={() => void applyPromotion()}>
+                    {submitting ? "Vérification…" : promotion ? "Appliqué" : "Appliquer"}
+                  </button>
+                </div>
+                {promotion ? <p className={styles.promotionSuccess} role="status" aria-live="polite">Code validé · remise de <LocalizedPrice amountCents={promotion.discountCents} /></p> : null}
+              </section>
               {signedInEmail ? (
                 <section className={styles.accountCheckoutFields} aria-labelledby="checkout-account-title">
                   <div className={styles.accountCheckoutHeading}>

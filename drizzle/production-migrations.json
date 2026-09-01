@@ -30,6 +30,7 @@
     "0024_customer_password_runtime_profile.sql",
     "0025_customer_password_scrypt_profile.sql",
     "0026_international_shipping.sql",
-    "0027_puzzling_war_machine.sql"
+    "0027_puzzling_war_machine.sql",
+    "0028_even_fallen_one.sql"
   ]
 }

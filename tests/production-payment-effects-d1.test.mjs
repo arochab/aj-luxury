@@ -18,7 +18,7 @@ import {
 
 const directory = fileURLToPath(new URL("../drizzle/", import.meta.url));
 const migrations = readdirSync(directory)
-  .filter((name) => /^(?:000[0-7]|0009|001[0-9]|002[013])_.+\.sql$/.test(name))
+  .filter((name) => /^(?:000[0-7]|0009|001[0-9]|002[0138])_.+\.sql$/.test(name))
   .sort();
 class Statement {
   constructor(database, query, values = []) { this.database = database; this.query = query; this.values = values; }
@@ -53,6 +53,7 @@ async function fixture(
   livemode = true,
   quantity = 1,
   destination = { postalCode: "75001", city: "Paris", countryCode: "FR" },
+  promotionCode = null,
 ) {
   const sqlite = new DatabaseSync(":memory:"); sqlite.exec("PRAGMA foreign_keys=ON");
   for (const name of migrations) for (const sql of readFileSync(`${directory}${name}`, "utf8").split("--> statement-breakpoint")) if (sql.trim()) sqlite.exec(sql);
@@ -75,14 +76,23 @@ async function fixture(
   const expiry = iso(base, 900_000);
   const delivery = new D1ProductionDeliveryActivationStore(d1, { quotes: { async quote() { return [{ providerCode: "sendcloud", providerQuoteReference: "provider-ref-home", carrierCode: "colissimo", serviceCode: "home", displayName: "Livraison domicile", deliveryMode: "home", amountCents: 900, currency: "EUR", estimatedDaysMin: 2, estimatedDaysMax: 5, dutiesTerms: "EU_INCLUDED", expiresAt: expiry, responseFingerprint: "c".repeat(64) }]; } }, servicePoints: { async servicePoints() { return []; } }, documents: { async document() { throw new Error("closed"); } }, returns: { async validate() { throw new Error("closed"); }, async create() { throw new Error("closed"); } } }, new DeliveryReferenceVault({ encryptionKeyBase64: Buffer.alloc(32, 7).toString("base64"), keyVersion: 1 }));
   const [option] = await delivery.quoteOptions({ cartId: "cart_prod", address, idempotencyKey: "delivery-idem-0001", now: iso(base, 50) });
+  if (promotionCode) {
+    sqlite.prepare(`INSERT INTO promotion_codes (
+      id,code,kind,percentage_basis_points,fixed_discount_cents,
+      minimum_subtotal_cents,maximum_discount_cents,maximum_redemptions,
+      active,starts_at,ends_at,created_by_administrator_id,created_at,updated_at
+    ) VALUES ('promotion_fixture',?,'percentage',1000,NULL,0,NULL,10,1,?,NULL,'admin_fixture',?,?)`)
+      .run(promotionCode, iso(base, 0), iso(base, 0), iso(base, 0));
+  }
   const checkout = new D1ProductionCheckoutStore(d1);
-  await checkout.createOrder({ cartId: "cart_prod", quoteId: option.quoteId, optionId: option.optionId, address, email: "ada@example.com", idempotencyKey: "order-idem-0001", termsVersion: "2026-08-26", privacyVersion: "2026-07-30", commerceReleaseSha: "a".repeat(40), commerceWorkerVersionId: "018f47ce-24bd-7b16-a1ea-4b3fc2d66b75", commerceMode: livemode ? "controlled" : "sandbox", settlementMode: livemode ? "live" : "test", now: iso(base, 60) });
+  const orderInput = { cartId: "cart_prod", quoteId: option.quoteId, optionId: option.optionId, address, email: "ada@example.com", promotionCode, idempotencyKey: "order-idem-0001", termsVersion: "2026-08-26", privacyVersion: "2026-07-30", commerceReleaseSha: "a".repeat(40), commerceWorkerVersionId: "018f47ce-24bd-7b16-a1ea-4b3fc2d66b75", commerceMode: livemode ? "controlled" : "sandbox", settlementMode: livemode ? "live" : "test", now: iso(base, 60) };
+  await checkout.createOrder(orderInput);
   const request = await checkout.prepareCheckoutSession({ cartId: "cart_prod", idempotencyKey: "payment-idem-0001", origin: "https://ajluxurystore.com", locale: "fr", now: iso(base, 70) });
   const sessionId = livemode ? "cs_live_fixture_001" : "cs_test_fixture_001";
-  const totalCents = ({ 1: 2999, 2: 4999, 3: 6999 })[quantity] + 900;
+  const totalCents = sqlite.prepare("SELECT total_cents FROM orders WHERE cart_id='cart_prod'").get().total_cents;
   await checkout.recordCheckoutSession(request, { provider: "stripe", providerSessionId: sessionId, providerPaymentId: null, checkoutUrl: "https://checkout.stripe.com/c/pay/test", state: "open", amountTotalCents: totalCents, currency: "EUR", livemode, providerRequestId: "req_fixture" }, iso(base, 80));
   const event = Object.freeze({ provider: "stripe", providerEventId: "evt_fixture_paid_001", eventType: "checkout.session.completed", occurredAt: iso(base, 90), livemode, kind: "payment", orderId: request.orderId, providerPaymentId: "pi_fixture_001", providerCheckoutSessionId: sessionId, state: "paid", amountCents: totalCents, currency: "EUR", providerFailureCode: null, semanticKey: "stripe:payment:pi_fixture_001:paid" });
-  return { sqlite, d1, event, expiry, request, effects: new D1StripePaymentEffectsStore(failEffectsAt === null ? d1 : new D1(sqlite, failEffectsAt), livemode) };
+  return { sqlite, d1, event, expiry, request, checkout, orderInput, effects: new D1StripePaymentEffectsStore(failEffectsAt === null ? d1 : new D1(sqlite, failEffectsAt), livemode) };
 }
 
 test("production delivery keeps EU live and fails closed outside it while the international gate is off", async () => {
@@ -148,6 +158,31 @@ test("same-colour pack two charges 49.99 before delivery without pack stock", as
     () => sqlite.prepare("UPDATE orders SET commerce_release_sha=?").run("b".repeat(40)),
     /order_commerce_runtime_provenance_is_immutable/,
   );
+});
+
+test("an exact order retry keeps its reserved promotion after the code is disabled", async () => {
+  const { sqlite, checkout, orderInput } = await fixture(
+    null,
+    true,
+    1,
+    { postalCode: "75001", city: "Paris", countryCode: "FR" },
+    "RETRY10",
+  );
+  try {
+    sqlite.prepare("UPDATE promotion_codes SET active=0,updated_at=? WHERE code='RETRY10'")
+      .run(new Date(Date.parse(orderInput.now) + 1000).toISOString());
+    const retried = await checkout.createOrder({
+      ...orderInput,
+      now: new Date(Date.parse(orderInput.now) + 2000).toISOString(),
+    });
+    assert.equal(retried.promotionCode, "RETRY10");
+    assert.equal(retried.promotionDiscountCents, 299);
+    assert.equal(sqlite.prepare(
+      "SELECT COUNT(*) AS count FROM promotion_redemptions",
+    ).get().count, 1);
+  } finally {
+    sqlite.close();
+  }
 });
 
 test("controlled order runtime provenance schema is installed with its exact sentinel", async () => {

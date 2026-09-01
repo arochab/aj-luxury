@@ -1175,6 +1175,7 @@
   }
 
   .tunnel .filListe {
+    grid-template-columns: .8fr .95fr 1.25fr;
     gap: 8px;
   }
 
@@ -1186,8 +1187,10 @@
 
   .tunnel .filNom {
     max-width: 100%;
-    overflow-wrap: anywhere;
+    font-size: clamp(8px, 2.5vw, 11px);
+    letter-spacing: .12em;
     line-height: 1.25;
+    white-space: nowrap;
   }
 
   .commerce.commerce > div {

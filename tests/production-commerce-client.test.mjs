@@ -22,6 +22,7 @@ import {
   changeProductionOrderDelivery,
   createProductionPaymentSession,
   parseProductionOrder,
+  quoteProductionPromotion,
 } from "../lib/commerce/production-order-client.ts";
 
 const csrf = "A".repeat(43);
@@ -312,6 +313,8 @@ test("production orders reject test identifiers and synthetic response fields", 
     status: "pending_payment",
     currency: "EUR",
     subtotalCents: 2999,
+    promotionCode: null,
+    promotionDiscountCents: 0,
     shippingCents: 700,
     taxCents: 0,
     invoiceTaxMention:
@@ -337,6 +340,33 @@ test("production orders reject test identifiers and synthetic response fields", 
     () => parseProductionOrder({ ...order, simulation: false }),
     /MALFORMED_RESPONSE/,
   );
+});
+
+test("promotion quote uses the protected checkout route and exact server amounts", async () => {
+  const originalFetch = globalThis.fetch;
+  let call;
+  globalThis.fetch = async (path, init) => {
+    call = { path, init };
+    return Response.json({
+      data: {
+        code: "BIENVENUE10",
+        discountCents: 600,
+        subtotalAfterDiscountCents: 5400,
+      },
+    });
+  };
+  try {
+    const quote = await withDocumentCookie(
+      () => quoteProductionPromotion("bienvenue10", "promotion-attempt-0001"),
+    );
+    assert.equal(quote.discountCents, 600);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+  assert.equal(call.path, "/api/commerce/checkout/promotion");
+  assert.equal(call.init.method, "POST");
+  assert.equal(call.init.headers.get("X-CSRF-Token"), csrf);
+  assert.deepEqual(JSON.parse(call.init.body), { code: "bienvenue10" });
 });
 
 test("payment uses the canonical session route and accepts only Stripe Checkout", async () => {

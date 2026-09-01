@@ -185,6 +185,47 @@ export const cartLines = sqliteTable(
   ],
 );
 
+export const promotionCodes = sqliteTable(
+  "promotion_codes",
+  {
+    id: text("id").primaryKey(),
+    code: text("code").notNull(),
+    kind: text("kind", { enum: ["percentage", "fixed"] }).notNull(),
+    percentageBasisPoints: integer("percentage_basis_points"),
+    fixedDiscountCents: integer("fixed_discount_cents"),
+    minimumSubtotalCents: integer("minimum_subtotal_cents").notNull().default(0),
+    maximumDiscountCents: integer("maximum_discount_cents"),
+    maximumRedemptions: integer("maximum_redemptions"),
+    active: integer("active", { mode: "boolean" }).notNull().default(true),
+    startsAt: text("starts_at").notNull(),
+    endsAt: text("ends_at"),
+    createdByAdministratorId: text("created_by_administrator_id").notNull(),
+    createdAt: text("created_at").notNull().default(utcNow),
+    updatedAt: text("updated_at").notNull().default(utcNow),
+  },
+  (table) => [
+    uniqueIndex("ux_promotion_codes_code").on(table.code),
+    index("idx_promotion_codes_active_window").on(table.active, table.startsAt, table.endsAt),
+    check("ck_promotion_codes_code", sql`length(${table.code}) BETWEEN 3 AND 32
+      AND ${table.code} = upper(${table.code})
+      AND ${table.code} NOT GLOB '*[^A-Z0-9_-]*'`),
+    check("ck_promotion_codes_kind", sql`${table.kind} IN ('percentage','fixed')`),
+    check("ck_promotion_codes_value", sql`(
+      ${table.kind} = 'percentage'
+      AND ${table.percentageBasisPoints} BETWEEN 1 AND 10000
+      AND ${table.fixedDiscountCents} IS NULL
+    ) OR (
+      ${table.kind} = 'fixed'
+      AND ${table.percentageBasisPoints} IS NULL
+      AND ${table.fixedDiscountCents} > 0
+    )`),
+    check("ck_promotion_codes_limits", sql`${table.minimumSubtotalCents} >= 0
+      AND (${table.maximumDiscountCents} IS NULL OR ${table.maximumDiscountCents} > 0)
+      AND (${table.maximumRedemptions} IS NULL OR ${table.maximumRedemptions} > 0)`),
+    check("ck_promotion_codes_active", sql`${table.active} IN (0,1)`),
+  ],
+);
+
 export const orders = sqliteTable(
   "orders",
   {
@@ -210,6 +251,11 @@ export const orders = sqliteTable(
     currency: text("currency", { enum: ["EUR"] }).notNull().default("EUR"),
     subtotalCents: integer("subtotal_cents").notNull(),
     discountCents: integer("discount_cents").notNull().default(0),
+    promotionCodeId: text("promotion_code_id").references(() => promotionCodes.id, {
+      onDelete: "restrict",
+    }),
+    promotionCode: text("promotion_code"),
+    promotionDiscountCents: integer("promotion_discount_cents").notNull().default(0),
     shippingCents: integer("shipping_cents").notNull(),
     taxCents: integer("tax_cents").notNull(),
     totalCents: integer("total_cents").notNull(),
@@ -252,9 +298,20 @@ export const orders = sqliteTable(
       "ck_orders_amounts_non_negative",
       sql`${table.subtotalCents} >= 0
         AND ${table.discountCents} >= 0
+        AND ${table.promotionDiscountCents} >= 0
+        AND ${table.discountCents} >= ${table.promotionDiscountCents}
         AND ${table.shippingCents} >= 0
         AND ${table.taxCents} >= 0
         AND ${table.totalCents} >= 0`,
+    ),
+    check(
+      "ck_orders_promotion_snapshot",
+      sql`(${table.promotionCodeId} IS NULL
+          AND ${table.promotionCode} IS NULL
+          AND ${table.promotionDiscountCents} = 0)
+        OR (${table.promotionCodeId} IS NOT NULL
+          AND ${table.promotionCode} IS NOT NULL
+          AND ${table.promotionDiscountCents} > 0)`,
     ),
     check(
       "ck_orders_total_consistent",
@@ -286,6 +343,32 @@ export const orders = sqliteTable(
           )
         )`,
     ),
+  ],
+);
+
+export const promotionRedemptions = sqliteTable(
+  "promotion_redemptions",
+  {
+    id: text("id").primaryKey(),
+    promotionCodeId: text("promotion_code_id").notNull().references(
+      () => promotionCodes.id,
+      { onDelete: "restrict" },
+    ),
+    orderId: text("order_id").notNull().references(() => orders.id, {
+      onDelete: "restrict",
+    }),
+    code: text("code").notNull(),
+    discountCents: integer("discount_cents").notNull(),
+    status: text("status", { enum: ["reserved", "redeemed", "released"] })
+      .notNull().default("reserved"),
+    createdAt: text("created_at").notNull().default(utcNow),
+    updatedAt: text("updated_at").notNull().default(utcNow),
+  },
+  (table) => [
+    uniqueIndex("ux_promotion_redemptions_order").on(table.orderId),
+    index("idx_promotion_redemptions_code_status").on(table.promotionCodeId, table.status),
+    check("ck_promotion_redemptions_discount", sql`${table.discountCents} > 0`),
+    check("ck_promotion_redemptions_status", sql`${table.status} IN ('reserved','redeemed','released')`),
   ],
 );
 

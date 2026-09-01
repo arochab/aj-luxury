@@ -50,9 +50,30 @@ type OrderDetail = Readonly<{
   }> | null;
 }>;
 
+type Promotion = Readonly<{
+  id: string;
+  code: string;
+  kind: "percentage" | "fixed";
+  percentageBasisPoints: number | null;
+  fixedDiscountCents: number | null;
+  minimumSubtotalCents: number;
+  maximumDiscountCents: number | null;
+  maximumRedemptions: number | null;
+  active: boolean;
+  startsAt: string;
+  endsAt: string | null;
+  reservedCount: number;
+  redeemedCount: number;
+}>;
+
 type ConsoleState =
   | Readonly<{ kind: "loading" }>
-  | Readonly<{ kind: "ready"; orders: readonly Order[]; csrfToken: string }>
+  | Readonly<{
+    kind: "ready";
+    orders: readonly Order[];
+    promotions: readonly Promotion[];
+    csrfToken: string;
+  }>
   | Readonly<{ kind: "error"; message: string }>;
 
 function readCookie(name: string): string | null {
@@ -73,8 +94,8 @@ async function parseError(response: Response): Promise<string> {
 }
 
 function operatorMessage(code: string): string {
-  if (code === "FRESH_MFA_REQUIRED") {
-    return "La preuve MFA n’est plus assez récente. Reconnectez-vous via Cloudflare Access.";
+  if (code === "FRESH_ACCESS_REQUIRED") {
+    return "Votre connexion administrateur n’est plus assez récente. Reconnectez-vous via Cloudflare Access.";
   }
   if (["CLOUDFLARE_ACCESS_REQUIRED", "OWNER_SESSION_REQUIRED"].includes(code)) {
     return "Accès opérateur requis. Ouvrez cette page après votre authentification Cloudflare Access.";
@@ -131,6 +152,14 @@ export default function OperatorConsole() {
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
   const [details, setDetails] = useState<Record<string, OrderDetail>>({});
   const [actionError, setActionError] = useState<string | null>(null);
+  const [promotionBusy, setPromotionBusy] = useState(false);
+  const [promotionCode, setPromotionCode] = useState("");
+  const [promotionKind, setPromotionKind] = useState<"percentage" | "fixed">("percentage");
+  const [promotionValue, setPromotionValue] = useState("10");
+  const [promotionMinimum, setPromotionMinimum] = useState("0");
+  const [promotionMaximumDiscount, setPromotionMaximumDiscount] = useState("");
+  const [promotionMaximumRedemptions, setPromotionMaximumRedemptions] = useState("");
+  const [promotionEndsAt, setPromotionEndsAt] = useState("");
 
   const load = useCallback(async () => {
     setState({ kind: "loading" });
@@ -156,13 +185,27 @@ export default function OperatorConsole() {
       setState({ kind: "error", message: operatorMessage(await parseError(response)) });
       return;
     }
+    const promotionsResponse = await fetch("/api/commerce/admin/promotions", {
+      credentials: "same-origin",
+      cache: "no-store",
+    });
+    if (!promotionsResponse.ok) {
+      setState({ kind: "error", message: operatorMessage(await parseError(promotionsResponse)) });
+      return;
+    }
     const payload = await response.json() as { data: readonly Order[] };
+    const promotionsPayload = await promotionsResponse.json() as { data: readonly Promotion[] };
     const csrfToken = readCookie("__Host-aj_admin_csrf");
     if (!csrfToken) {
       setState({ kind: "error", message: "La session opérateur est incomplète. Aucune action n’est possible." });
       return;
     }
-    setState({ kind: "ready", orders: payload.data, csrfToken });
+    setState({
+      kind: "ready",
+      orders: payload.data,
+      promotions: promotionsPayload.data,
+      csrfToken,
+    });
   }, []);
 
   useEffect(() => {
@@ -265,6 +308,99 @@ export default function OperatorConsole() {
     }
   }
 
+  async function createPromotion() {
+    if (state.kind !== "ready" || promotionBusy) return;
+    const value = Number(promotionValue);
+    const minimum = Number(promotionMinimum || "0");
+    const maximumDiscount = promotionMaximumDiscount
+      ? Number(promotionMaximumDiscount)
+      : null;
+    const maximumRedemptions = promotionMaximumRedemptions
+      ? Number(promotionMaximumRedemptions)
+      : null;
+    if (!promotionCode.trim() || !Number.isFinite(value) || value <= 0 ||
+      !Number.isFinite(minimum) || minimum < 0 ||
+      (maximumDiscount !== null && (!Number.isFinite(maximumDiscount) || maximumDiscount <= 0)) ||
+      (maximumRedemptions !== null && (!Number.isInteger(maximumRedemptions) || maximumRedemptions <= 0))) {
+      setActionError("Vérifiez le code, la remise et ses limites avant de l’enregistrer.");
+      return;
+    }
+    let endsAt: string | null = null;
+    if (promotionEndsAt) {
+      const date = new Date(promotionEndsAt);
+      if (Number.isNaN(date.getTime()) || date <= new Date()) {
+        setActionError("La date de fin doit être dans le futur.");
+        return;
+      }
+      endsAt = date.toISOString();
+    }
+    setPromotionBusy(true);
+    setActionError(null);
+    try {
+      const response = await fetch("/api/commerce/admin/promotions", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": state.csrfToken,
+        },
+        body: JSON.stringify({
+          code: promotionCode.trim().toUpperCase(),
+          kind: promotionKind,
+          percentageBasisPoints: promotionKind === "percentage" ? Math.round(value * 100) : null,
+          fixedDiscountCents: promotionKind === "fixed" ? Math.round(value * 100) : null,
+          minimumSubtotalCents: Math.round(minimum * 100),
+          maximumDiscountCents: maximumDiscount === null
+            ? null
+            : Math.round(maximumDiscount * 100),
+          maximumRedemptions,
+          startsAt: new Date().toISOString(),
+          endsAt,
+        }),
+      });
+      if (!response.ok) throw new Error(await parseError(response));
+      setPromotionCode("");
+      setPromotionValue("10");
+      setPromotionMinimum("0");
+      setPromotionMaximumDiscount("");
+      setPromotionMaximumRedemptions("");
+      setPromotionEndsAt("");
+      await load();
+    } catch (cause) {
+      setActionError(cause instanceof Error && cause.message === "PROMOTION_ALREADY_EXISTS"
+        ? "Ce code existe déjà. Réactivez-le dans la liste ou choisissez un autre code."
+        : "Le code promo n’a pas été créé. Aucun changement partiel n’a été conservé.");
+    } finally {
+      setPromotionBusy(false);
+    }
+  }
+
+  async function setPromotionActive(promotion: Promotion) {
+    if (state.kind !== "ready" || promotionBusy) return;
+    setPromotionBusy(true);
+    setActionError(null);
+    try {
+      const response = await fetch(
+        `/api/commerce/admin/promotions/${encodeURIComponent(promotion.id)}/status`,
+        {
+          method: "PUT",
+          credentials: "same-origin",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": state.csrfToken,
+          },
+          body: JSON.stringify({ active: !promotion.active }),
+        },
+      );
+      if (!response.ok) throw new Error(await parseError(response));
+      await load();
+    } catch {
+      setActionError("Le statut du code promo n’a pas été modifié.");
+    } finally {
+      setPromotionBusy(false);
+    }
+  }
+
   async function signOut() {
     if (state.kind !== "ready") return;
     await fetch("/api/commerce/admin/session", {
@@ -276,6 +412,7 @@ export default function OperatorConsole() {
   }
 
   const orders = state.kind === "ready" ? state.orders : [];
+  const promotions = state.kind === "ready" ? state.promotions : [];
   const actionableOrders = orders.filter((order) => ["paid", "preparing"].includes(order.status));
 
   return (
@@ -398,6 +535,53 @@ export default function OperatorConsole() {
             ))}
             {orders.length === 0 ? <p className={styles.empty}>Aucune commande payée à suivre.</p> : null}
           </div>
+        ) : null}
+
+        {state.kind === "ready" ? (
+          <section className={styles.promotions} aria-labelledby="promotions-title">
+            <div className={styles.sectionHeading}>
+              <div>
+                <p>Vente</p>
+                <h2 id="promotions-title">Codes promo</h2>
+              </div>
+              <span>{promotions.filter((promotion) => promotion.active).length} actif(s)</span>
+            </div>
+
+            <form className={styles.promotionForm} onSubmit={(event) => {
+              event.preventDefault();
+              void createPromotion();
+            }}>
+              <label>Code<input required autoComplete="off" minLength={3} maxLength={32} name="promotionCode" pattern="[A-Za-z0-9_-]+" placeholder="ex. BIENVENUE10…" spellCheck={false} value={promotionCode} onChange={(event) => setPromotionCode(event.currentTarget.value.toUpperCase())} /></label>
+              <label>Type<select autoComplete="off" name="promotionKind" value={promotionKind} onChange={(event) => setPromotionKind(event.currentTarget.value as "percentage" | "fixed")}><option value="percentage">Pourcentage</option><option value="fixed">Montant fixe</option></select></label>
+              <label>{promotionKind === "percentage" ? "Remise (%)" : "Remise (€)"}<input required autoComplete="off" inputMode="decimal" name="promotionValue" type="number" min="0.01" max={promotionKind === "percentage" ? "100" : "10000"} step="0.01" value={promotionValue} onChange={(event) => setPromotionValue(event.currentTarget.value)} /></label>
+              <label>Panier minimum (€)<input required autoComplete="off" inputMode="decimal" name="promotionMinimum" type="number" min="0" max="10000" step="0.01" value={promotionMinimum} onChange={(event) => setPromotionMinimum(event.currentTarget.value)} /></label>
+              <label>Plafond remise (€)<input autoComplete="off" inputMode="decimal" name="promotionMaximumDiscount" type="number" min="0.01" max="10000" step="0.01" placeholder="Facultatif…" value={promotionMaximumDiscount} onChange={(event) => setPromotionMaximumDiscount(event.currentTarget.value)} /></label>
+              <label>Nombre d’utilisations<input autoComplete="off" inputMode="numeric" name="promotionMaximumRedemptions" type="number" min="1" max="1000000" step="1" placeholder="Illimité…" value={promotionMaximumRedemptions} onChange={(event) => setPromotionMaximumRedemptions(event.currentTarget.value)} /></label>
+              <label>Fin du code<input autoComplete="off" name="promotionEndsAt" type="datetime-local" value={promotionEndsAt} onChange={(event) => setPromotionEndsAt(event.currentTarget.value)} /></label>
+              <button className={styles.download} type="submit" disabled={promotionBusy}>{promotionBusy ? "Enregistrement…" : "Créer le code"}</button>
+            </form>
+
+            <div className={styles.promotionList}>
+              {promotions.map((promotion) => (
+                <article key={promotion.id} className={styles.promotionCard}>
+                  <div>
+                    <strong>{promotion.code}</strong>
+                    <span>{promotion.kind === "percentage"
+                      ? `${(promotion.percentageBasisPoints ?? 0) / 100} %`
+                      : amount({ currency: "EUR", totalCents: promotion.fixedDiscountCents ?? 0 })}</span>
+                  </div>
+                  <p>
+                    {promotion.redeemedCount} utilisée(s) · {promotion.reservedCount} réservée(s)
+                    {promotion.maximumRedemptions ? ` · limite ${promotion.maximumRedemptions}` : " · sans limite"}
+                  </p>
+                  <button className={styles.secondary} type="button" disabled={promotionBusy} onClick={() => void setPromotionActive(promotion)}>
+                    {promotion.active ? "Désactiver" : "Réactiver"}
+                  </button>
+                </article>
+              ))}
+              {promotions.length === 0 ? <p className={styles.empty}>Aucun code promo créé.</p> : null}
+            </div>
+          </section>
         ) : null}
 
         <p className={styles.reminder}>

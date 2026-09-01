@@ -19,6 +19,13 @@ import { prepareProductionDeliveryOrderSelection } from "./production-delivery-o
 import { calculateAjPackPricing } from "./pack-pricing.ts";
 import { SELLER_TAX_STATUS } from "../legal.ts";
 import { resolveLaunchShippingCountryZone } from "./shipping-policy.ts";
+import {
+  calculatePromotionQuote,
+  normalizePromotionCode,
+  PromotionCodeError,
+  type PromotionCodeRule,
+  type PromotionQuote,
+} from "./promotion-code.ts";
 
 export type ProductionCheckoutErrorCode =
   | "INVALID_INPUT"
@@ -27,6 +34,7 @@ export type ProductionCheckoutErrorCode =
   | "ORDER_CONFLICT"
   | "PAYMENT_CONFLICT"
   | "ACCOUNT_AUTHENTICATION_REQUIRED"
+  | "PROMOTION_REJECTED"
   | "CHECKOUT_UNAVAILABLE";
 
 export class ProductionCheckoutError extends Error {
@@ -63,6 +71,9 @@ type OrderRow = Readonly<{
   email: string;
   subtotal_cents: number;
   discount_cents: number;
+  promotion_code_id: string | null;
+  promotion_code: string | null;
+  promotion_discount_cents: number;
   shipping_cents: number;
   tax_cents: number;
   total_cents: number;
@@ -116,11 +127,28 @@ type PaymentRow = Readonly<{
   livemode: number | null;
 }>;
 
+type PromotionRow = Readonly<{
+  id: string;
+  code: string;
+  kind: "percentage" | "fixed";
+  percentage_basis_points: number | null;
+  fixed_discount_cents: number | null;
+  minimum_subtotal_cents: number;
+  maximum_discount_cents: number | null;
+  maximum_redemptions: number | null;
+  active: number;
+  starts_at: string;
+  ends_at: string | null;
+  redeemed_count: number;
+}>;
+
 export type ProductionOrderSnapshot = Readonly<{
   orderNumber: string;
   status: "pending_payment" | "paid" | "preparing" | "shipped" | "cancelled" | "refunded";
   currency: "EUR";
   subtotalCents: number;
+  promotionCode: string | null;
+  promotionDiscountCents: number;
   shippingCents: number;
   taxCents: 0;
   invoiceTaxMention: string;
@@ -144,6 +172,7 @@ export type CreateProductionOrderInput = Readonly<{
   servicePointId?: string | null;
   address: ShippingAddressInput;
   email: string;
+  promotionCode?: string | null;
   customerId?: string | null;
   idempotencyKey: string;
   termsVersion: string;
@@ -165,7 +194,8 @@ export type ProductionDeliveryChangePlan =
   }>;
 
 const orderColumns = `id, order_number, cart_id, customer_id, status,
-  currency, email, subtotal_cents, discount_cents, shipping_cents, tax_cents, total_cents,
+  currency, email, subtotal_cents, discount_cents, promotion_code_id,
+  promotion_code, promotion_discount_cents, shipping_cents, tax_cents, total_cents,
   shipping_country_code, shipping_address_json, shipping_address_fingerprint,
   shipping_quote_id, terms_version, privacy_version, commerce_release_sha,
   commerce_worker_version_id, commerce_mode, settlement_mode, created_at, paid_at`;
@@ -174,6 +204,22 @@ const EMAIL_PATTERN =
 const RELEASE_SHA_PATTERN = /^[a-f0-9]{40}$/;
 const WORKER_VERSION_ID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+function promotionRule(row: PromotionRow): PromotionCodeRule {
+  return Object.freeze({
+    id: row.id,
+    code: row.code,
+    kind: row.kind,
+    percentageBasisPoints: row.percentage_basis_points,
+    fixedDiscountCents: row.fixed_discount_cents,
+    minimumSubtotalCents: row.minimum_subtotal_cents,
+    maximumDiscountCents: row.maximum_discount_cents,
+    maximumRedemptions: row.maximum_redemptions,
+    active: row.active === 1,
+    startsAt: row.starts_at,
+    endsAt: row.ends_at,
+  });
+}
 
 function normalizeEmail(value: unknown): string {
   if (typeof value !== "string") {
@@ -219,6 +265,13 @@ async function normalizeProductionLaunchAddress(
 
 function mapDatabaseError(error: unknown): never {
   const message = error instanceof Error ? error.message : String(error);
+  if (/promotion_order_mismatch|promotion_redemption/i.test(message)) {
+    throw new ProductionCheckoutError(
+      "PROMOTION_REJECTED",
+      "The promotion code is no longer available.",
+      { cause: error },
+    );
+  }
   if (/UNIQUE constraint failed|delivery_order_option_required|order_commit/i.test(message)) {
     throw new ProductionCheckoutError(
       "ORDER_CONFLICT",
@@ -259,6 +312,83 @@ export class D1ProductionCheckoutStore {
     this.#database = database;
     this.#internationalShippingEnabled = internationalShippingEnabled;
     this.#requireCustomerAccount = requireCustomerAccount;
+  }
+
+  async #promotionForSubtotal(
+    rawCode: string,
+    subtotalCents: number,
+    now: string,
+  ): Promise<Readonly<{ rule: PromotionCodeRule; quote: PromotionQuote }>> {
+    let code: string;
+    try {
+      code = normalizePromotionCode(rawCode);
+    } catch (cause) {
+      throw new ProductionCheckoutError(
+        "PROMOTION_REJECTED",
+        "The promotion code is invalid.",
+        { cause },
+      );
+    }
+    const row = await this.#database.prepare(
+      `SELECT promotion.id, promotion.code, promotion.kind,
+        promotion.percentage_basis_points, promotion.fixed_discount_cents,
+        promotion.minimum_subtotal_cents, promotion.maximum_discount_cents,
+        promotion.maximum_redemptions, promotion.active, promotion.starts_at,
+        promotion.ends_at, (
+          SELECT COUNT(*) FROM promotion_redemptions AS redemption
+          WHERE redemption.promotion_code_id=promotion.id
+            AND redemption.status IN ('reserved','redeemed')
+        ) AS redeemed_count
+      FROM promotion_codes AS promotion WHERE promotion.code=? LIMIT 1`,
+    ).bind(code).first<PromotionRow>();
+    if (!row) {
+      throw new ProductionCheckoutError("PROMOTION_REJECTED", "The promotion code is unknown.");
+    }
+    const rule = promotionRule(row);
+    try {
+      return Object.freeze({
+        rule,
+        quote: calculatePromotionQuote(rule, subtotalCents, row.redeemed_count, now),
+      });
+    } catch (cause) {
+      if (cause instanceof PromotionCodeError) {
+        throw new ProductionCheckoutError(
+          "PROMOTION_REJECTED",
+          "The promotion code cannot be applied to this cart.",
+          { cause },
+        );
+      }
+      throw cause;
+    }
+  }
+
+  async quotePromotion(
+    cartId: string,
+    rawCode: string,
+    now: string,
+  ): Promise<PromotionQuote> {
+    assertFulfillmentIdentifier(cartId, "cartId");
+    assertFulfillmentTimestamp(now, "now");
+    const lineResult = await this.#database.prepare(
+      `SELECT line.quantity, line.unit_price_cents
+      FROM cart_lines AS line INNER JOIN carts AS cart ON cart.id=line.cart_id
+      WHERE line.cart_id=? AND cart.status='open' AND cart.expires_at>?`,
+    ).bind(cartId, now).all<Pick<CheckoutLineRow, "quantity" | "unit_price_cents">>();
+    if (lineResult.results.length < 1) {
+      throw new ProductionCheckoutError("CHECKOUT_UNAVAILABLE", "The cart is unavailable.");
+    }
+    let subtotalCents: number;
+    try {
+      subtotalCents = calculateAjPackPricing(lineResult.results.map((line) => ({
+        quantity: line.quantity,
+        unitPriceCents: line.unit_price_cents,
+      }))).subtotalCents;
+    } catch (cause) {
+      throw new ProductionCheckoutError("CHECKOUT_UNAVAILABLE", "The cart price is invalid.", {
+        cause,
+      });
+    }
+    return (await this.#promotionForSubtotal(rawCode, subtotalCents, now)).quote;
   }
 
   async currentOrder(cartId: string): Promise<ProductionOrderSnapshot | null> {
@@ -591,7 +721,39 @@ export class D1ProductionCheckoutStore {
         { cause: error },
       );
     }
-    const subtotalCents = pricing.subtotalCents;
+    let requestedPromotionCode: string | null = null;
+    if (input.promotionCode !== undefined && input.promotionCode !== null) {
+      try {
+        requestedPromotionCode = normalizePromotionCode(input.promotionCode);
+      } catch (cause) {
+        throw new ProductionCheckoutError(
+          "PROMOTION_REJECTED",
+          "The promotion code is invalid.",
+          { cause },
+        );
+      }
+    }
+    if (existing && existing.promotion_code !== requestedPromotionCode) {
+      throw new ProductionCheckoutError(
+        "ORDER_CONFLICT",
+        "This cart is already bound to another order attempt.",
+      );
+    }
+    // An exact retry reuses the immutable order snapshot. It must not become
+    // impossible merely because the promotion expired after the order was created.
+    const promotion = !existing && requestedPromotionCode
+      ? await this.#promotionForSubtotal(requestedPromotionCode, pricing.subtotalCents, input.now)
+      : null;
+    const promotionCodeId = existing
+      ? existing.promotion_code_id
+      : promotion?.rule.id ?? null;
+    const promotionCode = existing
+      ? existing.promotion_code
+      : promotion?.quote.code ?? null;
+    const promotionDiscountCents = existing
+      ? existing.promotion_discount_cents
+      : promotion?.quote.discountCents ?? 0;
+    const subtotalCents = pricing.subtotalCents - promotionDiscountCents;
     if (
       !quote || !option || lines.length < 1 || quote.cart_status !== "open" ||
       quote.currency !== "EUR" || quote.cart_revision !== quote.fulfillment_revision ||
@@ -615,6 +777,8 @@ export class D1ProductionCheckoutStore {
       email,
       lines,
       pricing,
+      promotionCode,
+      promotionDiscountCents,
       optionId: input.optionId,
       servicePointId: input.servicePointId ?? null,
       privacyVersion: input.privacyVersion,
@@ -635,7 +799,10 @@ export class D1ProductionCheckoutStore {
         existing.id !== orderId || existing.shipping_quote_id !== input.quoteId ||
         existing.shipping_address_fingerprint !== address.fingerprint ||
         existing.email !== email || existing.total_cents !== subtotalCents + quote.amount_cents ||
-        existing.discount_cents !== pricing.discountCents ||
+        existing.discount_cents !== pricing.discountCents + promotionDiscountCents ||
+        existing.promotion_code_id !== promotionCodeId ||
+        existing.promotion_code !== promotionCode ||
+        existing.promotion_discount_cents !== promotionDiscountCents ||
         existing.customer_id !== (input.customerId ?? null) ||
         existing.commerce_release_sha !== input.commerceReleaseSha ||
         existing.commerce_worker_version_id !== input.commerceWorkerVersionId ||
@@ -684,14 +851,15 @@ export class D1ProductionCheckoutStore {
       this.#database.prepare(
         `INSERT INTO orders (
           id, order_number, cart_id, customer_id, email, status, currency,
-          subtotal_cents, discount_cents, shipping_cents, tax_cents, total_cents,
+          subtotal_cents, discount_cents, promotion_code_id, promotion_code,
+          promotion_discount_cents, shipping_cents, tax_cents, total_cents,
           shipping_country_code, shipping_address_json,
           shipping_address_fingerprint, billing_address_json,
           shipping_quote_id, terms_version, privacy_version,
           commerce_release_sha, commerce_worker_version_id, commerce_mode,
           settlement_mode, paid_at,
           created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, 'pending_payment', 'EUR', ?, ?, ?, 0, ?,
+        ) VALUES (?, ?, ?, ?, ?, 'pending_payment', 'EUR', ?, ?, ?, ?, ?, ?, 0, ?,
           ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)`,
       ).bind(
         orderId,
@@ -700,7 +868,10 @@ export class D1ProductionCheckoutStore {
         input.customerId ?? null,
         email,
         subtotalCents,
-        pricing.discountCents,
+        pricing.discountCents + promotionDiscountCents,
+        promotionCodeId,
+        promotionCode,
+        promotionDiscountCents,
         quote.amount_cents,
         subtotalCents + quote.amount_cents,
         address.address.countryCode,
@@ -976,6 +1147,8 @@ export class D1ProductionCheckoutStore {
       status: order.status,
       currency: order.currency,
       subtotalCents: order.subtotal_cents,
+      promotionCode: order.promotion_code,
+      promotionDiscountCents: order.promotion_discount_cents,
       shippingCents: order.shipping_cents,
       taxCents: SELLER_TAX_STATUS.taxCents,
       invoiceTaxMention: SELLER_TAX_STATUS.invoiceMention,

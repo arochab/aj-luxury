@@ -717,14 +717,13 @@ test("owner handover route records one real handover and queues confirmation ide
   assert.equal(unauthenticated.status, 403);
   assert.equal(unauthenticatedDatabase.queries.length, 0);
 
-  const liveWithoutMfaDatabase = database();
-  const liveWithoutMfa = await productionOperationsApiResponse(
+  const liveWithoutForcedMfaDatabase = database();
+  const liveWithoutForcedMfa = await productionOperationsApiResponse(
     await makeRequest(),
-    { ...controlledEnv(liveWithoutMfaDatabase), COMMERCE_MODE: "live" },
+    { ...controlledEnv(liveWithoutForcedMfaDatabase), COMMERCE_MODE: "live" },
+    { authorizeOwner: async () => true, shipments },
   );
-  assert.equal(liveWithoutMfa.status, 503);
-  assert.equal((await liveWithoutMfa.json()).error.code, "OPERATOR_MFA_NOT_ACTIVATED");
-  assert.equal(liveWithoutMfaDatabase.queries.length, 0);
+  assert.equal(liveWithoutForcedMfa.status, 200);
 });
 
 test("owner email reconciliation records exact provider evidence and never resends", async () => {

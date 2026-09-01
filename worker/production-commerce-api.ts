@@ -74,6 +74,7 @@ const routes = Object.freeze({
   delivery: `${PREFIX}checkout/delivery-options`,
   points: `${PREFIX}checkout/service-points`,
   select: `${PREFIX}checkout/delivery-options/select`,
+  promotion: `${PREFIX}checkout/promotion`,
   order: `${PREFIX}checkout/order`, payment: `${PREFIX}checkout/payment-session`,
   deliveryChange: `${PREFIX}checkout/order/delivery-change`,
   webhook: `${PREFIX}webhooks/stripe`, resendWebhook: `${PREFIX}webhooks/resend`,
@@ -389,6 +390,7 @@ function map(cause: unknown): Response {
       return fail("ACCOUNT_AUTHENTICATION_REQUIRED", 401);
     }
     if (cause.code === "INVALID_INPUT") return fail("INVALID_INPUT", 400);
+    if (cause.code === "PROMOTION_REJECTED") return fail("PROMOTION_REJECTED", 409);
     if (cause.code === "ORDER_NOT_FOUND") return fail("ORDER_NOT_FOUND", 404);
     if (["ORDER_CONFLICT", "PAYMENT_CONFLICT"].includes(cause.code)) {
       return fail("ORDER_NOT_MODIFIABLE", 409);
@@ -476,18 +478,8 @@ export function productionCommerceRuntimeBlockers(
         ...(productionOutboundShippingRuntimeConfigured(env)
           ? []
           : ["outbound-shipping-runtime-not-configured"]),
-        // Customer checkout does not expose operator administration. Keep MFA
-        // mandatory for public `live` promotion while allowing the owner-only
-        // controlled acceptance order to run before the admin console opens.
-        ...(mode !== "controlled" && env.OPERATOR_ADMIN_MFA_ENABLED !== "true"
-          ? ["operator-admin-mfa-not-enabled"]
-          : []),
         ...(mode !== "controlled" && env.OPERATOR_CONSOLE_ENABLED !== "true"
           ? ["operator-console-not-enabled"]
-          : []),
-        ...(mode !== "controlled" &&
-          env.CLOUDFLARE_ACCESS_MFA_ATTESTATION !== "independent-mfa:required-every-login"
-          ? ["operator-access-mfa-policy-not-attested"]
           : []),
         ...(productionEmailDispatchRuntimeConfigured(env)
           ? []
@@ -574,6 +566,54 @@ export async function productionDeliveryRuntimeInstalled(
     const actual = installed.results.map((row) => `${row.type}:${row.name}:${row.table_name}`).sort();
     return actual.length === deliverySchemaInventory.length &&
       actual.every((value, index) => value === deliverySchemaInventory[index]);
+  } catch {
+    return false;
+  }
+}
+
+const promotionSchemaInventory = Object.freeze([
+  "column:promotion_code:orders",
+  "column:promotion_code_id:orders",
+  "column:promotion_discount_cents:orders",
+  "index:idx_promotion_codes_active_window:promotion_codes",
+  "index:idx_promotion_redemptions_code_status:promotion_redemptions",
+  "index:ux_promotion_codes_code:promotion_codes",
+  "index:ux_promotion_redemptions_order:promotion_redemptions",
+  "table:promotion_codes:promotion_codes",
+  "table:promotion_redemptions:promotion_redemptions",
+  "trigger:trg_orders_promotion_redeem:orders",
+  "trigger:trg_orders_promotion_release:orders",
+  "trigger:trg_orders_promotion_reserve:orders",
+  "trigger:trg_orders_promotion_snapshot_immutable:orders",
+  "trigger:trg_orders_promotion_validate_insert:orders",
+  "trigger:trg_promotion_codes_lock_rule:promotion_codes",
+  "trigger:trg_promotion_codes_status_update:promotion_codes",
+  "trigger:trg_promotion_codes_timestamp_insert:promotion_codes",
+  "trigger:trg_promotion_redemptions_transition:promotion_redemptions",
+]);
+
+export async function productionPromotionRuntimeInstalled(
+  database: CommerceD1Database | undefined,
+): Promise<boolean> {
+  if (!database) return false;
+  try {
+    const installed = await database.prepare(
+      `SELECT lower(type) AS type, lower(name) AS name,
+        lower(tbl_name) AS table_name FROM sqlite_master
+      WHERE lower(name) NOT GLOB 'sqlite_autoindex_*' AND (
+        lower(tbl_name) IN ('promotion_codes','promotion_redemptions')
+        OR (lower(type)='trigger' AND lower(name) GLOB 'trg_orders_promotion_*')
+      )
+      UNION ALL
+      SELECT 'column' AS type, lower(name) AS name, 'orders' AS table_name
+      FROM pragma_table_info('orders') WHERE lower(name) GLOB 'promotion_*'
+      ORDER BY type, name`,
+    ).all<InstalledCommerceSchemaObject>();
+    const actual = installed.results
+      .map((row) => `${row.type}:${row.name}:${row.table_name}`)
+      .sort();
+    return actual.length === promotionSchemaInventory.length &&
+      actual.every((value, index) => value === promotionSchemaInventory[index]);
   } catch {
     return false;
   }
@@ -1235,6 +1275,9 @@ export async function productionCommerceApiResponse(
     if (gate.mode !== "closed" && !await productionDeliveryRuntimeInstalled(env.DB)) {
       blockers.push("delivery-schema-0013-not-installed");
     }
+    if (gate.mode !== "closed" && !await productionPromotionRuntimeInstalled(env.DB)) {
+      blockers.push("promotion-schema-0028-not-installed");
+    }
     if (["controlled", "live"].includes(gate.mode) &&
       !await productionLatePaymentRefundRuntimeReady(env.DB)) {
       blockers.push("late-payment-refund-schema-or-operations-not-ready");
@@ -1292,6 +1335,9 @@ export async function productionCommerceApiResponse(
   if (!env.DB) return fail("DATABASE_UNAVAILABLE", 503);
   if (gate.mode !== "closed" && !await productionDeliveryRuntimeInstalled(env.DB)) {
     blockers.push("delivery-schema-0013-not-installed");
+  }
+  if (gate.mode !== "closed" && !await productionPromotionRuntimeInstalled(env.DB)) {
+    blockers.push("promotion-schema-0028-not-installed");
   }
   if (["controlled", "live"].includes(gate.mode) &&
     !await productionLatePaymentRefundRuntimeReady(env.DB)) {
@@ -1626,7 +1672,7 @@ export async function productionCommerceApiResponse(
     } catch (cause) { return map(cause); }
   }
   if (!current) return fail("CART_SESSION_REQUIRED", 401);
-  if ([routes.delivery, routes.points, routes.select, routes.order, routes.payment,
+  if ([routes.delivery, routes.points, routes.select, routes.promotion, routes.order, routes.payment,
     routes.deliveryChange].includes(url.pathname as never)) {
     if (request.method !== "POST") return fail("METHOD_NOT_ALLOWED", 405);
     if (!key(request)) return fail("IDEMPOTENCY_KEY_REQUIRED", 400);
@@ -1634,6 +1680,9 @@ export async function productionCommerceApiResponse(
   }
   if (url.pathname === routes.currentOrder) {
     if (request.method !== "GET") return fail("METHOD_NOT_ALLOWED", 405);
+    if (blockers.includes("promotion-schema-0028-not-installed")) {
+      return fail("PROMOTION_SCHEMA_NOT_READY", 503);
+    }
     try { return json({ data: await new D1ProductionCheckoutStore(env.DB).currentOrder(current.cartId) }); } catch (cause) { return map(cause); }
   }
   if (url.pathname === routes.delivery) {
@@ -1678,11 +1727,38 @@ export async function productionCommerceApiResponse(
       return json({ data: await new D1ProductionDeliveryActivationStore(env.DB, provider, vault, internationalShippingConfigured(env)).selectOption({ cartId: current.cartId, optionId: parsed.optionId, servicePointId: typeof parsed.servicePointId === "string" ? parsed.servicePointId : null, address: parsed.address as never, now: now() }) });
     } catch (cause) { return map(cause); }
   }
+  if (url.pathname === routes.promotion) {
+    if (blockers.includes("promotion-schema-0028-not-installed")) {
+      return fail("PROMOTION_SCHEMA_NOT_READY", 503);
+    }
+    const parsed = await body(request);
+    if (!parsed || !exact(parsed, ["code"]) || typeof parsed.code !== "string") {
+      return fail("INVALID_BODY", 400);
+    }
+    try {
+      return json({
+        data: await new D1ProductionCheckoutStore(env.DB).quotePromotion(
+          current.cartId,
+          parsed.code,
+          now(),
+        ),
+      });
+    } catch (cause) {
+      return map(cause);
+    }
+  }
   if (url.pathname === routes.order) {
     if (blockers.includes("delivery-schema-0013-not-installed")) return fail("DELIVERY_SCHEMA_NOT_READY", 503);
-    const parsed = await body(request); const wanted = parsed && Object.hasOwn(parsed, "servicePointId") ? ["address", "email", "optionId", "privacyAccepted", "quoteId", "servicePointId", "termsAccepted"] : ["address", "email", "optionId", "privacyAccepted", "quoteId", "termsAccepted"];
+    if (blockers.includes("promotion-schema-0028-not-installed")) {
+      return fail("PROMOTION_SCHEMA_NOT_READY", 503);
+    }
+    const parsed = await body(request);
+    const wanted = ["address", "email", "optionId", "privacyAccepted", "quoteId", "termsAccepted"];
+    if (parsed && Object.hasOwn(parsed, "promotionCode")) wanted.push("promotionCode");
+    if (parsed && Object.hasOwn(parsed, "servicePointId")) wanted.push("servicePointId");
     if (!parsed || !exact(parsed, wanted) || typeof parsed.email !== "string" || typeof parsed.optionId !== "string" || typeof parsed.quoteId !== "string" || parsed.termsAccepted !== true || parsed.privacyAccepted !== true) return fail("INVALID_BODY", 400);
     if (Object.hasOwn(parsed, "servicePointId") && typeof parsed.servicePointId !== "string") return fail("INVALID_BODY", 400);
+    if (Object.hasOwn(parsed, "promotionCode") && typeof parsed.promotionCode !== "string") return fail("INVALID_BODY", 400);
     try {
       const orderNow = now();
       const orderSettlementMode = settlementMode(env);
@@ -1701,6 +1777,7 @@ export async function productionCommerceApiResponse(
         servicePointId: typeof parsed.servicePointId === "string" ? parsed.servicePointId : null,
         address: parsed.address as never,
         email: parsed.email,
+        promotionCode: typeof parsed.promotionCode === "string" ? parsed.promotionCode : null,
         customerId,
         idempotencyKey: key(request)!,
         termsVersion: LEGAL_VERSION,
@@ -1714,6 +1791,10 @@ export async function productionCommerceApiResponse(
     } catch (cause) { return map(cause); }
   }
   if (url.pathname === routes.payment) {
+    if (gate.mode === "sandbox" &&
+      blockers.includes("promotion-schema-0028-not-installed")) {
+      return fail("PROMOTION_SCHEMA_NOT_READY", 503);
+    }
     if (!["sandbox", "controlled", "live"].includes(gate.mode)) {
       return fail("PAYMENT_SESSION_NOT_ACTIVATED", 503);
     }

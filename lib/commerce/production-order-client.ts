@@ -6,6 +6,7 @@ import type { ShippingAddress } from "./preprod-shipping-client.ts";
 
 const ORDER_PATH = commerceApiPath("production", "/checkout/order");
 const CURRENT_ORDER_PATH = commerceApiPath("production", "/orders/current");
+const PROMOTION_PATH = commerceApiPath("production", "/checkout/promotion");
 const PAYMENT_SESSION_PATH = commerceApiPath(
   "production",
   "/checkout/payment-session",
@@ -20,6 +21,8 @@ export type PublicProductionOrder = Readonly<{
   status: "pending_payment" | "paid" | "preparing" | "shipped" | "cancelled" | "refunded";
   currency: "EUR";
   subtotalCents: number;
+  promotionCode: string | null;
+  promotionDiscountCents: number;
   shippingCents: number;
   taxCents: 0;
   invoiceTaxMention: string;
@@ -34,6 +37,12 @@ export type PublicProductionOrder = Readonly<{
     unitPriceCents: number;
     lineTotalCents: number;
   }>[];
+}>;
+
+export type PublicPromotionQuote = Readonly<{
+  code: string;
+  discountCents: number;
+  subtotalAfterDiscountCents: number;
 }>;
 
 export class ProductionOrderApiError extends Error {
@@ -66,8 +75,8 @@ function validAmount(value: unknown): value is number {
 export function parseProductionOrder(value: unknown): PublicProductionOrder {
   const keys = [
     "createdAt", "currency", "invoiceTaxMention", "lines", "orderNumber",
-    "paidAt", "shippingCents", "status", "subtotalCents", "taxCents",
-    "totalCents",
+    "paidAt", "promotionCode", "promotionDiscountCents", "shippingCents",
+    "status", "subtotalCents", "taxCents", "totalCents",
   ];
   const lineKeys = [
     "colorName", "lineTotalCents", "productName", "quantity", "size",
@@ -82,6 +91,10 @@ export function parseProductionOrder(value: unknown): PublicProductionOrder {
     !["pending_payment", "paid", "preparing", "shipped", "cancelled", "refunded"].includes(String(value.status)) ||
     value.currency !== "EUR" ||
     !validAmount(value.subtotalCents) ||
+    !(value.promotionCode === null || (typeof value.promotionCode === "string" &&
+      /^[A-Z0-9][A-Z0-9_-]{2,31}$/.test(value.promotionCode))) ||
+    !validAmount(value.promotionDiscountCents) ||
+    ((value.promotionCode === null) !== (value.promotionDiscountCents === 0)) ||
     !validAmount(value.shippingCents) ||
     value.taxCents !== 0 ||
     value.invoiceTaxMention !==
@@ -174,6 +187,7 @@ export async function createProductionOrder(input: Readonly<{
   address: ShippingAddress;
   email: string;
   idempotencyKey: string;
+  promotionCode?: string;
   servicePointId?: string;
 }>): Promise<PublicProductionOrder> {
   return orderResponse(await fetch(ORDER_PATH, {
@@ -186,11 +200,35 @@ export async function createProductionOrder(input: Readonly<{
       optionId: input.optionId,
       address: input.address,
       email: input.email,
+      ...(input.promotionCode ? { promotionCode: input.promotionCode } : {}),
       ...(input.servicePointId ? { servicePointId: input.servicePointId } : {}),
       termsAccepted: true,
       privacyAccepted: true,
     }),
   }));
+}
+
+export async function quoteProductionPromotion(
+  code: string,
+  idempotencyKey: string,
+): Promise<PublicPromotionQuote> {
+  const response = await fetch(PROMOTION_PATH, {
+    method: "POST",
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: mutationHeaders(idempotencyKey, true),
+    body: JSON.stringify({ code }),
+  });
+  const payload = await jsonResponse(response);
+  if (!exact(payload, ["data"]) || !record(payload.data) ||
+    !exact(payload.data, ["code", "discountCents", "subtotalAfterDiscountCents"]) ||
+    typeof payload.data.code !== "string" ||
+    !/^[A-Z0-9][A-Z0-9_-]{2,31}$/.test(payload.data.code) ||
+    !validAmount(payload.data.discountCents) || payload.data.discountCents < 1 ||
+    !validAmount(payload.data.subtotalAfterDiscountCents)) {
+    throw new ProductionOrderApiError("MALFORMED_RESPONSE", response.status);
+  }
+  return Object.freeze(payload.data as PublicPromotionQuote);
 }
 
 export async function createProductionPaymentSession(

@@ -553,7 +553,7 @@ test("a Cloudflare Access owner plus the durable AAL2 session can recover the un
   assert.equal(DB.auditLog.size, 1);
 });
 
-test("controlled labels defer MFA but live labels keep it mandatory", async () => {
+test("labels do not require forced MFA but still require Access and a durable owner session", async () => {
   const DB = { prepare() { throw new Error("D1 must not be touched without cookies"); }, batch() { throw new Error("D1 must not be touched"); } };
   const controlled = await productionShippingLabelAdminReleaseCoreResponse(
     await adminRequest(),

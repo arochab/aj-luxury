@@ -502,7 +502,7 @@ test("0011 fails closed for a missing, foreign, expired or unsealed service poin
   assert.doesNotMatch(migration, /provider_reference` text|raw_reference|api[_-]?key|secret[_-]?key/i);
 });
 
-test("0011-0027 remain additive and the journal ends at email reconciliation", () => {
+test("0011-0028 remain additive and the journal ends at promotion codes", () => {
   const previous = JSON.parse(readFileSync(`${drizzle}meta/0010_snapshot.json`, "utf8"));
   const snapshot = JSON.parse(readFileSync(`${drizzle}meta/0011_snapshot.json`, "utf8"));
   const pricingSnapshot = JSON.parse(readFileSync(`${drizzle}meta/0012_snapshot.json`, "utf8"));
@@ -514,6 +514,7 @@ test("0011-0027 remain additive and the journal ends at email reconciliation", (
   const resendSnapshot = JSON.parse(readFileSync(`${drizzle}meta/0018_snapshot.json`, "utf8"));
   const internationalSnapshot = JSON.parse(readFileSync(`${drizzle}meta/0026_snapshot.json`, "utf8"));
   const reconciliationSnapshot = JSON.parse(readFileSync(`${drizzle}meta/0027_snapshot.json`, "utf8"));
+  const promotionSnapshot = JSON.parse(readFileSync(`${drizzle}meta/0028_snapshot.json`, "utf8"));
   const journal = JSON.parse(readFileSync(`${drizzle}meta/_journal.json`, "utf8"));
   assert.equal(snapshot.version, "6");
   assert.equal(snapshot.dialect, "sqlite");
@@ -595,11 +596,14 @@ test("0011-0027 remain additive and the journal ends at email reconciliation", (
     Object.keys(internationalSnapshot.tables).length + 1,
   );
   assert.ok(reconciliationSnapshot.tables.email_delivery_provider_evidence);
+  assert.equal(promotionSnapshot.prevId, reconciliationSnapshot.id);
+  assert.ok(promotionSnapshot.tables.promotion_codes);
+  assert.ok(promotionSnapshot.tables.promotion_redemptions);
   assert.deepEqual(journal.entries.at(-1), {
-    idx: 27,
+    idx: 28,
     version: "6",
-    when: 1788307200000,
-    tag: "0027_puzzling_war_machine",
+    when: 1788393600000,
+    tag: "0028_even_fallen_one",
     breakpoints: true,
   });
 });
