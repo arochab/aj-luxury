@@ -1,4 +1,4 @@
-export const LEGAL_VERSION = "2026-09-01";
+export const LEGAL_VERSION = "2026-09-01-r2";
 
 /*
   La même date, mais avec des traits d'union INSÉCABLES (U+2011) pour
@@ -67,7 +67,7 @@ export const SELLER_IDENTITY = {
 export const SELLER_TAX_STATUS = Object.freeze({
   vatCollected: false,
   taxCents: 0,
-  invoiceMention: "TVA non applicable, article 293 B du Code général des impôts",
+  invoiceMention: "TVA non applicable, art. 293 B du code général des impôts",
 } as const);
 
 /** Numéro EORI relevé sur la fiche officielle le 22/08/2026 et déclaré valide
@@ -96,29 +96,25 @@ export const HOSTING_PROVIDER = {
   website: "https://www.cloudflare.com",
 } as const;
 
-/*
-  `null` TANT QU'AUCUN MÉDIATEUR N'EST CONVENTIONNÉ, pour la même raison que
-  le téléphone plus haut : une page de CGV qui affiche « À compléter, À
-  compléter » ne satisfait pas davantage l'article L612-1 du code de la
-  consommation, et signale au lecteur une marque qui n'est pas prête.
-
-  Relevé sur la prévisualisation déployée le 22/08/2026 : la phrase rendue
-  était « le médiateur conventionné par AJ Luxury : À sélectionner et
-  conventionner avant l'ouverture des ventes, À compléter, À compléter. »
-
-  À la place, la page dit ce qui est vrai : la vente n'est pas ouverte, et le
-  médiateur sera désigné avant qu'elle le soit. Dès qu'il l'est, poser l'objet
-  ici suffit : la phrase définitive réapparaît.
-*/
+/* Adhésion triennale payée le 01/09/2026. Preuve interne :
+   docs/legal/mediation/mediator-source-2026-09-01.pdf, SHA-256
+   f2b0cfddb88d0e8b2ede2b8abca8980e4d09e18d82cccb5a9107398cf67870b7.
+   Les coordonnées publiées sont celles du service consommateur indiquées sur
+   le site officiel du médiateur ; les données bancaires de la facture source
+   ne sont jamais exposées. */
 export const MEDIATOR: Readonly<{
   name: string;
   address: string;
   website: string;
-}> | null = null;
+  filingUrl: string;
+}> = Object.freeze({
+  name: "Société Médiation Professionnelle – Médiateur de la consommation",
+  address: "Alteritae, 5 rue Salvaing, 12000 Rodez, France",
+  website: "https://www.mediateur-consommation-smp.fr/",
+  filingUrl: "https://www.mediateur-consommation-smp.fr/demander-une-mediation/",
+});
 
-export const PRELAUNCH_BLOCKERS = [
-  "médiateur de la consommation conventionné",
-] as const;
+export const PRELAUNCH_BLOCKERS = [] as const;
 
 export const POSTLAUNCH_FORMALITIES = [
   "déclarer l’ajout de l’activité de vente en ligne au guichet unique dans le mois suivant son démarrage",

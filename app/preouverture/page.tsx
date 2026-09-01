@@ -4,8 +4,8 @@ import StoreHeader from "../components/StoreHeader";
 import styles from "./Preouverture.module.css";
 
 export const metadata: Metadata = {
-  title: "Préouverture | AJ Luxury",
-  description: "État de préparation privé avant l’ouverture d’AJ Luxury.",
+  title: "Contrôle d’ouverture | AJ Luxury",
+  description: "État privé de la chaîne commerce AJ Luxury.",
   robots: { index: false, follow: false },
 };
 
@@ -16,21 +16,23 @@ const construit = [
   "Packs reliés au stock des boxers",
   "Panier et parcours de paiement",
   "Livraison, e-mails et retours",
+  "Factures, avoirs et étiquettes A4",
+  "Tableau de bord administrateur et codes promotionnels",
   "Pages légales et confidentialité",
 ];
 
 const validations = [
-  ["Stock", "726 pièces à vendre + 23 cadeaux restant réservés, ventilés par couleur × taille"],
+  ["Stock", "749 unités physiques, 23 cadeaux réservés et 724 disponibles après la première commande"],
   ["Composition", "94 % modal · 6 % élasthanne"],
-  ["TVA", "Aucune TVA collectée · mention article 293 B sur facture"],
-  ["Livraison", "France + UE : prix, délais, poids et formats des colis"],
-  ["Validation finale", "Photos, textes et prix"],
+  ["Facturation", "Facture après paiement, avoir après remboursement, TVA non applicable – art. 293 B du CGI"],
+  ["Médiation", "Convention et coordonnées du médiateur publiées"],
+  ["Recette", "Commande, paiement, stock, e-mails, retour et accès administrateur testés"],
 ];
 
 const activation = [
-  "Importer les 726 pièces vendables dans le stock de production",
-  "Activer Stripe, Sendcloud et les e-mails sur le domaine public",
-  "Passer puis rembourser une vraie commande avant l’ouverture",
+  "Promouvoir le Worker, les migrations et les Assets sur le même SHA approuvé",
+  "Vérifier le health public : mode live, commerce public et aucun blocker",
+  "Exécuter le smoke test public sans dupliquer paiement, expédition ou remboursement",
 ];
 
 export default function PreouverturePage() {
@@ -39,10 +41,10 @@ export default function PreouverturePage() {
       <StoreHeader />
 
       <section className={styles.hero} aria-labelledby="preouverture-title">
-        <p className={styles.eyebrow}>Préouverture privée · 25 août 2026</p>
-        <h1 id="preouverture-title">Le site est construit.<br />L’ouverture tient à cinq validations.</h1>
+        <p className={styles.eyebrow}>Contrôle privé · 1er septembre 2026</p>
+        <h1 id="preouverture-title">La chaîne est validée.<br />La promotion doit conserver un seul SHA.</h1>
         <div className={styles.metrics} aria-label="Chiffres clés">
-          <p><strong>726</strong><span>pièces à vendre</span></p>
+          <p><strong>724</strong><span>pièces disponibles après la première commande</span></p>
           <p><strong>3 × 4</strong><span>coloris × tailles</span></p>
           <p><strong>1 · 2 · 3</strong><span>unité · duo · trio</span></p>
         </div>
@@ -61,8 +63,8 @@ export default function PreouverturePage() {
 
         <article className={styles.column}>
           <header>
-            <span className={`${styles.status} ${styles.waiting}`}>Jérémy</span>
-            <h2>Les 5 validations attendues</h2>
+            <span className={`${styles.status} ${styles.done}`}>Validé</span>
+            <h2>Les 5 preuves métier</h2>
           </header>
           <ol className={styles.decisions}>
             {validations.map(([title, detail], index) => (
@@ -76,22 +78,22 @@ export default function PreouverturePage() {
 
         <article className={styles.column}>
           <header>
-            <span className={`${styles.status} ${styles.next}`}>Adam</span>
-            <h2>Les 3 actions d’ouverture</h2>
+            <span className={`${styles.status} ${styles.next}`}>Release</span>
+            <h2>Les 3 contrôles de promotion</h2>
           </header>
           <ol className={styles.actions}>
             {activation.map((item, index) => (
               <li key={item}><span>{index + 1}</span><p>{item}</p></li>
             ))}
           </ol>
-          <p className={styles.gate}>Puis : contrôle du paiement, du stock, de l’e-mail, de l’expédition et du remboursement. Si tout passe, ouverture au public.</p>
+          <p className={styles.gate}>Aucun gate métier ou juridique restant. Si le runtime exact est vert, l’ouverture publique est autorisée.</p>
         </article>
       </section>
 
       <section className={styles.closing}>
-        <p>Jérémy valide cinq points.</p>
-        <p>Adam réalise trois actions et une commande réelle.</p>
-        <strong>Le public entre après le test réussi.</strong>
+        <p>Les validations métier et juridiques sont tracées.</p>
+        <p>Le déploiement reste lié au SHA exact approuvé.</p>
+        <strong>Le public entre uniquement sur un health check intégralement vert.</strong>
       </section>
 
       <StoreFooter />

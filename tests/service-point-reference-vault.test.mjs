@@ -502,7 +502,7 @@ test("0011 fails closed for a missing, foreign, expired or unsealed service poin
   assert.doesNotMatch(migration, /provider_reference` text|raw_reference|api[_-]?key|secret[_-]?key/i);
 });
 
-test("0011-0028 remain additive and the journal ends at promotion codes", () => {
+test("0011-0030 remain additive and the journal ends at immutable credit notes", () => {
   const previous = JSON.parse(readFileSync(`${drizzle}meta/0010_snapshot.json`, "utf8"));
   const snapshot = JSON.parse(readFileSync(`${drizzle}meta/0011_snapshot.json`, "utf8"));
   const pricingSnapshot = JSON.parse(readFileSync(`${drizzle}meta/0012_snapshot.json`, "utf8"));
@@ -515,6 +515,8 @@ test("0011-0028 remain additive and the journal ends at promotion codes", () => 
   const internationalSnapshot = JSON.parse(readFileSync(`${drizzle}meta/0026_snapshot.json`, "utf8"));
   const reconciliationSnapshot = JSON.parse(readFileSync(`${drizzle}meta/0027_snapshot.json`, "utf8"));
   const promotionSnapshot = JSON.parse(readFileSync(`${drizzle}meta/0028_snapshot.json`, "utf8"));
+  const invoiceSnapshot = JSON.parse(readFileSync(`${drizzle}meta/0029_snapshot.json`, "utf8"));
+  const creditNoteSnapshot = JSON.parse(readFileSync(`${drizzle}meta/0030_snapshot.json`, "utf8"));
   const journal = JSON.parse(readFileSync(`${drizzle}meta/_journal.json`, "utf8"));
   assert.equal(snapshot.version, "6");
   assert.equal(snapshot.dialect, "sqlite");
@@ -599,11 +601,17 @@ test("0011-0028 remain additive and the journal ends at promotion codes", () => 
   assert.equal(promotionSnapshot.prevId, reconciliationSnapshot.id);
   assert.ok(promotionSnapshot.tables.promotion_codes);
   assert.ok(promotionSnapshot.tables.promotion_redemptions);
+  assert.equal(invoiceSnapshot.prevId, promotionSnapshot.id);
+  assert.ok(invoiceSnapshot.tables.invoice_sequences);
+  assert.ok(invoiceSnapshot.tables.order_invoices);
+  assert.equal(creditNoteSnapshot.prevId, invoiceSnapshot.id);
+  assert.ok(creditNoteSnapshot.tables.credit_note_sequences);
+  assert.ok(creditNoteSnapshot.tables.order_credit_notes);
   assert.deepEqual(journal.entries.at(-1), {
-    idx: 28,
+    idx: 30,
     version: "6",
-    when: 1788393600000,
-    tag: "0028_even_fallen_one",
+    when: 1788566400000,
+    tag: "0030_striped_skin",
     breakpoints: true,
   });
 });

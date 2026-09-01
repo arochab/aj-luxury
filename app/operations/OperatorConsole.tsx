@@ -127,6 +127,10 @@ function labelReadyForFulfillment(order: Order): boolean {
     order.shipment?.status === "label_ready";
 }
 
+function invoiceAvailable(order: Order): boolean {
+  return ["paid", "preparing", "shipped", "refunded"].includes(order.status);
+}
+
 function paymentLabel(order: Order): string {
   return order.status === "refunded" ? "remboursé" : "réglé";
 }
@@ -432,6 +436,23 @@ export default function OperatorConsole() {
           Quand l’étiquette est prête, vérifiez les articles, imprimez l’A4, puis confirmez la remise physique au transporteur.
         </p>
 
+        <aside className={styles.documentGuide} aria-labelledby="document-guide-title">
+          <h2 id="document-guide-title">Facturation et expédition&nbsp;: 2 usages distincts</h2>
+          <dl>
+            <div>
+              <dt>Facture et avoirs A4</dt>
+              <dd>
+                Justificatifs comptables du client. La facture apparaît après paiement et,
+                en cas de remboursement, l’avoir correspondant est ajouté automatiquement.
+              </dd>
+            </div>
+            <div>
+              <dt>Étiquette transporteur A4</dt>
+              <dd>Document d’expédition à imprimer puis à coller sur le colis. Ce n’est pas une facture.</dd>
+            </div>
+          </dl>
+        </aside>
+
         {state.kind === "loading" ? <p className={styles.notice}>Chargement sécurisé…</p> : null}
         {state.kind === "error" ? (
           <div className={styles.notice} role="alert">
@@ -471,6 +492,17 @@ export default function OperatorConsole() {
                           ? "Chargement…"
                           : expandedOrder === order.orderId ? "Masquer le détail" : "Voir le détail"}
                       </button>
+                      {invoiceAvailable(order) ? (
+                        <a
+                          className={styles.documentLink}
+                          href={`/api/commerce/admin/orders/${encodeURIComponent(order.orderId)}/invoice`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label={`Ouvrir la facture et les éventuels avoirs A4 de la commande ${order.orderNumber} dans un nouvel onglet`}
+                        >
+                          Ouvrir facture et avoirs A4
+                        </a>
+                      ) : null}
                       {labelReadyForFulfillment(order) ? (
                         <button
                           className={styles.download}
@@ -478,7 +510,7 @@ export default function OperatorConsole() {
                           disabled={busyOrder !== null || busyHandover !== null}
                           onClick={() => void downloadLabel(order, state.csrfToken)}
                         >
-                          {busyOrder === order.orderId ? "Récupération…" : "Télécharger l’étiquette A4"}
+                          {busyOrder === order.orderId ? "Récupération…" : "Télécharger l’étiquette transporteur A4"}
                         </button>
                       ) : null}
                       {labelReadyForFulfillment(order) ? (

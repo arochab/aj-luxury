@@ -2375,11 +2375,13 @@ export class D1FulfillmentStore {
       .prepare(
         `SELECT request.order_id, request.status AS request_status,
           request.resolution, customer_order.email, customer_order.order_number,
-          customer_order.status AS order_status, payment.status AS payment_status
+          customer_order.status AS order_status, payment.status AS payment_status,
+          invoice.id AS invoice_id, invoice.total_cents AS invoice_total_cents
         FROM refunds AS refund
         INNER JOIN return_requests AS request ON request.id = refund.return_request_id
         INNER JOIN orders AS customer_order ON customer_order.id = request.order_id
         INNER JOIN payments AS payment ON payment.id = refund.payment_id
+        INNER JOIN order_invoices AS invoice ON invoice.order_id = request.order_id
         WHERE refund.id = ?`,
       )
       .bind(refund.id)
@@ -2391,6 +2393,8 @@ export class D1FulfillmentStore {
         order_number: string;
         order_status: string;
         payment_status: string;
+        invoice_id: string;
+        invoice_total_cents: number;
       }>();
     if (
       !context ||
@@ -2403,6 +2407,94 @@ export class D1FulfillmentStore {
     ) {
       throw new FulfillmentError("INVALID_TRANSITION", "The refund context is not eligible.");
     }
+    const refundableLines = await this.#database.prepare(
+      `SELECT order_line.id AS order_line_id,
+        order_line.internal_reference, order_line.product_name,
+        order_line.color_name, order_line.size, order_line.unit_price_cents,
+        COALESCE((
+          SELECT sum(eligible_line.received_quantity)
+          FROM return_lines AS eligible_line
+          INNER JOIN return_requests AS eligible_request
+            ON eligible_request.id=eligible_line.return_request_id
+          WHERE eligible_request.order_id=?
+            AND eligible_request.status IN ('inspected','resolved')
+            AND (eligible_request.status <> 'resolved'
+              OR eligible_request.resolution='refund')
+            AND eligible_line.inspection_result='complete'
+            AND eligible_line.order_line_id=order_line.id
+        ), 0) AS received_quantity,
+        COALESCE((
+          SELECT sum(CAST(json_extract(previous_line.value, '$.quantity') AS integer))
+          FROM order_credit_notes AS previous_note,
+            json_each(previous_note.credit_lines_json) AS previous_line
+          WHERE previous_note.invoice_id = ?
+            AND json_extract(previous_line.value, '$.kind') = 'item'
+            AND json_extract(previous_line.value, '$.orderLineId') = order_line.id
+        ), 0) AS credited_quantity
+      FROM refunds AS refund
+      INNER JOIN return_lines AS return_line
+        ON return_line.return_request_id = refund.return_request_id
+      INNER JOIN order_lines AS order_line ON order_line.id = return_line.order_line_id
+      WHERE refund.id = ? AND return_line.inspection_result = 'complete'
+        AND return_line.received_quantity > 0
+      ORDER BY return_line.id`,
+    ).bind(context.order_id, context.invoice_id, refund.id).all<{
+      order_line_id: string;
+      internal_reference: string;
+      product_name: string;
+      color_name: string;
+      size: "S" | "M" | "L" | "XL";
+      unit_price_cents: number;
+      received_quantity: number;
+      credited_quantity: number;
+    }>();
+    let unallocatedCents = refund.amount_cents;
+    const creditLines: Array<Record<string, string | number>> = [];
+    for (const line of refundableLines.results) {
+      const availableQuantity = line.received_quantity - line.credited_quantity;
+      if (!Number.isSafeInteger(availableQuantity) || availableQuantity < 0 ||
+        !Number.isSafeInteger(line.unit_price_cents) || line.unit_price_cents < 1) {
+        throw new FulfillmentError(
+          "PERSISTENCE_FAILURE",
+          "The previous credit-note allocation is incoherent.",
+        );
+      }
+      const quantity = Math.min(
+        availableQuantity,
+        Math.floor(unallocatedCents / line.unit_price_cents),
+      );
+      if (quantity < 1) continue;
+      const amountCents = quantity * line.unit_price_cents;
+      creditLines.push(Object.freeze({
+        kind: "item",
+        orderLineId: line.order_line_id,
+        internalReference: line.internal_reference,
+        productName: line.product_name,
+        colorName: line.color_name,
+        size: line.size,
+        quantity,
+        unitPriceCents: line.unit_price_cents,
+        amountCents,
+      }));
+      unallocatedCents -= amountCents;
+    }
+    if (unallocatedCents > 0) {
+      creditLines.push(Object.freeze({
+        kind: "adjustment",
+        label: "Ajustement / remboursement livraison",
+        amountCents: unallocatedCents,
+      }));
+    }
+    if (creditLines.length < 1 || creditLines.length > 16 ||
+      creditLines.reduce((total, line) => total + Number(line.amountCents), 0) !==
+        refund.amount_cents ||
+      refund.amount_cents > context.invoice_total_cents) {
+      throw new FulfillmentError(
+        "PERSISTENCE_FAILURE",
+        "The refund cannot be reconciled to a credit-note allocation.",
+      );
+    }
+    const creditLinesJson = JSON.stringify(creditLines);
     let receipt;
     try {
       receipt = await provider.refund({
@@ -2445,12 +2537,6 @@ export class D1FulfillmentStore {
         "The refund provider receipt does not match the claim.",
       );
     }
-    const payloadJson = JSON.stringify({
-      subject: input.locale === "fr" ? "Remboursement confirmé" : "Refund confirmed",
-      text: input.locale === "fr"
-        ? `Le remboursement de la commande ${context.order_number} est confirmé.`
-        : `The refund for order ${context.order_number} is confirmed.`,
-    });
     try {
       const results = await this.#database.batch([
         this.#database
@@ -2475,6 +2561,55 @@ export class D1FulfillmentStore {
               resolved_at = ?, updated_at = ? WHERE id = ? AND status = 'inspected'`,
           )
           .bind(input.now, input.now, refund.return_request_id),
+        this.#database.prepare(
+          `INSERT INTO credit_note_sequences (
+            credit_note_year, last_number, updated_at
+          ) VALUES (CAST(substr(?, 1, 4) AS integer), 1, ?)
+          ON CONFLICT (credit_note_year) DO UPDATE SET
+            last_number=last_number+1, updated_at=excluded.updated_at`,
+        ).bind(input.now, input.now),
+        this.#database.prepare(
+          `INSERT INTO order_credit_notes (
+            id, refund_id, invoice_id, order_id, order_number,
+            original_invoice_number, original_invoice_issued_at,
+            credit_note_number, credit_note_year, credit_note_sequence,
+            issued_at, refund_succeeded_at, refund_reason,
+            refund_provider_reference, seller_snapshot_json,
+            mediator_snapshot_json, buyer_email, billing_address_json, currency,
+            original_total_cents, credit_amount_cents, credit_lines_json,
+            tax_credit_cents, remaining_balance_cents, tax_mention, created_at
+          )
+          SELECT 'credit-note:' || refund.id, refund.id, invoice.id,
+            invoice.order_id, invoice.order_number, invoice.invoice_number,
+            invoice.issued_at,
+            printf('AJL-AV-%04d-%06d', sequence.credit_note_year, sequence.last_number),
+            sequence.credit_note_year, sequence.last_number, refund.succeeded_at,
+            refund.succeeded_at, refund.reason, refund.provider_refund_reference,
+            invoice.seller_snapshot_json, invoice.mediator_snapshot_json,
+            invoice.buyer_email, invoice.billing_address_json, invoice.currency,
+            invoice.total_cents, refund.amount_cents, ?, 0,
+            invoice.total_cents - refund.amount_cents - COALESCE((
+              SELECT sum(previous.credit_amount_cents)
+              FROM order_credit_notes AS previous
+              WHERE previous.invoice_id=invoice.id
+            ), 0),
+            invoice.tax_mention, refund.succeeded_at
+          FROM refunds AS refund
+          INNER JOIN payments AS payment ON payment.id=refund.payment_id
+          INNER JOIN return_requests AS request ON request.id=refund.return_request_id
+          INNER JOIN order_invoices AS invoice ON invoice.order_id=request.order_id
+          INNER JOIN credit_note_sequences AS sequence
+            ON sequence.credit_note_year=CAST(substr(refund.succeeded_at,1,4) AS integer)
+          WHERE refund.id=? AND refund.status='succeeded'
+            AND request.status='resolved' AND request.resolution='refund'
+            AND payment.status='succeeded' AND payment.order_id=request.order_id
+            AND payment.amount_cents=invoice.total_cents
+            AND refund.amount_cents + COALESCE((
+              SELECT sum(previous.credit_amount_cents)
+              FROM order_credit_notes AS previous
+              WHERE previous.invoice_id=invoice.id
+            ), 0) <= invoice.total_cents`,
+        ).bind(creditLinesJson, refund.id),
         this.#database
           .prepare(
             `INSERT INTO email_outbox (
@@ -2482,8 +2617,15 @@ export class D1FulfillmentStore {
               order_id, locale, template_version, payload_json, status,
               attempts, max_attempts, next_attempt_at, idempotency_key,
               provider_idempotency_key, created_at, updated_at
-            ) VALUES (?, 'refund_confirmation', 'refund_succeeded', ?, ?, ?, ?,
-              'refund-success-v1', ?, 'pending', 0, 5, ?, ?, ?, ?, ?)`,
+            ) SELECT ?, 'refund_confirmation', 'refund_succeeded', ?, ?, ?, ?,
+              'refund-success-v2', json_object(
+                'subject', CASE WHEN ?='fr'
+                  THEN 'Remboursement confirmé' ELSE 'Refund confirmed' END,
+                'text', CASE WHEN ?='fr'
+                  THEN 'Le remboursement de la commande ' || note.order_number || ' est confirmé. Votre avoir ' || note.credit_note_number || ' est disponible dans votre compte : https://ajluxurystore.com/account'
+                  ELSE 'The refund for order ' || note.order_number || ' is confirmed. Your credit note ' || note.credit_note_number || ' is available in your account: https://ajluxurystore.com/account' END
+              ), 'pending', 0, 5, ?, ?, ?, ?, ?
+            FROM order_credit_notes AS note WHERE note.refund_id = ?`,
           )
           .bind(
             `outbox_refund_${refund.id}`,
@@ -2491,12 +2633,14 @@ export class D1FulfillmentStore {
             context.email,
             context.order_id,
             input.locale,
-            payloadJson,
+            input.locale,
+            input.locale,
             input.now,
             `email:refund_succeeded:${refund.id}`,
             `refund_confirmation:${refund.id}`,
             input.now,
             input.now,
+            refund.id,
           ),
         this.#database
           .prepare(
@@ -2517,7 +2661,9 @@ export class D1FulfillmentStore {
         changed(results[0]) !== 1 ||
         ![0, 1].includes(changed(results[1])) ||
         changed(results[2]) !== 1 ||
-        changed(results[3]) !== 1
+        changed(results[3]) !== 1 ||
+        changed(results[4]) !== 1 ||
+        changed(results[5]) !== 1
       ) {
         throw new FulfillmentError(
           "PERSISTENCE_FAILURE",
@@ -2536,11 +2682,12 @@ export class D1FulfillmentStore {
   }
 
   async #assertRefundArtifacts(refund: RefundRow): Promise<void> {
-    const [outbox, audit, sale] = await Promise.all([
+    const [outbox, audit, sale, creditNote] = await Promise.all([
       this.#database
         .prepare(
-          `SELECT kind, transaction_intent, source_event_id, order_id,
-            idempotency_key, provider_idempotency_key
+          `SELECT kind, transaction_intent, source_event_id, order_id, locale,
+            template_version, payload_json, idempotency_key,
+            provider_idempotency_key
           FROM email_outbox WHERE id = ?`,
         )
         .bind(`outbox_refund_${refund.id}`)
@@ -2549,6 +2696,9 @@ export class D1FulfillmentStore {
           transaction_intent: string;
           source_event_id: string;
           order_id: string | null;
+          locale: "fr" | "en";
+          template_version: string;
+          payload_json: string;
           idempotency_key: string;
           provider_idempotency_key: string;
         }>(),
@@ -2567,6 +2717,7 @@ export class D1FulfillmentStore {
       this.#database
         .prepare(
           `SELECT customer_order.id AS order_id,
+            customer_order.order_number,
             customer_order.status AS order_status,
             payment.status AS payment_status,
             request.status AS request_status, request.resolution
@@ -2578,12 +2729,30 @@ export class D1FulfillmentStore {
         .bind(refund.return_request_id, refund.payment_id)
         .first<{
           order_id: string;
+          order_number: string;
           order_status: string;
           payment_status: string;
           request_status: string;
           resolution: string;
         }>(),
+      this.#database
+        .prepare(
+          `SELECT credit_note_number FROM order_credit_notes
+          WHERE refund_id = ?`,
+        )
+        .bind(refund.id)
+        .first<{ credit_note_number: string }>(),
     ]);
+    const expectedPayload = outbox && sale && creditNote
+      ? JSON.stringify({
+        subject: outbox.locale === "fr"
+          ? "Remboursement confirmé"
+          : "Refund confirmed",
+        text: outbox.locale === "fr"
+          ? `Le remboursement de la commande ${sale.order_number} est confirmé. Votre avoir ${creditNote.credit_note_number} est disponible dans votre compte : https://ajluxurystore.com/account`
+          : `The refund for order ${sale.order_number} is confirmed. Your credit note ${creditNote.credit_note_number} is available in your account: https://ajluxurystore.com/account`,
+      })
+      : null;
     if (
       refund.status !== "succeeded" ||
       outbox?.kind !== "refund_confirmation" ||
@@ -2592,6 +2761,9 @@ export class D1FulfillmentStore {
       outbox.order_id !== sale?.order_id ||
       outbox.idempotency_key !== `email:refund_succeeded:${refund.id}` ||
       outbox.provider_idempotency_key !== `refund_confirmation:${refund.id}` ||
+      outbox.template_version !== "refund-success-v2" ||
+      outbox.payload_json !== expectedPayload ||
+      !creditNote ||
       audit?.action !== "refund_succeeded" ||
       audit.entity_type !== "refund" ||
       audit.entity_id !== refund.id ||

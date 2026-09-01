@@ -70,6 +70,47 @@
   line-height: 1.45;
 }
 
+.documentGuide {
+  margin: 0 0 clamp(2rem, 5vh, 3.6rem);
+  padding: clamp(1.25rem, 2vw, 2rem);
+  border: 1px solid #b6b6b6;
+  background: #f4f3f1;
+}
+
+.documentGuide h2 {
+  margin: 0 0 1.25rem;
+  font-size: clamp(1.15rem, 2vw, 1.65rem);
+  font-weight: 400;
+  line-height: 1.2;
+  text-wrap: balance;
+}
+
+.documentGuide dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(1.5rem, 4vw, 4rem);
+  margin: 0;
+}
+
+.documentGuide div {
+  min-width: 0;
+}
+
+.documentGuide dt {
+  margin-bottom: .45rem;
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.documentGuide dd {
+  margin: 0;
+  color: #555;
+  font-size: .9rem;
+  line-height: 1.55;
+}
+
 .notice,
 .actionError {
   padding: 1.25rem 0;
@@ -147,11 +188,33 @@
   cursor: pointer;
 }
 
-.secondary:hover { background: #f1f1f1; }
+.documentLink {
+  width: 100%;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #070707;
+  background: #fff;
+  color: #070707;
+  padding: .65rem .8rem;
+  font-size: .65rem;
+  font-weight: 600;
+  letter-spacing: .1em;
+  line-height: 1.35;
+  text-align: center;
+  text-decoration: none;
+  text-transform: uppercase;
+  touch-action: manipulation;
+}
+
+.secondary:hover,
+.documentLink:hover { background: #f1f1f1; }
 
 .download:hover { background: #252525; }
 .download:focus-visible,
 .secondary:focus-visible,
+.documentLink:focus-visible,
 .nav button:focus-visible,
 .notice button:focus-visible { outline: 2px solid #a78eea; outline-offset: 4px; }
 .promotionForm input:focus-visible,
@@ -325,6 +388,7 @@
   .content { width: auto; padding: 3rem 1rem; }
   .content h1 { font-size: clamp(2.1rem, 11vw, 3.3rem); letter-spacing: .07em; }
   .summary { font-size: 1rem; }
+  .documentGuide dl { grid-template-columns: 1fr; gap: 1.25rem; }
   .tableHeader { display: none; }
   .row {
     min-height: 0;

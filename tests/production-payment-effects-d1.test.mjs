@@ -224,7 +224,7 @@ test("paid Checkout event atomically pays, sells stock, closes cart and enqueues
     const payload = JSON.parse(message.payload_json);
     assert.deepEqual(Object.keys(payload).sort(), ["subject", "text"]);
     assert.match(payload.text, /TVA : 0,00 €/);
-    assert.match(payload.text, /article 293 B du Code général des impôts/);
+    assert.match(payload.text, /TVA non applicable, art\. 293 B du code général des impôts/);
     if (message.kind === "order_confirmation") {
       assert.match(payload.text, /Apollon · Pourpre Impérial · Taille M × 1/);
       assert.match(payload.text, /Livraison \(Livraison domicile · À domicile\) : 9,00 €/);

@@ -234,6 +234,32 @@
   margin-bottom: 8px;
 }
 
+.accountBillingNotice {
+  display: grid;
+  grid-template-columns: minmax(180px, .7fr) minmax(0, 1.3fr);
+  gap: 24px;
+  align-items: start;
+  margin: 0 0 28px;
+  padding: 22px;
+  border: 1px solid rgba(9, 9, 9, 0.16);
+  background: #fff;
+}
+
+.accountBillingNotice h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.35;
+  text-wrap: balance;
+}
+
+.accountBillingNotice > p {
+  margin: 0;
+  color: #555;
+  font-size: 10px;
+  line-height: 1.7;
+}
+
 .accountTextLink {
   display: inline-block;
   color: #090909;
@@ -371,6 +397,57 @@
   color: #090909;
   font-size: 12px;
   font-weight: 500;
+}
+
+.accountOrderDocuments {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding-top: 18px;
+  border-top: 1px solid rgba(9, 9, 9, 0.12);
+}
+
+.accountOrderDocuments > span,
+.accountInvoicePending {
+  color: #686868;
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: .12em;
+  line-height: 1.5;
+  text-transform: uppercase;
+}
+
+.accountInvoicePending {
+  margin: 0;
+}
+
+.accountInvoiceLink {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 16px;
+  border: 1px solid #090909;
+  background: #090909;
+  color: #fff;
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: .11em;
+  line-height: 1.4;
+  text-align: center;
+  text-decoration: none;
+  text-transform: uppercase;
+  touch-action: manipulation;
+}
+
+.accountInvoiceLink:hover {
+  background: #2a2a2a;
+}
+
+.accountInvoiceLink:focus-visible {
+  outline: 2px solid #62646a;
+  outline-offset: 3px;
 }
 
 .accountVerified {
@@ -1179,6 +1256,12 @@ button.button {
     justify-self: start;
   }
 
+  .accountBillingNotice {
+    grid-template-columns: 1fr;
+    gap: 14px;
+    padding: 20px 18px;
+  }
+
   .accountOrderHeader {
     flex-direction: column;
     gap: 14px;
@@ -1194,6 +1277,15 @@ button.button {
 
   .accountProgress li {
     font-size: 7px;
+  }
+
+  .accountOrderDocuments {
+    display: grid;
+    gap: 12px;
+  }
+
+  .accountInvoiceLink {
+    width: 100%;
   }
 
   .header {

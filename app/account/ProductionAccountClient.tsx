@@ -38,6 +38,14 @@ const orderStatusDetail = Object.freeze({
 
 const progressStatuses = Object.freeze(["Paiement", "Préparation", "Expédition"]);
 
+const invoiceStatuses = Object.freeze(["paid", "preparing", "shipped", "refunded"]);
+
+function invoiceAvailable(
+  status: PublicCustomerAccount["orders"][number]["status"],
+): boolean {
+  return invoiceStatuses.includes(status);
+}
+
 function orderProgress(status: PublicCustomerAccount["orders"][number]["status"]): number {
   if (status === "shipped") return 3;
   if (status === "preparing") return 2;
@@ -244,6 +252,18 @@ export default function ProductionAccountClient() {
             <Link className={styles.accountTextLink} href="/shop">Continuer mes achats</Link>
           </div>
 
+          <aside className={styles.accountBillingNotice} aria-labelledby="account-billing-title">
+            <div>
+              <p className={styles.eyebrow}>Facturation</p>
+              <h3 id="account-billing-title">Facture et avoirs, au même endroit que votre commande</h3>
+            </div>
+            <p>
+              Dès que le paiement est confirmé, ouvrez vos documents de facturation A4 pour les
+              imprimer ou les enregistrer en PDF. En cas de remboursement, l’avoir correspondant
+              y apparaît automatiquement.
+            </p>
+          </aside>
+
           <div className={styles.accountOrders}>
             {account.orders.map((order) => {
               const progress = orderProgress(order.status);
@@ -282,6 +302,24 @@ export default function ProductionAccountClient() {
                     <span>{itemCount(order)} article{itemCount(order) > 1 ? "s" : ""}</span>
                     <strong>Total&nbsp;: <LocalizedPrice amountCents={order.totalCents} /></strong>
                   </footer>
+                  {invoiceAvailable(order.status) ? (
+                    <div className={styles.accountOrderDocuments}>
+                      <span>Document comptable</span>
+                      <a
+                        className={styles.accountInvoiceLink}
+                        href={`/api/commerce/account/invoices/${encodeURIComponent(order.orderNumber)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label={`Ouvrir la facture et les éventuels avoirs A4 de la commande ${order.orderNumber} dans un nouvel onglet`}
+                      >
+                        Ouvrir facture et avoirs A4
+                      </a>
+                    </div>
+                  ) : order.status === "pending_payment" ? (
+                    <p className={styles.accountInvoicePending}>
+                      Aucun document de facturation tant que le paiement n’est pas confirmé. La facture apparaîtra ici dès sa confirmation.
+                    </p>
+                  ) : null}
                   {order.status === "cancelled" && <Link className={styles.accountTextLink} href="/shop">Passer une nouvelle commande</Link>}
                 </article>
               );

@@ -60,8 +60,8 @@ test("an empty environment is closed and exposes no capability", () => {
 test("complete sandbox evidence remains closed until the router is wired", () => {
   const gate = evaluateProductionReleaseGate(base);
   assert.equal(gate.ready, false);
-  assert.equal(gate.evidenceComplete, false);
-  assert.deepEqual(gate.blockers, ["visible-legal-terms-not-ready", "commerce-router-not-wired"]);
+  assert.equal(gate.evidenceComplete, true);
+  assert.deepEqual(gate.blockers, ["commerce-router-not-wired"]);
   assert.deepEqual(gate.launchZones, ["EU"]);
   assert.equal(gate.capabilities.sandboxCheckout, false);
   assert.equal(gate.capabilities.realPayment, false);
@@ -145,8 +145,8 @@ test("public live remains closed until a controlled order proof is recorded", ()
     CF_VERSION_METADATA: { ...base.CF_VERSION_METADATA, id: liveVersionId },
   });
   assert.equal(configured.ready, false);
-  assert.equal(configured.evidenceComplete, false);
-  assert.deepEqual(configured.blockers, ["visible-legal-terms-not-ready", "commerce-router-not-wired"]);
+  assert.equal(configured.evidenceComplete, true);
+  assert.deepEqual(configured.blockers, ["commerce-router-not-wired"]);
   assert.equal(configured.capabilities.publicCommerce, false);
 
   const selfPromotion = evaluateProductionReleaseGate({
@@ -161,7 +161,7 @@ test("public live remains closed until a controlled order proof is recorded", ()
   assert.ok(selfPromotion.blockers.includes("promotion-source-version-missing"));
 });
 
-test("private controlled checkout defers monitoring and mediator gates but public live does not", () => {
+test("private controlled checkout defers monitoring while published legal terms unblock live", () => {
   const controlledGate = evaluateProductionReleaseGate({
     ...base,
     COMMERCE_MODE: "controlled",
@@ -183,7 +183,6 @@ test("private controlled checkout defers monitoring and mediator gates but publi
   });
   assert.deepEqual(liveGate.blockers, [
     "monitoring-alerts-unapproved",
-    "visible-legal-terms-not-ready",
     "commerce-router-not-wired",
   ]);
   assert.equal(liveGate.evidenceComplete, false);

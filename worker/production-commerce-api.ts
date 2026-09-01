@@ -1,5 +1,15 @@
 import { accessTokenHashContexts, createOpaqueAccessToken, hashOneTimeAccessToken, isOpaqueAccessToken } from "../lib/commerce/account-security.ts";
 import { CommerceError } from "../lib/commerce/backend-domain.ts";
+import {
+  customerOrderCreditNote,
+  customerOrderInvoice,
+  invoiceCreditNotes,
+  orderCreditNoteHtmlResponse,
+  orderInvoiceHtmlResponse,
+  OrderInvoiceError,
+  productionCreditNoteRuntimeInstalled,
+  productionInvoiceRuntimeInstalled,
+} from "../lib/commerce/order-invoice.ts";
 import { D1CommerceStore } from "../lib/commerce/d1-commerce-store.ts";
 import { D1FulfillmentStore } from "../lib/commerce/d1-fulfillment-store.ts";
 import type { CommerceD1Database } from "../lib/commerce/d1-port.ts";
@@ -93,6 +103,10 @@ const routes = Object.freeze({
   stockImport: `${PREFIX}admin/launch-stock-import`,
 } as const);
 const lineRoute = /^\/api\/commerce\/cart\/lines\/([^/]+)$/;
+const accountInvoiceRoute =
+  /^\/api\/commerce\/account\/invoices\/([^/]+)$/;
+const accountCreditNoteRoute =
+  /^\/api\/commerce\/account\/credit-notes\/([^/]+)$/;
 const known = new Set<string>(Object.values(routes));
 const IDEMPOTENCY = /^[A-Za-z0-9][A-Za-z0-9_.:-]{7,127}$/;
 const CART_TTL = 7 * 24 * 60 * 60;
@@ -1089,7 +1103,11 @@ export async function productionCommerceApiResponse(
   if (!url.pathname.startsWith(PREFIX)) return null;
   if (env?.APP_ENV !== "production") return json({ error: "not-found" }, 404);
   const line = lineRoute.exec(url.pathname);
-  if (!known.has(url.pathname) && !line) return json({ error: "not-found" }, 404);
+  const accountInvoice = accountInvoiceRoute.exec(url.pathname);
+  const accountCreditNote = accountCreditNoteRoute.exec(url.pathname);
+  if (!known.has(url.pathname) && !line && !accountInvoice && !accountCreditNote) {
+    return json({ error: "not-found" }, 404);
+  }
   if (url.pathname === routes.stockImport) {
     if (request.method !== "POST") return fail("METHOD_NOT_ALLOWED", 405);
     if (env.COMMERCE_MODE !== "controlled" ||
@@ -1278,6 +1296,12 @@ export async function productionCommerceApiResponse(
     if (gate.mode !== "closed" && !await productionPromotionRuntimeInstalled(env.DB)) {
       blockers.push("promotion-schema-0028-not-installed");
     }
+    if (gate.mode !== "closed" && !await productionInvoiceRuntimeInstalled(env.DB)) {
+      blockers.push("invoice-schema-0029-not-installed");
+    }
+    if (gate.mode !== "closed" && !await productionCreditNoteRuntimeInstalled(env.DB)) {
+      blockers.push("credit-note-schema-0030-not-installed");
+    }
     if (["controlled", "live"].includes(gate.mode) &&
       !await productionLatePaymentRefundRuntimeReady(env.DB)) {
       blockers.push("late-payment-refund-schema-or-operations-not-ready");
@@ -1338,6 +1362,12 @@ export async function productionCommerceApiResponse(
   }
   if (gate.mode !== "closed" && !await productionPromotionRuntimeInstalled(env.DB)) {
     blockers.push("promotion-schema-0028-not-installed");
+  }
+  if (gate.mode !== "closed" && !await productionInvoiceRuntimeInstalled(env.DB)) {
+    blockers.push("invoice-schema-0029-not-installed");
+  }
+  if (gate.mode !== "closed" && !await productionCreditNoteRuntimeInstalled(env.DB)) {
+    blockers.push("credit-note-schema-0030-not-installed");
   }
   if (["controlled", "live"].includes(gate.mode) &&
     !await productionLatePaymentRefundRuntimeReady(env.DB)) {
@@ -1407,7 +1437,8 @@ export async function productionCommerceApiResponse(
     routes.account, routes.accountRegister, routes.accountCryptoProbe, routes.accountVerify,
     routes.accountLogin, routes.accountLogout, routes.accountForgot,
     routes.accountReset, routes.accountMarketing,
-  ].includes(url.pathname as never);
+  ].includes(url.pathname as never) || accountInvoice !== null ||
+    accountCreditNote !== null;
   if (isAccountRoute) {
     if (!await productionCustomerAccountRuntimeInstalled(env.DB)) {
       return fail("ACCOUNT_RUNTIME_NOT_READY", 503);
@@ -1460,6 +1491,65 @@ export async function productionCommerceApiResponse(
           orders,
         },
       });
+    }
+    if (accountInvoice) {
+      if (request.method !== "GET") return fail("METHOD_NOT_ALLOWED", 405);
+      const account = await accountStore.currentAccount(sessionToken, accountNow);
+      if (!account) return fail("ACCOUNT_SESSION_REQUIRED", 401);
+      let orderNumber: string;
+      try {
+        orderNumber = decodeURIComponent(accountInvoice[1]);
+      } catch {
+        return fail("INVALID_ORDER", 400);
+      }
+      try {
+        const invoice = await customerOrderInvoice(
+          env.DB,
+          orderNumber,
+          account.customerId,
+        );
+        const notes = invoice
+          ? await invoiceCreditNotes(env.DB, invoice.id)
+          : Object.freeze([]);
+        return invoice
+          ? orderInvoiceHtmlResponse(invoice, notes, "customer")
+          : fail("INVOICE_NOT_FOUND", 404);
+      } catch (cause) {
+        return fail(
+          cause instanceof OrderInvoiceError && cause.code === "CORRUPT_SNAPSHOT"
+            ? "INVOICE_CORRUPT"
+            : "INVOICE_RUNTIME_NOT_READY",
+          503,
+        );
+      }
+    }
+    if (accountCreditNote) {
+      if (request.method !== "GET") return fail("METHOD_NOT_ALLOWED", 405);
+      const account = await accountStore.currentAccount(sessionToken, accountNow);
+      if (!account) return fail("ACCOUNT_SESSION_REQUIRED", 401);
+      let creditNoteNumber: string;
+      try {
+        creditNoteNumber = decodeURIComponent(accountCreditNote[1]);
+      } catch {
+        return fail("INVALID_CREDIT_NOTE", 400);
+      }
+      try {
+        const note = await customerOrderCreditNote(
+          env.DB,
+          creditNoteNumber,
+          account.customerId,
+        );
+        return note
+          ? orderCreditNoteHtmlResponse(note, "customer")
+          : fail("CREDIT_NOTE_NOT_FOUND", 404);
+      } catch (cause) {
+        return fail(
+          cause instanceof OrderInvoiceError && cause.code === "CORRUPT_SNAPSHOT"
+            ? "CREDIT_NOTE_CORRUPT"
+            : "CREDIT_NOTE_RUNTIME_NOT_READY",
+          503,
+        );
+      }
     }
     if (url.pathname === routes.accountVerify) {
       if (!["GET", "POST"].includes(request.method)) return fail("METHOD_NOT_ALLOWED", 405);

@@ -21,11 +21,11 @@ export default function TermsPage() {
       status={<T id="info.terms.status" />}
       officialFrenchOnly
     >
-      <InfoNotice warning>
+      <InfoNotice>
         <p>
           <strong>Conditions de vente — version {LEGAL_VERSION_DISPLAY}.</strong>{" "}
-          Les ventes restent désactivées tant que les coordonnées du médiateur
-          de la consommation conventionné ne sont pas publiées.
+          Ces conditions, les coordonnées de contact et le médiateur de la
+          consommation sont publiés avant l’ouverture des ventes.
         </p>
       </InfoNotice>
 
@@ -73,7 +73,7 @@ export default function TermsPage() {
       </section>
 
       <section>
-        <h2>3. Prix</h2>
+        <h2>3. Prix, TVA et facture</h2>
         <p>
           Les prix sont indiqués en euros. Le vendeur bénéficie de la franchise
           en base et ne collecte pas de TVA. Les factures portent la mention{" "}
@@ -85,6 +85,21 @@ export default function TermsPage() {
           Le calcul de commande conserve donc une TVA à zéro centime et
           n’ajoute aucune TVA au montant payé.
         </p>
+        <p>
+          Après confirmation du paiement, une <strong>facture distincte de la
+          confirmation de commande</strong> est générée automatiquement avec un
+          numéro unique, continu et chronologique. Le client peut la consulter
+          et l’imprimer au format A4 depuis son espace client. AJ Luxury la
+          retrouve dans le tableau de bord administrateur. Cette facture est
+          également distincte de l’étiquette transporteur, qui sert uniquement
+          à l’expédition du colis.
+        </p>
+        <p>
+          En cas de remboursement confirmé, un <strong>avoir distinct</strong>,
+          numéroté et référencé à la facture initiale, est généré
+          automatiquement. Il est ajouté au même dossier A4 dans l’espace
+          client et dans le tableau de bord administrateur.
+        </p>
       </section>
 
       <section>
@@ -92,7 +107,10 @@ export default function TermsPage() {
         <ol>
           <li>sélection du produit, du coloris et de la taille ;</li>
           <li>vérification du panier et correction des éventuelles erreurs ;</li>
-          <li>saisie des informations de livraison et de facturation ;</li>
+          <li>
+            saisie du nom et de l’adresse de livraison, repris comme adresse de
+            facturation ainsi que cela est indiqué dans le formulaire ;
+          </li>
           <li>choix de la livraison et du paiement ;</li>
           <li>acceptation des CGV puis validation avec obligation de paiement.</li>
         </ol>
@@ -261,22 +279,11 @@ export default function TermsPage() {
           <a href={`mailto:${LEGAL_CONTACT.email}`}>{LEGAL_CONTACT.email}</a>.
           Après une démarche écrite préalable restée sans solution, le
           consommateur peut saisir gratuitement un médiateur de la
-          consommation.{" "}
-          {/* Voir MEDIATOR dans lib/legal.ts : tant qu'aucun médiateur n'est
-              conventionné, la page dit l'échéance plutôt que d'afficher des
-              « À compléter » sur des conditions générales de vente. */}
-          {MEDIATOR ? (
-            <>
-              Le médiateur conventionné par AJ Luxury est{" "}
-              <strong>{MEDIATOR.name}</strong>, {MEDIATOR.address},{" "}
-              {MEDIATOR.website}.
-            </>
-          ) : (
-            <>
-              Le médiateur conventionné par AJ Luxury sera désigné avant
-              l’ouverture des ventes et ses coordonnées seront publiées ici.
-            </>
-          )}
+          consommation. Le médiateur conventionné par AJ Luxury est{" "}
+          <strong>{MEDIATOR.name}</strong>, {MEDIATOR.address}. Son site est{" "}
+          <a href={MEDIATOR.website} rel="noreferrer">{MEDIATOR.website}</a> et
+          la demande peut être déposée{" "}
+          <a href={MEDIATOR.filingUrl} rel="noreferrer">directement en ligne</a>.
         </p>
         <p>
           Les CGV sont soumises au droit français, sans priver le consommateur

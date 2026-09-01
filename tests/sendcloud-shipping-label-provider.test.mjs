@@ -433,10 +433,10 @@ test("controlled label route passes public-only legal gates but still requires a
   assert.equal((await response.json()).error.code, "OWNER_SESSION_REQUIRED");
 });
 
-test("public live label route remains closed while legal terms are unresolved", async () => {
+test("public live label route passes resolved legal gates but still requires signed owner access", async () => {
   const DB = {
-    prepare() { throw new Error("D1 must not be touched behind the public legal gate"); },
-    batch() { throw new Error("D1 must not be touched behind the public legal gate"); },
+    prepare() { throw new Error("D1 must not be touched before owner authentication"); },
+    batch() { throw new Error("D1 must not be touched before owner authentication"); },
   };
   const response = await productionShippingLabelAdminResponse(
     await adminRequest(),
@@ -453,8 +453,8 @@ test("public live label route remains closed while legal terms are unresolved", 
       DB,
     },
   );
-  assert.equal(response.status, 503);
-  assert.equal((await response.json()).error.code, "COMMERCE_CLOSED");
+  assert.equal(response.status, 403);
+  assert.equal((await response.json()).error.code, "CONTROLLED_ACCESS_REQUIRED");
 });
 
 async function adminRequest(headers = {}) {

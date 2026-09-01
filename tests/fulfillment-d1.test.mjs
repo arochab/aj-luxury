@@ -29,7 +29,7 @@ import { productionCommerceApiResponse } from "../worker/production-commerce-api
 
 const drizzleDirectory = fileURLToPath(new URL("../drizzle/", import.meta.url));
 const migrations = readdirSync(drizzleDirectory)
-  .filter((name) => /^(?:000(?:[0-5]|9)|0016)_.+\.sql$/.test(name))
+  .filter((name) => /^(?:000(?:[0-5]|9)|001[67]|002[89]|0030)_.+\.sql$/.test(name))
   .sort()
   .map((name) => `${drizzleDirectory}${name}`);
 const liveClockBase = Date.now();
@@ -1999,6 +1999,50 @@ test("full fulfillment flow is leased, append-only, mixed-unit safe and keeps pa
     now: "2026-08-11T12:21:04.000Z",
   });
   assert.equal(secondCompleted.status, "succeeded");
+  assert.equal((await context.fulfillment.executeRefund({
+    refundId: secondPartial.id,
+    leaseToken: "refund_lease_partial_two_replay",
+    leaseExpiresAt: "2026-08-11T12:22:30.000Z",
+    locale: "fr",
+    now: "2026-08-11T12:21:05.000Z",
+  })).status, "succeeded");
+  const creditNotes = context.database.prepare(`SELECT refund_id,
+    credit_note_number, credit_amount_cents, credit_lines_json,
+    original_total_cents, remaining_balance_cents
+    FROM order_credit_notes WHERE order_id=? ORDER BY credit_note_sequence`).all(
+    order.orderId,
+  );
+  assert.equal(creditNotes.length, 2, "a succeeded refund replay must not duplicate its credit note");
+  assert.deepEqual(creditNotes.map((note) => note.credit_note_number), [
+    "AJL-AV-2026-000001",
+    "AJL-AV-2026-000002",
+  ]);
+  assert.deepEqual(creditNotes.map((note) => note.refund_id), [refund.id, secondPartial.id]);
+  assert.equal(
+    creditNotes.reduce((total, note) => total + note.credit_amount_cents, 0),
+    9000,
+  );
+  for (const note of creditNotes) {
+    const lines = JSON.parse(note.credit_lines_json);
+    assert.equal(
+      lines.reduce((total, line) => total + line.amountCents, 0),
+      note.credit_amount_cents,
+      "the immutable line snapshot must explain the exact credited amount",
+    );
+    assert.ok(lines.every((line) => line.kind === "item" || (
+      line.kind === "adjustment" &&
+      line.label === "Ajustement / remboursement livraison"
+    )));
+  }
+  assert.equal(
+    creditNotes.at(-1).remaining_balance_cents,
+    creditNotes.at(-1).original_total_cents - 9000,
+  );
+  assert.throws(
+    () => context.database.prepare(`UPDATE order_credit_notes
+      SET credit_amount_cents=1 WHERE refund_id=?`).run(refund.id),
+    /commerce_credit_note_is_immutable/,
+  );
   refundModes.push("collision");
   const collisionRefund = await context.fulfillment.createRefund({
     id: "refund_provider_collision",
@@ -2029,7 +2073,8 @@ test("full fulfillment flow is leased, append-only, mixed-unit safe and keeps pa
     payment_status: "succeeded",
   });
 
-  const d03Emails = context.database.prepare(`SELECT kind, source_event_id
+  const d03Emails = context.database.prepare(`SELECT kind, source_event_id,
+    template_version, payload_json
     FROM email_outbox WHERE kind IN (
       'withdrawal_acknowledgement','shipment_confirmation','refund_confirmation'
     ) ORDER BY kind`).all();
@@ -2039,6 +2084,9 @@ test("full fulfillment flow is leased, append-only, mixed-unit safe and keeps pa
     "shipment_confirmation",
     "withdrawal_acknowledgement",
   ]);
+  const refundEmails = d03Emails.filter((email) => email.kind === "refund_confirmation");
+  assert.ok(refundEmails.every((email) => email.template_version === "refund-success-v2"));
+  assert.ok(refundEmails.every((email) => /AJL-AV-2026-00000[12]/.test(email.payload_json)));
   const rights = new D1DataRightsStore(context.d1);
   await rights.createRequest({
     id: "rights_flow",

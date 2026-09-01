@@ -32,6 +32,20 @@ test("the previous contractual snapshot remains immutable and replayable", async
   assert.equal(legacy.sha256, "f36436387b875dfeee3e538cf9b51005e04bbea5bbb7e809e870e52c81e4ea82");
 });
 
+test("the first 2026-09-01 contractual snapshot remains immutable after r2", async () => {
+  const legacy = durableTermsSnapshotFor("2026-09-01");
+  assert.ok(legacy);
+  const digest = new Uint8Array(await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(legacy.text),
+  ));
+  assert.equal(
+    Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join(""),
+    legacy.sha256,
+  );
+  assert.equal(legacy.sha256, "f90633c3c43de0fbb7b43d55723243b482e574f870824d8942aae0cdfcb9bb85");
+});
+
 test("order confirmation embeds line, delivery, zero VAT and the immutable terms snapshot", () => {
   const email = buildPaidOrderEmail("order-confirmation", {
     orderNumber: "AJ-2026-0042",
@@ -53,7 +67,8 @@ test("order confirmation embeds line, delivery, zero VAT and the immutable terms
   assert.match(email.text, /Mondial Relay · Point relais/);
   assert.match(email.text, /Adresse de livraison : Ada Test, 1 rue du Test, 75001 Paris, FR/);
   assert.match(email.text, /TVA : 0,00 €/);
-  assert.match(email.text, /article 293 B/);
+  assert.match(email.text, /art\. 293 B/);
+  assert.match(email.text, /Facture commerciale numérotée : https:\/\/ajluxurystore\.com\/account/);
   assert.match(email.text, /terms\?version=2026-08-26/);
   assert.match(email.text, /Empreinte SHA-256 du snapshot contractuel : [0-9a-f]{64}/);
   assert.match(email.text, /CONDITIONS GÉNÉRALES DE VENTE AJ LUXURY/);

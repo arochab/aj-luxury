@@ -174,12 +174,12 @@ test("Resend sends the detailed durable order proof in text and linked HTML", as
     "Livraison (Mondial Relay · Point relais) : 3,50 €",
     "TVA : 0,00 €",
     "Total payé : 53,49 €",
-    "TVA non applicable, article 293 B du Code général des impôts.",
+    "TVA non applicable, art. 293 B du code général des impôts.",
     "Conditions générales de vente, version 2026-08-26 : https://ajluxurystore.com/terms?version=2026-08-26",
   ].join("\n");
   await adapter.deliver(delivery({ subject: "Commande confirmée AJ-1", text }));
   assert.equal(requestBody.text, text);
-  assert.match(requestBody.html, /article 293 B/);
+  assert.match(requestBody.html, /art\. 293 B/);
   assert.match(requestBody.html, /<a href="https:\/\/ajluxurystore\.com\/terms\?version=2026-08-26"/);
   assert.doesNotMatch(requestBody.html, /<script/i);
 });

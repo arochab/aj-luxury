@@ -403,6 +403,208 @@ export const orderLines = sqliteTable(
   ],
 );
 
+export const invoiceSequences = sqliteTable(
+  "invoice_sequences",
+  {
+    invoiceYear: integer("invoice_year").primaryKey(),
+    lastNumber: integer("last_number").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    check(
+      "ck_invoice_sequences_year",
+      sql`${table.invoiceYear} BETWEEN 2020 AND 9999`,
+    ),
+    check(
+      "ck_invoice_sequences_last_number",
+      sql`${table.lastNumber} BETWEEN 1 AND 999999`,
+    ),
+  ],
+);
+
+export const orderInvoices = sqliteTable(
+  "order_invoices",
+  {
+    id: text("id").primaryKey(),
+    orderId: text("order_id")
+      .notNull()
+      .references(() => orders.id, { onDelete: "restrict" }),
+    orderNumber: text("order_number").notNull(),
+    invoiceNumber: text("invoice_number").notNull(),
+    invoiceYear: integer("invoice_year").notNull(),
+    invoiceSequence: integer("invoice_sequence").notNull(),
+    issuedAt: text("issued_at").notNull(),
+    paymentConfirmedAt: text("payment_confirmed_at").notNull(),
+    sellerSnapshotJson: text("seller_snapshot_json").notNull(),
+    mediatorSnapshotJson: text("mediator_snapshot_json").notNull(),
+    buyerEmail: text("buyer_email").notNull(),
+    billingAddressJson: text("billing_address_json").notNull(),
+    currency: text("currency", { enum: ["EUR"] }).notNull().default("EUR"),
+    merchandiseGrossCents: integer("merchandise_gross_cents").notNull(),
+    discountCents: integer("discount_cents").notNull(),
+    promotionCode: text("promotion_code"),
+    promotionDiscountCents: integer("promotion_discount_cents").notNull(),
+    merchandiseNetCents: integer("merchandise_net_cents").notNull(),
+    shippingCents: integer("shipping_cents").notNull(),
+    taxCents: integer("tax_cents").notNull(),
+    totalCents: integer("total_cents").notNull(),
+    taxMention: text("tax_mention").notNull(),
+    lineItemsJson: text("line_items_json").notNull(),
+    termsVersion: text("terms_version").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("ux_order_invoices_order").on(table.orderId),
+    uniqueIndex("ux_order_invoices_number").on(table.invoiceNumber),
+    uniqueIndex("ux_order_invoices_year_sequence").on(
+      table.invoiceYear,
+      table.invoiceSequence,
+    ),
+    index("idx_order_invoices_issued_at").on(table.issuedAt, table.id),
+    check("ck_order_invoices_currency", sql`${table.currency} = 'EUR'`),
+    check(
+      "ck_order_invoices_sequence",
+      sql`${table.invoiceYear} BETWEEN 2020 AND 9999
+        AND ${table.invoiceSequence} BETWEEN 1 AND 999999
+        AND ${table.invoiceNumber} = printf(
+          'AJL-%04d-%06d', ${table.invoiceYear}, ${table.invoiceSequence}
+        )`,
+    ),
+    check(
+      "ck_order_invoices_amounts",
+      sql`${table.merchandiseGrossCents} >= 0
+        AND ${table.discountCents} >= 0
+        AND ${table.promotionDiscountCents} >= 0
+        AND ${table.discountCents} >= ${table.promotionDiscountCents}
+        AND ${table.merchandiseNetCents} >= 0
+        AND ${table.shippingCents} >= 0
+        AND ${table.taxCents} >= 0
+        AND ${table.totalCents} >= 0
+        AND ${table.merchandiseGrossCents} - ${table.discountCents}
+          = ${table.merchandiseNetCents}
+        AND ${table.merchandiseNetCents} + ${table.shippingCents}
+          + ${table.taxCents} = ${table.totalCents}`,
+    ),
+    check(
+      "ck_order_invoices_promotion",
+      sql`(${table.promotionCode} IS NULL
+          AND ${table.promotionDiscountCents} = 0)
+        OR (${table.promotionCode} IS NOT NULL
+          AND ${table.promotionDiscountCents} > 0)`,
+    ),
+    check(
+      "ck_order_invoices_json",
+      sql`json_valid(${table.sellerSnapshotJson})
+        AND json_valid(${table.mediatorSnapshotJson})
+        AND json_valid(${table.billingAddressJson})
+        AND json_valid(${table.lineItemsJson})
+        AND json_array_length(${table.lineItemsJson}) BETWEEN 1 AND 3`,
+    ),
+  ],
+);
+
+export const creditNoteSequences = sqliteTable(
+  "credit_note_sequences",
+  {
+    creditNoteYear: integer("credit_note_year").primaryKey(),
+    lastNumber: integer("last_number").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    check(
+      "ck_credit_note_sequences_year",
+      sql`${table.creditNoteYear} BETWEEN 2020 AND 9999`,
+    ),
+    check(
+      "ck_credit_note_sequences_last_number",
+      sql`${table.lastNumber} BETWEEN 1 AND 999999`,
+    ),
+  ],
+);
+
+export const orderCreditNotes = sqliteTable(
+  "order_credit_notes",
+  {
+    id: text("id").primaryKey(),
+    refundId: text("refund_id")
+      .notNull()
+      .references(() => refunds.id, { onDelete: "restrict" }),
+    invoiceId: text("invoice_id")
+      .notNull()
+      .references(() => orderInvoices.id, { onDelete: "restrict" }),
+    orderId: text("order_id")
+      .notNull()
+      .references(() => orders.id, { onDelete: "restrict" }),
+    orderNumber: text("order_number").notNull(),
+    originalInvoiceNumber: text("original_invoice_number").notNull(),
+    originalInvoiceIssuedAt: text("original_invoice_issued_at").notNull(),
+    creditNoteNumber: text("credit_note_number").notNull(),
+    creditNoteYear: integer("credit_note_year").notNull(),
+    creditNoteSequence: integer("credit_note_sequence").notNull(),
+    issuedAt: text("issued_at").notNull(),
+    refundSucceededAt: text("refund_succeeded_at").notNull(),
+    refundReason: text("refund_reason", {
+      enum: ["return", "withdrawal"],
+    }).notNull(),
+    refundProviderReference: text("refund_provider_reference").notNull(),
+    sellerSnapshotJson: text("seller_snapshot_json").notNull(),
+    mediatorSnapshotJson: text("mediator_snapshot_json").notNull(),
+    buyerEmail: text("buyer_email").notNull(),
+    billingAddressJson: text("billing_address_json").notNull(),
+    currency: text("currency", { enum: ["EUR"] }).notNull().default("EUR"),
+    originalTotalCents: integer("original_total_cents").notNull(),
+    creditAmountCents: integer("credit_amount_cents").notNull(),
+    creditLinesJson: text("credit_lines_json").notNull(),
+    taxCreditCents: integer("tax_credit_cents").notNull().default(0),
+    remainingBalanceCents: integer("remaining_balance_cents").notNull(),
+    taxMention: text("tax_mention").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("ux_order_credit_notes_refund").on(table.refundId),
+    uniqueIndex("ux_order_credit_notes_number").on(table.creditNoteNumber),
+    uniqueIndex("ux_order_credit_notes_year_sequence").on(
+      table.creditNoteYear,
+      table.creditNoteSequence,
+    ),
+    index("idx_order_credit_notes_invoice").on(
+      table.invoiceId,
+      table.issuedAt,
+      table.id,
+    ),
+    check("ck_order_credit_notes_currency", sql`${table.currency} = 'EUR'`),
+    check(
+      "ck_order_credit_notes_reason",
+      sql`${table.refundReason} IN ('return', 'withdrawal')`,
+    ),
+    check(
+      "ck_order_credit_notes_sequence",
+      sql`${table.creditNoteYear} BETWEEN 2020 AND 9999
+        AND ${table.creditNoteSequence} BETWEEN 1 AND 999999
+        AND ${table.creditNoteNumber} = printf(
+          'AJL-AV-%04d-%06d', ${table.creditNoteYear}, ${table.creditNoteSequence}
+        )`,
+    ),
+    check(
+      "ck_order_credit_notes_amounts",
+      sql`${table.originalTotalCents} > 0
+        AND ${table.creditAmountCents} > 0
+        AND ${table.creditAmountCents} <= ${table.originalTotalCents}
+        AND ${table.taxCreditCents} = 0
+        AND ${table.remainingBalanceCents} >= 0
+        AND ${table.remainingBalanceCents} < ${table.originalTotalCents}`,
+    ),
+    check(
+      "ck_order_credit_notes_json",
+      sql`json_valid(${table.sellerSnapshotJson})
+        AND json_valid(${table.mediatorSnapshotJson})
+        AND json_valid(${table.billingAddressJson})
+        AND json_valid(${table.creditLinesJson})
+        AND json_array_length(${table.creditLinesJson}) BETWEEN 1 AND 16`,
+    ),
+  ],
+);
+
 export const stockReservations = sqliteTable(
   "stock_reservations",
   {

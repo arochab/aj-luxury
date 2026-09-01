@@ -318,7 +318,7 @@ test("production orders reject test identifiers and synthetic response fields", 
     shippingCents: 700,
     taxCents: 0,
     invoiceTaxMention:
-      "TVA non applicable, article 293 B du Code général des impôts",
+      "TVA non applicable, art. 293 B du code général des impôts",
     totalCents: 3699,
     createdAt: "2026-08-15T12:00:00.000Z",
     paidAt: null,

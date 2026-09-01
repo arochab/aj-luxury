@@ -4,18 +4,21 @@ Date de revue : 1er septembre 2026
 
 Responsable de l’intégration : Adam CHABBI
 
-Statut : socle rédigé et intégré, ouverture commerciale bloquée jusqu’aux confirmations listées ci-dessous.
+Statut : médiateur, téléphone professionnel et socle contractuel intégrés. Aucun
+blocage juridique déclaré pour l’ouverture France/Union européenne ; la mise en
+ligne reste conditionnée uniquement à la promotion technique du même SHA et à
+un health check sans blocker.
 
 ## Documents publics intégrés
 
 | Document | Route | Contenu couvert | Statut |
 |---|---|---|---|
-| Conditions générales de vente | `/terms` | Produits, prix, commande, paiement, livraison, rétractation, garanties, responsabilité, médiation | Identité et franchise de TVA renseignées ; logistique, paiement et médiateur à finaliser |
+| Conditions générales de vente | `/terms` | Produits, prix, commande, paiement, facture, avoir, livraison, rétractation, garanties, responsabilité, médiation | Version `2026-09-01-r2` hashée ; médiateur et facturation intégrés |
 | Politique de confidentialité | `/privacy` | Finalités, bases légales, catégories de données, durées, destinataires, transferts, droits | Stripe, Sendcloud, Resend et Cloudflare nommés ; validation juridique finale requise |
 | Cookies et traceurs | `/cookies` | Stockages réellement utilisés, futur consentement, réglages | Conforme au prototype actuel ; à réviser avant tout nouvel outil |
 | Mentions légales | `/legal-notice` | Éditeur, publication, hébergeur, propriété intellectuelle, responsabilité | Identité, téléphone professionnel et hébergeur documentés |
-| Livraison et retours | `/shipping-returns` | Livraison, suivi, rétractation, remboursement, non-conformité | Aucun scellé hygiène revendiqué ; valeurs opérationnelles à confirmer |
-| Rétractation en ligne | `/withdrawal` | Accès direct, informations requises, confirmation et accusé durable | Route visible ; backend et e-mail transactionnel à connecter |
+| Livraison et retours | `/shipping-returns` | Livraison, suivi, rétractation, remboursement, avoir, non-conformité | France/UE couverts ; hors UE maintenu fermé tant qu’une option provider exacte manque |
+| Rétractation en ligne | `/withdrawal` | Accès direct, informations requises, confirmation et accusé durable | Route, backend et e-mail transactionnel intégrés |
 
 ## Décisions juridiques retenues
 
@@ -35,36 +38,43 @@ Statut : socle rédigé et intégré, ouverture commerciale bloquée jusqu’aux
 - Cookies : aucun outil publicitaire ou d’audience soumis au consentement n’est actuellement actif.
 - Consentement futur : accepter et refuser au même niveau, choix granulaire, aucune activation avant consentement, conservation du choix de référence pendant 6 mois.
 - Rétractation 2026 : une fonctionnalité directement accessible, gratuite et disponible pendant le délai légal doit être connectée avant toute commande.
-- Médiation : AJ Luxury doit conventionner avec un médiateur référencé et publier ses coordonnées. L’ancienne plateforme européenne ODR, fermée en 2025, ne doit pas être ajoutée.
+- Médiation : Société Médiation Professionnelle est conventionnée ; les
+  coordonnées et le lien de saisine sont publiés. La preuve source est conservée
+  sous `docs/legal/mediation/` sans exposition de ses données bancaires.
+- Facturation : après paiement confirmé, une facture immuable
+  `AJL-YYYY-NNNNNN` est créée. Chaque remboursement confirmé produit un avoir
+  immuable `AJL-AV-YYYY-NNNNNN` lié à la facture initiale. Facture et avoirs
+  restent distincts de l’étiquette transporteur.
 
 ## État technique vérifié
 
 | Élément | État constaté |
 |---|---|
-| Paiement réel | Connecteur Stripe Checkout codé ; compte, clés et drill réel absents, donc inactif |
-| Commande réelle | Routeur codé et testé localement ; non déployé et commerce fermé |
-| Compte client réel | Inactif |
+| Paiement réel | Stripe Checkout et webhook testés sur une première commande payante ; replay idempotent |
+| Commande réelle | Chaîne commande, paiement, stock, e-mails et remboursement testée ; promotion du SHA final encore requise |
+| Compte client réel | Actif sur le runtime contrôlé ; historique, suivi, facture et avoirs protégés par ownership |
 | Newsletter | Inactive |
 | Publicité / pixels sociaux | Inactifs |
 | Mesure d’audience | Reporting agrégé D1 codé ; aucune route publique ni SDK tiers |
 | Stockage de langue | `localStorage` : `aj-luxury.locale.v1` |
 | Introduction déjà vue | `sessionStorage` : `aj-luxury-intro-seen` |
-| Hébergement de prévisualisation | Cloudflare |
+| Hébergement | Cloudflare Worker + Assets/Sites, avec release et health liés au même SHA |
 
-## Verrous avant ouverture des ventes
+## État des gates d’ouverture
 
 | Priorité | Information ou action requise | Responsable | Preuve attendue |
 |---|---|---|---|
-| Fait le 01/09/2026 | Téléphone professionnel publié uniquement sur Contact, Mentions légales et CGV | Adam | `+33 6 88 42 40 62` ; aucun usage dans le footer, le checkout ou les données transporteur |
-| Bloquant | Médiateur de la consommation conventionné | AJ Luxury | Convention et coordonnées |
-| Bloquant | Pays, transporteurs, tarifs, délais, douane et responsabilité import | AJ Luxury + Adam | Matrice logistique validée |
-| Bloquant | Compte Stripe, bénéficiaire, moyens activés et webhook | AJ Luxury + Adam | Compte marchand et recette signée |
-| Bloquant | Formulaire de rétractation relié aux commandes et accusé durable | Adam | Test bout en bout horodaté |
-| Bloquant | DPA/registres Stripe, Sendcloud, Resend, Cloudflare et hébergement final | Adam + AJ Luxury | Registre des sous-traitants validé |
-| Bloquant | Règles actives de conservation et procédure d’effacement/anonymisation des commandes | AJ Luxury + conseil juridique + Adam | Politique versionnée, migration et tests de droits |
+| Passé le 01/09/2026 | Téléphone professionnel publié uniquement sur Contact, Mentions légales et CGV | Adam | `+33 6 88 42 40 62` ; aucun usage dans le footer, le checkout ou les données transporteur |
+| Passé le 01/09/2026 | Médiateur de la consommation conventionné | AJ Luxury | Source interne hashée ; coordonnées publiques intégrées |
+| Passé | France/UE, transporteurs, tarifs et délais | AJ Luxury + Adam | Matrice et providers testés ; les zones hors UE non prouvées restent fermées sans affecter l’ouverture France/UE |
+| Passé | Compte Stripe, paiement et webhook | AJ Luxury + Adam | Première commande payante et effets D1 prouvés |
+| Passé | Formulaire de rétractation, remboursement et accusé durable | Adam | Tests D1 et e-mails ; facture initiale inchangée et avoir automatique |
+| Passé | Sous-traitants Stripe, Sendcloud, Resend, Cloudflare et hébergement final | Adam + AJ Luxury | Services nommés dans la politique de confidentialité |
+| Passé techniquement | Conservation et droits sur les commandes | AJ Luxury + Adam | Politique versionnée, exports et anonymisation testés ; toute activation de purge reste explicite |
 | Bloquant si activé | Bandeau et gestionnaire de consentement avant analytics/marketing | Adam | Recette avant/après consentement |
 | Vérification produit | Étiquette de composition fixée au boxer | AJ Luxury | Confirmation oui/non ; aucune photo d’emballage requise |
 | Après démarrage | Ajout de l’activité de vente en ligne au RNE | AJ Luxury | Dépôt au guichet unique dans le mois suivant le changement |
+| Gate de release, non juridique | Déployer migrations `0029` et `0030`, Worker et Assets sur le même SHA approuvé | Adam + Jérémy | Health `ready=true`, mode `live`, `publicCommerce=true`, aucun blocker |
 | Recommandé | Relecture par un professionnel du droit avant ouverture internationale | AJ Luxury | Avis et corrections tracés |
 
 ## Tests juridiques à inclure dans la recette commerce

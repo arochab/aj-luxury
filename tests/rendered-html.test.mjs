@@ -1001,7 +1001,7 @@ test("legal notice publishes the sourced seller identity and never the closed es
   assert.doesNotMatch(html, /FR\s?58\s?944\s?996\s?487/);
   assert.doesNotMatch(html, /TVA intracommunautaire/);
   assert.doesNotMatch(html, /\bTTC\b/);
-  assert.match(html, /TVA non applicable, article 293 B/);
+  assert.match(html, /TVA non applicable, art\. 293 B/);
 
   /* Le numéro professionnel confirmé doit apparaître comme coordonnée de
      l'éditeur sans texte d'attente. */

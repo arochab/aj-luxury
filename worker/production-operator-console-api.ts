@@ -15,11 +15,23 @@ import {
   type CloudflareAccessOwnerIdentity,
 } from "./cloudflare-access-owner.ts";
 import { normalizePromotionCode, PromotionCodeError } from "../lib/commerce/promotion-code.ts";
+import {
+  administratorOrderCreditNote,
+  administratorOrderInvoice,
+  invoiceCreditNotes,
+  orderCreditNoteHtmlResponse,
+  orderInvoiceHtmlResponse,
+  OrderInvoiceError,
+} from "../lib/commerce/order-invoice.ts";
 
 const SESSION_ROUTE = "/api/commerce/admin/session";
 const ORDERS_ROUTE = "/api/commerce/admin/orders";
 const PROMOTIONS_ROUTE = "/api/commerce/admin/promotions";
 const ORDER_DETAIL_ROUTE = /^\/api\/commerce\/admin\/orders\/([^/]+)$/;
+const ORDER_INVOICE_ROUTE =
+  /^\/api\/commerce\/admin\/orders\/([^/]+)\/invoice$/;
+const ORDER_CREDIT_NOTE_ROUTE =
+  /^\/api\/commerce\/admin\/orders\/([^/]+)\/credit-notes\/([^/]+)$/;
 const PROMOTION_STATUS_ROUTE = /^\/api\/commerce\/admin\/promotions\/([^/]+)\/status$/;
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,191}$/;
 const ACCESS_SESSION_ATTESTATION = "cloudflare-access:allowlisted-email";
@@ -453,6 +465,70 @@ async function orderDetail(
   }
 }
 
+async function orderInvoice(
+  request: Request,
+  database: CommerceD1Database,
+  now: string,
+  orderId: string,
+): Promise<Response> {
+  if (!(await adminActor(request, database, now))) {
+    return fail("OWNER_SESSION_REQUIRED", 403);
+  }
+  if (request.headers.get("Origin") !== null &&
+    request.headers.get("Origin") !== new URL(request.url).origin) {
+    return fail("ORIGIN_REJECTED", 403);
+  }
+  try {
+    const invoice = await administratorOrderInvoice(database, orderId);
+    const notes = invoice
+      ? await invoiceCreditNotes(database, invoice.id)
+      : Object.freeze([]);
+    return invoice
+      ? orderInvoiceHtmlResponse(invoice, notes, "administrator")
+      : fail("INVOICE_NOT_FOUND", 404);
+  } catch (cause) {
+    return fail(
+      cause instanceof OrderInvoiceError && cause.code === "CORRUPT_SNAPSHOT"
+        ? "INVOICE_CORRUPT"
+        : "INVOICE_RUNTIME_NOT_READY",
+      503,
+    );
+  }
+}
+
+async function orderCreditNote(
+  request: Request,
+  database: CommerceD1Database,
+  now: string,
+  orderId: string,
+  creditNoteNumber: string,
+): Promise<Response> {
+  if (!(await adminActor(request, database, now))) {
+    return fail("OWNER_SESSION_REQUIRED", 403);
+  }
+  if (request.headers.get("Origin") !== null &&
+    request.headers.get("Origin") !== new URL(request.url).origin) {
+    return fail("ORIGIN_REJECTED", 403);
+  }
+  try {
+    const note = await administratorOrderCreditNote(
+      database,
+      orderId,
+      creditNoteNumber,
+    );
+    return note
+      ? orderCreditNoteHtmlResponse(note, "administrator")
+      : fail("CREDIT_NOTE_NOT_FOUND", 404);
+  } catch (cause) {
+    return fail(
+      cause instanceof OrderInvoiceError && cause.code === "CORRUPT_SNAPSHOT"
+        ? "CREDIT_NOTE_CORRUPT"
+        : "CREDIT_NOTE_RUNTIME_NOT_READY",
+      503,
+    );
+  }
+}
+
 function promotionPayload(row: PromotionListRow) {
   return {
     id: row.id,
@@ -666,9 +742,12 @@ export async function productionOperatorConsoleApiResponse(
 ): Promise<Response | null> {
   const url = new URL(request.url);
   const orderDetailMatch = ORDER_DETAIL_ROUTE.exec(url.pathname);
+  const orderInvoiceMatch = ORDER_INVOICE_ROUTE.exec(url.pathname);
+  const orderCreditNoteMatch = ORDER_CREDIT_NOTE_ROUTE.exec(url.pathname);
   const promotionStatusMatch = PROMOTION_STATUS_ROUTE.exec(url.pathname);
   if (![SESSION_ROUTE, ORDERS_ROUTE, PROMOTIONS_ROUTE].includes(url.pathname) &&
-    !orderDetailMatch && !promotionStatusMatch) return null;
+    !orderDetailMatch && !orderInvoiceMatch && !orderCreditNoteMatch &&
+    !promotionStatusMatch) return null;
   if (!configured(env, url)) return fail("OPERATOR_CONSOLE_CLOSED", 503);
   const now = dependencies.now?.() ?? new Date().toISOString();
   if (!isCanonicalUtcTimestamp(now)) return fail("CLOCK_UNAVAILABLE", 503);
@@ -688,6 +767,20 @@ export async function productionOperatorConsoleApiResponse(
     const promotionId = decodedIdentifier(promotionStatusMatch[1]);
     if (!promotionId) return fail("INVALID_PROMOTION", 400);
     return setPromotionStatus(request, env, now, promotionId);
+  }
+  if (orderInvoiceMatch) {
+    if (request.method !== "GET") return fail("METHOD_NOT_ALLOWED", 405);
+    const orderId = decodedIdentifier(orderInvoiceMatch[1]);
+    if (!orderId) return fail("INVALID_ORDER", 400);
+    return orderInvoice(request, env.DB, now, orderId);
+  }
+  if (orderCreditNoteMatch) {
+    if (request.method !== "GET") return fail("METHOD_NOT_ALLOWED", 405);
+    const orderId = decodedIdentifier(orderCreditNoteMatch[1]);
+    const creditNoteNumber = decodedIdentifier(orderCreditNoteMatch[2]);
+    if (!orderId) return fail("INVALID_ORDER", 400);
+    if (!creditNoteNumber) return fail("INVALID_CREDIT_NOTE", 400);
+    return orderCreditNote(request, env.DB, now, orderId, creditNoteNumber);
   }
   if (orderDetailMatch) {
     if (request.method !== "GET") return fail("METHOD_NOT_ALLOWED", 405);

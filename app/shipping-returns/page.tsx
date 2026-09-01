@@ -97,6 +97,11 @@ export default function ShippingReturnsPage() {
           preuve d’expédition.
         </p>
         <p>
+          Une fois le remboursement confirmé, un avoir numéroté et relié à la
+          facture initiale est automatiquement ajouté au dossier A4 de la
+          commande dans l’espace client.
+        </p>
+        <p>
           Une dépréciation résultant de manipulations allant au-delà de celles
           nécessaires pour vérifier la nature, les caractéristiques et la taille
           peut rester à la charge du client.

@@ -10,12 +10,18 @@ l'identifiant de commande concerné et un horodatage UTC.
 
 ### Verdict courant
 
-**NO-GO public tant que le médiateur n'est pas contracté, validé et publié.** Un
-déploiement strictement `controlled` peut être instruit séparément, mais il doit
-rester fermé par l'authentification applicative même si Cloudflare Access est
-mal configuré ou indisponible. La session Wrangler actuelle n'est pas autorisée sur le compte D1
-(erreur API `7403`), donc ni l'inventaire distant ni la migration `0027` ne sont
-présentés comme exécutés. La commande payée `AJ-41B58D96CCAAE37F00B8` prouve le
+Le blocage documentaire « médiateur non contracté » est **résolu depuis le
+1er septembre 2026** par la preuve conservée sous
+`docs/legal/mediation/mediator-source-2026-09-01.pdf` et documentée dans
+`docs/legal/mediation/README.md`. Les coordonnées sont intégrées au candidat ;
+l'ouverture publique n'est toutefois pas déclarée acquise avant déploiement et
+preuve sur le runtime exact. Un déploiement strictement
+`controlled` peut être instruit séparément, mais il doit rester fermé par
+l'authentification applicative même si Cloudflare Access est mal configuré ou
+indisponible. La session Wrangler a de nouveau accès à D1 en lecture/écriture et
+le bookmark Time Travel a pu être lu le 1er septembre 2026 ; les migrations
+jusqu'à `0030` ne sont néanmoins pas présentées comme exécutées tant que leur
+reçu distant n'existe pas. La commande payée `AJ-41B58D96CCAAE37F00B8` prouve le
 paiement Stripe de 55,03 EUR, mais ne prouve pas encore les deux confirmations
 e-mail, l'étiquette A4 imprimée, la remise physique au transporteur ni le suivi.
 
@@ -23,23 +29,25 @@ e-mail, l'étiquette A4 imprimée, la remise physique au transporteur ni le suiv
 
 | Gate | Statut | Owner / approbateurs | Système et action exacte | État attendu et preuve conservée | STOP et récupération |
 | --- | --- | --- | --- | --- | --- |
-| Candidat code | OUVERT | Adam | Geler un commit contenant ce runbook, `0027` et les correctifs ; exécuter `APP_ENV=production npm test`, `npm run lint` et `git diff --check` sur ce commit | SHA unique + reçu complet des trois commandes lié à ce SHA | Toute modification invalide le reçu ; nouveau SHA et nouvelle recette |
+| Candidat code | OUVERT | Adam | Geler un commit contenant ce runbook, les migrations jusqu'à `0030` et les correctifs ; exécuter `APP_ENV=production npm test`, `npm run lint` et `git diff --check` sur ce commit | SHA unique + reçu complet des trois commandes lié à ce SHA | Toute modification invalide le reçu ; nouveau SHA et nouvelle recette |
 | Autorisation de mutation contrôlée | OUVERT après candidat | Adam puis Jérémy | Présenter l'URL de preview, le SHA et la checklist de recette ; recueillir deux textes « j'approuve le déploiement contrôlé ... SHA ... » | Les deux accords datés citent le même SHA ; ils n'approuvent ni la recette visible ni le passage live | Sans les deux accords : aucune mutation Cloudflare, D1, Sendcloud ou Resend |
-| Sauvegarde et migration D1 | BLOQUÉ ACCÈS | Adam | Exécuter les commandes du § « D1 0027 » sur `aj-luxury-production` | Bookmark, export schéma, reçu d'application, puis table + 3 index + 3 triggers exacts | Accès `7403`, erreur SQL ou inventaire divergent : STOP avant Worker |
+| Sauvegarde et migration D1 | PRÊT À EXÉCUTER APRÈS APPROBATION DU SHA | Adam | Exécuter les commandes du § « D1 jusqu'à 0030 » sur `aj-luxury-production` | Bookmark, export schéma, reçu d'application et inventaire exact des factures et avoirs | Erreur d'accès/SQL ou inventaire divergent : STOP avant Worker |
 | Ré-attestation stock | BLOQUÉ PREUVE | Jérémy (stock) / Adam (runtime) | Jérémy confirme directement le manifeste 749 physiques / 23 cadeaux / 726 vendables ; Adam vérifie D1 et lie manifeste/hash au runtime | Accord direct daté + manifeste/hash + requête D1 après migration | Aucun accord direct ou D1 illisible : ne pas importer/réécrire le stock |
 | Ré-attestation fournisseurs | BLOQUÉ PREUVE | Adam | Stripe : compte + mode live ; Sendcloud : intégration + expéditeur ; Resend : domaine + expéditeur. Relever les identités publiques dans chaque dashboard | Capture expurgée datée + identité publique + SHA/Worker ID ; aucun secret | Toute identité divergente : STOP et nouvelle qualification |
-| Worker contrôlé | OUVERT après D1 | Adam | Déployer le Worker en `controlled`, import stock fermé, authentification applicative fail-closed ; l'automatisation d'étiquette n'est prête que si `OUTBOUND_SHIPMENT_CREATION_ENABLED=true` **et** `AUTOMATIC_OUTBOUND_SHIPMENT_ENABLED=true` | Worker ID, SHA/tag, santé exacte du § « Vérification » et preuve locale sans dépense des deux verrous | Santé non ready, bypass edge actif ou un seul flag d'étiquette : restaurer le Worker ID précédent ; garder `0027` additive et ne créer aucun colis |
+| Worker contrôlé | OUVERT après D1 | Adam | Déployer le Worker en `controlled`, import stock fermé, authentification applicative fail-closed ; l'automatisation d'étiquette n'est prête que si `OUTBOUND_SHIPMENT_CREATION_ENABLED=true` **et** `AUTOMATIC_OUTBOUND_SHIPMENT_ENABLED=true` | Worker ID, SHA/tag, santé exacte du § « Vérification » et preuve locale sans dépense des deux verrous | Santé non ready, bypass edge actif ou un seul flag d'étiquette : restaurer le Worker ID précédent ; garder les migrations additives et ne créer aucun colis |
 | Front Sites | OUVERT après Worker | Adam | Déployer le build du même SHA sans ouvrir `live` | Sites ID, marqueur release et recette desktop/mobile | Régression : restaurer le Sites ID précédent sans toucher au Worker |
 | Validation fonctionnelle visible | OUVERT après Sites | Jérémy / Adam témoin | Sur l'URL contrôlée : accueil, compte, panier, livraison, paiement et compte client ; cocher la checklist | Validation datée de la version visible (SHA + Worker ID + Sites ID), distincte de l'autorisation de mutation | Un écart : corriger sous un nouveau SHA ; les accords précédents deviennent caducs |
 | Webhook Sendcloud | OUVERT TERRAIN | Adam | Sendcloud intégration `612109` : test signé vers `/api/commerce/webhooks/sendcloud`; conserver un fixture expurgé ne contenant que IDs internes, statut et horodatages, puis rejouer exactement ses octets et sa signature dans la fenêtre valide | 1er appel `applied`; retry différé `duplicate`; statut inconnu signé = 503 retryable | Signature/route inconnue : désactiver le webhook et garder la commande `preparing` |
-| Confirmation commande | BLOQUÉ PREUVE | Adam | Resend > Emails : retrouver le message « Commande reçue » pour `AJ-41B58D96CCAAE37F00B8`; appeler `POST /api/commerce/admin/email-outbox/{outboxId}/reconcile` avec son provider ID, session owner AAL2, CSRF et clé `email-reconcile:{sha256(outboxId\0providerId)}` | Evidence ID immuable propre à `order_confirmation`, événement `delivered/opened/clicked`; aucun renvoi | Aucun provider ID exact ou contenu divergent : ne pas rejouer ni modifier l'historique |
+| Confirmation commande | BLOQUÉ PREUVE | Adam | Resend > Emails : retrouver le message « Commande reçue » pour `AJ-41B58D96CCAAE37F00B8`; appeler `POST /api/commerce/admin/email-outbox/{outboxId}/reconcile` avec son provider ID, session owner nominative, CSRF et clé `email-reconcile:{sha256(outboxId\0providerId)}` | Evidence ID immuable propre à `order_confirmation`, événement `delivered/opened/clicked`; aucun renvoi | Aucun provider ID exact ou contenu divergent : ne pas rejouer ni modifier l'historique |
 | Confirmation paiement | BLOQUÉ PREUVE | Adam | Même route owner-only, avec l'outbox `payment_confirmation` et son propre provider ID Resend | Evidence ID immuable propre au paiement ; elle ne vaut jamais pour la confirmation commande | ID absent/divergent : ne pas modifier l'outbox historique |
+| Facture commerciale A4 | OUVERT PRODUIT/RUNTIME | Adam (implémentation et preuve) / Jérémy (validation métier) | Après signal Stripe confirmé, attribuer une seule facture à la commande payée, avec numéro continu `AJL-YYYY-NNNNNN`; exposer le même document au client dans son compte et à l'administrateur dans la commande | Numéro unique et chronologique, date, vendeur, acheteur, lignes, remise, livraison, total, statut payé, mention fiscale et médiateur ; téléchargement/impression A4 identiques côté client et admin | Une confirmation e-mail, un récapitulatif de commande ou une étiquette transporteur ne remplace jamais la facture ; résultat ambigu ou doublon = STOP et revue manuelle |
+| Avoir commercial A4 | OUVERT PRODUIT/RUNTIME | Adam (implémentation et preuve) / Jérémy (validation métier) | Après remboursement Stripe confirmé, générer atomiquement un avoir unique `AJL-AV-YYYY-NNNNNN`, lié à la facture d'origine, puis l'ajouter au même espace facturation côté client et admin | Un avoir par remboursement réussi, numéro continu, facture d'origine, montant crédité, solde restant, snapshots légaux immuables et rendu A4 identique côté client/admin | Aucun avoir sur remboursement non confirmé ; si la génération échoue, la transition backend s'arrête et part en revue manuelle, sans numéro consommé ni faux statut réussi |
 | Étiquette A4 et colis réel | BLOQUÉ TERRAIN | Adam (action protégée) / Jérémy (colis et impression) | Adam ouvre l'action owner-only de la commande payée ; Jérémy vérifie le contenu, télécharge, imprime à 100 % et scanne | PDF dont chaque `MediaBox` est A4, hash, impression lisible et scan du code-barres | Outcome fournisseur inconnu : aucune seconde création ; lookup de l'unique shipment par commande |
 | Remise transporteur et suivi | BLOQUÉ TERRAIN | Jérémy (remise) / Adam (reprise protégée si nécessaire) | Jérémy remet et conserve le reçu ; attendre le premier scan signé. Adam n'utilise la reprise owner-only qu'avec ce reçu | Premier état attendu `in_transit`; commande `shipped`; exactement un mail expédition | Pas de scan signé : conserver `preparing`; aucun handover manuel sans reçu |
 | Retour, réception et remboursement | BLOQUÉ TERRAIN | Jérémy (réception/inspection) / Adam (actions protégées) | Client : `/shipping-returns` puis `POST /api/commerce/returns`; Adam : approve/inspect owner-only ; créer l'étiquette retour via Sendcloud, tracer la remise/retour reçu, calculer articles reçus + règle de frais, puis rembourser une fois via Stripe sous 14 jours | IDs demande/étiquette/scan/réception/refund, montant calculé, stock et mail cohérents | Étiquette retour ou remboursement non câblé : gate reste NO-GO public ; aucune reprise aveugle |
-| Admin MFA et console | BLOQUÉ EXTERNE/PRODUIT | Adam | Cloudflare Zero Trust > Access : la même application et le même AUD protègent explicitement `/operations*` **et** `/api/commerce/admin/*`, avec MFA indépendant requis à chaque login ; l'allowlist contient exactement les trois comptes nommés au § « Controlled runtime matrix » ; provisionner l'admin D1 ; tester une lecture et l'action A4 | Pour chacun des deux chemins : anonyme bloqué à l'edge, chacune des trois identités owner AAL2 admise, toute autre identité refusée, puis session D1/CSRF encore exigée ; capture expurgée de policy et audit `identity_admin_session_started`, sans valeur de cookie/JWT | Une allowlist de 2, 4 ou davantage d'identités, un chemin hors Access ou un contrôle D1 absent garde console et `live` fermés |
+| Allowlist admin et console | OUVERT PRODUIT/RUNTIME | Adam | Cloudflare Zero Trust > Access : la même application et le même AUD protègent explicitement `/operations*` **et** `/api/commerce/admin/*` ; l'allowlist contient exactement les trois comptes nommés au § « Controlled runtime matrix » ; la session D1 courte et le CSRF restent obligatoires. La décision du 01/09/2026 n'impose pas de MFA supplémentaire à ce stade | Pour chacun des deux chemins : anonyme bloqué à l'edge, chacune des trois identités owner admise, toute autre identité refusée, puis session D1/CSRF encore exigée ; capture expurgée de policy et audit `identity_admin_session_started`, sans valeur de cookie/JWT | Une allowlist de 2, 4 ou davantage d'identités, un chemin hors Access ou un contrôle D1 absent garde console et `live` fermés |
 | Monitoring | BLOQUÉ EXTERNE | Adam (principal) / Jérémy (suppléant seulement après accord direct) | Alertes : health non-ready 2 min, taux 5xx >1 %/5 min, webhook 4xx/5xx >=1, cron absent >5 min ; canal e-mail Adam + copie Jérémy après son accord ; injecter pour chaque règle un signal synthétique non transactionnel | Pour chaque alerte : rule ID Cloudflare + signal injecté + événement créé par cette règle + livraison + acquittement + evidence ID ; alors seulement `MONITORING_ALERTS_APPROVED=true` | Un simple e-mail manuel ne vaut pas test ; un test absent ou un suppléant non consentant garde `live` fermé |
-| Médiateur consommation | BLOQUÉ JURIDIQUE — VALIDATEUR À NOMMER | Jérémy (contrat) / validateur juridique nommé (validation) / Adam (pages) | Contracter un médiateur ; nommer le validateur et faire valider le contrat et le texte ; modifier mentions + CGV avant le gel final | Nom/rôle du validateur, validation datée, contrat, coordonnées exactes, pages publiques, SHA/Sites ID | Le mode propriétaire `controlled` peut rester fermé pendant l'attente ; aucune promotion `live` ni ouverture publique avant clôture de ce gate |
+| Médiateur consommation | PREUVE CONTRACTUELLE PASSÉE — RUNTIME À PROUVER | Jérémy (adhésion) / Adam (intégration et preuve) | Preuve payée reçue le 01/09/2026, hashée et conservée ; intégrer le nom, l'adresse, le site et le lien de saisine exacts dans les pages prévues | Source et SHA-256 de `docs/legal/mediation/README.md`, puis pages publiques cohérentes liées au SHA et aux IDs Worker/Sites | La preuve contractuelle clôt l'ancien blocage « médiateur absent », mais aucune promotion `live` avant preuve des coordonnées sur le runtime exact |
 | UK hors UE | HORS PÉRIMÈTRE, NON BLOQUANT FR/UE | Jérémy / Adam | Zone fermée jusqu'à HS par SKU, origine, EORI, Incoterm, service, documents et colis test | Cotation + documents + étiquette + packing | Ne pas ouvrir la zone ; aucun impact sur France/UE |
 | US hors UE | HORS PÉRIMÈTRE, NON BLOQUANT FR/UE | Jérémy / Adam | Même gate autonome, zone fermée | Preuve US autonome | Ne pas ouvrir la zone ; aucun impact sur France/UE |
 | Canada hors UE | HORS PÉRIMÈTRE, NON BLOQUANT FR/UE | Jérémy / Adam | Même gate autonome, zone fermée | Preuve Canada autonome | Ne pas ouvrir la zone ; aucun impact sur France/UE |
@@ -51,16 +59,18 @@ Une gate ne passe à `PASS` qu'avec une ligne immuable au format :
 `Gate ID | evidence ID | SHA | Worker ID | Sites ID | order ID si pertinent | UTC | vérificateur | approbateur`.
 Une capture, un test local ou un accord générique ne remplace jamais ce reçu.
 
-1. Jérémy confirme directement le manifeste et son hash, accepte ou refuse le
-   rôle de suppléant monitoring, contracte le médiateur ; le validateur juridique
-   est nommé et approuve les textes. Adam intègre ces textes **avant** le gel.
+1. Jérémy confirme directement le manifeste et son hash, puis accepte ou refuse
+   le rôle de suppléant monitoring. L'adhésion au médiateur est documentée comme
+   payée le 1er septembre 2026 ; Adam intègre ses coordonnées exactes **avant**
+   le gel et conserve la preuve décrite dans `docs/legal/mediation/README.md`.
 2. Geler et committer le candidat. Publier une preview de ce même SHA et sa
    checklist. Obtenir l'accord d'Adam puis celui de Jérémy sur ce SHA pour une
    **mutation contrôlée**, pas pour la validation visible ni l'ouverture publique.
 3. Avec une session Cloudflare autorisée, exécuter en lecture seule
    `npx wrangler d1 time-travel info aj-luxury-production --config cloudflare.production.jsonc --json`
    et conserver le bookmark. Exporter aussi le schéma avant mutation. Appliquer
-   `0027`, vérifier son inventaire, relire le stock D1 et le comparer au manifeste.
+   les migrations jusqu'à `0030`, vérifier leur inventaire, relire le stock D1
+   et le comparer au manifeste.
 4. Ré-attester sur les dashboards les identités Stripe, Sendcloud et Resend qui
    alimenteront ce Worker ; conserver seulement leurs identifiants publics.
 5. Déployer d'abord le Worker en `controlled`, puis Sites depuis le même SHA.
@@ -68,7 +78,7 @@ Une capture, un test local ou un accord générique ne remplace jamais ce reçu.
    variable historique ne constitue jamais une autorisation et toute valeur
    `true` invalide le candidat. Configurer la même application Access sur
    `/operations*` et `/api/commerce/admin/*`, avec le même AUD, l'allowlist exacte
-   des trois admins et MFA indépendant à chaque login. Exécuter les preuves
+   des trois admins, sans exigence MFA additionnelle à ce stade. Exécuter les preuves
    anonymes du § « Vérification fail-closed et auto-étiquette sans dépense », puis
    les quatre tests monitoring et figer les Worker/Sites IDs finaux. Toute
    nouvelle version après cette étape impose une nouvelle preuve.
@@ -79,12 +89,16 @@ Une capture, un test local ou un accord générique ne remplace jamais ce reçu.
    `AUTOMATIC_OUTBOUND_SHIPMENT_ENABLED=true`, l'idempotence et l'arrêt sur
    outcome ambigu. Réconcilier séparément les deux e-mails. Aucune
    réconciliation ne renvoie d'e-mail et aucune ligne historique n'est réécrite.
-8. Sur une commande et un colis réels vérifiés par Jérémy, payer une fois, créer
-   ou récupérer l'unique shipment,
-   télécharger le PDF A4, imprimer à 100 %, scanner le code-barres et conserver
-   le reçu lors de la remise transporteur.
-9. Effectuer et conserver la preuve retour/remboursement. UK, US et Canada restent
-   fermés et sont non bloquants pour France/UE.
+8. Sur une commande et un colis réels vérifiés par Jérémy, payer une fois. Prouver
+   d'abord la création d'une facture commerciale unique `AJL-YYYY-NNNNNN`, son
+   accès client/admin et son rendu A4. Créer ou récupérer ensuite l'unique
+   shipment, télécharger l'étiquette transporteur A4, imprimer à 100 %, scanner
+   le code-barres et conserver le reçu lors de la remise transporteur.
+9. Effectuer et conserver la preuve retour/remboursement. Le passage du
+   remboursement fournisseur à `succeeded` doit créer atomiquement un seul avoir
+   `AJL-AV-YYYY-NNNNNN`, lié à la facture d'origine et visible dans le même rendu
+   A4 côté client et admin. Un rejeu ne crée aucun second avoir. UK, US et Canada
+   restent fermés et sont non bloquants pour France/UE.
 10. Constituer le registre de clôture et le proof ID contrôlé. Demander alors un
    **nouvel accord distinct**
    d'Adam puis de Jérémy citant SHA + Worker ID + Sites ID + proof ID pour passer
@@ -92,10 +106,10 @@ Une capture, un test local ou un accord générique ne remplace jamais ce reçu.
 
 Une restauration Time Travel écrase D1 en place et annule les requêtes en cours.
 Elle n'est donc jamais l'étape automatique d'un rollback applicatif. Le premier
-rollback est Worker, puis Sites. D1 `0027` reste en place sauf décision d'incident
+rollback est Worker, puis Sites. D1 jusqu'à `0030` reste en place sauf décision d'incident
 documentée à partir du bookmark conservé.
 
-### D1 `0027` — commandes et inventaire exacts
+### D1 jusqu'à `0030` — commandes, factures, avoirs et inventaire exacts
 
 Toutes les sorties vont sous `release-evidence/<SHA>/`, dans ce workspace. Elles
 ne contiennent ni secret ni données client. Depuis un worktree propre positionné
@@ -115,19 +129,18 @@ $env:PRODUCTION_D1_DATABASE_ID = 'b02e8fc8-7309-43f7-a596-78fa51dc110d'
 $env:PRODUCTION_D1_DATABASE_NAME = 'aj-luxury-production'
 npm run apply:production-migrations
 npx wrangler d1 execute aj-luxury-production --remote --config cloudflare.production.jsonc `
-  --command="SELECT type,name,tbl_name FROM sqlite_schema WHERE name LIKE '%email_delivery_provider_evidence%' ORDER BY type,name;" --json |
-  Tee-Object "release-evidence/$env:COMMERCE_RELEASE_SHA/d1-0027-inventory-after.json"
+  --command="SELECT type,name,tbl_name FROM sqlite_schema WHERE name LIKE '%email_delivery_provider_evidence%' OR name LIKE '%invoice%' OR name LIKE '%credit_note%' ORDER BY type,name;" --json |
+  Tee-Object "release-evidence/$env:COMMERCE_RELEASE_SHA/d1-0030-inventory-after.json"
 ```
 
-Le dernier fichier doit contenir exactement la table
-`email_delivery_provider_evidence`, les index
-`ux_email_delivery_provider_evidence_outbox`,
-`ux_email_delivery_provider_evidence_message`,
-`idx_email_delivery_provider_evidence_time`, et les triggers
-`trg_email_delivery_provider_evidence_validate_insert`,
-`trg_email_delivery_provider_evidence_immutable_update`,
-`trg_email_delivery_provider_evidence_retain_delete`. Toute ligne manquante ou
-supplémentaire portant ce préfixe est un STOP.
+Le dernier fichier doit contenir l'inventaire exact des tables de facturation
+`invoice_sequences`, `order_invoices`, `credit_note_sequences` et
+`order_credit_notes`, de leurs index et de leurs triggers. Les déclencheurs
+terminaux attendus incluent `trg_orders_create_invoice_after_payment` et
+`trg_refunds_create_credit_note_after_success`. Le health du Worker doit ensuite
+confirmer l'absence simultanée de `invoice-schema-0029-not-installed` et de
+`credit-note-schema-0030-not-installed`. Toute ligne manquante, tout remboursement
+réussi sans avoir, tout doublon ou tout écart de schéma est un STOP.
 
 ### Les trois accords, volontairement séparés
 
@@ -136,6 +149,52 @@ supplémentaire portant ce préfixe est un STOP.
    recette constatée, sans ouvrir le public.
 3. **Promotion live France/UE** : SHA + Worker ID + Sites ID + proof ID. Autorise
    les variables de provenance et `COMMERCE_MODE=live` avec UK/US/Canada fermés.
+
+### Facturation — cinq documents à ne jamais confondre
+
+La chaîne commerce produit cinq objets ayant des rôles distincts :
+
+1. la **confirmation de commande** récapitule la demande enregistrée ;
+2. la **confirmation de paiement** indique que Stripe a confirmé le règlement ;
+3. la **facture commerciale AJ Luxury** est le document de vente numéroté remis
+   au client après confirmation du paiement ;
+4. l'**avoir commercial AJ Luxury** constate tout ou partie du montant remboursé
+   sans modifier la facture d'origine ;
+5. l'**étiquette transporteur** sert uniquement à acheminer le colis et n'est ni
+   une facture, ni une preuve comptable du règlement.
+
+Le comportement cible à prouver sur le runtime exact est le suivant :
+
+- aucune facture n'est émise pour une commande impayée ou un résultat Stripe
+  ambigu ;
+- le premier signal de paiement vérifié attribue atomiquement un seul numéro
+  continu au format `AJL-YYYY-NNNNNN` ; un rejeu du webhook retourne la même
+  facture et ne consomme jamais un second numéro ;
+- la facture fige la date d'émission, le vendeur, l'acheteur, les lignes et
+  quantités, les remises, les frais de livraison, les montants, le statut payé,
+  la mention fiscale applicable et les coordonnées du médiateur ;
+- le client retrouve le document dans son compte et l'administrateur dans la
+  commande ; les deux accès rendent le même document A4 ;
+- l'impression ou l'enregistrement PDF se fait depuis ce rendu A4 ; le bouton
+  « étiquette A4 » reste séparé et concerne exclusivement Sendcloud ;
+- une facture émise est immuable. Une annulation ou un remboursement ultérieur
+  ne la réécrit pas ;
+- lorsque le remboursement fournisseur devient `succeeded` avec ses références
+  vérifiées, la migration `0030` crée atomiquement un avoir continu au format
+  `AJL-AV-YYYY-NNNNNN`. Il reprend la facture d'origine, le montant crédité et le
+  solde restant ; un rejeu retrouve le même avoir et n'en crée aucun second ;
+- le client retrouve la facture et ses avoirs dans son compte, et
+  l'administrateur dans la commande. Les deux accès rendent le même ensemble A4,
+  sans exposer les références internes du fournisseur ;
+- une facture et un avoir émis sont immuables. Toute régularisation suivante
+  passe par un nouveau document lié, jamais par la réécriture de l'historique.
+
+La preuve de recette conserve les numéros de facture et d'avoir, l'order ID,
+l'identifiant de remboursement, les horodatages Stripe, le hash du rendu A4 côté
+client et admin, le SHA et les IDs Worker/Sites, sans donnée de carte. Tant que
+cette concordance et l'absence des deux blockers de schéma ne sont pas acquises,
+la facturation et les avoirs restent `OUVERT PRODUIT/RUNTIME` et ne doivent pas
+être présentés comme déployés.
 
 ### Décision préalable — montant et frais d'un retour
 
@@ -212,11 +271,12 @@ new version must keep the import route closed. Live promotion keeps that same
 immutable stock-evidence pair and separately sets
 `COMMERCE_PROMOTED_FROM_RELEASE_SHA` and
 `COMMERCE_PROMOTED_FROM_VERSION_ID` to the exact controlled runtime provenance
-written immutably on the first order. The private owner-only
-controlled order may defer the mediator,
-monitoring-alert approval and operator-MFA gates by the release owner's dated
-decision. All three remain mandatory before promotion to public `live` commerce;
-the controlled exception never represents those tasks as completed.
+written immutably on the first order. The private owner-only controlled order
+may defer the runtime proof of the mediator coordinates, monitoring-alert
+approval gates by the release owner's dated decision. The
+mediator's contractual proof is already retained; its runtime publication, plus
+the other applicable gates, remains mandatory before public `live` commerce.
+The controlled exception never represents those tasks as completed.
 
 ### Provider identity attestation
 
@@ -273,9 +333,10 @@ Sur le Worker storefront/bridge, la policy Access protège les deux chemins et
 le bridge ne transmet `Cf-Access-Jwt-Assertion` que vers
 `/api/commerce/admin/*`. Sur le Worker commerce backend, la console exige les
 valeurs exactes suivantes : `CLOUDFLARE_ACCESS_TEAM_DOMAIN`,
-`CLOUDFLARE_ACCESS_AUD`, `COMMERCE_CONTROLLED_OWNER_EMAIL`,
-`OPERATOR_ADMIN_MFA_ENABLED=true`, `OPERATOR_CONSOLE_ENABLED=true` et
-`CLOUDFLARE_ACCESS_MFA_ATTESTATION=independent-mfa:required-every-login`.
+`CLOUDFLARE_ACCESS_AUD`, `COMMERCE_CONTROLLED_OWNER_EMAIL` et
+`OPERATOR_CONSOLE_ENABLED=true`. Aucun challenge MFA additionnel n'est exigé à
+ce stade : l'allowlist nominative Access, la session D1 courte, le CSRF et
+l'idempotence restent obligatoires.
 `COMMERCE_ADMIN_ALLOWED_EMAILS_JSON` contient exactement trois identités
 distinctes après normalisation en minuscules : `adam.chabbi94@gmail.com`,
 `jeremy@ajluxurystore.com` et `jeremyscheppler360@gmail.com`. Deux, quatre,
@@ -299,7 +360,7 @@ runtime-only groups against the exact release SHA and Worker version:
 - Resend provider reconciliation enabled only for an owner-authorized,
   append-only lookup of a known provider message ID; it never enables replay;
 - late-payment refund dispatch, reservation expiry, returns, shipment handover
-  and reporting activation; operator MFA may be deferred only in `controlled`;
+  and reporting activation;
 - the four controlled rate-limit bindings and the exact private bridge origin.
 
 Flags such as `PRODUCTION_STOCK_IMPORT_ENABLED`,
@@ -309,12 +370,12 @@ Flags such as `PRODUCTION_STOCK_IMPORT_ENABLED`,
 `TRANSACTIONAL_EMAIL_RECONCILIATION_ENABLED`,
 `LATE_PAYMENT_REFUND_DISPATCH_ENABLED`, `RESERVATION_EXPIRY_ENABLED`,
 `RETURNS_WORKFLOW_ENABLED`, `SHIPMENT_HANDOVER_ENABLED`,
-`COMMERCE_REPORTING_ENABLED` and `OPERATOR_ADMIN_MFA_ENABLED` are runtime release
+`COMMERCE_REPORTING_ENABLED` are runtime release
 decisions, not claims pre-signed in the committed config. The health response
 must remain closed if any gate required for the current mode, schema proof or
 identity is missing. The narrow `controlled` exception does not apply to
-`live`: unresolved mediator details, monitoring approval or operator MFA keep
-public commerce closed.
+`live`: unproved mediator publication or monitoring approval keeps public
+commerce closed.
 
 ### Vérification fail-closed et auto-étiquette sans dépense
 
@@ -381,6 +442,13 @@ or card data:
 7. provider receipts, D1 rows and audit events reconcile to the same order,
    payment, shipment and idempotency references.
 
+La recette retour distincte requise avant promotion publique doit relier un
+remboursement Stripe réellement confirmé à exactement un avoir automatique
+`AJL-AV-YYYY-NNNNNN`. La facture d'origine reste inchangée ; le compte client et
+la console admin affichent le même avoir dans l'ensemble A4, avec montant crédité
+et solde restant concordants. Le rejeu du signal ne crée ni second avoir ni
+second numéro.
+
 ### Controlled rollback and reconciliation
 
 If any step is ambiguous, close new checkout traffic and preserve the controlled
@@ -427,13 +495,16 @@ npx wrangler deployments list --name aj-luxury-production --config cloudflare.pr
   `environment="production"`, `mode="controlled"`, `releaseSha="<SHA>"`,
   `origin="https://ajluxurystore.com"`, `launchZones=["EU"]`, `blockers=[]`,
   `capabilities.controlledOrder=true`, `capabilities.publicCommerce=false` ; le
-  paquet D1 prouve séparément `0027`, le settlement live et les provenances ;
+  paquet D1 prouve séparément les migrations jusqu'à `0030`, le settlement live
+  et les provenances ; le health ne contient ni
+  `invoice-schema-0029-not-installed` ni
+  `credit-note-schema-0030-not-installed` ;
 - `COMMERCE_CONTROLLED_EDGE_ACCESS_ENFORCED` est absent ou faux ; la requête
   commerce anonyme du test fail-closed retourne `401`/`403` et aucune route
   mutante contrôlée ne repose uniquement sur Access ;
 - `/operations*` et `/api/commerce/admin/*` sont couverts par la même application
   Access et le même AUD : l'anonyme est bloqué à l'edge, les trois identités de
-  l'allowlist exacte passent avec MFA, toute autre identité échoue, puis les
+  l'allowlist exacte passent, toute autre identité échoue, puis les
   verrous session D1/CSRF/idempotence restent actifs ;
 - la préparation auto-étiquette possède les deux flags vrais et sa preuve locale
   sans dépense ; cette preuve ne vaut pas création, impression ni scan d'un colis ;
@@ -446,11 +517,21 @@ npx wrangler deployments list --name aj-luxury-production --config cloudflare.pr
 - une commande de contrôle prouve panier, livraison sélectionnée, paiement Stripe
   unique, stock décrémenté une fois, compte client et deux confirmations e-mail
   distinctes ;
-- la console AAL2 prouve une session admin sans exposer cookie/JWT, l'étiquette
+- cette commande payée possède une facture unique `AJL-YYYY-NNNNNN` ; le compte
+  client et la console admin retournent le même rendu A4 et le même hash, alors
+  que le lien d'étiquette reste explicitement distinct ;
+- la recette de remboursement produit un avoir automatique unique
+  `AJL-AV-YYYY-NNNNNN`, lié à la facture inchangée ; le compte client et la
+  console admin retournent le même ensemble facture + avoirs A4 et le rejeu ne
+  crée aucun second document ;
+- la console prouve une session admin nominative sans exposer cookie/JWT, l'étiquette
   A4 unique, le scan transporteur, le suivi et les actions retour ;
 - les quatre alertes monitoring possèdent chacune un evidence ID acquitté ;
-- le médiateur contracté et validé figure exactement dans les pages légales ;
-  tant que cette ligne n'est pas prouvée, `mode=controlled` et
+- la preuve médiateur porte le SHA-256
+  `f2b0cfddb88d0e8b2ede2b8abca8980e4d09e18d82cccb5a9107398cf67870b7` et les
+  coordonnées documentées dans `docs/legal/mediation/README.md` figurent
+  exactement dans les pages légales et la facture ; tant que cette publication
+  runtime n'est pas prouvée, `mode=controlled` et
   `capabilities.publicCommerce=false` restent obligatoires ;
 
 - the expected release marker is present in HTML;
@@ -493,11 +574,11 @@ est aussi concerné. En
 incident purement visuel, ne pas toucher au Worker. Ne jamais reconstruire une
 ancienne version et ne jamais modifier DNS pendant ce rollback.
 
-La migration `0027` est additive et l'ancien Worker n'utilise pas sa table :
-elle reste donc en place lors d'un rollback applicatif. Une restauration D1 est
+Les migrations additives jusqu'à `0030` restent en place lors d'un
+rollback applicatif. Une restauration D1 est
 une action destructive séparée, uniquement sur décision d'incident, à partir du
 bookmark Time Travel conservé. Répéter ensuite les contrôles SHA/Worker/Sites,
-mode/audience/zones, santé, paiement/livraison/e-mails, session MFA, monitoring,
+mode/audience/zones, santé, paiement/livraison/e-mails, session admin, monitoring,
 retours, Range média, cache et responsive. Conserver le commit et les version IDs en échec
 pour diagnostic ; corriger par un nouveau commit et de nouvelles versions.
 

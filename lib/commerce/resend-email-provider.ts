@@ -62,10 +62,10 @@ function escapeHtml(value: string): string {
 
 function brandedHtml(content: EmailContent): string {
   const title = escapeHtml(content.subject);
-  const termsUrl = /https:\/\/ajluxurystore\.com\/terms\?version=[A-Za-z0-9._%+-]{1,80}/g;
+  const trustedAjLuxuryUrl = /https:\/\/ajluxurystore\.com\/(?:account|terms\?version=[A-Za-z0-9._%+-]{1,80})/g;
   let cursor = 0;
   const linked: string[] = [];
-  for (const match of content.text.matchAll(termsUrl)) {
+  for (const match of content.text.matchAll(trustedAjLuxuryUrl)) {
     const index = match.index ?? 0;
     linked.push(escapeHtml(content.text.slice(cursor, index)));
     const url = escapeHtml(match[0]);

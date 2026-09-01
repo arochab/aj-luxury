@@ -98,7 +98,7 @@ export function parseProductionOrder(value: unknown): PublicProductionOrder {
     !validAmount(value.shippingCents) ||
     value.taxCents !== 0 ||
     value.invoiceTaxMention !==
-      "TVA non applicable, article 293 B du Code général des impôts" ||
+      "TVA non applicable, art. 293 B du code général des impôts" ||
     !validAmount(value.totalCents) ||
     value.totalCents !== value.subtotalCents + value.shippingCents + value.taxCents ||
     typeof value.createdAt !== "string" ||

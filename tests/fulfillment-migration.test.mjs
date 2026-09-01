@@ -54,6 +54,8 @@ const migrationNames = [
   "0026_international_shipping.sql",
   "0027_puzzling_war_machine.sql",
   "0028_even_fallen_one.sql",
+  "0029_slippery_ironclad.sql",
+  "0030_striped_skin.sql",
 ];
 const legacyMigrationNames = migrationNames.slice(0, 8);
 // Hosted D1 bootstrap version 1 succeeded with exactly these LF-normalized
@@ -85,7 +87,7 @@ test("the exact Drizzle D1 splitter emits no blank statements", () => {
   assert.equal(migrations.length, migrationNames.length);
   assert.equal(
     migrations.reduce((total, migration) => total + migration.sql.length, 0),
-    620,
+    650,
   );
   for (const [migrationIndex, migration] of migrations.entries()) {
     for (const [statementIndex, statement] of migration.sql.entries()) {
@@ -117,11 +119,10 @@ test("every trigger is compatible with the Sites D1 statement ingester", () => {
   assert.ok(triggerStatements.length > 0);
   for (const statement of triggerStatements) {
     const triggerName = statement.match(/CREATE\s+TRIGGER\s+`?([^`\s]+)`?/i)?.[1];
-    assert.equal(
-      statement.match(/\bEND;/gi)?.length,
-      1,
-      `${triggerName ?? "unnamed trigger"} contains an internal END; that Sites D1 can split prematurely`,
-    );
+    const bodyTerminators = statement.match(/(?:^|\n)\s*END;\s*$/gi) ??
+      statement.match(/\bBEGIN\b[^\n]*\bEND;\s*$/gi) ?? [];
+    assert.equal(bodyTerminators.length, 1,
+      `${triggerName ?? "unnamed trigger"} must contain exactly one trigger-body terminator`);
     assert.match(
       statement,
       /\bEND;\s*$/i,

@@ -65,6 +65,7 @@ export default function ProductionCheckoutSuccessClient() {
           <div className={styles.quote} role="status">
             <strong>Commande {order.orderNumber}</strong>
             <p>{settlementDetail}</p>
+            <p>Votre facture commerciale numérotée est maintenant disponible dans votre espace client.</p>
             <p><LocalizedPrice amountCents={order.totalCents} /></p>
           </div>
         )}
@@ -78,7 +79,9 @@ export default function ProductionCheckoutSuccessClient() {
             <p>Impossible de relire la commande depuis cette session sécurisée.</p>
           </div>
         )}
-        <Link className={styles.button} href="/account">Voir ma commande</Link>
+        <Link className={styles.button} href="/account">
+          {settled ? "Voir ma commande et ma facture" : "Voir ma commande"}
+        </Link>
         <Link className={styles.secondary} href="/shop">Retour à la collection</Link>
       </section>
     </div>

@@ -491,6 +491,11 @@ export default function ProductionCheckoutClient() {
             {["US", "CA"].includes(form.countryCode) ? <label>{form.countryCode === "US" ? "État (code à 2 lettres)" : "Province (code à 2 lettres)"}<input required maxLength={2} autoComplete="address-level1" value={form.regionCode} onChange={(e) => updateField("regionCode", e.currentTarget.value)} /></label> : null}
             <label>{t("checkout.mobilePhone")}<input required type="tel" inputMode="tel" autoComplete="tel" pattern="\+[1-9][0-9]{7,14}" title="Format international, par exemple +33612345678" placeholder="+33612345678" value={form.phone} onChange={(e) => updateField("phone", e.currentTarget.value)} /></label>
             <label>{t("checkout.country")}<select required autoComplete="country" value={form.countryCode} onChange={(e) => updateField("countryCode", e.currentTarget.value)}>{launchCountries.map(([code, label]) => <option key={code} value={code}>{label}</option>)}</select></label>
+            <p className={styles.accountEmailNotice}>
+              <strong>Adresse de facturation</strong> Cette adresse et le nom
+              renseigné seront repris sur votre facture A4. Vérifiez-les avant
+              de calculer la livraison ; le champ société reste facultatif.
+            </p>
             <button className={styles.button} type="submit" disabled={submitting}>{submitting ? t("checkout.calculatingShipping") : t("checkout.calculateShipping")}</button>
           </form>
         ) : null}
@@ -581,7 +586,7 @@ export default function ProductionCheckoutClient() {
                     <span className={styles.accountCheckoutStatus}>Connecté</span>
                   </div>
                   <label>{t("checkout.email")}<input type="email" inputMode="email" autoComplete="email" readOnly value={email} /></label>
-                  <p className={styles.accountCheckoutIntro}>Cette commande sera ajoutée automatiquement à votre historique.</p>
+                  <p className={styles.accountCheckoutIntro}>Cette commande et sa facture A4 seront ajoutées automatiquement à votre historique après confirmation du paiement.</p>
                 </section>
               ) : (
                 <section className={styles.accountCheckoutFields} aria-labelledby="checkout-account-title">
@@ -595,7 +600,7 @@ export default function ProductionCheckoutClient() {
                       <Link href={accountAccessHref("forgot", email)}>Mot de passe oublié</Link>
                     </nav>
                   </div>
-                  <p className={styles.accountCheckoutIntro}>Retrouvez votre commande, son paiement et sa livraison depuis un espace sécurisé.</p>
+                  <p className={styles.accountCheckoutIntro}>Retrouvez votre commande, sa facture A4, son paiement et sa livraison depuis un espace sécurisé.</p>
                   <label>{t("checkout.email")}<input type="email" inputMode="email" autoComplete="email" required aria-describedby="checkout-account-email-help" value={email} onChange={(e) => { setEmail(e.currentTarget.value); setAccountPrepared(false); }} /></label>
                   <label>Choisir un mot de passe <span className={styles.fieldHint}>12 caractères minimum</span><input type="password" minLength={12} maxLength={128} autoComplete="new-password" required value={accountPassword} onChange={(e) => { setAccountPassword(e.currentTarget.value); setAccountPrepared(false); }} /></label>
                   <label>Confirmer le mot de passe<input type="password" minLength={12} maxLength={128} autoComplete="new-password" required value={accountPasswordConfirmation} onChange={(e) => { setAccountPasswordConfirmation(e.currentTarget.value); setAccountPrepared(false); }} /></label>
