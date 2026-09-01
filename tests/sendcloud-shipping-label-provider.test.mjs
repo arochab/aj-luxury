@@ -28,11 +28,20 @@ class Statement {
   }
   bind(...values) { return new Statement(this.database, this.query, values); }
   async first() {
-    if (this.query.includes("FROM shipments AS shipment")) return this.database.context;
-    if (this.query.includes("FROM shipments WHERE order_id")) {
-      return this.database.existingByOrder ?? this.database.existing ?? null;
+    if (this.query.includes("WHERE shipment.order_id")) {
+      const shipment = this.database.existingByOrder ?? this.database.existing ?? null;
+      return shipment ? { order_status: "preparing", ...shipment } : null;
     }
-    if (this.query.includes("FROM shipments WHERE idempotency_key")) return this.database.existing ?? null;
+    if (this.query.includes("WHERE shipment.idempotency_key")) {
+      return this.database.existing ? { order_status: "preparing", ...this.database.existing } : null;
+    }
+    if (this.query.includes("FROM shipments AS shipment")) return this.database.context;
+    if (this.query.includes("FROM shipping_document_metadata WHERE id")) {
+      return this.database.shippingDocuments.get(this.values[0]) ?? null;
+    }
+    if (this.query.includes("FROM audit_log WHERE id")) {
+      return this.database.auditLog.get(this.values[0]) ?? null;
+    }
     throw new Error(`unexpected first query: ${this.query}`);
   }
   async all() {
@@ -50,9 +59,51 @@ class Database {
     this.lines = lines;
     this.existing = null;
     this.existingByOrder = null;
+    this.shippingDocuments = new Map();
+    this.auditLog = new Map();
   }
   prepare(query) { return new Statement(this, query); }
-  async batch() { throw new Error("unexpected batch"); }
+  async batch(statements) {
+    for (const statement of statements) {
+      if (statement.query.includes("INSERT OR IGNORE INTO shipping_document_metadata")) {
+        const [id, shipment_id, provider_document_reference_hash, content_sha256, byte_length] = statement.values;
+        if (!this.shippingDocuments.has(id)) {
+          this.shippingDocuments.set(id, {
+            shipment_id,
+            document_kind: "label",
+            media_type: "application/pdf",
+            provider_document_reference_hash,
+            content_sha256,
+            byte_length,
+          });
+        }
+        continue;
+      }
+      if (statement.query.includes("INSERT OR IGNORE INTO audit_log")) {
+        const [id, actor_id, entity_id, idempotency_key, metadata_json,
+          , documentId, shipmentId, providerHash, contentSha256, byteLength] = statement.values;
+        const document = this.shippingDocuments.get(documentId);
+        if (!this.auditLog.has(id) && document &&
+          document.shipment_id === shipmentId &&
+          document.provider_document_reference_hash === providerHash &&
+          document.content_sha256 === contentSha256 &&
+          document.byte_length === byteLength) {
+          this.auditLog.set(id, {
+            actor_type: "admin",
+            actor_id,
+            action: "shipping_label_downloaded",
+            entity_type: "shipment",
+            entity_id,
+            idempotency_key,
+            metadata_json,
+          });
+        }
+        continue;
+      }
+      throw new Error(`unexpected batch query: ${statement.query}`);
+    }
+    return statements.map(() => ({ success: true, meta: { changes: 1 } }));
+  }
 }
 
 const configuration = Object.freeze({
@@ -417,6 +468,7 @@ async function adminRequest(headers = {}) {
         Origin: "https://ajluxurystore.com",
         "Sec-Fetch-Site": "same-origin",
         "Idempotency-Key": "shipment:test:0001",
+        "X-AJ-Download-Request-Id": "label-download:test:0001",
         "oai-authenticated-user-email": "adam@example.com",
         "oai-authenticated-user-id": "owner-1",
         "X-AJ-Controlled-Authorization": await controlledRequestAuthorization(
@@ -471,6 +523,7 @@ test("a Cloudflare Access owner plus the durable AAL2 session can recover the un
         Origin: "https://ajluxurystore.com",
         "Sec-Fetch-Site": "same-origin",
         "Idempotency-Key": "operator-label:order_test_1",
+        "X-AJ-Download-Request-Id": "label-download:access:0001",
       },
     },
   );
@@ -480,7 +533,7 @@ test("a Cloudflare Access owner plus the durable AAL2 session can recover the un
     "https://ajluxurystore.com",
     {
       authorizeControlledOwner: async () => true,
-      authorizeOwner: async () => true,
+      authorizeOwner: async () => ({ administratorId: "admin_access_1", sessionId: "session_access_1" }),
       shippingDocuments: {
         async document() {
           return {
@@ -496,6 +549,8 @@ test("a Cloudflare Access owner plus the durable AAL2 session can recover the un
   );
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("Content-Type"), "application/pdf");
+  assert.equal(DB.shippingDocuments.size, 1);
+  assert.equal(DB.auditLog.size, 1);
 });
 
 test("controlled labels defer MFA but live labels keep it mandatory", async () => {
@@ -568,7 +623,7 @@ test("operator route hard-stops an already claimed shipment for manual reconcili
     { ...adminEnv, DB },
     "https://ajluxurystore.com",
     {
-      authorizeOwner: async () => true,
+      authorizeOwner: async () => ({ administratorId: "admin_owner_1", sessionId: "session_owner_1" }),
       shippingLabelProvider: { async createLabel() { providerCalls += 1; throw new Error("must not call"); } },
     },
   );
@@ -596,7 +651,7 @@ test("an order-level label-ready replay with a new request key returns the same 
     { ...adminEnv, DB },
     "https://ajluxurystore.com",
     {
-      authorizeOwner: async () => true,
+      authorizeOwner: async () => ({ administratorId: "admin_owner_1", sessionId: "session_owner_1" }),
       shippingDocuments: {
         async document(input) {
           requestInput = input;
@@ -624,4 +679,57 @@ test("an order-level label-ready replay with a new request key returns the same 
     new Uint8Array(await response.arrayBuffer()),
     new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x37]),
   );
+  assert.equal(DB.shippingDocuments.size, 1);
+  assert.equal(DB.auditLog.size, 1);
+});
+
+test("a changed printable document for the same provider reference is blocked and not audited", async () => {
+  const DB = new Database(null, []);
+  DB.existing = {
+    id: "shipment_test_1",
+    order_id: "order_test_1",
+    status: "label_ready",
+    attempts: 1,
+    provider_shipment_reference: "383707309",
+    tracking_reference: "3S123456789",
+  };
+  const pdf = new Blob([new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x37])], {
+    type: "application/pdf",
+  });
+  let contentSha256 = "c".repeat(64);
+  const dependencies = {
+    authorizeOwner: async () => ({ administratorId: "admin_owner_1", sessionId: "session_owner_1" }),
+    shippingDocuments: {
+      async document() {
+        return {
+          providerDocumentReference: "sendcloud:parcel:383707309:document:label",
+          mediaType: "application/pdf",
+          contentSha256,
+          byteLength: pdf.size,
+          content: pdf,
+        };
+      },
+    },
+  };
+  const first = await productionShippingLabelAdminReleaseCoreResponse(
+    await adminRequest({ "X-AJ-Download-Request-Id": "label-download:stable:0001" }),
+    { ...adminEnv, DB },
+    "https://ajluxurystore.com",
+    dependencies,
+  );
+  assert.equal(first.status, 200);
+  assert.equal(DB.shippingDocuments.size, 1);
+  assert.equal(DB.auditLog.size, 1);
+
+  contentSha256 = "d".repeat(64);
+  const changed = await productionShippingLabelAdminReleaseCoreResponse(
+    await adminRequest({ "X-AJ-Download-Request-Id": "label-download:changed:0002" }),
+    { ...adminEnv, DB },
+    "https://ajluxurystore.com",
+    dependencies,
+  );
+  assert.equal(changed.status, 503);
+  assert.equal((await changed.json()).error.code, "SHIPPING_DOCUMENT_PROOF_UNAVAILABLE");
+  assert.equal(DB.shippingDocuments.size, 1);
+  assert.equal(DB.auditLog.size, 1);
 });

@@ -17,10 +17,18 @@ import { productionOutboundShippingRuntimeConfigured } from "./production-shippi
 const ROUTE = /^\/api\/commerce\/admin\/orders\/([^/]+)\/shipping-label$/;
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,191}$/;
 const IDEMPOTENCY = /^[A-Za-z0-9][A-Za-z0-9_.:-]{7,127}$/;
+const SHA256 = /^[0-9a-f]{64}$/;
+const DOWNLOAD_REQUEST_HEADER = "X-AJ-Download-Request-Id";
+
+type ShippingLabelAdminActor = Readonly<{
+  administratorId: string;
+  sessionId: string;
+}>;
 
 export type ProductionShippingLabelEnvironment = ProductionCommerceEnvironment & Readonly<{
   DB?: CommerceD1Database;
   COMMERCE_CONTROLLED_OWNER_EMAIL?: string;
+  COMMERCE_ADMIN_ALLOWED_EMAILS_JSON?: string;
   COMMERCE_CONTROLLED_AUTH_HMAC_SECRET?: string;
   OUTBOUND_SHIPMENT_CREATION_ENABLED?: string;
   OPERATOR_ADMIN_MFA_ENABLED?: string;
@@ -45,7 +53,7 @@ export type ProductionShippingLabelDependencies = Readonly<{
     database: CommerceD1Database,
     now: string,
     origin: string,
-  ) => Promise<boolean>;
+  ) => Promise<ShippingLabelAdminActor | null>;
 }>; 
 
 function referenceVaultConfiguration(env: ProductionShippingLabelEnvironment): Readonly<{
@@ -71,6 +79,9 @@ async function printableLabelResponse(
   env: ProductionShippingLabelEnvironment,
   dependencies: ProductionShippingLabelDependencies,
   shipment: ExistingShipment,
+  actor: ShippingLabelAdminActor,
+  downloadRequestId: string,
+  now: string,
   status: 200 | 201,
 ): Promise<Response> {
   if (!shipment.provider_shipment_reference || !/^[1-9]\d{0,18}$/.test(shipment.provider_shipment_reference)) {
@@ -89,10 +100,115 @@ async function printableLabelResponse(
     if (document.mediaType !== "application/pdf" || document.byteLength !== document.content.size) {
       return fail("SHIPPING_DOCUMENT_UNAVAILABLE", 503);
     }
+    if (!SHA256.test(document.contentSha256) ||
+      !SAFE_ID.test(document.providerDocumentReference) ||
+      !IDEMPOTENCY.test(downloadRequestId)) {
+      return fail("SHIPPING_DOCUMENT_UNAVAILABLE", 503);
+    }
     const signature = new Uint8Array(await document.content.slice(0, 5).arrayBuffer());
     if (signature.length !== 5 || signature[0] !== 0x25 || signature[1] !== 0x50 ||
       signature[2] !== 0x44 || signature[3] !== 0x46 || signature[4] !== 0x2d) {
       return fail("SHIPPING_DOCUMENT_UNAVAILABLE", 503);
+    }
+    if (!env.DB) return fail("DATABASE_UNAVAILABLE", 503);
+    const providerReferenceHash = await sha256Hex(document.providerDocumentReference);
+    const documentIdentity = await sha256Hex(
+      `${shipment.id}\0label\0${providerReferenceHash}`,
+    );
+    const auditIdentity = await sha256Hex(
+      `${shipment.id}\0${actor.administratorId}\0${downloadRequestId}`,
+    );
+    const documentId = `shipping_document_${documentIdentity}`;
+    const auditId = `audit_shipping_label_download_${auditIdentity}`;
+    const auditIdempotencyKey = `shipping-label-download:${auditIdentity}`;
+    const auditMetadata = JSON.stringify({
+      administratorSessionId: actor.sessionId,
+      byteLength: document.byteLength,
+      contentSha256: document.contentSha256,
+    });
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT OR IGNORE INTO shipping_document_metadata (
+          id, shipment_id, document_kind, media_type,
+          provider_document_reference_hash, content_sha256, byte_length, created_at
+        ) VALUES (?, ?, 'label', 'application/pdf', ?, ?, ?, ?)`,
+      ).bind(
+        documentId,
+        shipment.id,
+        providerReferenceHash,
+        document.contentSha256,
+        document.byteLength,
+        now,
+      ),
+      env.DB.prepare(
+        `INSERT OR IGNORE INTO audit_log (
+          id, actor_type, actor_id, action, entity_type, entity_id,
+          idempotency_key, metadata_json, created_at
+        ) SELECT ?, 'admin', ?, 'shipping_label_downloaded', 'shipment', ?, ?, ?, ?
+        WHERE EXISTS (
+          SELECT 1 FROM shipping_document_metadata
+          WHERE id = ? AND shipment_id = ? AND document_kind = 'label'
+            AND media_type = 'application/pdf'
+            AND provider_document_reference_hash = ?
+            AND content_sha256 = ? AND byte_length = ?
+        )`,
+      ).bind(
+        auditId,
+        actor.administratorId,
+        shipment.id,
+        auditIdempotencyKey,
+        auditMetadata,
+        now,
+        documentId,
+        shipment.id,
+        providerReferenceHash,
+        document.contentSha256,
+        document.byteLength,
+      ),
+    ]);
+    const [persistedDocument, persistedAudit] = await Promise.all([
+      env.DB.prepare(
+        `SELECT shipment_id, document_kind, media_type,
+          provider_document_reference_hash, content_sha256, byte_length
+        FROM shipping_document_metadata WHERE id = ?`,
+      ).bind(documentId).first<{
+        shipment_id: string;
+        document_kind: string;
+        media_type: string;
+        provider_document_reference_hash: string;
+        content_sha256: string;
+        byte_length: number;
+      }>(),
+      env.DB.prepare(
+        `SELECT actor_type, actor_id, action, entity_type, entity_id,
+          idempotency_key, metadata_json
+        FROM audit_log WHERE id = ?`,
+      ).bind(auditId).first<{
+        actor_type: string;
+        actor_id: string | null;
+        action: string;
+        entity_type: string;
+        entity_id: string;
+        idempotency_key: string;
+        metadata_json: string;
+      }>(),
+    ]);
+    if (
+      persistedDocument?.shipment_id !== shipment.id ||
+      persistedDocument.document_kind !== "label" ||
+      persistedDocument.media_type !== "application/pdf" ||
+      persistedDocument.provider_document_reference_hash !== providerReferenceHash ||
+      persistedDocument.content_sha256 !== document.contentSha256 ||
+      persistedDocument.byte_length !== document.byteLength ||
+      persistedAudit?.actor_type !== "admin" ||
+      persistedAudit.actor_id !== actor.administratorId ||
+      persistedAudit.action !== "shipping_label_downloaded" ||
+      persistedAudit.entity_type !== "shipment" ||
+      persistedAudit.entity_id !== shipment.id ||
+      persistedAudit.idempotency_key !== auditIdempotencyKey ||
+      persistedAudit.metadata_json !== auditMetadata
+    ) {
+      return fail("SHIPPING_DOCUMENT_PROOF_UNAVAILABLE", 503);
     }
     return new Response(document.content, {
       status,
@@ -120,6 +236,7 @@ type ExistingShipment = Readonly<{
   attempts: number;
   provider_shipment_reference: string | null;
   tracking_reference: string | null;
+  order_status?: string;
 }>;
 
 function json(value: unknown, status = 200): Response {
@@ -153,7 +270,7 @@ async function authorizeD1Owner(
   database: CommerceD1Database,
   now: string,
   origin: string,
-): Promise<boolean> {
+): Promise<ShippingLabelAdminActor | null> {
   const sessions = cookie(request, "__Host-aj_admin");
   const csrfCookies = cookie(request, "__Host-aj_admin_csrf");
   if (sessions.length !== 1 || csrfCookies.length !== 1 || !authorizeBrowserMutation({
@@ -163,13 +280,15 @@ async function authorizeD1Owner(
     allowedOrigins: [origin],
     csrfCookieToken: csrfCookies[0],
     csrfHeaderToken: request.headers.get("X-CSRF-Token"),
-  })) return false;
+  })) return null;
   const actor = await resolveD1MutationActor(database, {
     kind: "admin",
     sessionToken: sessions[0],
     csrfToken: csrfCookies[0],
   }, now);
-  return actor?.kind === "admin" && actor.role === "owner";
+  return actor?.kind === "admin" && actor.role === "owner"
+    ? { administratorId: actor.administratorId, sessionId: actor.sessionId }
+    : null;
 }
 
 async function emptyBody(request: Request): Promise<boolean> {
@@ -268,24 +387,51 @@ export async function productionShippingLabelAdminReleaseCoreResponse(
   }
   if (!env.DB) return fail("DATABASE_UNAVAILABLE", 503);
   const now = new Date().toISOString();
+  let actor: ShippingLabelAdminActor | null;
   try {
-    const authorized = await (dependencies.authorizeOwner ?? authorizeD1Owner)(
+    actor = await (dependencies.authorizeOwner ?? authorizeD1Owner)(
       request,
       env.DB,
       now,
       origin,
     );
-    if (!authorized) return fail("OWNER_SESSION_REQUIRED", 403);
   } catch {
     return fail("OWNER_SESSION_UNAVAILABLE", 503);
+  }
+  if (!actor) return fail("OWNER_SESSION_REQUIRED", 403);
+  const downloadRequestId = request.headers.get(DOWNLOAD_REQUEST_HEADER);
+  if (!downloadRequestId || !IDEMPOTENCY.test(downloadRequestId)) {
+    return fail("DOWNLOAD_REQUEST_ID_REQUIRED", 400);
   }
   const idempotencyKey = request.headers.get("Idempotency-Key");
   if (!idempotencyKey || !IDEMPOTENCY.test(idempotencyKey)) {
     return fail("IDEMPOTENCY_KEY_REQUIRED", 400);
   }
+  return productionShippingLabelAdminAuthorizedResponse(
+    request,
+    env as ProductionShippingLabelEnvironment & { DB: CommerceD1Database },
+    dependencies,
+    actor,
+    downloadRequestId,
+    idempotencyKey,
+    now,
+    match[1],
+  );
+}
+
+async function productionShippingLabelAdminAuthorizedResponse(
+  request: Request,
+  env: ProductionShippingLabelEnvironment & { DB: CommerceD1Database },
+  dependencies: ProductionShippingLabelDependencies,
+  actor: ShippingLabelAdminActor,
+  downloadRequestId: string,
+  idempotencyKey: string,
+  now: string,
+  encodedOrderId: string,
+): Promise<Response> {
   let orderId: string;
   try {
-    orderId = decodeURIComponent(match[1]);
+    orderId = decodeURIComponent(encodedOrderId);
   } catch {
     return fail("INVALID_ORDER", 400);
   }
@@ -296,18 +442,37 @@ export async function productionShippingLabelAdminReleaseCoreResponse(
   // a copied operator link or a newly generated request key must always recover
   // the one existing shipment instead of creating a second Sendcloud parcel.
   const existingForOrder = await env.DB.prepare(
-    `SELECT id, order_id, status, attempts, provider_shipment_reference,
-      tracking_reference FROM shipments WHERE order_id = ? LIMIT 1`,
+    `SELECT shipment.id, shipment.order_id, shipment.status, shipment.attempts,
+      shipment.provider_shipment_reference, shipment.tracking_reference,
+      customer_order.status AS order_status
+    FROM shipments AS shipment
+    INNER JOIN orders AS customer_order ON customer_order.id=shipment.order_id
+    WHERE shipment.order_id = ? LIMIT 1`,
   ).bind(orderId).first<ExistingShipment>();
   const existing = existingForOrder ?? await env.DB.prepare(
-    `SELECT id, order_id, status, attempts, provider_shipment_reference,
-      tracking_reference FROM shipments WHERE idempotency_key = ?`,
+    `SELECT shipment.id, shipment.order_id, shipment.status, shipment.attempts,
+      shipment.provider_shipment_reference, shipment.tracking_reference,
+      customer_order.status AS order_status
+    FROM shipments AS shipment
+    INNER JOIN orders AS customer_order ON customer_order.id=shipment.order_id
+    WHERE shipment.idempotency_key = ?`,
   ).bind(idempotencyKey).first<ExistingShipment>();
   if (existing && existing.order_id !== orderId) {
     return fail("IDEMPOTENCY_CONFLICT", 409);
   }
+  if (existing && !["paid", "preparing"].includes(existing.order_status ?? "")) {
+    return fail("SHIPMENT_LABEL_UNAVAILABLE", 409);
+  }
   if (existing?.status === "label_ready") {
-    return printableLabelResponse(env, dependencies, existing, 200);
+    return printableLabelResponse(
+      env,
+      dependencies,
+      existing,
+      actor,
+      downloadRequestId,
+      now,
+      200,
+    );
   }
   if (existing && existing.status !== "label_pending") {
     return fail(
@@ -345,7 +510,15 @@ export async function productionShippingLabelAdminReleaseCoreResponse(
       leaseExpiresAt: new Date(Date.parse(now) + 120_000).toISOString(),
       now,
     });
-    return printableLabelResponse(env, dependencies, shipment, 201);
+    return printableLabelResponse(
+      env,
+      dependencies,
+      shipment,
+      actor,
+      downloadRequestId,
+      now,
+      201,
+    );
   } catch (cause) {
     if (cause instanceof FulfillmentError) {
       if (cause.code === "PROVIDER_OUTCOME_UNKNOWN") {

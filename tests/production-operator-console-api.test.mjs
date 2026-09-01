@@ -106,6 +106,13 @@ test("fresh Cloudflare Access MFA creates an AAL2 owner session and lists no-PII
     ), env, { now: () => now, accessIdentity: async () => identity });
     assert.equal(orders.status, 200);
     assert.deepEqual((await orders.json()).data, []);
+
+    const missingDetail = await productionOperatorConsoleApiResponse(new Request(
+      "https://ajluxurystore.com/api/commerce/admin/orders/order_missing",
+      { headers: { Cookie: cookies(session) } },
+    ), env, { now: () => now, accessIdentity: async () => identity });
+    assert.equal(missingDetail.status, 404);
+    assert.equal((await missingDetail.json()).error.code, "ORDER_NOT_FOUND");
   } finally {
     sqlite.close();
   }

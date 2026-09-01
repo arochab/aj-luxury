@@ -9,6 +9,11 @@ const env = Object.freeze({
   CLOUDFLARE_ACCESS_TEAM_DOMAIN: "https://aj-luxury.cloudflareaccess.com",
   CLOUDFLARE_ACCESS_AUD: "accessAudience_1234567890",
   COMMERCE_CONTROLLED_OWNER_EMAIL: "adam@example.com",
+  COMMERCE_ADMIN_ALLOWED_EMAILS_JSON: JSON.stringify([
+    "adam.chabbi94@gmail.com",
+    "jeremy@ajluxurystore.com",
+    "jeremyajluxurystore@gmail.com",
+  ]),
 });
 
 function base64Url(value) {
@@ -67,8 +72,8 @@ test("Cloudflare Access owner configuration rejects attacker-controlled certific
   assert.equal(cloudflareAccessOwnerConfigurationValid({ ...env, CLOUDFLARE_ACCESS_AUD: "short" }), false);
 });
 
-test("a valid signed Access assertion authenticates only the configured owner", async () => {
-  const { assertion, jwk } = await fixture();
+test("a valid signed Access assertion authenticates only an exact admin identity", async () => {
+  const { assertion, jwk } = await fixture({ email: "adam.chabbi94@gmail.com" });
   await withCertificates(jwk, async (calls) => {
     const request = new Request("https://ajluxurystore.com/api/commerce/cart", {
       headers: { "Cf-Access-Jwt-Assertion": assertion },
@@ -76,6 +81,75 @@ test("a valid signed Access assertion authenticates only the configured owner", 
     assert.equal(await cloudflareAccessOwnerRequestAuthenticated(request, env), true);
     assert.equal(calls(), 1);
   });
+});
+
+test("the admin allowlist accepts the three configured identities case-insensitively", async () => {
+  const allowed = {
+    ...env,
+    COMMERCE_ADMIN_ALLOWED_EMAILS_JSON: JSON.stringify([
+      "adam.chabbi94@gmail.com",
+      "jeremy@ajluxurystore.com",
+      "JeremyAJLuxuryStore@gmail.com",
+    ]),
+  };
+  for (const email of [
+    "ADAM.CHABBI94@GMAIL.COM",
+    "jeremy@ajluxurystore.com",
+    "jeremyajluxurystore@gmail.com",
+  ]) {
+    const { assertion, jwk } = await fixture({ email });
+    await withCertificates(jwk, async () => {
+      const request = new Request("https://ajluxurystore.com/operations", {
+        headers: { "Cf-Access-Jwt-Assertion": assertion },
+      });
+      assert.equal(await cloudflareAccessOwnerRequestAuthenticated(request, allowed), true);
+    });
+  }
+  const { assertion, jwk } = await fixture({ email: "intruder@example.com" });
+  await withCertificates(jwk, async () => {
+    const request = new Request("https://ajluxurystore.com/operations", {
+      headers: { "Cf-Access-Jwt-Assertion": assertion },
+    });
+    assert.equal(await cloudflareAccessOwnerRequestAuthenticated(request, allowed), false);
+  });
+  const legacy = await fixture({ email: env.COMMERCE_CONTROLLED_OWNER_EMAIL });
+  await withCertificates(legacy.jwk, async () => {
+    const request = new Request("https://ajluxurystore.com/operations", {
+      headers: { "Cf-Access-Jwt-Assertion": legacy.assertion },
+    });
+    assert.equal(await cloudflareAccessOwnerRequestAuthenticated(request, allowed), false);
+  });
+});
+
+test("the admin allowlist fails closed when malformed, empty, or oversized", () => {
+  for (const COMMERCE_ADMIN_ALLOWED_EMAILS_JSON of [
+    "not-json",
+    "[]",
+    JSON.stringify(["owner1@example.com", "owner2@example.com"]),
+    JSON.stringify(["not-an-email"]),
+    JSON.stringify(Array.from({ length: 4 }, (_, index) => `owner${index}@example.com`)),
+    JSON.stringify(["owner@example.com", "OWNER@example.com", "third@example.com"]),
+  ]) {
+    assert.equal(cloudflareAccessOwnerConfigurationValid({
+      CLOUDFLARE_ACCESS_TEAM_DOMAIN: env.CLOUDFLARE_ACCESS_TEAM_DOMAIN,
+      CLOUDFLARE_ACCESS_AUD: env.CLOUDFLARE_ACCESS_AUD,
+      COMMERCE_ADMIN_ALLOWED_EMAILS_JSON,
+    }), false);
+  }
+  assert.equal(cloudflareAccessOwnerConfigurationValid({
+    CLOUDFLARE_ACCESS_TEAM_DOMAIN: env.CLOUDFLARE_ACCESS_TEAM_DOMAIN,
+    CLOUDFLARE_ACCESS_AUD: env.CLOUDFLARE_ACCESS_AUD,
+    COMMERCE_CONTROLLED_OWNER_EMAIL: env.COMMERCE_CONTROLLED_OWNER_EMAIL,
+  }), false);
+  assert.equal(cloudflareAccessOwnerConfigurationValid({
+    CLOUDFLARE_ACCESS_TEAM_DOMAIN: env.CLOUDFLARE_ACCESS_TEAM_DOMAIN,
+    CLOUDFLARE_ACCESS_AUD: env.CLOUDFLARE_ACCESS_AUD,
+    COMMERCE_ADMIN_ALLOWED_EMAILS_JSON: JSON.stringify([
+      "first@example.com",
+      "second@example.com",
+      "third@example.com",
+    ]),
+  }), false);
 });
 
 test("Access assertions fail closed on wrong claims, expiry, or signature", async () => {

@@ -17,6 +17,8 @@ import {
 
 const SESSION_ROUTE = "/api/commerce/admin/session";
 const ORDERS_ROUTE = "/api/commerce/admin/orders";
+const ORDER_DETAIL_ROUTE = /^\/api\/commerce\/admin\/orders\/([^/]+)$/;
+const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,191}$/;
 const MFA_ATTESTATION = "independent-mfa:required-every-login";
 const MAX_FRESH_AUTH_MS = 5 * 60_000;
 
@@ -52,6 +54,40 @@ type OrderRow = Readonly<{
   payment_email_status: string | null;
 }>;
 
+type OrderDetailRow = Readonly<{
+  id: string;
+  order_number: string;
+  status: string;
+  currency: string;
+  subtotal_cents: number;
+  shipping_cents: number;
+  total_cents: number;
+  shipping_address_json: string;
+  paid_at: string | null;
+  created_at: string;
+  shipment_id: string | null;
+  shipment_status: string | null;
+  tracking_provider_code: string | null;
+  tracking_reference: string | null;
+}>;
+
+type OrderLineRow = Readonly<{
+  internal_reference: string;
+  product_name: string;
+  color_name: string;
+  size: string;
+  quantity: number;
+}>;
+
+type OperatorShippingAddress = Readonly<{
+  recipient: string;
+  line1: string;
+  line2: string | null;
+  postalCode: string;
+  city: string;
+  countryCode: string;
+}>;
+
 function json(value: unknown, status = 200, headers: HeadersInit = {}): Response {
   const responseHeaders = new Headers(headers);
   responseHeaders.set("Cache-Control", "no-store");
@@ -75,6 +111,48 @@ function cookie(request: Request, name: string): string | null {
       : [];
   });
   return values.length === 1 ? values[0] : null;
+}
+
+function operatorShippingAddress(value: string): OperatorShippingAddress | null {
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+    const record = parsed as Record<string, unknown>;
+    const recipient = record.recipient;
+    const line1 = record.line1;
+    const line2 = record.line2;
+    const postalCode = record.postalCode;
+    const city = record.city;
+    const countryCode = record.countryCode;
+    if (
+      typeof recipient !== "string" || recipient.length < 1 || recipient.length > 120 ||
+      typeof line1 !== "string" || line1.length < 1 || line1.length > 160 ||
+      (line2 !== null && line2 !== undefined &&
+        (typeof line2 !== "string" || line2.length > 160)) ||
+      typeof postalCode !== "string" || postalCode.length < 1 || postalCode.length > 16 ||
+      typeof city !== "string" || city.length < 1 || city.length > 120 ||
+      typeof countryCode !== "string" || !/^[A-Z]{2}$/.test(countryCode)
+    ) return null;
+    return Object.freeze({
+      recipient,
+      line1,
+      line2: typeof line2 === "string" && line2.length > 0 ? line2 : null,
+      postalCode,
+      city,
+      countryCode,
+    });
+  } catch {
+    return null;
+  }
+}
+
+function decodedIdentifier(value: string): string | null {
+  try {
+    const decoded = decodeURIComponent(value);
+    return SAFE_ID.test(decoded) ? decoded : null;
+  } catch {
+    return null;
+  }
 }
 
 async function sha256(value: string): Promise<string> {
@@ -263,6 +341,73 @@ async function listOrders(
   }
 }
 
+async function orderDetail(
+  request: Request,
+  database: CommerceD1Database,
+  now: string,
+  orderId: string,
+): Promise<Response> {
+  if (!(await adminActor(request, database, now))) return fail("OWNER_SESSION_REQUIRED", 403);
+  if (request.headers.get("Origin") !== null &&
+    request.headers.get("Origin") !== new URL(request.url).origin) {
+    return fail("ORIGIN_REJECTED", 403);
+  }
+  try {
+    const [order, lines] = await Promise.all([
+      database.prepare(
+        `SELECT customer_order.id, customer_order.order_number, customer_order.status,
+          customer_order.currency, customer_order.subtotal_cents,
+          customer_order.shipping_cents, customer_order.total_cents,
+          customer_order.shipping_address_json, customer_order.paid_at,
+          customer_order.created_at, shipment.id AS shipment_id,
+          shipment.status AS shipment_status,
+          shipment.tracking_provider_code, shipment.tracking_reference
+        FROM orders AS customer_order
+        LEFT JOIN shipments AS shipment ON shipment.order_id=customer_order.id
+        WHERE customer_order.id = ?
+          AND customer_order.status IN ('paid','preparing','shipped','refunded')
+        LIMIT 1`,
+      ).bind(orderId).first<OrderDetailRow>(),
+      database.prepare(
+        `SELECT internal_reference, product_name, color_name, size, quantity
+        FROM order_lines WHERE order_id = ? ORDER BY id`,
+      ).bind(orderId).all<OrderLineRow>(),
+    ]);
+    if (!order) return fail("ORDER_NOT_FOUND", 404);
+    const address = operatorShippingAddress(order.shipping_address_json);
+    if (!address || lines.results.length < 1) return fail("ORDER_DETAIL_UNAVAILABLE", 503);
+    return json({
+      data: {
+        orderId: order.id,
+        orderNumber: order.order_number,
+        status: order.status,
+        currency: order.currency,
+        subtotalCents: order.subtotal_cents,
+        shippingCents: order.shipping_cents,
+        totalCents: order.total_cents,
+        paidAt: order.paid_at,
+        createdAt: order.created_at,
+        shippingAddress: address,
+        items: lines.results.map((line) => ({
+          internalReference: line.internal_reference,
+          productName: line.product_name,
+          colorName: line.color_name,
+          size: line.size,
+          quantity: line.quantity,
+        })),
+        shipment: order.shipment_id ? {
+          id: order.shipment_id,
+          status: order.shipment_status,
+          trackingProviderCode: order.tracking_provider_code,
+          trackingReference: order.tracking_reference,
+        } : null,
+      },
+    });
+  } catch {
+    return fail("ORDER_DETAIL_UNAVAILABLE", 503);
+  }
+}
+
 async function logout(
   request: Request,
   env: ProductionOperatorConsoleEnvironment & { DB: CommerceD1Database },
@@ -292,7 +437,8 @@ export async function productionOperatorConsoleApiResponse(
   dependencies: ProductionOperatorConsoleDependencies = {},
 ): Promise<Response | null> {
   const url = new URL(request.url);
-  if (![SESSION_ROUTE, ORDERS_ROUTE].includes(url.pathname)) return null;
+  const orderDetailMatch = ORDER_DETAIL_ROUTE.exec(url.pathname);
+  if (![SESSION_ROUTE, ORDERS_ROUTE].includes(url.pathname) && !orderDetailMatch) return null;
   if (!configured(env, url)) return fail("OPERATOR_CONSOLE_CLOSED", 503);
   const now = dependencies.now?.() ?? new Date().toISOString();
   if (!isCanonicalUtcTimestamp(now)) return fail("CLOCK_UNAVAILABLE", 503);
@@ -301,6 +447,12 @@ export async function productionOperatorConsoleApiResponse(
   if (url.pathname === ORDERS_ROUTE) {
     if (request.method !== "GET") return fail("METHOD_NOT_ALLOWED", 405);
     return listOrders(request, env.DB, now);
+  }
+  if (orderDetailMatch) {
+    if (request.method !== "GET") return fail("METHOD_NOT_ALLOWED", 405);
+    const orderId = decodedIdentifier(orderDetailMatch[1]);
+    if (!orderId) return fail("INVALID_ORDER", 400);
+    return orderDetail(request, env.DB, now, orderId);
   }
   if (request.method === "POST") return createSession(request, env, identity, now);
   if (request.method === "DELETE") return logout(request, env, now);

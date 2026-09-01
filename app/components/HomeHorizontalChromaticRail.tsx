@@ -32,10 +32,10 @@ const CHAPTERS: readonly Chapter[] = [
     productAlt:
       "Apollon Pourpre Impérial en lévitation sur son décor de marbre",
     // Identité confirmée par Adam : Alex est le modèle aux cheveux attachés et
-    // à la barbe pleine. Le master 2:3 est rendu en entier (`contain`) sur le
-    // fond pourpre, sans recadrage supplémentaire par l'interface.
+    // à la barbe pleine. Cette variante conserve les deux jambes visibles sur
+    // le fond pourpre ; elle reste rendue en entier (`contain`) sans recadrage.
     model:
-      "/images/client/apollon-world/apollon-pourpre-model-color-v2.webp",
+      "/images/client/apollon-world/apollon-pourpre-model-color-v1.webp",
     modelAlt: "Apollon Pourpre Impérial porté par Alex",
     modelWidth: 1731,
     modelHeight: 2600,

@@ -65,6 +65,7 @@ export type ProductionOperationsEnvironment = ProductionCommerceEnvironment &
   ProductionRateLimitEnvironment & Readonly<{
   DB?: CommerceD1Database;
   COMMERCE_CONTROLLED_OWNER_EMAIL?: string;
+  COMMERCE_ADMIN_ALLOWED_EMAILS_JSON?: string;
   COMMERCE_CONTROLLED_AUTH_HMAC_SECRET?: string;
   RETURNS_WORKFLOW_ENABLED?: string;
   RESERVATION_EXPIRY_ENABLED?: string;
@@ -1244,8 +1245,19 @@ export async function dispatchProductionOutboundShipments(
           AND payment.amount_cents = customer_order.total_cents
           AND payment.currency = customer_order.currency
       )
-      AND NOT EXISTS (
-        SELECT 1 FROM shipments WHERE shipments.order_id = customer_order.id
+      AND (
+        NOT EXISTS (
+          SELECT 1 FROM shipments WHERE shipments.order_id = customer_order.id
+        )
+        OR EXISTS (
+          SELECT 1 FROM shipments
+          WHERE shipments.order_id = customer_order.id
+            AND shipments.status = 'label_pending'
+            AND shipments.attempts = 0
+            AND shipments.lease_token_hash IS NULL
+            AND shipments.provider_shipment_reference IS NULL
+            AND shipments.tracking_reference IS NULL
+        )
       )
     ORDER BY customer_order.paid_at, customer_order.id LIMIT 3`,
   ).bind(input.orderId ?? null, input.orderId ?? null).all<PaidShipmentCandidate>();

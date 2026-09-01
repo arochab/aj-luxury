@@ -10,8 +10,10 @@ l'identifiant de commande concerné et un horodatage UTC.
 
 ### Verdict courant
 
-**NO-GO public.** Le code ferme les risques connus, mais la production reste
-inchangée. La session Wrangler actuelle n'est pas autorisée sur le compte D1
+**NO-GO public tant que le médiateur n'est pas contracté, validé et publié.** Un
+déploiement strictement `controlled` peut être instruit séparément, mais il doit
+rester fermé par l'authentification applicative même si Cloudflare Access est
+mal configuré ou indisponible. La session Wrangler actuelle n'est pas autorisée sur le compte D1
 (erreur API `7403`), donc ni l'inventaire distant ni la migration `0027` ne sont
 présentés comme exécutés. La commande payée `AJ-41B58D96CCAAE37F00B8` prouve le
 paiement Stripe de 55,03 EUR, mais ne prouve pas encore les deux confirmations
@@ -26,7 +28,7 @@ e-mail, l'étiquette A4 imprimée, la remise physique au transporteur ni le suiv
 | Sauvegarde et migration D1 | BLOQUÉ ACCÈS | Adam | Exécuter les commandes du § « D1 0027 » sur `aj-luxury-production` | Bookmark, export schéma, reçu d'application, puis table + 3 index + 3 triggers exacts | Accès `7403`, erreur SQL ou inventaire divergent : STOP avant Worker |
 | Ré-attestation stock | BLOQUÉ PREUVE | Jérémy (stock) / Adam (runtime) | Jérémy confirme directement le manifeste 749 physiques / 23 cadeaux / 726 vendables ; Adam vérifie D1 et lie manifeste/hash au runtime | Accord direct daté + manifeste/hash + requête D1 après migration | Aucun accord direct ou D1 illisible : ne pas importer/réécrire le stock |
 | Ré-attestation fournisseurs | BLOQUÉ PREUVE | Adam | Stripe : compte + mode live ; Sendcloud : intégration + expéditeur ; Resend : domaine + expéditeur. Relever les identités publiques dans chaque dashboard | Capture expurgée datée + identité publique + SHA/Worker ID ; aucun secret | Toute identité divergente : STOP et nouvelle qualification |
-| Worker contrôlé | OUVERT après D1 | Adam | Déployer le Worker en `controlled`, import stock fermé, création automatique d'étiquette fermée | Worker ID, SHA/tag et santé exacte du § « Vérification » | Santé non ready : restaurer le Worker ID précédent ; garder `0027` additive |
+| Worker contrôlé | OUVERT après D1 | Adam | Déployer le Worker en `controlled`, import stock fermé, authentification applicative fail-closed ; l'automatisation d'étiquette n'est prête que si `OUTBOUND_SHIPMENT_CREATION_ENABLED=true` **et** `AUTOMATIC_OUTBOUND_SHIPMENT_ENABLED=true` | Worker ID, SHA/tag, santé exacte du § « Vérification » et preuve locale sans dépense des deux verrous | Santé non ready, bypass edge actif ou un seul flag d'étiquette : restaurer le Worker ID précédent ; garder `0027` additive et ne créer aucun colis |
 | Front Sites | OUVERT après Worker | Adam | Déployer le build du même SHA sans ouvrir `live` | Sites ID, marqueur release et recette desktop/mobile | Régression : restaurer le Sites ID précédent sans toucher au Worker |
 | Validation fonctionnelle visible | OUVERT après Sites | Jérémy / Adam témoin | Sur l'URL contrôlée : accueil, compte, panier, livraison, paiement et compte client ; cocher la checklist | Validation datée de la version visible (SHA + Worker ID + Sites ID), distincte de l'autorisation de mutation | Un écart : corriger sous un nouveau SHA ; les accords précédents deviennent caducs |
 | Webhook Sendcloud | OUVERT TERRAIN | Adam | Sendcloud intégration `612109` : test signé vers `/api/commerce/webhooks/sendcloud`; conserver un fixture expurgé ne contenant que IDs internes, statut et horodatages, puis rejouer exactement ses octets et sa signature dans la fenêtre valide | 1er appel `applied`; retry différé `duplicate`; statut inconnu signé = 503 retryable | Signature/route inconnue : désactiver le webhook et garder la commande `preparing` |
@@ -35,9 +37,9 @@ e-mail, l'étiquette A4 imprimée, la remise physique au transporteur ni le suiv
 | Étiquette A4 et colis réel | BLOQUÉ TERRAIN | Adam (action protégée) / Jérémy (colis et impression) | Adam ouvre l'action owner-only de la commande payée ; Jérémy vérifie le contenu, télécharge, imprime à 100 % et scanne | PDF dont chaque `MediaBox` est A4, hash, impression lisible et scan du code-barres | Outcome fournisseur inconnu : aucune seconde création ; lookup de l'unique shipment par commande |
 | Remise transporteur et suivi | BLOQUÉ TERRAIN | Jérémy (remise) / Adam (reprise protégée si nécessaire) | Jérémy remet et conserve le reçu ; attendre le premier scan signé. Adam n'utilise la reprise owner-only qu'avec ce reçu | Premier état attendu `in_transit`; commande `shipped`; exactement un mail expédition | Pas de scan signé : conserver `preparing`; aucun handover manuel sans reçu |
 | Retour, réception et remboursement | BLOQUÉ TERRAIN | Jérémy (réception/inspection) / Adam (actions protégées) | Client : `/shipping-returns` puis `POST /api/commerce/returns`; Adam : approve/inspect owner-only ; créer l'étiquette retour via Sendcloud, tracer la remise/retour reçu, calculer articles reçus + règle de frais, puis rembourser une fois via Stripe sous 14 jours | IDs demande/étiquette/scan/réception/refund, montant calculé, stock et mail cohérents | Étiquette retour ou remboursement non câblé : gate reste NO-GO public ; aucune reprise aveugle |
-| Admin MFA et console | BLOQUÉ EXTERNE/PRODUIT | Adam | Cloudflare Zero Trust > Access : la même application et le même AUD protègent explicitement `/operations` **et** `/api/commerce/admin/*`, avec MFA indépendant requis à chaque login ; provisionner l'admin D1 ; tester une lecture et l'action A4 | Pour chacun des deux chemins : anonyme bloqué par Access, identité owner AAL2 admise, puis session D1/CSRF encore exigée ; capture expurgée de policy, présence des cookies sans leur valeur et audit `identity_admin_session_started` | Ne jamais conserver la valeur d'un cookie/JWT ; si un chemin échappe à Access ou au contrôle D1, console et `live` restent fermés |
+| Admin MFA et console | BLOQUÉ EXTERNE/PRODUIT | Adam | Cloudflare Zero Trust > Access : la même application et le même AUD protègent explicitement `/operations*` **et** `/api/commerce/admin/*`, avec MFA indépendant requis à chaque login ; l'allowlist contient exactement les trois comptes nommés au § « Controlled runtime matrix » ; provisionner l'admin D1 ; tester une lecture et l'action A4 | Pour chacun des deux chemins : anonyme bloqué à l'edge, chacune des trois identités owner AAL2 admise, toute autre identité refusée, puis session D1/CSRF encore exigée ; capture expurgée de policy et audit `identity_admin_session_started`, sans valeur de cookie/JWT | Une allowlist de 2, 4 ou davantage d'identités, un chemin hors Access ou un contrôle D1 absent garde console et `live` fermés |
 | Monitoring | BLOQUÉ EXTERNE | Adam (principal) / Jérémy (suppléant seulement après accord direct) | Alertes : health non-ready 2 min, taux 5xx >1 %/5 min, webhook 4xx/5xx >=1, cron absent >5 min ; canal e-mail Adam + copie Jérémy après son accord ; injecter pour chaque règle un signal synthétique non transactionnel | Pour chaque alerte : rule ID Cloudflare + signal injecté + événement créé par cette règle + livraison + acquittement + evidence ID ; alors seulement `MONITORING_ALERTS_APPROVED=true` | Un simple e-mail manuel ne vaut pas test ; un test absent ou un suppléant non consentant garde `live` fermé |
-| Médiateur consommation | BLOQUÉ JURIDIQUE — VALIDATEUR À NOMMER | Jérémy (contrat) / validateur juridique nommé (validation) / Adam (pages) | Contracter un médiateur ; nommer le validateur et faire valider le contrat et le texte ; modifier mentions + CGV avant le gel final | Nom/rôle du validateur, validation datée, contrat, coordonnées exactes, pages publiques, SHA/Sites ID | Ne jamais inventer ; toute intégration après le gel crée un nouveau SHA et impose une nouvelle recette/double approbation |
+| Médiateur consommation | BLOQUÉ JURIDIQUE — VALIDATEUR À NOMMER | Jérémy (contrat) / validateur juridique nommé (validation) / Adam (pages) | Contracter un médiateur ; nommer le validateur et faire valider le contrat et le texte ; modifier mentions + CGV avant le gel final | Nom/rôle du validateur, validation datée, contrat, coordonnées exactes, pages publiques, SHA/Sites ID | Le mode propriétaire `controlled` peut rester fermé pendant l'attente ; aucune promotion `live` ni ouverture publique avant clôture de ce gate |
 | UK hors UE | HORS PÉRIMÈTRE, NON BLOQUANT FR/UE | Jérémy / Adam | Zone fermée jusqu'à HS par SKU, origine, EORI, Incoterm, service, documents et colis test | Cotation + documents + étiquette + packing | Ne pas ouvrir la zone ; aucun impact sur France/UE |
 | US hors UE | HORS PÉRIMÈTRE, NON BLOQUANT FR/UE | Jérémy / Adam | Même gate autonome, zone fermée | Preuve US autonome | Ne pas ouvrir la zone ; aucun impact sur France/UE |
 | Canada hors UE | HORS PÉRIMÈTRE, NON BLOQUANT FR/UE | Jérémy / Adam | Même gate autonome, zone fermée | Preuve Canada autonome | Ne pas ouvrir la zone ; aucun impact sur France/UE |
@@ -62,12 +64,20 @@ Une capture, un test local ou un accord générique ne remplace jamais ce reçu.
 4. Ré-attester sur les dashboards les identités Stripe, Sendcloud et Resend qui
    alimenteront ce Worker ; conserver seulement leurs identifiants publics.
 5. Déployer d'abord le Worker en `controlled`, puis Sites depuis le même SHA.
-   Configurer Access sur `/operations` et `/api/commerce/admin/*`, activer MFA et
-   les quatre règles monitoring, exécuter leurs tests, puis figer les Worker/Sites
-   IDs finaux. Toute nouvelle version après cette étape impose une nouvelle preuve.
+   Laisser `COMMERCE_CONTROLLED_EDGE_ACCESS_ENFORCED` absent ou faux : cette
+   variable historique ne constitue jamais une autorisation et toute valeur
+   `true` invalide le candidat. Configurer la même application Access sur
+   `/operations*` et `/api/commerce/admin/*`, avec le même AUD, l'allowlist exacte
+   des trois admins et MFA indépendant à chaque login. Exécuter les preuves
+   anonymes du § « Vérification fail-closed et auto-étiquette sans dépense », puis
+   les quatre tests monitoring et figer les Worker/Sites IDs finaux. Toute
+   nouvelle version après cette étape impose une nouvelle preuve.
 6. Vérifier la santé puis faire valider par Jérémy la version visible — accueil,
    compte, panier et livraison — **avant** paiement, impression ou remise physique.
-7. Configurer/tester Sendcloud. Réconcilier séparément les deux e-mails. Aucune
+7. Prouver d'abord, sans commande fournisseur ni dépense, le double verrou
+   `OUTBOUND_SHIPMENT_CREATION_ENABLED=true` et
+   `AUTOMATIC_OUTBOUND_SHIPMENT_ENABLED=true`, l'idempotence et l'arrêt sur
+   outcome ambigu. Réconcilier séparément les deux e-mails. Aucune
    réconciliation ne renvoie d'e-mail et aucune ligne historique n'est réécrite.
 8. Sur une commande et un colis réels vérifiés par Jérémy, payer une fois, créer
    ou récupérer l'unique shipment,
@@ -233,8 +243,18 @@ release evidence. The first real order on the official domain instead runs the
 `aj-luxury-production` Worker in `controlled` mode, on the production D1, with
 `COMMERCE_ORIGIN=https://ajluxurystore.com`. Its immutable stock/provider proof,
 order provenance and later `live` promotion therefore stay on the same D1 and
-the same canonical origin. Public traffic remains owner-restricted until that
-order is reconciled and the live gates pass.
+the same canonical origin. Public traffic remains owner-restricted by the
+application until that order is reconciled and the live gates pass.
+
+`capabilities.publicCommerce=false` is a health assertion, not an access-control
+mechanism. In `controlled`, every commerce request capable of creating or
+mutating customer, cart, checkout, payment or order state must fail closed unless
+the application has authenticated the approved owner. The legacy variable
+`COMMERCE_CONTROLLED_EDGE_ACCESS_ENFORCED` is prohibited and ignored as release
+evidence : it must be absent or false. A value `true` is an immediate STOP because
+Cloudflare Access cannot replace this application control. Stripe, Resend and
+Sendcloud webhooks remain outside human Access and continue to require their
+provider signatures.
 
 The private Sites environment supplies `COMMERCE_BACKEND_ORIGIN`, an exact
 `COMMERCE_STOREFRONT_ORIGINS_JSON` containing only the private Sites origin,
@@ -244,7 +264,7 @@ controlled-HMAC secrets through their secret stores. No secret is copied into a
 config file, release note or evidence bundle.
 
 The production operator console is a separate owner-only surface. One
-Cloudflare Access application with one exact AUD must cover both `/operations`
+Cloudflare Access application with one exact AUD must cover both `/operations*`
 and `/api/commerce/admin/*`. Access is the perimeter, not the application
 authorization: every mutation still requires the D1 owner session, same-origin
 CSRF and its operation-specific idempotency key.
@@ -256,6 +276,11 @@ valeurs exactes suivantes : `CLOUDFLARE_ACCESS_TEAM_DOMAIN`,
 `CLOUDFLARE_ACCESS_AUD`, `COMMERCE_CONTROLLED_OWNER_EMAIL`,
 `OPERATOR_ADMIN_MFA_ENABLED=true`, `OPERATOR_CONSOLE_ENABLED=true` et
 `CLOUDFLARE_ACCESS_MFA_ATTESTATION=independent-mfa:required-every-login`.
+`COMMERCE_ADMIN_ALLOWED_EMAILS_JSON` contient exactement trois identités
+distinctes après normalisation en minuscules : `adam.chabbi94@gmail.com`,
+`jeremy@ajluxurystore.com` et `jeremyscheppler360@gmail.com`. Deux, quatre,
+un doublon ou une adresse supplémentaire ferment la console. La policy Access
+reprend exactement cette liste ; aucune adresse n'est admise par domaine entier.
 Les valeurs non secrètes sont enregistrées dans la preuve de configuration ;
 le JWT, les cookies et les secrets du bridge ne le sont jamais.
 
@@ -266,7 +291,9 @@ runtime-only groups against the exact release SHA and Worker version:
 - Stripe live settlement, webhook verification and controlled payment-session
   enablement;
 - Sendcloud outbound shipment creation, sender attestation and delivery-reference
-  vault key version;
+  vault key version ; l'automatisation exige simultanément
+  `OUTBOUND_SHIPMENT_CREATION_ENABLED=true` et
+  `AUTOMATIC_OUTBOUND_SHIPMENT_ENABLED=true` ;
 - Resend webhook verification plus transactional dispatch enabled in
   `controlled` mode;
 - Resend provider reconciliation enabled only for an owner-authorized,
@@ -277,6 +304,7 @@ runtime-only groups against the exact release SHA and Worker version:
 
 Flags such as `PRODUCTION_STOCK_IMPORT_ENABLED`,
 `CONTROLLED_PAYMENT_SESSION_ENABLED`, `OUTBOUND_SHIPMENT_CREATION_ENABLED`,
+`AUTOMATIC_OUTBOUND_SHIPMENT_ENABLED`,
 `TRANSACTIONAL_EMAIL_DISPATCH_ENABLED`, `TRANSACTIONAL_EMAIL_DISPATCH_MODE`,
 `TRANSACTIONAL_EMAIL_RECONCILIATION_ENABLED`,
 `LATE_PAYMENT_REFUND_DISPATCH_ENABLED`, `RESERVATION_EXPIRY_ENABLED`,
@@ -287,6 +315,38 @@ must remain closed if any gate required for the current mode, schema proof or
 identity is missing. The narrow `controlled` exception does not apply to
 `live`: unresolved mediator details, monitoring approval or operator MFA keep
 public commerce closed.
+
+### Vérification fail-closed et auto-étiquette sans dépense
+
+Ces contrôles précèdent toute commande payante et tout appel Sendcloud capable
+de créer un colis. Ils ne doivent transmettre ni cookie, ni JWT, ni en-tête owner,
+ni clé fournisseur. Enregistrer seulement le code HTTP et l'horodatage UTC :
+
+```powershell
+$proof = [DateTimeOffset]::UtcNow.ToString('yyyyMMddTHHmmssZ')
+curl.exe -sS -o NUL -w "commerce-anonyme=%{http_code}`n" "https://ajluxurystore.com/api/commerce/cart?proof=$proof"
+curl.exe -sS -o NUL -w "operations-anonyme=%{http_code}`n" "https://ajluxurystore.com/operations?proof=$proof"
+curl.exe -sS -o NUL -w "admin-api-anonyme=%{http_code}`n" "https://ajluxurystore.com/api/commerce/admin/orders?proof=$proof"
+npm run test:last-mile
+```
+
+Résultats obligatoires :
+
+- `commerce-anonyme` retourne `401` ou `403` applicatif, jamais `200` ; une
+  redirection Access ne suffit pas à prouver le fail-closed applicatif ;
+- `operations-anonyme` et `admin-api-anonyme` retournent un refus Access à
+  l'edge (`302` vers le login ou `403` selon la policy), jamais un `200` ni un
+  `404` produit par l'application ;
+- les tests prouvent localement, avec fournisseur simulé, que les deux flags
+  d'étiquette sont nécessaires, qu'un seul shipment/idempotency key est créé et
+  qu'un résultat fournisseur ambigu s'arrête en revue manuelle ;
+- une preuve de configuration expurgée lie les deux flags vrais au SHA et au
+  Worker ID, sans afficher les secrets Sendcloud.
+
+Cette preuve est une preuve de préparation, pas une preuve de colis réel. Aucun
+appel de création Sendcloud, aucun achat d'étiquette et aucun paiement n'est
+autorisé pendant cette étape. La preuve terrain A4 reste distincte, owner-only et
+nécessite une autorisation explicite sur une commande réelle vérifiée.
 
 ### First controlled order evidence
 
@@ -368,6 +428,15 @@ npx wrangler deployments list --name aj-luxury-production --config cloudflare.pr
   `origin="https://ajluxurystore.com"`, `launchZones=["EU"]`, `blockers=[]`,
   `capabilities.controlledOrder=true`, `capabilities.publicCommerce=false` ; le
   paquet D1 prouve séparément `0027`, le settlement live et les provenances ;
+- `COMMERCE_CONTROLLED_EDGE_ACCESS_ENFORCED` est absent ou faux ; la requête
+  commerce anonyme du test fail-closed retourne `401`/`403` et aucune route
+  mutante contrôlée ne repose uniquement sur Access ;
+- `/operations*` et `/api/commerce/admin/*` sont couverts par la même application
+  Access et le même AUD : l'anonyme est bloqué à l'edge, les trois identités de
+  l'allowlist exacte passent avec MFA, toute autre identité échoue, puis les
+  verrous session D1/CSRF/idempotence restent actifs ;
+- la préparation auto-étiquette possède les deux flags vrais et sa preuve locale
+  sans dépense ; cette preuve ne vaut pas création, impression ni scan d'un colis ;
 - après promotion seulement, le même endpoint retourne exactement
   `status="ready"`, `environment="production"`, `mode="live"`,
   `releaseSha="<SHA>"`, `origin="https://ajluxurystore.com"`,
@@ -381,6 +450,8 @@ npx wrangler deployments list --name aj-luxury-production --config cloudflare.pr
   A4 unique, le scan transporteur, le suivi et les actions retour ;
 - les quatre alertes monitoring possèdent chacune un evidence ID acquitté ;
 - le médiateur contracté et validé figure exactement dans les pages légales ;
+  tant que cette ligne n'est pas prouvée, `mode=controlled` et
+  `capabilities.publicCommerce=false` restent obligatoires ;
 
 - the expected release marker is present in HTML;
 - public HTML carries the expected shared `Cache-Control` policy without any

@@ -101,6 +101,7 @@ export type ProductionCommerceRuntimeEnvironment = ProductionCommerceEnvironment
   DB?: CommerceD1Database;
   COMMERCE_CART_HMAC_SECRET?: string;
   COMMERCE_CONTROLLED_OWNER_EMAIL?: string;
+  COMMERCE_ADMIN_ALLOWED_EMAILS_JSON?: string;
   COMMERCE_CONTROLLED_AUTH_HMAC_SECRET?: string;
   CLOUDFLARE_ACCESS_TEAM_DOMAIN?: string;
   CLOUDFLARE_ACCESS_AUD?: string;
@@ -110,6 +111,7 @@ export type ProductionCommerceRuntimeEnvironment = ProductionCommerceEnvironment
   LATE_PAYMENT_REFUND_DISPATCH_ENABLED?: string;
   CONTROLLED_PAYMENT_SESSION_ENABLED?: string;
   OUTBOUND_SHIPMENT_CREATION_ENABLED?: string;
+  AUTOMATIC_OUTBOUND_SHIPMENT_ENABLED?: string;
   SENDCLOUD_INTEGRATION_ID?: string;
   SENDCLOUD_SENDER_ADDRESS_ID?: string;
   SENDCLOUD_SENDER_ADDRESS_ATTESTATION?: string;
@@ -136,7 +138,6 @@ export type ProductionCommerceRuntimeEnvironment = ProductionCommerceEnvironment
   COMMERCE_STOREFRONT_ORIGINS_JSON?: string;
   COMMERCE_CONTROLLED_STOREFRONT_ORIGIN?: string;
   COMMERCE_PUBLIC_STOREFRONT_ORIGINS_JSON?: string;
-  COMMERCE_CONTROLLED_EDGE_ACCESS_ENFORCED?: string;
 }>;
 export type ProductionCommerceRouterDependencies = Readonly<{
   trustedStorefrontOrigin?: string;
@@ -469,6 +470,9 @@ export function productionCommerceRuntimeBlockers(
         ...(env.OUTBOUND_SHIPMENT_CREATION_ENABLED === "true"
           ? []
           : ["outbound-shipment-creation-not-enabled"]),
+        ...(env.AUTOMATIC_OUTBOUND_SHIPMENT_ENABLED === "true"
+          ? []
+          : ["automatic-outbound-shipment-not-enabled"]),
         ...(productionOutboundShippingRuntimeConfigured(env)
           ? []
           : ["outbound-shipping-runtime-not-configured"]),
@@ -1268,7 +1272,7 @@ export async function productionCommerceApiResponse(
       blockers.push("stock-runtime-attestation-not-verified");
     }
     const ready = gate.ready && blockers.length === 0;
-    return json({ status: ready ? "ready" : "closed", environment: "production", mode: gate.mode, releaseSha: gate.releaseSha, origin: gate.origin, launchZones: gate.launchZones, blockers: [...gate.blockers, ...blockers], capabilities: { sandboxCheckout: ready && gate.mode === "sandbox", realPayment: ready && ["controlled", "live"].includes(gate.mode), realDelivery: ready && ["controlled", "live"].includes(gate.mode), transactionalEmail: ready && productionEmailDispatchRuntimeConfigured(env), emailDeliveryReconciliation: ready && env.TRANSACTIONAL_EMAIL_RECONCILIATION_ENABLED === "true", returns: ready && gate.mode === "live" && env.RETURNS_WORKFLOW_ENABLED === "true", controlledOrder: ready && gate.mode === "controlled", publicCommerce: ready && gate.mode === "live" }, routes: { cart: "wired", homeDelivery: "wired-provider-priced", order: "wired", paymentSession: "sandbox-controlled-or-live-behind-release-gate", servicePoint: "wired-encrypted", stripeWebhook: "atomic-d1-effects-and-late-refund-obligation", resendWebhook: "svix-signed-idempotent-audit", sendcloudWebhook: "hmac-signed-idempotent-tracking", emailDeliveryReconciliation: "owner-only-read-provider-append-proof-no-replay", lateRefundDispatch: "wired-bounded-owner-only", returns: "workflow-gated" } }, ready ? 200 : 503);
+    return json({ status: ready ? "ready" : "closed", environment: "production", mode: gate.mode, releaseSha: gate.releaseSha, origin: gate.origin, launchZones: gate.launchZones, blockers: [...gate.blockers, ...blockers], capabilities: { sandboxCheckout: ready && gate.mode === "sandbox", realPayment: ready && ["controlled", "live"].includes(gate.mode), realDelivery: ready && ["controlled", "live"].includes(gate.mode), automaticOutboundShipment: ready && ["controlled", "live"].includes(gate.mode) && env.AUTOMATIC_OUTBOUND_SHIPMENT_ENABLED === "true", transactionalEmail: ready && productionEmailDispatchRuntimeConfigured(env), emailDeliveryReconciliation: ready && env.TRANSACTIONAL_EMAIL_RECONCILIATION_ENABLED === "true", returns: ready && gate.mode === "live" && env.RETURNS_WORKFLOW_ENABLED === "true", controlledOrder: ready && gate.mode === "controlled", publicCommerce: ready && gate.mode === "live" }, routes: { cart: "wired", homeDelivery: "wired-provider-priced", order: "wired", paymentSession: "sandbox-controlled-or-live-behind-release-gate", servicePoint: "wired-encrypted", stripeWebhook: "atomic-d1-effects-and-late-refund-obligation", resendWebhook: "svix-signed-idempotent-audit", sendcloudWebhook: "hmac-signed-idempotent-tracking", emailDeliveryReconciliation: "owner-only-read-provider-append-proof-no-replay", lateRefundDispatch: "wired-bounded-owner-only", returns: "workflow-gated" } }, ready ? 200 : 503);
   }
   if (!gate.ready || !gate.origin || url.origin !== gate.origin) {
     console.warn(JSON.stringify({
@@ -1281,11 +1285,7 @@ export async function productionCommerceApiResponse(
   }
   const controlledStorefront = env.COMMERCE_BACKEND_ONLY === "true" &&
     dependencies.trustedStorefrontOrigin === env.COMMERCE_CONTROLLED_STOREFRONT_ORIGIN;
-  const controlledEdgeAccess = gate.mode === "controlled" &&
-    env.COMMERCE_CONTROLLED_EDGE_ACCESS_ENFORCED === "true" &&
-    url.origin === gate.origin;
   if ((gate.mode !== "live" || controlledStorefront) &&
-    !controlledEdgeAccess &&
     !await controlledOwnerRequestAuthenticated(request, env)) {
     return fail("CONTROLLED_ACCESS_REQUIRED", 403);
   }

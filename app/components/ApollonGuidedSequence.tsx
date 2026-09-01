@@ -219,7 +219,7 @@ const PLATEAUX: readonly Plateau[] = [
            100 %, c'est ce qui rend la marge de 10 px acceptable aujourd'hui ;
          • si de nouvelles sources doivent être fabriquées ainsi, générer le
            haut par EXTENSION de mur, pas par miroir. */
-    worn: "/images/client/apollon-world/apollon-pourpre-model-color-v2.webp",
+    worn: "/images/client/apollon-world/apollon-pourpre-model-color-v1.webp",
     mur: "var(--aj-mur-pourpre)",
     voile: "var(--aj-voile-pourpre)",
     phrase:

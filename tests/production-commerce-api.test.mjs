@@ -213,6 +213,11 @@ test("controlled runtime does not require the public-only admin MFA gate", () =>
     OPERATOR_ADMIN_MFA_ENABLED: undefined,
   }, "controlled");
   assert.equal(blockers.includes("operator-admin-mfa-not-enabled"), false);
+  assert.equal(blockers.includes("automatic-outbound-shipment-not-enabled"), true);
+  assert.equal(productionCommerceRuntimeBlockers({
+    ...controlled,
+    AUTOMATIC_OUTBOUND_SHIPMENT_ENABLED: "true",
+  }, "controlled").includes("automatic-outbound-shipment-not-enabled"), false);
 });
 
 test("the one-shot stock importer is wired before the stock gate but bound to owner, SHA and exact manifest", async () => {
@@ -372,6 +377,18 @@ test("controlled cart reaches origin validation after public-only legal gates ar
   );
   assert.equal(response.status, 403);
   assert.equal((await response.json()).error.code, "ORIGIN_REJECTED");
+});
+
+test("controlled commerce never trusts an unproven edge-access bypass", async () => {
+  const response = await productionCommerceApiResponse(
+    new Request("https://ajluxurystore.com/api/commerce/cart"),
+    {
+      ...controlled,
+      COMMERCE_CONTROLLED_EDGE_ACCESS_ENFORCED: "true",
+    },
+  );
+  assert.equal(response.status, 403);
+  assert.equal((await response.json()).error.code, "CONTROLLED_ACCESS_REQUIRED");
 });
 
 test("controlled service-point purchase reaches delivery schema validation", async () => {

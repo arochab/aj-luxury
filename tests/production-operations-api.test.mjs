@@ -1023,6 +1023,48 @@ test("automatic outbound shipment uses a deterministic idempotency identity for 
   assert.match(queries[0], /status = 'paid'/);
   assert.match(queries[0], /payment\.status = 'succeeded'/);
   assert.match(queries[0], /NOT EXISTS[\s\S]*FROM shipments/);
+  assert.match(
+    queries[0],
+    /OR EXISTS[\s\S]*status = 'label_pending'[\s\S]*attempts = 0[\s\S]*lease_token_hash IS NULL/,
+  );
+});
+
+test("automatic outbound shipment resumes only a pristine pre-provider pending row", async () => {
+  let candidateQuery = "";
+  const db = {
+    prepare(query) {
+      candidateQuery = query;
+      return {
+        bind() {
+          return {
+            async all() {
+              return { success: true, results: [{ id: "order_paid_signal_resume" }] };
+            },
+          };
+        },
+      };
+    },
+  };
+  const calls = [];
+  const result = await dispatchProductionOutboundShipments(
+    automaticShippingEnv(db),
+    { now: "2026-08-15T09:00:00.000Z", orderId: "order_paid_signal_resume" },
+    {
+      fulfillment: {
+        async createShipmentLabel(input) {
+          calls.push(input);
+          return { status: "label_ready" };
+        },
+      },
+    },
+  );
+  assert.equal(result.created, 1);
+  assert.equal(calls.length, 1);
+  assert.match(candidateQuery, /status = 'label_pending'/);
+  assert.match(candidateQuery, /attempts = 0/);
+  assert.match(candidateQuery, /provider_shipment_reference IS NULL/);
+  assert.match(candidateQuery, /tracking_reference IS NULL/);
+  assert.doesNotMatch(candidateQuery, /status = 'label_claimed'/);
 });
 
 test("ambiguous carrier outcome is isolated for manual attention and never blindly retried", async () => {
