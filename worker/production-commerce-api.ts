@@ -1004,10 +1004,12 @@ export async function productionStockRuntimeAttested(
     !evidenceVersionId || !promotionReleaseSha || !promotionVersionId) return false;
   try {
     const release = await env.DB.prepare(
-      `SELECT release.worker_version_id, release.worker_version_tag,
-        release.controlled_order_id, release.adam_approver_id,
-        release.jeremy_approver_id, manifest.stock_owner_id,
-        manifest.release_owner_id,
+      `SELECT manifest.worker_version_id,
+        manifest.release_sha AS worker_version_tag,
+        controlled_order.id AS controlled_order_id,
+        manifest.release_owner_id AS adam_approver_id,
+        manifest.stock_owner_id AS jeremy_approver_id,
+        manifest.stock_owner_id, manifest.release_owner_id,
         controlled_order.commerce_release_sha AS controlled_release_sha,
         controlled_order.commerce_worker_version_id AS controlled_worker_version_id,
         controlled_order.commerce_mode AS controlled_commerce_mode,
@@ -1024,7 +1026,7 @@ export async function productionStockRuntimeAttested(
         ) AND EXISTS (
           SELECT 1 FROM orders AS customer_order
           INNER JOIN payments AS payment ON payment.order_id=customer_order.id
-          WHERE customer_order.id=release.controlled_order_id
+          WHERE customer_order.id=controlled_order.id
             AND customer_order.status IN ('paid','preparing','shipped')
             AND customer_order.paid_at IS NOT NULL
             AND payment.provider='stripe' AND payment.status='succeeded'
@@ -1032,13 +1034,12 @@ export async function productionStockRuntimeAttested(
             AND payment.amount_cents=customer_order.total_cents
             AND payment.currency=customer_order.currency
         ) THEN 1 ELSE 0 END AS controlled_order_proven
-      FROM production_release_attestations AS release
-      INNER JOIN production_launch_stock_manifests AS manifest
-        ON manifest.id=release.stock_manifest_id
+      FROM production_launch_stock_manifests AS manifest
       INNER JOIN orders AS controlled_order
-        ON controlled_order.id=release.controlled_order_id
-      WHERE release.release_sha=? AND release.stock_manifest_id=?`,
-    ).bind(evidenceReleaseSha, env.STOCK_MANIFEST_ID)
+        ON controlled_order.id=?
+      WHERE manifest.release_sha=? AND manifest.id=?`,
+    ).bind(env.COMMERCE_CONTROLLED_ORDER_PROOF_ID, evidenceReleaseSha,
+      env.STOCK_MANIFEST_ID)
       .first<Record<string, string | number>>();
     return release?.controlled_order_proven === 1 &&
       release.worker_version_id === evidenceVersionId &&

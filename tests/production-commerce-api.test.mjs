@@ -507,11 +507,12 @@ function stockProofDatabase(
       return {
         bind() { return this; },
         async first() {
-          if (query.includes("FROM production_launch_stock_manifests")) return proof;
-          if (query.includes("FROM production_provider_configuration_attestations")) return providerProof;
-          if (query.includes("FROM production_release_attestations")) {
+          if (query.includes("INNER JOIN orders AS controlled_order")) {
+            assert.doesNotMatch(query, /release\.controlled_order_id/);
             return releaseProof;
           }
+          if (query.includes("FROM production_launch_stock_manifests")) return proof;
+          if (query.includes("FROM production_provider_configuration_attestations")) return providerProof;
           return null;
         },
         async all() {
