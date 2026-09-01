@@ -65,6 +65,7 @@ export type ProductionReleaseBlocker =
   | "stock-manifest-approval-missing"
   | "payment-provider-not-ready"
   | "delivery-provider-not-ready"
+  | "international-shipping-not-ready"
   | "email-provider-not-ready"
   | "seller-legal-identity-unapproved"
   | "tax-duty-policy-unapproved"
@@ -274,6 +275,9 @@ function evaluateProductionReleaseGateInternal(
   const emailReady = mode !== "closed" && emailIsReady(env);
   if (!paymentReady) blockers.push("payment-provider-not-ready");
   if (!deliveryReady) blockers.push("delivery-provider-not-ready");
+  if (mode === "live" && !internationalShippingConfigured(env)) {
+    blockers.push("international-shipping-not-ready");
+  }
   if (!emailReady) blockers.push("email-provider-not-ready");
   if (!isApproved(env.SELLER_LEGAL_IDENTITY_APPROVED)) {
     blockers.push("seller-legal-identity-unapproved");

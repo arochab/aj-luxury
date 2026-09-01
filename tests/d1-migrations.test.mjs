@@ -388,6 +388,7 @@ test("detached Sites build keeps migrations out of the frontend while Wrangler a
       "0029_slippery_ironclad.sql",
       "0030_striped_skin.sql",
       "0031_failed_shipment_admin_retry.sql",
+      "0032_operator_label_email_and_international_activation.sql",
     ],
   );
 

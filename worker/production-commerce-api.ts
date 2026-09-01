@@ -585,6 +585,63 @@ export async function productionDeliveryRuntimeInstalled(
   }
 }
 
+export async function productionInternationalShippingRuntimeReady(
+  database: CommerceD1Database | undefined,
+): Promise<boolean> {
+  if (!database) return false;
+  try {
+    const [zones, columns, triggers] = await Promise.all([
+      database.prepare(
+        `SELECT zone,status,duties_terms,origin_country_code,customs_hs_code
+        FROM shipping_zone_configurations
+        WHERE status='active' ORDER BY zone`,
+      ).all<{
+        zone: string;
+        status: string;
+        duties_terms: string | null;
+        origin_country_code: string | null;
+        customs_hs_code: string | null;
+      }>(),
+      database.prepare(
+        `SELECT lower(name) AS name FROM pragma_table_info('operator_label_email_outbox')
+        WHERE lower(name) IN (
+          'shipment_id','recipient_email','status','provider_message_id',
+          'attachment_sha256','attachment_byte_length','attachment_count','idempotency_key'
+        ) ORDER BY name`,
+      ).all<{ name: string }>(),
+      database.prepare(
+        `SELECT COUNT(*) AS count FROM sqlite_master
+        WHERE type='trigger' AND name IN (
+          'trg_operator_label_email_validate_insert',
+          'trg_operator_label_email_identity_immutable',
+          'trg_operator_label_email_transition',
+          'trg_operator_label_email_terminal_immutable'
+        )`,
+      ).first<{ count: number }>(),
+    ]);
+    const expectedZones = ["CA", "EU", "GCC", "UK", "US"];
+    if (zones.results.length !== expectedZones.length ||
+      zones.results.some((row, index) => row.zone !== expectedZones[index] || row.status !== "active")) {
+      return false;
+    }
+    if (zones.results.some((row) => row.zone === "EU"
+      ? row.duties_terms !== "EU_INCLUDED"
+      : row.duties_terms !== "DAP" || row.origin_country_code !== "CN" ||
+        row.customs_hs_code !== "61071200")) {
+      return false;
+    }
+    const expectedColumns = [
+      "attachment_byte_length", "attachment_count", "attachment_sha256", "idempotency_key",
+      "provider_message_id", "recipient_email", "shipment_id", "status",
+    ];
+    return columns.results.length === expectedColumns.length &&
+      columns.results.every((row, index) => row.name === expectedColumns[index]) &&
+      triggers?.count === 4;
+  } catch {
+    return false;
+  }
+}
+
 const promotionSchemaInventory = Object.freeze([
   "column:promotion_code:orders",
   "column:promotion_code_id:orders",
@@ -1254,6 +1311,10 @@ export async function productionCommerceApiResponse(
   if (url.pathname === routes.health) {
     if (gate.mode !== "closed" && !await productionDeliveryRuntimeInstalled(env.DB)) {
       blockers.push("delivery-schema-0013-not-installed");
+    }
+    if (gate.mode === "live" && internationalShippingConfigured(env) &&
+      !await productionInternationalShippingRuntimeReady(env.DB)) {
+      blockers.push("international-shipping-schema-or-zones-not-ready");
     }
     if (gate.mode !== "closed" && !await productionPromotionRuntimeInstalled(env.DB)) {
       blockers.push("promotion-schema-0028-not-installed");

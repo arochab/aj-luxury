@@ -62,7 +62,10 @@ const syntheticMigration = journal.entries.find(
 assert.ok(syntheticMigration);
 assert.equal(syntheticMigration.when, releaseBuildEpoch);
 const terminalMigration = journal.entries.at(-1);
-assert.equal(terminalMigration.tag, "0031_failed_shipment_admin_retry");
+assert.equal(
+  terminalMigration.tag,
+  "0032_operator_label_email_and_international_activation",
+);
 assert.ok(
   terminalMigration.when > releaseBuildEpoch,
   "additive launch migrations must follow the frozen synthetic release",

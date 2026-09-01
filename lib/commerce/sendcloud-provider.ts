@@ -26,9 +26,10 @@ const MAX_FALLBACK_PRICE_CONCURRENCY = 4;
 const SAFE_CODE = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/;
 const SAFE_SHIPPING_OPTION_CODE = /^[A-Za-z0-9][A-Za-z0-9_.:,\/-]{0,159}$/;
 const SAFE_PARCEL_ID = /^[1-9]\d{0,18}$/;
-const EU_COUNTRY_CODES = Object.freeze([
+const LAUNCH_COUNTRY_CODES = Object.freeze([
   "AT", "BE", "BG", "HR", "CY", "CZ", "DE", "DK", "EE", "ES", "FI", "FR", "GR", "HU",
   "IE", "IT", "LT", "LU", "LV", "MT", "NL", "PL", "PT", "RO", "SE", "SI", "SK",
+  "GB", "US", "CA", "AE", "QA", "SA",
 ] as const);
 const LEAD_TIME_KEYS = Object.freeze([
   "p10", "p20", "p30", "p40", "p50", "p60", "p70", "p80", "p90", "p95",
@@ -491,7 +492,7 @@ async function resolveV2FallbackPrice(
   option: SendcloudUnpricedOption,
 ): Promise<SendcloudFallbackPrice | null> {
   if (!validFallbackRequest(request)) {
-    throw new DeliveryProviderError("REJECTED", "Shipping fallback request is invalid.");
+    return null;
   }
   const productsUrl = new URL(`${PANEL_ORIGIN}/api/v2/shipping-products`);
   productsUrl.searchParams.set("from_country", request.originCountryCode);
@@ -997,12 +998,11 @@ export function createSendcloudProviderPorts(
           ttlSeconds: request.ttlSeconds,
           dutiesTerms: request.dutiesTerms,
           // Keep every published Dynamic Checkout V3 price unchanged. When an
-          // eligible EU option is published with a null rate (including for a
-          // domestic French shipment), resolve only that exact carrier,
+          // eligible launch option is published with a null rate, resolve only that exact carrier,
           // shipping-option code and last-mile mode through Sendcloud V2.
           ...(request.originCountryCode === "FR" &&
-            EU_COUNTRY_CODES.includes(
-              request.destination.countryCode as typeof EU_COUNTRY_CODES[number],
+            LAUNCH_COUNTRY_CODES.includes(
+              request.destination.countryCode as typeof LAUNCH_COUNTRY_CODES[number],
             )
             ? {
               resolveFallbackPrice: (option: SendcloudUnpricedOption) =>

@@ -48,7 +48,7 @@ const customerCreditNote = /^\/api\/commerce\/account\/credit-notes\/AJL-AV-[0-9
 const operatorOrderDetail = /^\/api\/commerce\/admin\/orders\/[A-Za-z0-9][A-Za-z0-9_.:-]{0,191}$/;
 const operatorInvoice = /^\/api\/commerce\/admin\/orders\/[A-Za-z0-9][A-Za-z0-9_.:-]{0,191}\/invoice$/;
 const operatorCreditNote = /^\/api\/commerce\/admin\/orders\/[A-Za-z0-9][A-Za-z0-9_.:-]{0,191}\/credit-notes\/AJL-AV-[0-9]{4}-[0-9]{6}$/;
-const shippingLabel = /^\/api\/commerce\/admin\/orders\/[A-Za-z0-9][A-Za-z0-9_.:-]{0,191}\/shipping-label$/;
+const shippingDocument = /^\/api\/commerce\/admin\/orders\/[A-Za-z0-9][A-Za-z0-9_.:-]{0,191}\/(?:shipping-label|customs-document)$/;
 const shipmentHandover = /^\/api\/commerce\/admin\/shipments\/[A-Za-z0-9][A-Za-z0-9_.:-]{0,191}\/handover$/;
 const returnOperator = /^\/api\/commerce\/admin\/returns\/[A-Za-z0-9][A-Za-z0-9_.:-]{0,191}\/(?:approve|inspect)$/;
 
@@ -59,7 +59,7 @@ function routeClass(pathname: string): LimitClass | null {
   if (operatorOrderDetail.test(pathname)) return "operator";
   if (operatorInvoice.test(pathname)) return "operator";
   if (operatorCreditNote.test(pathname)) return "operator";
-  if (shippingLabel.test(pathname)) return "operator";
+  if (shippingDocument.test(pathname)) return "operator";
   if (shipmentHandover.test(pathname)) return "operator";
   if (returnOperator.test(pathname)) return "operator";
   return exactRoutes.get(pathname) ?? null;
@@ -167,6 +167,7 @@ export async function productionCommerceRateLimitResponse(
 export type ScheduledProductionOperation =
   | "late-payment-refund-dispatch"
   | "transactional-email-dispatch"
+  | "operator-label-email-dispatch"
   | "reservation-expiry"
   | "outbound-shipment-dispatch";
 

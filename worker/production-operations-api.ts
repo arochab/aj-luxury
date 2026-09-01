@@ -22,7 +22,10 @@ import type { TransactionalEmailProviderPort } from "../lib/commerce/email-outbo
 import type { RefundPaymentProviderPort } from "../lib/commerce/payment-provider.ts";
 import { FulfillmentError, sha256Hex } from "../lib/commerce/fulfillment-domain.ts";
 import type { ShippingLabelProviderPort } from "../lib/commerce/fulfillment-domain.ts";
+import type { ShippingDocumentProviderPort } from "../lib/commerce/delivery-provider.ts";
+import { D1OperatorLabelEmailDispatcher } from "../lib/commerce/operator-label-email-outbox.ts";
 import { createSendcloudShippingLabelProvider } from "../lib/commerce/sendcloud-shipping-label-provider.ts";
+import { createSendcloudProviderPorts } from "../lib/commerce/sendcloud-provider.ts";
 import {
   authorizeBrowserMutation,
   isTrustedMutationOrigin,
@@ -86,6 +89,7 @@ export type ProductionOperationsEnvironment = ProductionCommerceEnvironment &
   DELIVERY_REFERENCE_ENCRYPTION_KEY_BASE64?: string;
   DELIVERY_REFERENCE_KEY_VERSION?: string;
   DELIVERY_REFERENCE_DECRYPTION_KEYS_JSON?: string;
+  OPERATIONS_LABEL_EMAIL?: string;
 }>;
 
 type ReturnRequestResult = Readonly<{
@@ -174,7 +178,9 @@ export type ProductionScheduledOperationsDependencies =
   ProductionEmailDispatchDependencies & Readonly<{
     refundProvider?: RefundPaymentProviderPort;
     shippingLabelProvider?: ShippingLabelProviderPort;
+    shippingDocuments?: ShippingDocumentProviderPort;
     fulfillment?: Pick<D1FulfillmentStore, "createShipmentLabel">;
+    operatorLabelEmailDispatcher?: Pick<D1OperatorLabelEmailDispatcher, "dispatch">;
   }>;
 
 type ExpiredReservationCandidate = Readonly<{ id: string }>;
@@ -1222,7 +1228,10 @@ export async function dispatchProductionOutboundShipments(
           },
         },
       );
-      fulfillment = new D1FulfillmentStore(env.DB, { shippingLabel: provider });
+      fulfillment = new D1FulfillmentStore(env.DB, {
+        shippingLabel: provider,
+        operatorLabelRecipientEmail: env.OPERATIONS_LABEL_EMAIL,
+      });
     } catch {
       return closed("production-shipping-provider-not-configured");
     }
@@ -1295,6 +1304,74 @@ export async function dispatchProductionOutboundShipments(
   });
 }
 
+export async function dispatchProductionOperatorLabelEmails(
+  env: ProductionOperationsEnvironment | undefined,
+  input: Readonly<{ now: string }>,
+  dependencies: ProductionScheduledOperationsDependencies = {},
+): Promise<Readonly<{
+  closed: boolean;
+  reason: string | null;
+  staleLeasesRecovered: number;
+  claimed: number;
+  sent: number;
+  retryScheduled: number;
+  failed: number;
+  queueDrained: boolean;
+}>> {
+  const closed = (reason: string) => Object.freeze({
+    closed: true,
+    reason,
+    staleLeasesRecovered: 0,
+    claimed: 0,
+    sent: 0,
+    retryScheduled: 0,
+    failed: 0,
+    queueDrained: false,
+  });
+  if (!env || env.APP_ENV !== "production" || !env.DB) {
+    return closed("operator-label-email-runtime-not-configured");
+  }
+  if (
+    !isCanonicalUtcTimestamp(input.now) ||
+    env.OPERATIONS_LABEL_EMAIL !== "jeremy@ajluxurystore.com" ||
+    !exactProductionOperationsConfiguration(env) ||
+    !productionEmailDispatchRuntimeConfigured(env, true) ||
+    !productionOutboundShippingRuntimeConfigured(env)
+  ) return closed("operator-label-email-dispatch-not-activated");
+  const installed = await env.DB.prepare(
+    `SELECT COUNT(*) AS count FROM sqlite_master
+    WHERE type='table' AND name='operator_label_email_outbox'`,
+  ).first<{ count: number }>();
+  if (installed?.count !== 1) return closed("operator-label-email-schema-not-installed");
+  const rateLimit = await productionScheduledRateLimit(env, "operator-label-email-dispatch");
+  if (rateLimit !== "allowed") {
+    return closed(`operator-label-email-rate-limit-${rateLimit}`);
+  }
+  let dispatcher = dependencies.operatorLabelEmailDispatcher;
+  if (!dispatcher) {
+    const provider = emailProvider(env, dependencies);
+    if (!provider) return closed("operator-label-email-provider-not-configured");
+    try {
+      const documents = dependencies.shippingDocuments ?? createSendcloudProviderPorts({
+        publicKey: env.SENDCLOUD_PUBLIC_KEY,
+        secretKey: env.SENDCLOUD_SECRET_KEY,
+      }).documents;
+      dispatcher = new D1OperatorLabelEmailDispatcher(env.DB, provider, documents);
+    } catch {
+      return closed("operator-label-email-provider-not-configured");
+    }
+  }
+  try {
+    return Object.freeze({
+      closed: false,
+      reason: null,
+      ...await dispatcher.dispatch({ now: input.now, limit: 3 }),
+    });
+  } catch {
+    return closed("operator-label-email-dispatch-unavailable");
+  }
+}
+
 export async function dispatchProductionLatePaymentRefunds(
   env: ProductionOperationsEnvironment | undefined,
   input: Readonly<{ now: string }>,
@@ -1357,6 +1434,7 @@ export async function runProductionScheduledOperations(
   email: Awaited<ReturnType<typeof dispatchProductionTransactionalEmails>>;
   lateRefunds: Awaited<ReturnType<typeof dispatchProductionLatePaymentRefunds>>;
   shipments: Awaited<ReturnType<typeof dispatchProductionOutboundShipments>>;
+  operatorLabelEmail: Awaited<ReturnType<typeof dispatchProductionOperatorLabelEmails>>;
 }>> {
   // Confirmation messages are claimed before an order can advance to
   // `preparing`, preserving the immediate paid-order path.
@@ -1379,5 +1457,23 @@ export async function runProductionScheduledOperations(
       candidates: 0, created: 0, alreadyReady: 0, attentionRequired: 0,
     })),
   ]);
-  return Object.freeze({ reservations, email, lateRefunds, shipments });
+  // A label is created first, then its one durable operator notification is
+  // claimed. This avoids waiting for the following cron while preserving the
+  // shipment as the sole idempotency boundary.
+  const operatorLabelEmail = await dispatchProductionOperatorLabelEmails(
+    env,
+    input,
+    dependencies,
+  ).catch(() => Object.freeze({
+    closed: true, reason: "operator-label-email-dispatch-unavailable",
+    staleLeasesRecovered: 0, claimed: 0, sent: 0,
+    retryScheduled: 0, failed: 0, queueDrained: false,
+  }));
+  return Object.freeze({
+    reservations,
+    email,
+    lateRefunds,
+    shipments,
+    operatorLabelEmail,
+  });
 }

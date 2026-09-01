@@ -6,6 +6,7 @@ import {
   productionCommerceRuntimeBlockers,
   productionCommerceApiResponse,
   productionDeliveryRuntimeInstalled,
+  productionInternationalShippingRuntimeReady,
   productionLatePaymentRefundRuntimeReady,
   productionPromotionRuntimeInstalled,
   productionStockRuntimeAttested,
@@ -450,6 +451,38 @@ test("delivery runtime proof rejects missing and prefix-colliding 0013 objects",
   assert.equal(await productionDeliveryRuntimeInstalled(database(exact)), true);
   assert.equal(await productionDeliveryRuntimeInstalled(database(exact.slice(1))), false);
   assert.equal(await productionDeliveryRuntimeInstalled(database([...exact, { ...exact[1], name: "delivery_provider_reference_vault_shadow" }])), false);
+});
+
+test("international shipping runtime requires five active zones and the durable label-email proof", async () => {
+  const zones = [
+    { zone: "CA", status: "active", duties_terms: "DAP", origin_country_code: "CN", customs_hs_code: "61071200" },
+    { zone: "EU", status: "active", duties_terms: "EU_INCLUDED", origin_country_code: "CN", customs_hs_code: "61071200" },
+    { zone: "GCC", status: "active", duties_terms: "DAP", origin_country_code: "CN", customs_hs_code: "61071200" },
+    { zone: "UK", status: "active", duties_terms: "DAP", origin_country_code: "CN", customs_hs_code: "61071200" },
+    { zone: "US", status: "active", duties_terms: "DAP", origin_country_code: "CN", customs_hs_code: "61071200" },
+  ];
+  const columns = [
+    "attachment_byte_length", "attachment_count", "attachment_sha256", "idempotency_key",
+    "provider_message_id", "recipient_email", "shipment_id", "status",
+  ].map((name) => ({ name }));
+  const database = (zoneRows = zones, columnRows = columns, triggerCount = 4) => ({
+    prepare(query) {
+      if (query.includes("FROM shipping_zone_configurations")) {
+        return { async all() { return { results: zoneRows }; } };
+      }
+      if (query.includes("pragma_table_info('operator_label_email_outbox')")) {
+        return { async all() { return { results: columnRows }; } };
+      }
+      return { async first() { return { count: triggerCount }; } };
+    },
+  });
+  assert.equal(await productionInternationalShippingRuntimeReady(database()), true);
+  assert.equal(await productionInternationalShippingRuntimeReady(database(zones.slice(1))), false);
+  assert.equal(await productionInternationalShippingRuntimeReady(database(
+    zones,
+    columns.filter((row) => row.name !== "attachment_count"),
+  )), false);
+  assert.equal(await productionInternationalShippingRuntimeReady(database(zones, columns, 3)), false);
 });
 
 test("promotion runtime proof rejects missing and prefix-colliding 0028 objects", async () => {

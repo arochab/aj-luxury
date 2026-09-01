@@ -1684,7 +1684,7 @@ export const shippingZoneConfigurations = sqliteTable(
   "shipping_zone_configurations",
   {
     id: text("id").primaryKey(),
-    zone: text("zone", { enum: ["EU", "UK", "US", "CA"] }).notNull(),
+    zone: text("zone", { enum: ["EU", "UK", "US", "CA", "GCC"] }).notNull(),
     version: integer("version").notNull(),
     status: text("status", { enum: ["draft", "active", "retired"] })
       .notNull()
@@ -1719,7 +1719,7 @@ export const shippingZoneConfigurations = sqliteTable(
       .where(sql`${table.status} = 'active'`),
     check(
       "ck_shipping_zone_configurations_zone",
-      sql`${table.zone} IN ('EU', 'UK', 'US', 'CA')`,
+      sql`${table.zone} IN ('EU', 'UK', 'US', 'CA', 'GCC')`,
     ),
     check(
       "ck_shipping_zone_configurations_status",
@@ -2229,6 +2229,132 @@ export const shippingDocumentMetadata = sqliteTable(
     check(
       "ck_shipping_document_timestamp",
       sql`strftime('%Y-%m-%dT%H:%M:%fZ',${table.createdAt}) IS ${table.createdAt}`,
+    ),
+  ],
+);
+
+export const operatorLabelEmailOutbox = sqliteTable(
+  "operator_label_email_outbox",
+  {
+    id: text("id").primaryKey(),
+    shipmentId: text("shipment_id").notNull().references(
+      () => shipments.id,
+      { onDelete: "restrict" },
+    ),
+    orderId: text("order_id").notNull().references(
+      () => orders.id,
+      { onDelete: "restrict" },
+    ),
+    recipientEmail: text("recipient_email").notNull(),
+    status: text("status", {
+      enum: ["pending", "sending", "sent", "failed"],
+    }).notNull().default("pending"),
+    attempts: integer("attempts").notNull().default(0),
+    maxAttempts: integer("max_attempts").notNull().default(5),
+    nextAttemptAt: text("next_attempt_at").notNull(),
+    leaseTokenHash: text("lease_token_hash"),
+    leasedAt: text("leased_at"),
+    leaseExpiresAt: text("lease_expires_at"),
+    lastErrorCode: text("last_error_code", {
+      enum: [
+        "dependency_unavailable",
+        "provider_rejected",
+        "delivery_ambiguous",
+        "attempts_exhausted",
+      ],
+    }),
+    providerMessageId: text("provider_message_id"),
+    attachmentSha256: text("attachment_sha256"),
+    attachmentByteLength: integer("attachment_byte_length"),
+    attachmentCount: integer("attachment_count"),
+    idempotencyKey: text("idempotency_key").notNull(),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+    sentAt: text("sent_at"),
+    terminalAt: text("terminal_at"),
+  },
+  (table) => [
+    uniqueIndex("ux_operator_label_email_shipment").on(table.shipmentId),
+    uniqueIndex("ux_operator_label_email_idempotency").on(table.idempotencyKey),
+    uniqueIndex("ux_operator_label_email_provider_message")
+      .on(table.providerMessageId)
+      .where(sql`${table.providerMessageId} IS NOT NULL`),
+    uniqueIndex("ux_operator_label_email_active_lease")
+      .on(table.leaseTokenHash)
+      .where(sql`${table.leaseTokenHash} IS NOT NULL`),
+    index("idx_operator_label_email_claim").on(
+      table.status,
+      table.nextAttemptAt,
+      table.createdAt,
+    ),
+    check(
+      "ck_operator_label_email_recipient",
+      sql`${table.recipientEmail} = 'jeremy@ajluxurystore.com'`,
+    ),
+    check(
+      "ck_operator_label_email_status",
+      sql`${table.status} IN ('pending','sending','sent','failed')`,
+    ),
+    check(
+      "ck_operator_label_email_attempts",
+      sql`${table.attempts} >= 0 AND ${table.maxAttempts} = 5
+        AND ${table.attempts} <= ${table.maxAttempts}`,
+    ),
+    check(
+      "ck_operator_label_email_error",
+      sql`${table.lastErrorCode} IS NULL OR ${table.lastErrorCode} IN (
+        'dependency_unavailable','provider_rejected','delivery_ambiguous',
+        'attempts_exhausted'
+      )`,
+    ),
+    check(
+      "ck_operator_label_email_hashes",
+      sql`(${table.leaseTokenHash} IS NULL OR (
+          length(${table.leaseTokenHash}) = 64
+          AND ${table.leaseTokenHash} = lower(${table.leaseTokenHash})
+          AND ${table.leaseTokenHash} NOT GLOB '*[^0-9a-f]*'
+        )) AND (${table.attachmentSha256} IS NULL OR (
+          length(${table.attachmentSha256}) = 64
+          AND ${table.attachmentSha256} = lower(${table.attachmentSha256})
+          AND ${table.attachmentSha256} NOT GLOB '*[^0-9a-f]*'
+        ))`,
+    ),
+    check(
+      "ck_operator_label_email_attachment",
+      sql`(${table.attachmentSha256} IS NULL AND ${table.attachmentByteLength} IS NULL
+          AND ${table.attachmentCount} IS NULL)
+        OR (${table.attachmentSha256} IS NOT NULL AND ${table.attachmentByteLength} > 0
+          AND ${table.attachmentCount} IN (1,2))`,
+    ),
+    check(
+      "ck_operator_label_email_state",
+      sql`(${table.status} = 'pending' AND ${table.nextAttemptAt} IS NOT NULL
+          AND ${table.leaseTokenHash} IS NULL AND ${table.leasedAt} IS NULL
+          AND ${table.leaseExpiresAt} IS NULL AND ${table.lastErrorCode} IS NULL
+          AND ${table.providerMessageId} IS NULL AND ${table.attachmentSha256} IS NULL
+          AND ${table.attachmentByteLength} IS NULL AND ${table.attachmentCount} IS NULL
+          AND ${table.sentAt} IS NULL AND ${table.terminalAt} IS NULL)
+        OR (${table.status} = 'sending' AND ${table.nextAttemptAt} IS NULL
+          AND ${table.leaseTokenHash} IS NOT NULL AND ${table.leasedAt} IS NOT NULL
+          AND ${table.leaseExpiresAt} IS NOT NULL AND ${table.attempts} >= 1
+          AND ${table.lastErrorCode} IS NULL AND ${table.providerMessageId} IS NULL
+          AND ${table.attachmentSha256} IS NULL AND ${table.attachmentByteLength} IS NULL
+          AND ${table.attachmentCount} IS NULL AND ${table.sentAt} IS NULL
+          AND ${table.terminalAt} IS NULL)
+        OR (${table.status} = 'sent' AND ${table.nextAttemptAt} IS NULL
+          AND ${table.leaseTokenHash} IS NULL AND ${table.leasedAt} IS NULL
+          AND ${table.leaseExpiresAt} IS NULL AND ${table.lastErrorCode} IS NULL
+          AND ${table.providerMessageId} IS NOT NULL
+          AND ${table.attachmentSha256} IS NOT NULL
+          AND ${table.attachmentByteLength} > 0 AND ${table.attachmentCount} IN (1,2)
+          AND ${table.sentAt} IS NOT NULL
+          AND ${table.terminalAt} = ${table.sentAt})
+        OR (${table.status} = 'failed' AND ${table.nextAttemptAt} IS NULL
+          AND ${table.leaseTokenHash} IS NULL AND ${table.leasedAt} IS NULL
+          AND ${table.leaseExpiresAt} IS NULL AND ${table.lastErrorCode} IS NOT NULL
+          AND ${table.providerMessageId} IS NULL AND ${table.attachmentSha256} IS NULL
+          AND ${table.attachmentByteLength} IS NULL AND ${table.attachmentCount} IS NULL
+          AND ${table.sentAt} IS NULL AND ${table.terminalAt} IS NOT NULL)`,
     ),
   ],
 );

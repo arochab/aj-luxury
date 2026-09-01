@@ -502,7 +502,7 @@ test("0011 fails closed for a missing, foreign, expired or unsealed service poin
   assert.doesNotMatch(migration, /provider_reference` text|raw_reference|api[_-]?key|secret[_-]?key/i);
 });
 
-test("0011-0031 remain additive and the journal ends at the immutable shipment retry", () => {
+test("0011-0032 remain additive and the journal ends at operator label email plus international activation", () => {
   const previous = JSON.parse(readFileSync(`${drizzle}meta/0010_snapshot.json`, "utf8"));
   const snapshot = JSON.parse(readFileSync(`${drizzle}meta/0011_snapshot.json`, "utf8"));
   const pricingSnapshot = JSON.parse(readFileSync(`${drizzle}meta/0012_snapshot.json`, "utf8"));
@@ -518,6 +518,7 @@ test("0011-0031 remain additive and the journal ends at the immutable shipment r
   const invoiceSnapshot = JSON.parse(readFileSync(`${drizzle}meta/0029_snapshot.json`, "utf8"));
   const creditNoteSnapshot = JSON.parse(readFileSync(`${drizzle}meta/0030_snapshot.json`, "utf8"));
   const shipmentRetrySnapshot = JSON.parse(readFileSync(`${drizzle}meta/0031_snapshot.json`, "utf8"));
+  const operatorLabelSnapshot = JSON.parse(readFileSync(`${drizzle}meta/0032_snapshot.json`, "utf8"));
   const journal = JSON.parse(readFileSync(`${drizzle}meta/_journal.json`, "utf8"));
   assert.equal(snapshot.version, "6");
   assert.equal(snapshot.dialect, "sqlite");
@@ -614,11 +615,21 @@ test("0011-0031 remain additive and the journal ends at the immutable shipment r
     Object.keys(creditNoteSnapshot.tables).length + 1,
   );
   assert.ok(shipmentRetrySnapshot.tables.shipment_retry_authorizations);
+  assert.equal(operatorLabelSnapshot.prevId, shipmentRetrySnapshot.id);
+  assert.equal(
+    Object.keys(operatorLabelSnapshot.tables).length,
+    Object.keys(shipmentRetrySnapshot.tables).length + 1,
+  );
+  assert.ok(operatorLabelSnapshot.tables.operator_label_email_outbox);
+  assert.equal(
+    operatorLabelSnapshot.tables.operator_label_email_outbox.columns.attachment_count.notNull,
+    false,
+  );
   assert.deepEqual(journal.entries.at(-1), {
-    idx: 31,
+    idx: 32,
     version: "6",
-    when: 1788652800000,
-    tag: "0031_failed_shipment_admin_retry",
+    when: 1788739200000,
+    tag: "0032_operator_label_email_and_international_activation",
     breakpoints: true,
   });
 });

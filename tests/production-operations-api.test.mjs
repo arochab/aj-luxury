@@ -254,6 +254,7 @@ function automaticShippingEnv(db = database()) {
     ...controlledEnv(db),
     OUTBOUND_SHIPMENT_CREATION_ENABLED: "true",
     AUTOMATIC_OUTBOUND_SHIPMENT_ENABLED: "true",
+    OPERATIONS_LABEL_EMAIL: "jeremy@ajluxurystore.com",
     SENDCLOUD_SECRET_KEY: "sendcloud-secret-redacted-0001",
     SENDCLOUD_SENDER_ADDRESS_ID: "123456",
     SENDCLOUD_SENDER_ADDRESS_ATTESTATION: "3 A rue Principale|67130|Belmont|FR",

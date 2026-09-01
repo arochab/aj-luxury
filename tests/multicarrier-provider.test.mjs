@@ -744,7 +744,7 @@ test("Sendcloud maps the live France V3 codes to one exact V2 price band", async
   ]);
 });
 
-test("Sendcloud prefers a real EU V3 rate and keeps non-EU null rates closed", async (t) => {
+test("Sendcloud prefers a real V3 rate and resolves an exact non-EU null rate", async (t) => {
   await t.test("priced EU option", async () => {
     let calls = 0;
     const ports = createSendcloudProviderPorts(
@@ -776,8 +776,25 @@ test("Sendcloud prefers a real EU V3 rate and keeps non-EU null rates closed", a
     let calls = 0;
     const ports = createSendcloudProviderPorts(
       { publicKey: "public_key", secretKey: "x".repeat(32) },
-      async () => {
+      async (input) => {
         calls += 1;
+        const url = new URL(String(input));
+        if (url.pathname === "/api/v2/shipping-products") {
+          assert.equal(url.searchParams.get("to_country"), "GB");
+          assert.equal(url.searchParams.get("to_postal_code"), "SW1A 1AA");
+          return Response.json([shippingProduct({
+            carrier: "colissimo",
+            code: "colissimo:international/home_delivery,signature",
+            lastMile: "home_delivery",
+            methodIds: [7601],
+          })]);
+        }
+        if (url.pathname === "/api/v2/shipping-price") {
+          assert.equal(url.searchParams.get("to_country"), "GB");
+          return Response.json([{
+            price: "18.42", currency: "EUR", to_country: "GB", breakdown: [],
+          }]);
+        }
         return Response.json({
           configuration_id: "configuration_gb",
           delivery_options: [nullRateOffer({
@@ -794,8 +811,9 @@ test("Sendcloud prefers a real EU V3 rate and keeps non-EU null rates closed", a
       dutiesTerms: "DAP",
       destination: { countryCode: "GB", postalCode: "SW1A 1AA", city: "London" },
     }));
-    assert.deepEqual(quotes, []);
-    assert.equal(calls, 1);
+    assert.equal(quotes[0].amountCents, 1842);
+    assert.equal(quotes[0].dutiesTerms, "DAP");
+    assert.equal(calls, 3);
   });
 });
 

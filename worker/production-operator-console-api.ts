@@ -73,6 +73,9 @@ type OrderRow = Readonly<{
   shipment_tracking_provider_code: string | null;
   shipment_tracking_reference: string | null;
   shipment_receipt_fingerprint: string | null;
+  shipment_label_email_status: string | null;
+  shipment_zone: string | null;
+  shipment_customs_status: string | null;
   shipping_phone_type: string | null;
   retry_authorization_id: string | null;
   retry_authorization_consumed_at: string | null;
@@ -95,6 +98,8 @@ type OrderDetailRow = Readonly<{
   shipment_status: string | null;
   tracking_provider_code: string | null;
   tracking_reference: string | null;
+  shipment_zone: string | null;
+  shipment_customs_status: string | null;
 }>;
 
 type OrderLineRow = Readonly<{
@@ -385,6 +390,11 @@ async function listOrders(
         shipment.tracking_provider_code AS shipment_tracking_provider_code,
         shipment.tracking_reference AS shipment_tracking_reference,
         shipment.provider_receipt_fingerprint AS shipment_receipt_fingerprint,
+        configuration.zone AS shipment_zone,
+        customs.status AS shipment_customs_status,
+        (SELECT message.status FROM operator_label_email_outbox AS message
+          WHERE message.shipment_id=shipment.id LIMIT 1
+        ) AS shipment_label_email_status,
         json_type(customer_order.shipping_address_json, '$.phone') AS shipping_phone_type,
         retry_authorization.id AS retry_authorization_id,
         retry_authorization.consumed_at AS retry_authorization_consumed_at,
@@ -404,6 +414,10 @@ async function listOrders(
           ORDER BY message.created_at DESC LIMIT 1) AS payment_email_status
       FROM orders AS customer_order
       LEFT JOIN shipments AS shipment ON shipment.order_id=customer_order.id
+      LEFT JOIN shipping_quotes AS quote ON quote.id=shipment.shipping_quote_id
+      LEFT JOIN shipping_zone_configurations AS configuration
+        ON configuration.id=quote.configuration_id
+      LEFT JOIN customs_records AS customs ON customs.shipment_id=shipment.id
       LEFT JOIN shipment_retry_authorizations AS retry_authorization
         ON retry_authorization.shipment_id=shipment.id
       WHERE customer_order.status IN ('paid','preparing','shipped','refunded')
@@ -422,6 +436,9 @@ async function listOrders(
         shipment: row.shipment_id ? {
           id: row.shipment_id,
           status: row.shipment_status,
+          labelEmailStatus: row.shipment_label_email_status,
+          zone: row.shipment_zone,
+          customsStatus: row.shipment_customs_status,
           retryAllowed: row.shipment_status === "failed" &&
             row.shipment_last_error_code === "provider_rejected" &&
             (row.shipment_attempts ?? 0) >= 1 &&
@@ -525,9 +542,15 @@ async function orderDetail(
           customer_order.shipping_address_json, customer_order.paid_at,
           customer_order.created_at, shipment.id AS shipment_id,
           shipment.status AS shipment_status,
-          shipment.tracking_provider_code, shipment.tracking_reference
+          shipment.tracking_provider_code, shipment.tracking_reference,
+          configuration.zone AS shipment_zone,
+          customs.status AS shipment_customs_status
         FROM orders AS customer_order
         LEFT JOIN shipments AS shipment ON shipment.order_id=customer_order.id
+        LEFT JOIN shipping_quotes AS quote ON quote.id=shipment.shipping_quote_id
+        LEFT JOIN shipping_zone_configurations AS configuration
+          ON configuration.id=quote.configuration_id
+        LEFT JOIN customs_records AS customs ON customs.shipment_id=shipment.id
         WHERE customer_order.id = ?
           AND customer_order.status IN ('paid','preparing','shipped','refunded')
         LIMIT 1`,
@@ -564,6 +587,8 @@ async function orderDetail(
           status: order.shipment_status,
           trackingProviderCode: order.tracking_provider_code,
           trackingReference: order.tracking_reference,
+          zone: order.shipment_zone,
+          customsStatus: order.shipment_customs_status,
         } : null,
       },
     });

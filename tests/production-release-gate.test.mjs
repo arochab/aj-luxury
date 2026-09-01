@@ -39,6 +39,9 @@ const base = Object.freeze({
   RESEND_API_KEY: "re_redacted",
   RESEND_WEBHOOK_SECRET: "whsec_resend_redacted",
   TRANSACTIONAL_FROM_EMAIL: "commandes@ajluxurystore.com",
+  INTERNATIONAL_SHIPPING_ENABLED: "true",
+  INTERNATIONAL_SHIPPING_COUNTRIES: "GB,US,CA,AE,QA,SA",
+  INTERNATIONAL_CUSTOMS_POLICY: "DAP|CN|61071200|FR944996487",
   SELLER_LEGAL_IDENTITY_APPROVED: "true",
   TAX_DUTY_POLICY_APPROVED: "true",
   RETURNS_POLICY_APPROVED: "true",
@@ -62,7 +65,7 @@ test("complete sandbox evidence remains closed until the router is wired", () =>
   assert.equal(gate.ready, false);
   assert.equal(gate.evidenceComplete, true);
   assert.deepEqual(gate.blockers, ["commerce-router-not-wired"]);
-  assert.deepEqual(gate.launchZones, ["EU"]);
+  assert.deepEqual(gate.launchZones, ["EU", "UK", "US", "CA", "GCC"]);
   assert.equal(gate.capabilities.sandboxCheckout, false);
   assert.equal(gate.capabilities.realPayment, false);
   assert.equal(gate.capabilities.realDelivery, false);
@@ -159,6 +162,21 @@ test("public live remains closed until a controlled order proof is recorded", ()
     CF_VERSION_METADATA: { ...base.CF_VERSION_METADATA, id: liveVersionId },
   });
   assert.ok(selfPromotion.blockers.includes("promotion-source-version-missing"));
+});
+
+test("public live fails closed if any international launch attestation drifts", () => {
+  const gate = evaluateProductionReleaseGate({
+    ...base,
+    COMMERCE_MODE: "live",
+    STRIPE_SECRET_KEY: "sk_live_redacted",
+    COMMERCE_CONTROLLED_ORDER_PROOF_ID: "proof-controlled-order-0001",
+    COMMERCE_PROMOTED_FROM_RELEASE_SHA: releaseSha,
+    COMMERCE_PROMOTED_FROM_VERSION_ID: candidateVersionId,
+    CF_VERSION_METADATA: { ...base.CF_VERSION_METADATA, id: liveVersionId },
+    INTERNATIONAL_SHIPPING_COUNTRIES: "GB,US,CA",
+  });
+  assert.ok(gate.blockers.includes("international-shipping-not-ready"));
+  assert.deepEqual(gate.launchZones, ["EU"]);
 });
 
 test("private controlled checkout defers monitoring while published legal terms unblock live", () => {

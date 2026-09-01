@@ -64,6 +64,72 @@ test("Resend receives one bounded branded email with the durable idempotency key
   ]);
 });
 
+test("Resend receives one bounded PDF attachment for the operator label email", async () => {
+  let body;
+  const adapter = provider(async (_url, init) => {
+    body = JSON.parse(init.body);
+    return Response.json({ id: "email_label_123" }, { status: 200 });
+  });
+  const payload = delivery({
+    subject: "AJ Luxury — étiquette A4 prête — AJ-TEST",
+    text: "Étiquette jointe. https://ajluxurystore.com/operations",
+  });
+  await adapter.deliver({
+    ...payload,
+    message: { ...payload.message, kind: "operator_label_ready" },
+    attachments: [{
+      filename: "AJL-AJ-TEST-A4.pdf",
+      contentBase64: Buffer.from("%PDF-1.7\n%%EOF").toString("base64"),
+    }],
+  });
+  assert.deepEqual(body.attachments, [{
+    filename: "AJL-AJ-TEST-A4.pdf",
+    content: Buffer.from("%PDF-1.7\n%%EOF").toString("base64"),
+  }]);
+  assert.match(body.html, /href="https:\/\/ajluxurystore\.com\/operations"/);
+  assert.equal(body.tags[0].value, "operator_label_ready");
+});
+
+test("Resend accepts the exact label plus customs A4 pair", async () => {
+  let body;
+  const adapter = provider(async (_url, init) => {
+    body = JSON.parse(init.body);
+    return Response.json({ id: "email_documents_123" }, { status: 200 });
+  });
+  const contentBase64 = Buffer.from("%PDF-1.7\n%%EOF").toString("base64");
+  await adapter.deliver({
+    ...delivery(),
+    attachments: [
+      { filename: "AJL-AJ-TEST-ETIQUETTE-A4.pdf", contentBase64 },
+      { filename: "AJL-AJ-TEST-DOUANE-A4.pdf", contentBase64 },
+    ],
+  });
+  assert.deepEqual(body.attachments.map((attachment) => attachment.filename), [
+    "AJL-AJ-TEST-ETIQUETTE-A4.pdf",
+    "AJL-AJ-TEST-DOUANE-A4.pdf",
+  ]);
+});
+
+test("Resend rejects unsafe or more than two operator attachments before transport", async () => {
+  let calls = 0;
+  const adapter = provider(async () => {
+    calls += 1;
+    return Response.json({ id: "unexpected" });
+  });
+  await assert.rejects(
+    adapter.deliver({
+      ...delivery(),
+      attachments: [
+        { filename: "label.pdf", contentBase64: "JVBERi0x" },
+        { filename: "customs.pdf", contentBase64: "JVBERi0x" },
+        { filename: "third.pdf", contentBase64: "JVBERi0x" },
+      ],
+    }),
+    (error) => error instanceof ResendEmailProviderError && error.outcome === "rejected",
+  );
+  assert.equal(calls, 0);
+});
+
 test("exact delivered Resend record becomes minimal evidence without exposing content", async () => {
   let sentBody;
   const adapter = provider(async (url, init) => {

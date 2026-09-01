@@ -14,7 +14,7 @@ import { controlledOwnerRequestAuthenticated } from "./production-commerce-api.t
 import { cloudflareAccessOwnerRequestAuthenticated } from "./cloudflare-access-owner.ts";
 import { productionOutboundShippingRuntimeConfigured } from "./production-shipping-runtime.ts";
 
-const ROUTE = /^\/api\/commerce\/admin\/orders\/([^/]+)\/shipping-label$/;
+const ROUTE = /^\/api\/commerce\/admin\/orders\/([^/]+)\/(shipping-label|customs-document)$/;
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,191}$/;
 const IDEMPOTENCY = /^[A-Za-z0-9][A-Za-z0-9_.:-]{7,127}$/;
 const SHA256 = /^[0-9a-f]{64}$/;
@@ -39,6 +39,7 @@ export type ProductionShippingLabelEnvironment = ProductionCommerceEnvironment &
   DELIVERY_REFERENCE_ENCRYPTION_KEY_BASE64?: string;
   DELIVERY_REFERENCE_KEY_VERSION?: string;
   DELIVERY_REFERENCE_DECRYPTION_KEYS_JSON?: string;
+  OPERATIONS_LABEL_EMAIL?: string;
 }>; 
 
 export type ProductionShippingLabelDependencies = Readonly<{
@@ -75,7 +76,7 @@ function referenceVaultConfiguration(env: ProductionShippingLabelEnvironment): R
   });
 }
 
-async function printableLabelResponse(
+async function printableShippingDocumentResponse(
   env: ProductionShippingLabelEnvironment,
   dependencies: ProductionShippingLabelDependencies,
   shipment: Pick<
@@ -86,6 +87,7 @@ async function printableLabelResponse(
   downloadRequestId: string,
   now: string,
   status: 200 | 201,
+  documentKind: "label" | "customs",
 ): Promise<Response> {
   if (!shipment.provider_shipment_reference || !/^[1-9]\d{0,18}$/.test(shipment.provider_shipment_reference)) {
     return fail("SHIPPING_DOCUMENT_UNAVAILABLE", 503);
@@ -98,7 +100,7 @@ async function printableLabelResponse(
     const document = await documents.document({
       requestId: shipment.id,
       providerParcelReference: shipment.provider_shipment_reference,
-      documentKind: "label",
+      documentKind,
     });
     if (document.mediaType !== "application/pdf" || document.byteLength !== document.content.size) {
       return fail("SHIPPING_DOCUMENT_UNAVAILABLE", 503);
@@ -116,14 +118,17 @@ async function printableLabelResponse(
     if (!env.DB) return fail("DATABASE_UNAVAILABLE", 503);
     const providerReferenceHash = await sha256Hex(document.providerDocumentReference);
     const documentIdentity = await sha256Hex(
-      `${shipment.id}\0label\0${providerReferenceHash}`,
+      `${shipment.id}\0${documentKind}\0${providerReferenceHash}`,
     );
     const auditIdentity = await sha256Hex(
-      `${shipment.id}\0${actor.administratorId}\0${downloadRequestId}`,
+      `${shipment.id}\0${documentKind}\0${actor.administratorId}\0${downloadRequestId}`,
     );
     const documentId = `shipping_document_${documentIdentity}`;
-    const auditId = `audit_shipping_label_download_${auditIdentity}`;
-    const auditIdempotencyKey = `shipping-label-download:${auditIdentity}`;
+    const auditAction = documentKind === "label"
+      ? "shipping_label_downloaded"
+      : "customs_document_downloaded";
+    const auditId = `audit_${auditAction}_${auditIdentity}`;
+    const auditIdempotencyKey = `${documentKind}-document-download:${auditIdentity}`;
     const auditMetadata = JSON.stringify({
       administratorSessionId: actor.sessionId,
       byteLength: document.byteLength,
@@ -134,10 +139,11 @@ async function printableLabelResponse(
         `INSERT OR IGNORE INTO shipping_document_metadata (
           id, shipment_id, document_kind, media_type,
           provider_document_reference_hash, content_sha256, byte_length, created_at
-        ) VALUES (?, ?, 'label', 'application/pdf', ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, 'application/pdf', ?, ?, ?, ?)`,
       ).bind(
         documentId,
         shipment.id,
+        documentKind,
         providerReferenceHash,
         document.contentSha256,
         document.byteLength,
@@ -147,10 +153,10 @@ async function printableLabelResponse(
         `INSERT OR IGNORE INTO audit_log (
           id, actor_type, actor_id, action, entity_type, entity_id,
           idempotency_key, metadata_json, created_at
-        ) SELECT ?, 'admin', ?, 'shipping_label_downloaded', 'shipment', ?, ?, ?, ?
+        ) SELECT ?, 'admin', ?, ?, 'shipment', ?, ?, ?, ?
         WHERE EXISTS (
           SELECT 1 FROM shipping_document_metadata
-          WHERE id = ? AND shipment_id = ? AND document_kind = 'label'
+          WHERE id = ? AND shipment_id = ? AND document_kind = ?
             AND media_type = 'application/pdf'
             AND provider_document_reference_hash = ?
             AND content_sha256 = ? AND byte_length = ?
@@ -158,12 +164,14 @@ async function printableLabelResponse(
       ).bind(
         auditId,
         actor.administratorId,
+        auditAction,
         shipment.id,
         auditIdempotencyKey,
         auditMetadata,
         now,
         documentId,
         shipment.id,
+        documentKind,
         providerReferenceHash,
         document.contentSha256,
         document.byteLength,
@@ -198,14 +206,14 @@ async function printableLabelResponse(
     ]);
     if (
       persistedDocument?.shipment_id !== shipment.id ||
-      persistedDocument.document_kind !== "label" ||
+      persistedDocument.document_kind !== documentKind ||
       persistedDocument.media_type !== "application/pdf" ||
       persistedDocument.provider_document_reference_hash !== providerReferenceHash ||
       persistedDocument.content_sha256 !== document.contentSha256 ||
       persistedDocument.byte_length !== document.byteLength ||
       persistedAudit?.actor_type !== "admin" ||
       persistedAudit.actor_id !== actor.administratorId ||
-      persistedAudit.action !== "shipping_label_downloaded" ||
+      persistedAudit.action !== auditAction ||
       persistedAudit.entity_type !== "shipment" ||
       persistedAudit.entity_id !== shipment.id ||
       persistedAudit.idempotency_key !== auditIdempotencyKey ||
@@ -217,10 +225,13 @@ async function printableLabelResponse(
       status,
       headers: {
         "Cache-Control": "no-store",
-        "Content-Disposition": `attachment; filename="AJL-${shipment.order_id}-A4.pdf"`,
+        "Content-Disposition": `attachment; filename="AJL-${shipment.order_id}-${
+          documentKind === "label" ? "ETIQUETTE" : "DOUANE"
+        }-A4.pdf"`,
         "Content-Length": String(document.byteLength),
         "Content-Type": "application/pdf",
         "X-AJ-Document-SHA256": document.contentSha256,
+        "X-AJ-Document-Kind": documentKind,
         "X-AJ-Shipment-Id": shipment.id,
         "X-AJ-Tracking-Reference": shipment.tracking_reference ?? "",
         "X-Content-Type-Options": "nosniff",
@@ -244,6 +255,8 @@ type ExistingShipment = Readonly<{
   tracking_provider_code: string | null;
   tracking_reference: string | null;
   provider_receipt_fingerprint: string | null;
+  zone: "EU" | "UK" | "US" | "CA" | "GCC";
+  customs_status: string | null;
   order_status?: string;
 }>;
 
@@ -456,6 +469,7 @@ export async function productionShippingLabelAdminReleaseCoreResponse(
     idempotencyKey,
     now,
     match[1],
+    match[2] === "customs-document" ? "customs" : "label",
   );
 }
 
@@ -468,6 +482,7 @@ async function productionShippingLabelAdminAuthorizedResponse(
   idempotencyKey: string,
   now: string,
   encodedOrderId: string,
+  documentKind: "label" | "customs",
 ): Promise<Response> {
   let orderId: string;
   try {
@@ -487,9 +502,14 @@ async function productionShippingLabelAdminAuthorizedResponse(
       shipment.max_attempts, shipment.idempotency_key, shipment.last_error_code,
       shipment.provider_shipment_reference, shipment.tracking_provider_code,
       shipment.tracking_reference, shipment.provider_receipt_fingerprint,
-      customer_order.status AS order_status
+      customer_order.status AS order_status, configuration.zone,
+      customs.status AS customs_status
     FROM shipments AS shipment
     INNER JOIN orders AS customer_order ON customer_order.id=shipment.order_id
+    INNER JOIN shipping_quotes AS quote ON quote.id=shipment.shipping_quote_id
+    INNER JOIN shipping_zone_configurations AS configuration
+      ON configuration.id=quote.configuration_id
+    LEFT JOIN customs_records AS customs ON customs.shipment_id=shipment.id
     WHERE shipment.order_id = ? LIMIT 1`,
   ).bind(orderId).first<ExistingShipment>();
   const existing = existingForOrder ?? await env.DB.prepare(
@@ -497,9 +517,14 @@ async function productionShippingLabelAdminAuthorizedResponse(
       shipment.max_attempts, shipment.idempotency_key, shipment.last_error_code,
       shipment.provider_shipment_reference, shipment.tracking_provider_code,
       shipment.tracking_reference, shipment.provider_receipt_fingerprint,
-      customer_order.status AS order_status
+      customer_order.status AS order_status, configuration.zone,
+      customs.status AS customs_status
     FROM shipments AS shipment
     INNER JOIN orders AS customer_order ON customer_order.id=shipment.order_id
+    INNER JOIN shipping_quotes AS quote ON quote.id=shipment.shipping_quote_id
+    INNER JOIN shipping_zone_configurations AS configuration
+      ON configuration.id=quote.configuration_id
+    LEFT JOIN customs_records AS customs ON customs.shipment_id=shipment.id
     WHERE shipment.idempotency_key = ?`,
   ).bind(idempotencyKey).first<ExistingShipment>();
   if (existing && existing.order_id !== orderId) {
@@ -508,9 +533,14 @@ async function productionShippingLabelAdminAuthorizedResponse(
   if (existing && !["paid", "preparing"].includes(existing.order_status ?? "")) {
     return fail("SHIPMENT_LABEL_UNAVAILABLE", 409);
   }
-  if (existing?.status === "label_ready") {
+  if (documentKind === "customs") {
     if (body.kind !== "empty") return fail("INVALID_REQUEST", 400);
-    return printableLabelResponse(
+    if (!existing) return fail("SHIPMENT_LABEL_UNAVAILABLE", 404);
+    if (existing.zone === "EU") return fail("CUSTOMS_DOCUMENT_NOT_REQUIRED", 409);
+    if (existing.status !== "label_ready" || existing.customs_status !== "ready") {
+      return fail("CUSTOMS_DOCUMENT_UNAVAILABLE", 503);
+    }
+    return printableShippingDocumentResponse(
       env,
       dependencies,
       existing,
@@ -518,6 +548,20 @@ async function productionShippingLabelAdminAuthorizedResponse(
       downloadRequestId,
       now,
       200,
+      "customs",
+    );
+  }
+  if (existing?.status === "label_ready") {
+    if (body.kind !== "empty") return fail("INVALID_REQUEST", 400);
+    return printableShippingDocumentResponse(
+      env,
+      dependencies,
+      existing,
+      actor,
+      downloadRequestId,
+      now,
+      200,
+      "label",
     );
   }
   const authorizedFailedRetry = Boolean(
@@ -630,7 +674,10 @@ async function productionShippingLabelAdminAuthorizedResponse(
   const shipmentId = existing?.id ??
     `shipment_${await sha256Hex(`${orderId}\0${idempotencyKey}`)}`;
   const shipmentIdempotencyKey = existing?.idempotency_key ?? idempotencyKey;
-  const fulfillment = new D1FulfillmentStore(env.DB, { shippingLabel: provider });
+  const fulfillment = new D1FulfillmentStore(env.DB, {
+    shippingLabel: provider,
+    operatorLabelRecipientEmail: env.OPERATIONS_LABEL_EMAIL,
+  });
   try {
     const shipment = await fulfillment.createShipmentLabel({
       shipmentId,
@@ -640,7 +687,7 @@ async function productionShippingLabelAdminAuthorizedResponse(
       leaseExpiresAt: new Date(Date.parse(now) + 120_000).toISOString(),
       now,
     });
-    return printableLabelResponse(
+    return printableShippingDocumentResponse(
       env,
       dependencies,
       shipment,
@@ -648,6 +695,7 @@ async function productionShippingLabelAdminAuthorizedResponse(
       downloadRequestId,
       now,
       201,
+      "label",
     );
   } catch (cause) {
     if (cause instanceof FulfillmentError) {

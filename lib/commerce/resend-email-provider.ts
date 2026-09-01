@@ -11,6 +11,9 @@ const PROVIDER_LOOKUP_TIMEOUT_MS = 5_000;
 const SAFE_IDEMPOTENCY_KEY = /^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,255}$/;
 const SAFE_MAILBOX = /^[\x21-\x7e]+@[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$/;
 const SAFE_TAG_VALUE = /^[A-Za-z0-9_-]{1,256}$/;
+const SAFE_ATTACHMENT_NAME = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,126}\.pdf$/;
+const MAX_ATTACHMENT_BASE64_BYTES = 12 * 1024 * 1024;
+const MAX_ATTACHMENTS_BASE64_BYTES = 24 * 1024 * 1024;
 
 export class ResendEmailProviderError extends Error {
   readonly outcome: "invalid-config" | "rejected" | "ambiguous";
@@ -62,7 +65,7 @@ function escapeHtml(value: string): string {
 
 function brandedHtml(content: EmailContent): string {
   const title = escapeHtml(content.subject);
-  const trustedAjLuxuryUrl = /https:\/\/ajluxurystore\.com\/(?:account|terms\?version=[A-Za-z0-9._%+-]{1,80})/g;
+  const trustedAjLuxuryUrl = /https:\/\/ajluxurystore\.com\/(?:account|operations|terms\?version=[A-Za-z0-9._%+-]{1,80})/g;
   let cursor = 0;
   const linked: string[] = [];
   for (const match of content.text.matchAll(trustedAjLuxuryUrl)) {
@@ -159,6 +162,39 @@ function tagValue(value: string): string {
   return safe;
 }
 
+function resendAttachments(
+  attachments: TransactionalEmailDelivery["attachments"],
+): readonly Readonly<{ filename: string; content: string }>[] | undefined {
+  if (attachments === undefined) return undefined;
+  if (attachments.length < 1 || attachments.length > 2) {
+    throw new ResendEmailProviderError("rejected", "Email attachment count is invalid.");
+  }
+  const names = new Set<string>();
+  let totalBytes = 0;
+  const normalized = attachments.map((attachment) => {
+    totalBytes += attachment.contentBase64.length;
+    if (
+      names.has(attachment.filename) ||
+      !SAFE_ATTACHMENT_NAME.test(attachment.filename) ||
+      attachment.contentBase64.length < 8 ||
+      attachment.contentBase64.length > MAX_ATTACHMENT_BASE64_BYTES ||
+      attachment.contentBase64.length % 4 !== 0 ||
+      !/^[A-Za-z0-9+/]+={0,2}$/.test(attachment.contentBase64)
+    ) {
+      throw new ResendEmailProviderError("rejected", "Email attachment is invalid.");
+    }
+    names.add(attachment.filename);
+    return Object.freeze({
+      filename: attachment.filename,
+      content: attachment.contentBase64,
+    });
+  });
+  if (totalBytes > MAX_ATTACHMENTS_BASE64_BYTES) {
+    throw new ResendEmailProviderError("rejected", "Email attachments are too large.");
+  }
+  return Object.freeze(normalized);
+}
+
 function mailboxList(value: unknown): string[] | null {
   if (typeof value === "string") return [value];
   if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) return null;
@@ -240,6 +276,7 @@ export class ResendEmailProvider implements TransactionalEmailProviderPort {
       throw new ResendEmailProviderError("rejected", "Email idempotency key is invalid.");
     }
     const content = parseContent(delivery.message.payloadJson);
+    const attachments = resendAttachments(delivery.attachments);
     // Keep RequestInit and its headers mutable. Cloudflare's native fetch
     // normalizes these objects internally; freezing them can fail before the
     // request ever reaches Resend. The account-email adapter already uses the
@@ -257,6 +294,7 @@ export class ResendEmailProvider implements TransactionalEmailProviderPort {
         subject: content.subject,
         text: content.text,
         html: brandedHtml(content),
+        ...(attachments ? { attachments } : {}),
         ...(this.#replyTo ? { reply_to: this.#replyTo } : {}),
         tags: [
           { name: "kind", value: delivery.message.kind },

@@ -32,8 +32,18 @@ export type EmailOutboxClaim = Readonly<{
 }>;
 
 export type TransactionalEmailDelivery = Readonly<{
-  message: EmailOutboxClaim;
+  message: Readonly<{
+    id: string;
+    kind: string;
+    recipientEmail: string;
+    locale: "fr" | "en";
+    payloadJson: string;
+  }>;
   idempotencyKey: string;
+  attachments?: readonly Readonly<{
+    filename: string;
+    contentBase64: string;
+  }>[];
 }>;
 
 export type TransactionalEmailDeliveryReceipt = Readonly<{

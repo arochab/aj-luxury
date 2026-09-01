@@ -34,6 +34,7 @@
     "0028_even_fallen_one.sql",
     "0029_slippery_ironclad.sql",
     "0030_striped_skin.sql",
-    "0031_failed_shipment_admin_retry.sql"
+    "0031_failed_shipment_admin_retry.sql",
+    "0032_operator_label_email_and_international_activation.sql"
   ]
 }

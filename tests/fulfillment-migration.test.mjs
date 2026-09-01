@@ -14,6 +14,7 @@ import { join, relative } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { readMigrationFiles } from "drizzle-orm/migrator";
+import { DatabaseSync } from "node:sqlite";
 
 const projectRoot = fileURLToPath(new URL("../", import.meta.url));
 const migrationRoot = join(projectRoot, "drizzle");
@@ -57,7 +58,12 @@ const migrationNames = [
   "0029_slippery_ironclad.sql",
   "0030_striped_skin.sql",
   "0031_failed_shipment_admin_retry.sql",
+  "0032_operator_label_email_and_international_activation.sql",
 ];
+const productionMigrationNames = JSON.parse(readFileSync(
+  join(migrationRoot, "production-migrations.json"),
+  "utf8",
+)).ordered;
 const legacyMigrationNames = migrationNames.slice(0, 8);
 // Hosted D1 bootstrap version 1 succeeded with exactly these LF-normalized
 // bytes. From this point onward, every schema change must be additive in a new
@@ -88,7 +94,7 @@ test("the exact Drizzle D1 splitter emits no blank statements", () => {
   assert.equal(migrations.length, migrationNames.length);
   assert.equal(
     migrations.reduce((total, migration) => total + migration.sql.length, 0),
-    658,
+    691,
   );
   for (const [migrationIndex, migration] of migrations.entries()) {
     for (const [statementIndex, statement] of migration.sql.entries()) {
@@ -147,6 +153,62 @@ test("0026 preserves the populated shipping configuration parent", () => {
     /DROP TRIGGER IF EXISTS `trg_shipping_zone_configuration_validate_insert`/,
   );
   assert.match(migration, /PRAGMA foreign_key_check/);
+});
+
+test("0032 preserves an active EU parent and its dependent row while activating international zones", () => {
+  const sqlite = new DatabaseSync(":memory:");
+  try {
+    sqlite.exec("PRAGMA foreign_keys=ON");
+    for (const migrationName of productionMigrationNames.slice(0, -1)) {
+      const migration = readFileSync(join(migrationRoot, migrationName), "utf8");
+      for (const statement of migration.split("--> statement-breakpoint")) {
+        if (statement.trim()) sqlite.exec(statement.trim());
+      }
+    }
+    sqlite.exec(`
+      INSERT INTO shipping_zone_configurations (
+        id,zone,version,status,created_at,updated_at
+      ) VALUES (
+        'config_existing_eu_v1','EU',1,'draft',
+        '2026-09-01T20:40:00.000Z','2026-09-01T20:40:00.000Z'
+      );
+      UPDATE shipping_zone_configurations SET
+        status='active',service_code='sendcloud-dynamic-v3',price_cents=0,
+        estimated_days_min=1,estimated_days_max=10,duties_terms='EU_INCLUDED',
+        parcel_code='AJL_ENVELOPE_3_ITEMS_V1',parcel_weight_grams=350,
+        parcel_length_mm=400,parcel_width_mm=320,parcel_height_mm=40,
+        origin_country_code='CN',customs_hs_code='61071200',
+        activated_at='2026-09-01T20:40:00.001Z',
+        updated_at='2026-09-01T20:40:00.001Z'
+      WHERE id='config_existing_eu_v1';
+      CREATE TABLE migration_parent_proof (
+        id TEXT PRIMARY KEY,
+        configuration_id TEXT NOT NULL REFERENCES shipping_zone_configurations(id)
+      );
+      INSERT INTO migration_parent_proof VALUES ('proof_eu','config_existing_eu_v1');
+    `);
+    const migration = readFileSync(
+      join(migrationRoot, "0032_operator_label_email_and_international_activation.sql"),
+      "utf8",
+    );
+    for (const statement of migration.split("--> statement-breakpoint")) {
+      if (statement.trim()) sqlite.exec(statement.trim());
+    }
+    assert.deepEqual(
+      sqlite.prepare(
+        `SELECT zone,status FROM shipping_zone_configurations
+        WHERE status='active' ORDER BY zone`,
+      ).all().map((row) => ({ ...row })),
+      ["CA", "EU", "GCC", "UK", "US"].map((zone) => ({ zone, status: "active" })),
+    );
+    assert.deepEqual(
+      { ...sqlite.prepare("SELECT * FROM migration_parent_proof").get() },
+      { id: "proof_eu", configuration_id: "config_existing_eu_v1" },
+    );
+    assert.deepEqual(sqlite.prepare("PRAGMA foreign_key_check").all(), []);
+  } finally {
+    sqlite.close();
+  }
 });
 
 function environment(root) {

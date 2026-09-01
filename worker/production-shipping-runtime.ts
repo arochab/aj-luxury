@@ -13,6 +13,7 @@ export type ProductionShippingRuntimeEnvironment = Readonly<{
   DELIVERY_REFERENCE_ENCRYPTION_KEY_BASE64?: string;
   DELIVERY_REFERENCE_KEY_VERSION?: string;
   DELIVERY_REFERENCE_DECRYPTION_KEYS_JSON?: string;
+  OPERATIONS_LABEL_EMAIL?: string;
 }>;
 
 /** Exact provider configuration consumed by the outbound-label route. */
@@ -26,7 +27,8 @@ export function productionOutboundShippingRuntimeConfigured(
     (env.SENDCLOUD_SECRET_KEY?.trim().length ?? 0) > 256 ||
     !/^[1-9]\d{0,17}$/.test(env.SENDCLOUD_SENDER_ADDRESS_ID ?? "") ||
     !Number.isSafeInteger(Number(env.SENDCLOUD_SENDER_ADDRESS_ID)) ||
-    env.SENDCLOUD_SENDER_ADDRESS_ATTESTATION !== BELMONT_ORIGIN_ATTESTATION) {
+    env.SENDCLOUD_SENDER_ADDRESS_ATTESTATION !== BELMONT_ORIGIN_ATTESTATION ||
+    env.OPERATIONS_LABEL_EMAIL !== "jeremy@ajluxurystore.com") {
     return false;
   }
   try {

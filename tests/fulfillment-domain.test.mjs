@@ -42,13 +42,35 @@ const addresses = Object.freeze({
     countryCode: "CA",
     phone: "+14165550123",
   },
+  AE: {
+    recipient: "Mariam Test",
+    line1: "1 Sheikh Zayed Road",
+    city: "Dubai",
+    countryCode: "AE",
+    phone: "+971501234567",
+  },
+  QA: {
+    recipient: "Noura Test",
+    line1: "1 Corniche Street",
+    city: "Doha",
+    countryCode: "QA",
+    phone: "+97433123456",
+  },
+  SA: {
+    recipient: "Faisal Test",
+    line1: "1 King Fahd Road",
+    postalCode: "12271",
+    city: "Riyadh",
+    countryCode: "SA",
+    phone: "+966501234567",
+  },
 });
 
 test("address normalization resolves the controlled EU and international scope deterministically", async () => {
   for (const [zone, input] of Object.entries(addresses)) {
     const first = await normalizeShippingAddress(input);
     const second = await normalizeShippingAddress({ ...input });
-    assert.equal(first.zone, zone);
+    assert.equal(first.zone, ["AE", "QA", "SA"].includes(zone) ? "GCC" : zone);
     assert.equal(first.fingerprint, second.fingerprint);
     assert.equal(first.canonicalJson, second.canonicalJson);
     assert.match(first.fingerprint, /^[0-9a-f]{64}$/);

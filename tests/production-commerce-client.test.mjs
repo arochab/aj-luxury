@@ -448,7 +448,7 @@ test("production UI wiring contains no synthetic payment or hostname switch", as
   assert.match(joined, /MAX_POLLS = 90/);
 });
 
-test("production checkout preserves all EU countries and gates the reviewed international set", async () => {
+test("production checkout exposes the reviewed EU and international launch set", async () => {
   const source = await readFile(
     new URL("../app/checkout/ProductionCheckoutClient.tsx", import.meta.url),
     "utf8",
@@ -463,7 +463,7 @@ test("production checkout preserves all EU countries and gates the reviewed inte
   assert.ok(euCodes.includes("FR"));
   assert.ok(euCodes.includes("DE"));
   assert.ok(euCodes.includes("IE"));
-  assert.match(source, /NEXT_PUBLIC_INTERNATIONAL_SHIPPING_ENABLED === "true"/);
+  assert.match(source, /const internationalCheckoutEnabled = true/);
   assert.match(
     source,
     /const launchCountries = internationalCheckoutEnabled\s*\? Object\.freeze\(\[\.\.\.euLaunchCountries, \.\.\.internationalLaunchCountries\]\)\s*:\s*euLaunchCountries/,

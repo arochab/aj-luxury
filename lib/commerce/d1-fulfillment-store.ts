@@ -190,6 +190,7 @@ export type FulfillmentStorePorts = Readonly<{
   tracking?: TrackingProviderPort;
   refund?: RefundProviderPort;
   transitionOrderToPreparingAfterLabel?: boolean;
+  operatorLabelRecipientEmail?: string;
 }>;
 
 function changed(result: CommerceD1Result<object>): number {
@@ -737,6 +738,16 @@ export class D1FulfillmentStore {
     assertFulfillmentIdentifier(input.idempotencyKey, "idempotencyKey");
     assertFulfillmentIdentifier(input.leaseToken, "leaseToken");
     assertLeaseWindow(input.now, input.leaseExpiresAt);
+    const operatorLabelRecipientEmail = this.#ports.operatorLabelRecipientEmail;
+    if (
+      operatorLabelRecipientEmail !== undefined &&
+      operatorLabelRecipientEmail !== "jeremy@ajluxurystore.com"
+    ) {
+      throw new FulfillmentError(
+        "INVALID_INPUT",
+        "The operator label recipient is invalid.",
+      );
+    }
     const leaseTokenHash = await sha256Hex(input.leaseToken);
     try {
       await this.#database
@@ -997,6 +1008,32 @@ export class D1FulfillmentStore {
             shipment.order_id,
             shipment.id,
           ),
+        ...(operatorLabelRecipientEmail ? [
+          this.#database.prepare(
+            `INSERT OR IGNORE INTO operator_label_email_outbox (
+              id, shipment_id, order_id, recipient_email, status,
+              attempts, max_attempts, next_attempt_at, idempotency_key,
+              created_at, updated_at
+            )
+            SELECT 'operator_label_email_' || shipment.id,
+              shipment.id, shipment.order_id, ?, 'pending',
+              0, 5, ?, 'operator_label_ready:' || shipment.id, ?, ?
+            FROM shipments AS shipment
+            INNER JOIN orders AS customer_order ON customer_order.id=shipment.order_id
+            WHERE ?='jeremy@ajluxurystore.com' AND shipment.id=?
+              AND shipment.status='label_ready'
+              AND shipment.provider_shipment_reference IS NOT NULL
+              AND shipment.tracking_reference IS NOT NULL
+              AND customer_order.status='preparing'`,
+          ).bind(
+            operatorLabelRecipientEmail,
+            input.now,
+            input.now,
+            input.now,
+            operatorLabelRecipientEmail,
+            shipment.id,
+          ),
+        ] : []),
         this.#database
           .prepare(
             `INSERT INTO audit_log (
@@ -1039,11 +1076,14 @@ export class D1FulfillmentStore {
       if (changed(results[0]) !== 1) {
         throw new FulfillmentError("LEASE_UNAVAILABLE", "The shipment lease was lost.");
       }
+      const labelAuditIndex = operatorLabelRecipientEmail ? 4 : 3;
+      const customsAuditIndex = labelAuditIndex + 1;
       if (
         changed(results[2]) !== (transitionOrderToPreparing ? 1 : 0) ||
-        changed(results[3]) !== 1 ||
+        (operatorLabelRecipientEmail && changed(results[3]) !== 1) ||
+        changed(results[labelAuditIndex]) !== 1 ||
         changed(results[1]) !== (international ? 1 : 0) ||
-        changed(results[4]) !== (international ? 1 : 0)
+        changed(results[customsAuditIndex]) !== (international ? 1 : 0)
       ) {
         throw new FulfillmentError(
           "PERSISTENCE_FAILURE",

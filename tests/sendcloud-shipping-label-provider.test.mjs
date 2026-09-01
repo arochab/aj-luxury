@@ -30,10 +30,14 @@ class Statement {
   async first() {
     if (this.query.includes("WHERE shipment.order_id")) {
       const shipment = this.database.existingByOrder ?? this.database.existing ?? null;
-      return shipment ? { order_status: "preparing", ...shipment } : null;
+      return shipment ? {
+        order_status: "preparing", zone: "EU", customs_status: null, ...shipment,
+      } : null;
     }
     if (this.query.includes("WHERE shipment.idempotency_key")) {
-      return this.database.existing ? { order_status: "preparing", ...this.database.existing } : null;
+      return this.database.existing ? {
+        order_status: "preparing", zone: "EU", customs_status: null, ...this.database.existing,
+      } : null;
     }
     if (this.query.includes("FROM shipments AS shipment")) return this.database.context;
     if (this.query.includes("FROM shipping_document_metadata WHERE id")) {
@@ -66,11 +70,12 @@ class Database {
   async batch(statements) {
     for (const statement of statements) {
       if (statement.query.includes("INSERT OR IGNORE INTO shipping_document_metadata")) {
-        const [id, shipment_id, provider_document_reference_hash, content_sha256, byte_length] = statement.values;
+        const [id, shipment_id, document_kind, provider_document_reference_hash,
+          content_sha256, byte_length] = statement.values;
         if (!this.shippingDocuments.has(id)) {
           this.shippingDocuments.set(id, {
             shipment_id,
-            document_kind: "label",
+            document_kind,
             media_type: "application/pdf",
             provider_document_reference_hash,
             content_sha256,
@@ -80,18 +85,20 @@ class Database {
         continue;
       }
       if (statement.query.includes("INSERT OR IGNORE INTO audit_log")) {
-        const [id, actor_id, entity_id, idempotency_key, metadata_json,
-          , documentId, shipmentId, providerHash, contentSha256, byteLength] = statement.values;
+        const [id, actor_id, action, entity_id, idempotency_key, metadata_json,
+          , documentId, shipmentId, documentKind, providerHash, contentSha256,
+          byteLength] = statement.values;
         const document = this.shippingDocuments.get(documentId);
         if (!this.auditLog.has(id) && document &&
           document.shipment_id === shipmentId &&
+          document.document_kind === documentKind &&
           document.provider_document_reference_hash === providerHash &&
           document.content_sha256 === contentSha256 &&
           document.byte_length === byteLength) {
           this.auditLog.set(id, {
             actor_type: "admin",
             actor_id,
-            action: "shipping_label_downloaded",
+            action,
             entity_type: "shipment",
             entity_id,
             idempotency_key,
@@ -427,6 +434,10 @@ const adminEnv = Object.freeze({
   COMMERCE_CONTROLLED_OWNER_EMAIL: "adam@example.com",
   COMMERCE_CONTROLLED_AUTH_HMAC_SECRET: controlledSecret,
   OUTBOUND_SHIPMENT_CREATION_ENABLED: "true",
+  OPERATIONS_LABEL_EMAIL: "jeremy@ajluxurystore.com",
+  INTERNATIONAL_SHIPPING_ENABLED: "true",
+  INTERNATIONAL_SHIPPING_COUNTRIES: "GB,US,CA,AE,QA,SA",
+  INTERNATIONAL_CUSTOMS_POLICY: "DAP|CN|61071200|FR944996487",
   OPERATOR_ADMIN_MFA_ENABLED: "true",
   SENDCLOUD_SENDER_ADDRESS_ID: "12345",
   SENDCLOUD_SENDER_ADDRESS_ATTESTATION: "3 A rue Principale|67130|Belmont|FR",
@@ -479,8 +490,11 @@ test("public live label route passes resolved legal gates but still requires sig
   assert.equal((await response.json()).error.code, "CONTROLLED_ACCESS_REQUIRED");
 });
 
-async function adminRequest(headers = {}, body) {
-  const pathname = "/api/commerce/admin/orders/order_test_1/shipping-label";
+async function adminRequest(
+  headers = {},
+  body,
+  pathname = "/api/commerce/admin/orders/order_test_1/shipping-label",
+) {
   const timestamp = Math.floor(Date.now() / 1000);
   return new Request(
     `https://ajluxurystore.com${pathname}`,
@@ -722,7 +736,7 @@ test("an order-level label-ready replay with a new request key returns the same 
   );
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("Content-Type"), "application/pdf");
-  assert.equal(response.headers.get("Content-Disposition"), 'attachment; filename="AJL-order_test_1-A4.pdf"');
+  assert.equal(response.headers.get("Content-Disposition"), 'attachment; filename="AJL-order_test_1-ETIQUETTE-A4.pdf"');
   assert.equal(response.headers.get("X-AJ-Document-SHA256"), "c".repeat(64));
   assert.deepEqual(requestInput, {
     requestId: "shipment_test_1",
@@ -735,6 +749,73 @@ test("an order-level label-ready replay with a new request key returns the same 
   );
   assert.equal(DB.shippingDocuments.size, 1);
   assert.equal(DB.auditLog.size, 1);
+});
+
+test("a non-EU order exposes its verified customs A4 without creating another parcel", async () => {
+  const DB = new Database(null, []);
+  DB.existing = {
+    id: "shipment_test_1",
+    order_id: "order_test_1",
+    status: "label_ready",
+    attempts: 1,
+    provider_shipment_reference: "383707309",
+    tracking_reference: "3S123456789",
+    zone: "US",
+    customs_status: "ready",
+  };
+  const pdf = new Blob([
+    new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x37]),
+  ], { type: "application/pdf" });
+  let requestInput;
+  let labelCreations = 0;
+  const response = await productionShippingLabelAdminReleaseCoreResponse(
+    await adminRequest(
+      {
+        "Idempotency-Key": "operator-customs:order_test_1",
+        "X-AJ-Download-Request-Id": "customs-download:test:0001",
+      },
+      undefined,
+      "/api/commerce/admin/orders/order_test_1/customs-document",
+    ),
+    { ...adminEnv, DB },
+    "https://ajluxurystore.com",
+    {
+      authorizeControlledOwner: async () => true,
+      authorizeOwner: async () => ({ administratorId: "admin_owner_1", sessionId: "session_owner_1" }),
+      shippingLabelProvider: {
+        async createLabel() {
+          labelCreations += 1;
+          throw new Error("must not create a parcel");
+        },
+      },
+      shippingDocuments: {
+        async document(input) {
+          requestInput = input;
+          return {
+            providerDocumentReference: "sendcloud:parcel:383707309:document:customs",
+            mediaType: "application/pdf",
+            contentSha256: "e".repeat(64),
+            byteLength: pdf.size,
+            content: pdf,
+          };
+        },
+      },
+    },
+  );
+  assert.equal(response.status, 200);
+  assert.equal(labelCreations, 0);
+  assert.equal(response.headers.get("X-AJ-Document-Kind"), "customs");
+  assert.equal(
+    response.headers.get("Content-Disposition"),
+    'attachment; filename="AJL-order_test_1-DOUANE-A4.pdf"',
+  );
+  assert.deepEqual(requestInput, {
+    requestId: "shipment_test_1",
+    providerParcelReference: "383707309",
+    documentKind: "customs",
+  });
+  assert.equal([...DB.shippingDocuments.values()][0].document_kind, "customs");
+  assert.equal([...DB.auditLog.values()][0].action, "customs_document_downloaded");
 });
 
 test("a changed printable document for the same provider reference is blocked and not audited", async () => {

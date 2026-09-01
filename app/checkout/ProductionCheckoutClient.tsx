@@ -52,8 +52,10 @@ const internationalLaunchCountries = Object.freeze([
   ["GB", "Royaume-Uni"], ["US", "États-Unis"], ["CA", "Canada"],
   ["AE", "Émirats arabes unis"], ["QA", "Qatar"], ["SA", "Arabie saoudite"],
 ] as const);
-const internationalCheckoutEnabled =
-  process.env.NEXT_PUBLIC_INTERNATIONAL_SHIPPING_ENABLED === "true";
+// The reviewed launch scope includes these six non-EU destinations. The
+// Worker remains the final authority and still fails closed if its provider,
+// customs or active-zone evidence is incomplete.
+const internationalCheckoutEnabled = true;
 const launchCountries = internationalCheckoutEnabled
   ? Object.freeze([...euLaunchCountries, ...internationalLaunchCountries])
   : euLaunchCountries;

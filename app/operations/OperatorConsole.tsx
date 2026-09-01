@@ -14,6 +14,9 @@ type Order = Readonly<{
     id: string;
     status: string | null;
     retryAllowed: boolean;
+    labelEmailStatus: string | null;
+    zone: string | null;
+    customsStatus: string | null;
   }> | null;
   emails: Readonly<{
     orderConfirmation: string | null;
@@ -51,6 +54,8 @@ type OrderDetail = Readonly<{
     status: string | null;
     trackingProviderCode: string | null;
     trackingReference: string | null;
+    zone: string | null;
+    customsStatus: string | null;
   }> | null;
 }>;
 
@@ -141,7 +146,17 @@ function deliveryLabel(order: Order): string {
   if (order.status === "refunded") return "commande remboursée — ne pas expédier";
   if (!order.shipment) return "aucune étiquette créée";
   if (order.shipment.status === "label_pending") return "création d’étiquette en cours";
-  if (order.shipment.status === "label_ready") return "étiquette prête";
+  if (order.shipment.status === "label_ready") {
+    if (order.shipment.labelEmailStatus === "sent") {
+      return order.shipment.zone === "EU"
+        ? "étiquette A4 prête · envoyée par e-mail"
+        : "étiquette + douane A4 prêtes · envoyées par e-mail";
+    }
+    if (order.shipment.labelEmailStatus === "failed") {
+      return "étiquette prête · e-mail à vérifier";
+    }
+    return "étiquette prête · e-mail en cours";
+  }
   if (["handed_over", "in_transit"].includes(order.shipment.status ?? "")) {
     return "remise transporteur confirmée";
   }
@@ -156,6 +171,11 @@ function deliveryLabel(order: Order): string {
 function labelReadyForFulfillment(order: Order): boolean {
   return ["paid", "preparing"].includes(order.status) &&
     order.shipment?.status === "label_ready";
+}
+
+function customsReadyForFulfillment(order: Order): boolean {
+  return labelReadyForFulfillment(order) && order.shipment?.zone !== "EU" &&
+    order.shipment?.customsStatus === "ready";
 }
 
 function invoiceAvailable(order: Order): boolean {
@@ -259,9 +279,16 @@ export default function OperatorConsole() {
     return () => window.clearTimeout(task);
   }, [load]);
 
-  async function downloadLabel(order: Order, csrfToken: string, recipientPhone?: string) {
+  async function downloadShippingDocument(
+    order: Order,
+    csrfToken: string,
+    documentKind: "label" | "customs" = "label",
+    recipientPhone?: string,
+  ) {
     const retrying = Boolean(recipientPhone);
-    if (retrying ? !order.shipment?.retryAllowed : !labelReadyForFulfillment(order)) return;
+    if (documentKind === "customs" && !customsReadyForFulfillment(order)) return;
+    if (documentKind === "label" &&
+      (retrying ? !order.shipment?.retryAllowed : !labelReadyForFulfillment(order))) return;
     if (retrying && !window.confirm(
       `Créer une seule étiquette pour ${order.orderNumber} avec ce téléphone destinataire ? Cette action peut facturer l’affranchissement sélectionné par le client.`,
     )) return;
@@ -269,14 +296,16 @@ export default function OperatorConsole() {
     setActionError(null);
     try {
       const response = await fetch(
-        `/api/commerce/admin/orders/${encodeURIComponent(order.orderId)}/shipping-label`,
+        `/api/commerce/admin/orders/${encodeURIComponent(order.orderId)}/${
+          documentKind === "label" ? "shipping-label" : "customs-document"
+        }`,
         {
           method: "POST",
           credentials: "same-origin",
           headers: {
             "X-CSRF-Token": csrfToken,
-            "Idempotency-Key": `operator-label:${order.orderId}`,
-            "X-AJ-Download-Request-Id": `label-download:${crypto.randomUUID()}`,
+            "Idempotency-Key": `operator-${documentKind}:${order.orderId}`,
+            "X-AJ-Download-Request-Id": `${documentKind}-download:${crypto.randomUUID()}`,
             ...(retrying ? { "Content-Type": "application/json" } : {}),
           },
           ...(retrying ? { body: JSON.stringify({ recipientPhone }) } : {}),
@@ -288,7 +317,8 @@ export default function OperatorConsole() {
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `AJL-${order.orderNumber}-A4.pdf`;
+      const documentLabel = documentKind === "label" ? "ETIQUETTE" : "DOUANE";
+      link.download = `AJL-${order.orderNumber}-${documentLabel}-A4.pdf`;
       link.click();
       URL.revokeObjectURL(url);
       await load();
@@ -298,7 +328,9 @@ export default function OperatorConsole() {
         ? "Résultat transporteur à vérifier. Ne recliquez pas : aucune deuxième étiquette ne doit être créée."
         : code === "SHIPMENT_RETRY_ALREADY_USED"
           ? "La relance unique a déjà été consommée. Vérifiez le transporteur avant toute autre action."
-          : "L’étiquette n’a pas pu être récupérée. Aucune deuxième création n’a été lancée.");
+          : documentKind === "customs"
+            ? "Le document douanier n’a pas pu être récupéré. L’expédition existante n’a pas été modifiée."
+            : "L’étiquette n’a pas pu être récupérée. Aucune deuxième création n’a été lancée.");
     } finally {
       setBusyOrder(null);
     }
@@ -484,7 +516,8 @@ export default function OperatorConsole() {
         <h1>Commandes et expéditions</h1>
         <p className={styles.summary}>
           {actionableOrders.length} commande(s) à préparer sur {orders.length} commande(s) suivie(s).<br />
-          Quand l’étiquette est prête, vérifiez les articles, imprimez l’A4, puis confirmez la remise physique au transporteur.
+          Pour chaque commande, l’étiquette A4 est envoyée automatiquement à jeremy@ajluxurystore.com. Hors UE, le document douanier A4 est joint au même e-mail.<br />
+          Les mêmes documents restent téléchargeables ici, sans créer un deuxième colis. Vérifiez les articles, imprimez les documents requis, puis confirmez la remise physique au transporteur.
         </p>
 
         <aside className={styles.documentGuide} aria-labelledby="document-guide-title">
@@ -498,8 +531,12 @@ export default function OperatorConsole() {
               </dd>
             </div>
             <div>
-              <dt>Étiquette transporteur A4</dt>
-              <dd>Document d’expédition à imprimer puis à coller sur le colis. Ce n’est pas une facture.</dd>
+              <dt>Documents d’expédition A4</dt>
+              <dd>
+                L’étiquette transporteur est envoyée automatiquement par e-mail à Jérémy pour chaque commande.
+                Pour une destination hors UE, le document douanier est joint au même e-mail. Les documents restent ici
+                comme solution de secours : les retélécharger ne recrée jamais d’expédition. Ce n’est pas une facture.
+              </dd>
             </div>
           </dl>
         </aside>
@@ -518,7 +555,7 @@ export default function OperatorConsole() {
             <div className={styles.tableHeader} role="row">
               <span role="columnheader">Commande</span>
               <span role="columnheader">Paiement</span>
-              <span role="columnheader">E-mails</span>
+              <span role="columnheader">E-mails client</span>
               <span role="columnheader">Livraison</span>
               <span role="columnheader">Montant</span>
               <span role="columnheader">Actions</span>
@@ -559,9 +596,23 @@ export default function OperatorConsole() {
                           className={styles.download}
                           type="button"
                           disabled={busyOrder !== null || busyHandover !== null}
-                          onClick={() => void downloadLabel(order, state.csrfToken)}
+                          onClick={() => void downloadShippingDocument(order, state.csrfToken)}
                         >
                           {busyOrder === order.orderId ? "Récupération…" : "Télécharger l’étiquette transporteur A4"}
+                        </button>
+                      ) : null}
+                      {customsReadyForFulfillment(order) ? (
+                        <button
+                          className={styles.download}
+                          type="button"
+                          disabled={busyOrder !== null || busyHandover !== null}
+                          onClick={() => void downloadShippingDocument(
+                            order,
+                            state.csrfToken,
+                            "customs",
+                          )}
+                        >
+                          {busyOrder === order.orderId ? "Récupération…" : "Télécharger le document douanier A4"}
                         </button>
                       ) : null}
                       {order.shipment?.retryAllowed ? (
@@ -586,9 +637,10 @@ export default function OperatorConsole() {
                             type="button"
                             disabled={busyOrder !== null ||
                               !/^\+[1-9]\d{7,14}$/.test(recipientPhones[order.orderId] ?? "")}
-                            onClick={() => void downloadLabel(
+                            onClick={() => void downloadShippingDocument(
                               order,
                               state.csrfToken,
+                              "label",
                               recipientPhones[order.orderId],
                             )}
                           >
