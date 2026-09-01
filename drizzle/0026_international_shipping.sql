@@ -1,57 +1,15 @@
--- Additive international foundation. No international zone is activated by
+-- Additive international hardening. No international zone is activated by
 -- this migration; production remains EU-only until the runtime kill switch and
--- a reviewed active configuration are both present.
-PRAGMA foreign_keys=OFF;--> statement-breakpoint
-PRAGMA legacy_alter_table=ON;--> statement-breakpoint
-CREATE TABLE `__new_shipping_zone_configurations` (
-  `id` text PRIMARY KEY NOT NULL,
-  `zone` text NOT NULL,
-  `version` integer NOT NULL,
-  `status` text DEFAULT 'draft' NOT NULL,
-  `service_code` text,
-  `price_cents` integer,
-  `currency` text DEFAULT 'EUR' NOT NULL,
-  `estimated_days_min` integer,
-  `estimated_days_max` integer,
-  `duties_terms` text,
-  `parcel_code` text,
-  `parcel_weight_grams` integer,
-  `parcel_length_mm` integer,
-  `parcel_width_mm` integer,
-  `parcel_height_mm` integer,
-  `origin_country_code` text,
-  `customs_hs_code` text,
-  `activated_at` text,
-  `retired_at` text,
-  `created_at` text NOT NULL,
-  `updated_at` text NOT NULL,
-  CONSTRAINT `ck_shipping_zone_configurations_zone`
-    CHECK (`zone` IN ('EU','UK','US','CA','GCC')),
-  CONSTRAINT `ck_shipping_zone_configurations_status`
-    CHECK (`status` IN ('draft','active','retired')),
-  CONSTRAINT `ck_shipping_zone_configurations_version` CHECK (`version` > 0),
-  CONSTRAINT `ck_shipping_zone_configurations_currency` CHECK (`currency` = 'EUR'),
-  CONSTRAINT `ck_shipping_zone_configurations_price` CHECK (`price_cents` IS NULL OR `price_cents` >= 0),
-  CONSTRAINT `ck_shipping_zone_configurations_delays` CHECK (
-    (`estimated_days_min` IS NULL AND `estimated_days_max` IS NULL)
-    OR (`estimated_days_min` > 0 AND `estimated_days_max` >= `estimated_days_min`)
-  ),
-  CONSTRAINT `ck_shipping_zone_configurations_duties`
-    CHECK (`duties_terms` IS NULL OR `duties_terms` IN ('EU_INCLUDED','DAP','DDP')),
-  CONSTRAINT `ck_shipping_zone_configurations_parcel` CHECK (
-    (`parcel_weight_grams` IS NULL AND `parcel_length_mm` IS NULL
-      AND `parcel_width_mm` IS NULL AND `parcel_height_mm` IS NULL)
-    OR (`parcel_weight_grams` > 0 AND `parcel_length_mm` > 0
-      AND `parcel_width_mm` > 0 AND `parcel_height_mm` > 0)
-  )
-);--> statement-breakpoint
-INSERT INTO `__new_shipping_zone_configurations` SELECT * FROM `shipping_zone_configurations`;--> statement-breakpoint
-DROP TABLE `shipping_zone_configurations`;--> statement-breakpoint
-ALTER TABLE `__new_shipping_zone_configurations` RENAME TO `shipping_zone_configurations`;--> statement-breakpoint
-CREATE UNIQUE INDEX `ux_shipping_zone_configurations_version`
-  ON `shipping_zone_configurations` (`zone`,`version`);--> statement-breakpoint
-CREATE UNIQUE INDEX `ux_shipping_zone_configurations_active`
-  ON `shipping_zone_configurations` (`zone`) WHERE `status`='active';--> statement-breakpoint
+-- a reviewed active configuration are both present. The existing parent table
+-- is deliberately preserved because historical shipping quotes reference it.
+-- GCC remains physically schema-gated until a separate maintenance migration
+-- can rebuild the parent and its references under an explicit approval.
+DROP TRIGGER IF EXISTS `trg_shipping_zone_configuration_validate_insert`;--> statement-breakpoint
+DROP TRIGGER IF EXISTS `trg_shipping_zone_configuration_validate_activation`;--> statement-breakpoint
+DROP TRIGGER IF EXISTS `trg_shipping_zone_configuration_transition`;--> statement-breakpoint
+DROP TRIGGER IF EXISTS `trg_shipping_zone_configuration_validate_update_timestamp`;--> statement-breakpoint
+DROP TRIGGER IF EXISTS `trg_shipping_zone_configuration_state_shape`;--> statement-breakpoint
+DROP TRIGGER IF EXISTS `trg_shipping_zone_configuration_retain`;--> statement-breakpoint
 
 CREATE TRIGGER `trg_shipping_zone_configuration_validate_insert`
 BEFORE INSERT ON `shipping_zone_configurations`
@@ -298,7 +256,5 @@ WHEN OLD.`status`<>NEW.`status` AND NOT (
 )
 BEGIN SELECT RAISE(ABORT,'commerce_invalid_order_transition'); END;--> statement-breakpoint
 
-PRAGMA legacy_alter_table=OFF;--> statement-breakpoint
-PRAGMA foreign_keys=ON;--> statement-breakpoint
 PRAGMA foreign_key_check;--> statement-breakpoint
 PRAGMA optimize;

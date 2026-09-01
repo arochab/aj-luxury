@@ -6504,7 +6504,7 @@
       "checkConstraints": {
         "ck_shipping_zone_configurations_zone": {
           "name": "ck_shipping_zone_configurations_zone",
-          "value": "\"shipping_zone_configurations\".\"zone\" IN ('EU', 'UK', 'US', 'CA', 'GCC')"
+          "value": "\"shipping_zone_configurations\".\"zone\" IN ('EU', 'UK', 'US', 'CA')"
         },
         "ck_shipping_zone_configurations_status": {
           "name": "ck_shipping_zone_configurations_status",

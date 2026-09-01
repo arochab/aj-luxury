@@ -1399,7 +1399,7 @@ export const shippingZoneConfigurations = sqliteTable(
   "shipping_zone_configurations",
   {
     id: text("id").primaryKey(),
-    zone: text("zone", { enum: ["EU", "UK", "US", "CA", "GCC"] }).notNull(),
+    zone: text("zone", { enum: ["EU", "UK", "US", "CA"] }).notNull(),
     version: integer("version").notNull(),
     status: text("status", { enum: ["draft", "active", "retired"] })
       .notNull()
@@ -1434,7 +1434,7 @@ export const shippingZoneConfigurations = sqliteTable(
       .where(sql`${table.status} = 'active'`),
     check(
       "ck_shipping_zone_configurations_zone",
-      sql`${table.zone} IN ('EU', 'UK', 'US', 'CA', 'GCC')`,
+      sql`${table.zone} IN ('EU', 'UK', 'US', 'CA')`,
     ),
     check(
       "ck_shipping_zone_configurations_status",

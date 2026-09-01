@@ -84,7 +84,7 @@ test("the exact Drizzle D1 splitter emits no blank statements", () => {
   assert.equal(migrations.length, migrationNames.length);
   assert.equal(
     migrations.reduce((total, migration) => total + migration.sql.length, 0),
-    604,
+    600,
   );
   for (const [migrationIndex, migration] of migrations.entries()) {
     for (const [statementIndex, statement] of migration.sql.entries()) {
@@ -127,6 +127,23 @@ test("every trigger is compatible with the Sites D1 statement ingester", () => {
       `${triggerName ?? "unnamed trigger"} must end with the sole END; terminator`,
     );
   }
+});
+
+test("0026 preserves the populated shipping configuration parent", () => {
+  const migration = readFileSync(
+    join(migrationRoot, "0026_international_shipping.sql"),
+    "utf8",
+  );
+  assert.doesNotMatch(
+    migration,
+    /DROP TABLE `shipping_zone_configurations`|__new_shipping_zone_configurations/,
+  );
+  assert.doesNotMatch(migration, /PRAGMA foreign_keys\s*=\s*OFF/i);
+  assert.match(
+    migration,
+    /DROP TRIGGER IF EXISTS `trg_shipping_zone_configuration_validate_insert`/,
+  );
+  assert.match(migration, /PRAGMA foreign_key_check/);
 });
 
 function environment(root) {
