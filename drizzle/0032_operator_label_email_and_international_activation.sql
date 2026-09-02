@@ -77,8 +77,22 @@ CREATE UNIQUE INDEX `ux_operator_label_email_idempotency` ON `operator_label_ema
 CREATE UNIQUE INDEX `ux_operator_label_email_provider_message` ON `operator_label_email_outbox` (`provider_message_id`) WHERE "operator_label_email_outbox"."provider_message_id" IS NOT NULL;--> statement-breakpoint
 CREATE UNIQUE INDEX `ux_operator_label_email_active_lease` ON `operator_label_email_outbox` (`lease_token_hash`) WHERE "operator_label_email_outbox"."lease_token_hash" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX `idx_operator_label_email_claim` ON `operator_label_email_outbox` (`status`,`next_attempt_at`,`created_at`);--> statement-breakpoint
-PRAGMA foreign_keys=OFF;--> statement-breakpoint
+-- D1 applies a migration inside one transaction. Foreign-key enforcement cannot
+-- be disabled after that transaction starts. We therefore defer validation and
+-- temporarily move the parent primary keys out of the child-key namespace before
+-- dropping the old table. That prevents DROP TABLE from applying an implicit
+-- delete to the 71 historical shipping-quote references. The canonical keys are
+-- restored before enforcement is made immediate again.
+PRAGMA defer_foreign_keys=ON;--> statement-breakpoint
 PRAGMA legacy_alter_table=ON;--> statement-breakpoint
+DROP TRIGGER IF EXISTS `trg_shipping_zone_configuration_validate_insert`;--> statement-breakpoint
+DROP TRIGGER IF EXISTS `trg_shipping_zone_configuration_validate_activation`;--> statement-breakpoint
+DROP TRIGGER IF EXISTS `trg_shipping_zone_configuration_transition`;--> statement-breakpoint
+DROP TRIGGER IF EXISTS `trg_shipping_zone_configuration_validate_update_timestamp`;--> statement-breakpoint
+DROP TRIGGER IF EXISTS `trg_shipping_zone_configuration_state_shape`;--> statement-breakpoint
+DROP TRIGGER IF EXISTS `trg_shipping_zone_configuration_retain`;--> statement-breakpoint
+UPDATE `shipping_zone_configurations`
+SET `id`='__ajl_0032_parent_move__' || `id`;--> statement-breakpoint
 CREATE TABLE `__new_shipping_zone_configurations` (
 	`id` text PRIMARY KEY NOT NULL,
 	`zone` text NOT NULL,
@@ -124,8 +138,10 @@ CREATE TABLE `__new_shipping_zone_configurations` (
 INSERT INTO `__new_shipping_zone_configurations`("id", "zone", "version", "status", "service_code", "price_cents", "currency", "estimated_days_min", "estimated_days_max", "duties_terms", "parcel_code", "parcel_weight_grams", "parcel_length_mm", "parcel_width_mm", "parcel_height_mm", "origin_country_code", "customs_hs_code", "activated_at", "retired_at", "created_at", "updated_at") SELECT "id", "zone", "version", "status", "service_code", "price_cents", "currency", "estimated_days_min", "estimated_days_max", "duties_terms", "parcel_code", "parcel_weight_grams", "parcel_length_mm", "parcel_width_mm", "parcel_height_mm", "origin_country_code", "customs_hs_code", "activated_at", "retired_at", "created_at", "updated_at" FROM `shipping_zone_configurations`;--> statement-breakpoint
 DROP TABLE `shipping_zone_configurations`;--> statement-breakpoint
 ALTER TABLE `__new_shipping_zone_configurations` RENAME TO `shipping_zone_configurations`;--> statement-breakpoint
+UPDATE `shipping_zone_configurations`
+SET `id`=substr(`id`,length('__ajl_0032_parent_move__') + 1)
+WHERE `id` LIKE '__ajl_0032_parent_move__%';--> statement-breakpoint
 PRAGMA legacy_alter_table=OFF;--> statement-breakpoint
-PRAGMA foreign_keys=ON;--> statement-breakpoint
 CREATE UNIQUE INDEX `ux_shipping_zone_configurations_version` ON `shipping_zone_configurations` (`zone`,`version`);--> statement-breakpoint
 CREATE UNIQUE INDEX `ux_shipping_zone_configurations_active` ON `shipping_zone_configurations` (`zone`) WHERE "shipping_zone_configurations"."status" = 'active';
 --> statement-breakpoint
@@ -313,6 +329,10 @@ BEGIN
     NEW.`terminal_at`
   );
 END;
+--> statement-breakpoint
+PRAGMA foreign_key_check;
+--> statement-breakpoint
+PRAGMA defer_foreign_keys=OFF;
 --> statement-breakpoint
 PRAGMA foreign_key_check;
 --> statement-breakpoint

@@ -94,7 +94,7 @@ test("the exact Drizzle D1 splitter emits no blank statements", () => {
   assert.equal(migrations.length, migrationNames.length);
   assert.equal(
     migrations.reduce((total, migration) => total + migration.sql.length, 0),
-    691,
+    700,
   );
   for (const [migrationIndex, migration] of migrations.entries()) {
     for (const [statementIndex, statement] of migration.sql.entries()) {
@@ -183,16 +183,32 @@ test("0032 preserves an active EU parent and its dependent row while activating 
       WHERE id='config_existing_eu_v1';
       CREATE TABLE migration_parent_proof (
         id TEXT PRIMARY KEY,
-        configuration_id TEXT NOT NULL REFERENCES shipping_zone_configurations(id)
+        configuration_id TEXT NOT NULL
+          REFERENCES shipping_zone_configurations(id) ON DELETE RESTRICT
       );
-      INSERT INTO migration_parent_proof VALUES ('proof_eu','config_existing_eu_v1');
+      WITH RECURSIVE proof_number(value) AS (
+        SELECT 1 UNION ALL SELECT value + 1 FROM proof_number WHERE value < 71
+      )
+      INSERT INTO migration_parent_proof
+      SELECT 'proof_eu_' || value,'config_existing_eu_v1' FROM proof_number;
     `);
     const migration = readFileSync(
       join(migrationRoot, "0032_operator_label_email_and_international_activation.sql"),
       "utf8",
     );
-    for (const statement of migration.split("--> statement-breakpoint")) {
-      if (statement.trim()) sqlite.exec(statement.trim());
+    assert.match(migration, /PRAGMA defer_foreign_keys\s*=\s*ON/i);
+    assert.match(migration, /PRAGMA defer_foreign_keys\s*=\s*OFF/i);
+    assert.doesNotMatch(migration, /PRAGMA foreign_keys\s*=\s*OFF/i);
+    assert.match(migration, /__ajl_0032_parent_move__/);
+    sqlite.exec("BEGIN IMMEDIATE");
+    try {
+      for (const statement of migration.split("--> statement-breakpoint")) {
+        if (statement.trim()) sqlite.exec(statement.trim());
+      }
+      sqlite.exec("COMMIT");
+    } catch (error) {
+      sqlite.exec("ROLLBACK");
+      throw error;
     }
     assert.deepEqual(
       sqlite.prepare(
@@ -202,13 +218,79 @@ test("0032 preserves an active EU parent and its dependent row while activating 
       ["CA", "EU", "GCC", "UK", "US"].map((zone) => ({ zone, status: "active" })),
     );
     assert.deepEqual(
-      { ...sqlite.prepare("SELECT * FROM migration_parent_proof").get() },
-      { id: "proof_eu", configuration_id: "config_existing_eu_v1" },
+      { ...sqlite.prepare(`SELECT COUNT(*) AS count,
+        COUNT(DISTINCT configuration_id) AS configuration_count,
+        MIN(configuration_id) AS configuration_id
+        FROM migration_parent_proof`).get() },
+      { count: 71, configuration_count: 1, configuration_id: "config_existing_eu_v1" },
     );
     assert.deepEqual(sqlite.prepare("PRAGMA foreign_key_check").all(), []);
   } finally {
     sqlite.close();
   }
+});
+
+test("real local D1 upgrades populated 0031 to 0032 without losing 71 historical references", (t) => {
+  assert.ok(existsSync(wranglerCli), "local Wrangler must be installed");
+  const proofParent = join(projectRoot, ".test-proofs");
+  mkdirSync(proofParent, { recursive: true });
+  const proofRoot = mkdtempSync(join(proofParent, "migration-0032-"));
+  assert.ok(!relative(projectRoot, proofRoot).startsWith(".."));
+  t.after(() => rmSync(proofRoot, { recursive: true, force: true, maxRetries: 5 }));
+
+  const configPath = createConfig(proofRoot, productionMigrationNames.slice(0, -1));
+  const state = join(proofRoot, "state");
+  mkdirSync(state, { recursive: true });
+  apply(proofRoot, configPath, state);
+  query(proofRoot, configPath, state, `
+    INSERT INTO shipping_zone_configurations (
+      id,zone,version,status,created_at,updated_at
+    ) VALUES (
+      'config_existing_eu_v1','EU',1,'draft',
+      '2026-09-01T20:40:00.000Z','2026-09-01T20:40:00.000Z'
+    );
+    UPDATE shipping_zone_configurations SET
+      status='active',service_code='sendcloud-dynamic-v3',price_cents=0,
+      estimated_days_min=1,estimated_days_max=10,duties_terms='EU_INCLUDED',
+      parcel_code='AJL_ENVELOPE_3_ITEMS_V1',parcel_weight_grams=350,
+      parcel_length_mm=400,parcel_width_mm=320,parcel_height_mm=40,
+      origin_country_code='CN',customs_hs_code='61071200',
+      activated_at='2026-09-01T20:40:00.001Z',
+      updated_at='2026-09-01T20:40:00.001Z'
+    WHERE id='config_existing_eu_v1';
+    CREATE TABLE migration_parent_proof (
+      id TEXT PRIMARY KEY,
+      configuration_id TEXT NOT NULL
+        REFERENCES shipping_zone_configurations(id) ON DELETE RESTRICT
+    );
+    WITH RECURSIVE proof_number(value) AS (
+      SELECT 1 UNION ALL SELECT value + 1 FROM proof_number WHERE value < 71
+    )
+    INSERT INTO migration_parent_proof
+    SELECT 'proof_eu_' || value,'config_existing_eu_v1' FROM proof_number;
+  `);
+  copyFileSync(
+    join(migrationRoot, productionMigrationNames.at(-1)),
+    join(proofRoot, "migrations", productionMigrationNames.at(-1)),
+  );
+  apply(proofRoot, configPath, state);
+
+  assert.equal(
+    query(proofRoot, configPath, state,
+      "SELECT COUNT(*) AS count FROM migration_parent_proof")[0].count,
+    71,
+  );
+  assert.deepEqual(
+    query(proofRoot, configPath, state,
+      "SELECT zone,status FROM shipping_zone_configurations WHERE status='active' ORDER BY zone"),
+    ["CA", "EU", "GCC", "UK", "US"].map((zone) => ({ zone, status: "active" })),
+  );
+  assert.deepEqual(query(proofRoot, configPath, state, "PRAGMA foreign_key_check"), []);
+  assert.equal(
+    query(proofRoot, configPath, state,
+      "SELECT name FROM d1_migrations ORDER BY id DESC LIMIT 1")[0].name,
+    productionMigrationNames.at(-1),
+  );
 });
 
 function environment(root) {
