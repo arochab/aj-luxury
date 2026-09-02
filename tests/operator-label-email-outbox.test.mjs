@@ -31,8 +31,17 @@ function fixture(zone = "EU") {
   const sqlite = new DatabaseSync(":memory:");
   sqlite.exec(`
     CREATE TABLE orders (
-      id TEXT PRIMARY KEY, order_number TEXT NOT NULL, total_cents INTEGER NOT NULL,
-      currency TEXT NOT NULL, status TEXT NOT NULL
+      id TEXT PRIMARY KEY, order_number TEXT NOT NULL,
+      subtotal_cents INTEGER NOT NULL, discount_cents INTEGER NOT NULL,
+      promotion_code TEXT, promotion_discount_cents INTEGER NOT NULL,
+      shipping_cents INTEGER NOT NULL, total_cents INTEGER NOT NULL,
+      currency TEXT NOT NULL, status TEXT NOT NULL, paid_at TEXT NOT NULL
+    );
+    CREATE TABLE order_lines (
+      id TEXT PRIMARY KEY, order_id TEXT NOT NULL, internal_reference TEXT NOT NULL,
+      product_name TEXT NOT NULL, color_name TEXT NOT NULL, size TEXT NOT NULL,
+      quantity INTEGER NOT NULL, unit_price_cents INTEGER NOT NULL,
+      line_total_cents INTEGER NOT NULL
     );
     CREATE TABLE shipments (
       id TEXT PRIMARY KEY, order_id TEXT NOT NULL, status TEXT NOT NULL,
@@ -56,8 +65,15 @@ function fixture(zone = "EU") {
   `);
   const now = "2026-09-01T20:50:00.000Z";
   sqlite.prepare(
-    "INSERT INTO orders VALUES (?,?,?,?,?)",
-  ).run("order_1", "AJ-TEST0000000000000001", 5503, "EUR", "preparing");
+    "INSERT INTO orders VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+  ).run(
+    "order_1", "AJ-TEST0000000000000001", 5998, 995, null, 0,
+    500, 5503, "EUR", "preparing", now,
+  );
+  sqlite.prepare("INSERT INTO order_lines VALUES (?,?,?,?,?,?,?,?,?)").run(
+    "line_1", "order_1", "AJ-APOLLON-POURPRE-M", "Apollon",
+    "Pourpre Impérial", "M", 2, 2999, 5998,
+  );
   sqlite.prepare("INSERT INTO shipping_zone_configurations VALUES (?,?)")
     .run("config_1", zone);
   sqlite.prepare("INSERT INTO shipping_quotes VALUES (?,?)").run("quote_1", "config_1");
@@ -129,6 +145,14 @@ test("one ready shipment sends one A4 PDF to Jérémy and never creates a duplic
   assert.equal(calls[0].idempotencyKey, "operator_label_ready:shipment_1");
   assert.equal(calls[0].attachments[0].filename, "AJL-AJ-TEST0000000000000001-ETIQUETTE-A4.pdf");
   assert.equal(Buffer.from(calls[0].attachments[0].contentBase64, "base64").compare(pdf), 0);
+  const payload = JSON.parse(calls[0].message.payloadJson);
+  assert.equal(payload.subject, "AJ Luxury — paiement reçu + étiquette A4 — AJ-TEST0000000000000001");
+  assert.match(payload.text, /Le paiement de la commande AJ-TEST0000000000000001 a bien été reçu/);
+  assert.match(payload.text, /2 × Apollon — Pourpre Impérial — taille M — réf\. AJ-APOLLON-POURPRE-M/);
+  assert.match(payload.text, /Sous-total articles : 59,98/);
+  assert.match(payload.text, /Remises : −9,95/);
+  assert.match(payload.text, /Livraison : 5,00/);
+  assert.match(payload.text, /Total payé : 55,03/);
   assert.match(calls[0].message.payloadJson, /L’étiquette transporteur au format A4 est jointe directement/);
   const stored = context.sqlite.prepare(
     "SELECT status,attempts,provider_message_id,attachment_sha256,attachment_byte_length,attachment_count FROM operator_label_email_outbox",

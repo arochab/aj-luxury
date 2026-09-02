@@ -10,6 +10,8 @@ const SAFE_TRACKING_REFERENCE = /^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,191}$/;
 const SAFE_PROVIDER_REFERENCE = /^[1-9]\d{0,18}$/;
 const SAFE_PROVIDER_MESSAGE = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,191}$/;
 const SAFE_ORDER_NUMBER = /^[A-Z0-9][A-Z0-9-]{0,80}$/;
+const SAFE_ITEM_REFERENCE = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,80}$/;
+const SAFE_PROMOTION_CODE = /^[A-Z0-9][A-Z0-9_-]{2,31}$/;
 const RETRY_SECONDS = Object.freeze([60, 300, 1_800, 7_200] as const);
 
 type Candidate = Readonly<{
@@ -27,10 +29,26 @@ type ClaimedOperatorLabelEmail = Candidate & Readonly<{
   tracking_provider_code: string;
   tracking_reference: string;
   order_number: string;
+  subtotal_cents: number;
+  discount_cents: number;
+  promotion_code: string | null;
+  promotion_discount_cents: number;
+  shipping_cents: number;
   total_cents: number;
   currency: "EUR";
+  paid_at: string;
   zone: "EU" | "UK" | "US" | "CA" | "GCC";
   customs_status: string | null;
+}>;
+
+type OperatorOrderLine = Readonly<{
+  internal_reference: string;
+  product_name: string;
+  color_name: string;
+  size: string;
+  quantity: number;
+  unit_price_cents: number;
+  line_total_cents: number;
 }>;
 
 type PrintableAttachment = Readonly<{
@@ -72,17 +90,49 @@ function base64(bytes: Uint8Array): string {
   return btoa(chunks.join(""));
 }
 
-function emailText(row: ClaimedOperatorLabelEmail, attachmentCount: number): string {
-  const amount = new Intl.NumberFormat("fr-FR", {
+function money(cents: number, currency: "EUR"): string {
+  return new Intl.NumberFormat("fr-FR", {
     style: "currency",
-    currency: row.currency,
-  }).format(row.total_cents / 100);
+    currency,
+  }).format(cents / 100);
+}
+
+function safeDisplayText(value: string, maximumLength: number): boolean {
+  return value.length >= 1 && value.length <= maximumLength &&
+    value.trim() === value && !/[\u0000-\u001f\u007f]/.test(value);
+}
+
+function emailText(
+  row: ClaimedOperatorLabelEmail,
+  lines: readonly OperatorOrderLine[],
+  attachmentCount: number,
+): string {
+  const paidAt = new Intl.DateTimeFormat("fr-FR", {
+    dateStyle: "long",
+    timeStyle: "short",
+    timeZone: "Europe/Paris",
+  }).format(new Date(row.paid_at));
+  const itemLines = lines.map((line) =>
+    `• ${line.quantity} × ${line.product_name} — ${line.color_name} — taille ${line.size} — réf. ${line.internal_reference} — ${money(line.line_total_cents, row.currency)}`
+  );
   return [
     "Bonjour Jérémy,",
     "",
-    `Les documents d’expédition sont prêts pour la commande ${row.order_number}.`,
+    `Le paiement de la commande ${row.order_number} a bien été reçu le ${paidAt}.`,
+    "L’étiquette associée est maintenant prête et jointe à ce même e-mail.",
     "",
-    `Montant payé : ${amount}`,
+    "Détail de la commande",
+    ...itemLines,
+    "",
+    `Sous-total articles : ${money(row.subtotal_cents, row.currency)}`,
+    ...(row.discount_cents > 0 ? [
+      `Remises : −${money(row.discount_cents, row.currency)}${
+        row.promotion_code === null ? "" : ` (dont code ${row.promotion_code} : −${money(row.promotion_discount_cents, row.currency)})`
+      }`,
+    ] : []),
+    `Livraison : ${money(row.shipping_cents, row.currency)}`,
+    `Total payé : ${money(row.total_cents, row.currency)}`,
+    "",
     `Transporteur : ${row.tracking_provider_code}`,
     `Numéro de suivi : ${row.tracking_reference}`,
     "",
@@ -212,8 +262,11 @@ export class D1OperatorLabelEmailDispatcher {
         message.recipient_email,message.attempts,message.max_attempts,
         message.lease_token_hash,shipment.provider_shipment_reference,
         shipment.tracking_provider_code,shipment.tracking_reference,
-        customer_order.order_number,customer_order.total_cents,
-        customer_order.currency,configuration.zone,
+        customer_order.order_number,customer_order.subtotal_cents,
+        customer_order.discount_cents,customer_order.promotion_code,
+        customer_order.promotion_discount_cents,customer_order.shipping_cents,
+        customer_order.total_cents,customer_order.currency,customer_order.paid_at,
+        configuration.zone,
         customs.status AS customs_status
       FROM operator_label_email_outbox AS message
       INNER JOIN shipments AS shipment ON shipment.id=message.shipment_id
@@ -232,11 +285,40 @@ export class D1OperatorLabelEmailDispatcher {
       !SAFE_ID.test(row.tracking_provider_code) ||
       !SAFE_TRACKING_REFERENCE.test(row.tracking_reference) ||
       !SAFE_ORDER_NUMBER.test(row.order_number) || row.currency !== "EUR" ||
+      !isCanonicalUtcTimestamp(row.paid_at) ||
       !["EU", "UK", "US", "CA", "GCC"].includes(row.zone) ||
       (row.zone !== "EU" && row.customs_status !== "ready") ||
-      !Number.isSafeInteger(row.total_cents) || row.total_cents <= 0
+      (row.promotion_code !== null && !SAFE_PROMOTION_CODE.test(row.promotion_code)) ||
+      !Number.isSafeInteger(row.subtotal_cents) || row.subtotal_cents <= 0 ||
+      !Number.isSafeInteger(row.discount_cents) || row.discount_cents < 0 ||
+      !Number.isSafeInteger(row.promotion_discount_cents) ||
+      row.promotion_discount_cents < 0 ||
+      row.promotion_discount_cents > row.discount_cents ||
+      !Number.isSafeInteger(row.shipping_cents) || row.shipping_cents < 0 ||
+      !Number.isSafeInteger(row.total_cents) || row.total_cents <= 0 ||
+      row.subtotal_cents - row.discount_cents + row.shipping_cents !== row.total_cents
     ) return this.#retryOrFail(candidate.id, leaseTokenHash, candidate.attempts + 1, now);
     try {
+      const orderLines = await this.#database.prepare(
+        `SELECT internal_reference,product_name,color_name,size,quantity,
+          unit_price_cents,line_total_cents
+        FROM order_lines WHERE order_id=? ORDER BY id LIMIT 26`,
+      ).bind(row.order_id).all<OperatorOrderLine>();
+      if (
+        orderLines.results.length < 1 || orderLines.results.length > 25 ||
+        orderLines.results.some((line) =>
+          !SAFE_ITEM_REFERENCE.test(line.internal_reference) ||
+          !safeDisplayText(line.product_name, 120) ||
+          !safeDisplayText(line.color_name, 80) ||
+          !safeDisplayText(line.size, 12) ||
+          !Number.isSafeInteger(line.quantity) || line.quantity < 1 || line.quantity > 3 ||
+          !Number.isSafeInteger(line.unit_price_cents) || line.unit_price_cents <= 0 ||
+          !Number.isSafeInteger(line.line_total_cents) ||
+          line.line_total_cents !== line.unit_price_cents * line.quantity
+        ) ||
+        orderLines.results.reduce((sum, line) => sum + line.line_total_cents, 0) !==
+          row.subtotal_cents
+      ) throw new TypeError("Operator order line proof is invalid.");
       const documentKinds = row.zone === "EU"
         ? Object.freeze(["label"] as const)
         : Object.freeze(["label", "customs"] as const);
@@ -261,8 +343,8 @@ export class D1OperatorLabelEmailDispatcher {
           recipientEmail: row.recipient_email,
           locale: "fr",
           payloadJson: JSON.stringify({
-            subject: `AJ Luxury — documents A4 prêts — ${row.order_number}`,
-            text: emailText(row, attachments.length),
+            subject: `AJ Luxury — paiement reçu + étiquette A4 — ${row.order_number}`,
+            text: emailText(row, orderLines.results, attachments.length),
           }),
         }),
         idempotencyKey: `operator_label_ready:${row.shipment_id}`,

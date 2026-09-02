@@ -49,7 +49,8 @@ docs/
 visiteur → panier → livraison → paiement Stripe confirmé
         → commande + stock + e-mails + facture
         → expédition Sendcloud unique
-        → Admin AJ Luxury : préparation + étiquette A4
+        → e-mail opérateur : paiement + détail + étiquette A4 (+ douane hors UE)
+        → Admin AJ Luxury : suivi + réimpression de secours
         → dépôt réel par Jérémy + preuve de dépôt
         → suivi transporteur → livraison
 ```
@@ -59,10 +60,29 @@ Règles cardinales :
 - Stripe confirmé fait foi pour le paiement ;
 - une commande payée produit une facture unique ;
 - une expédition possède un identifiant et une étiquette uniques ;
+- pour chaque expédition prête, Jérémy reçoit un seul e-mail opérationnel avec
+  le paiement, le détail de préparation et les PDF associés ;
 - Jérémy prépare, imprime et remet le colis ; Adam n’opère pas la logistique ;
 - le stock visible dans Admin est l’autorité opérationnelle courante ;
 - aucun statut `live` ne peut être annoncé si le health public ne retourne pas
   simultanément `mode=live` et `publicCommerce=true`.
+
+## Garde-fou de communication
+
+Les mots **livré**, **ouvert**, **disponible** et **tu peux communiquer** sont
+interdits dans une communication externe tant que les quatre états suivants ne
+sont pas distingués et que le quatrième n'est pas prouvé :
+
+1. `DÉVELOPPÉ` — présent dans le code du SHA candidat ;
+2. `TESTÉ` — contrôles automatisés et recette locale réussis sur ce SHA ;
+3. `DÉPLOYÉ` — migration, Worker et Assets du même SHA publiés ;
+4. `VÉRIFIÉ EN PRODUCTION` — santé canonique, zones, parcours et preuves
+   post-déploiement conformes sur `https://ajluxurystore.com`.
+
+Un brouillon, une capture locale ou un accord de principe ne permet jamais de
+sauter un état. Toute communication destinée à Jérémy doit citer l'état réel et
+la preuve disponible ; une fonctionnalité testée mais non déployée reste
+explicitement nommée `candidate`.
 
 ## Niveaux d’autorité
 

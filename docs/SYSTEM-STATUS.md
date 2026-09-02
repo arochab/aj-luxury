@@ -2,7 +2,7 @@
 
 Statut : `SOURCE DE STATUT COURANTE — À METTRE À JOUR APRÈS CHAQUE RELEASE`
 
-Dernière vérification consignée : 1er septembre 2026
+Dernière vérification consignée : 2 septembre 2026
 
 ## Verdict
 
@@ -32,6 +32,20 @@ Conséquence : le commerce n’est annoncé ouvert qu’après une promotion dis
 prouvée avec `mode=live` et `publicCommerce=true` sur le même SHA. La décision
 du 1er septembre autorise une ouverture anticipée traçable sans transformer les
 alertes non encore recettées ni l’expédition historique en faux résultats PASS.
+
+## Candidat en cours — ne pas confondre avec la production prouvée
+
+Le candidat en cours ajoute deux éléments qui ne doivent pas être annoncés en
+production avant son déploiement et sa preuve post-déploiement :
+
+- ouverture internationale contrôlée pour Royaume-Uni, États-Unis, Canada,
+  Émirats arabes unis, Qatar et Arabie saoudite ;
+- e-mail opérateur automatique unique à Jérémy lorsque l'étiquette est prête,
+  contenant paiement reçu, détail des articles et étiquette A4 ; hors UE, le
+  document douanier A4 est joint au même message.
+
+Le code et les tests du candidat ne modifient pas à eux seuls l'état de la
+production décrit dans le tableau ci-dessus.
 
 ## Première commande réelle
 
@@ -120,9 +134,11 @@ n’achètent aucune étiquette. La preuve terrain reste donc distincte.
 Le reçu technique complet est conservé sous
 `docs/internal/evidence/af95e25d21aad7f4d5e32565c49a7e8809bf288e/`.
 
-## Hors périmètre de l’ouverture France/UE
+## International — gate du candidat
 
-Royaume-Uni, États-Unis et Canada restent fermés tant que les codes douaniers,
-documents, services transporteur, coûts et colis tests propres à chaque zone ne
-sont pas prouvés. Cette fermeture doit rester explicite ; elle ne doit ni
-inventer une disponibilité internationale ni altérer les options France/UE.
+L'international fait partie du périmètre du candidat, et non d'un futur chantier
+séparé. Il reste néanmoins `NON PROUVÉ EN PRODUCTION` tant que le même SHA n'a
+pas été déployé puis contrôlé avec les cinq zones `EU`, `UK`, `US`, `CA`, `GCC`,
+les tarifs réels, les documents douaniers et l'e-mail opérateur. Avant cette
+preuve, il faut écrire « candidat international testé », jamais « international
+ouvert ».

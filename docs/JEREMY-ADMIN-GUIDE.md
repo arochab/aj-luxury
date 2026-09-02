@@ -13,6 +13,8 @@ Depuis `https://ajluxurystore.com/operations`, Jérémy doit pouvoir :
 
 - voir les commandes payées et leur montant ;
 - vérifier les deux e-mails de confirmation ;
+- recevoir automatiquement le mail opérationnel « paiement reçu + étiquette »
+  avec le détail des articles ;
 - ouvrir la facture A4 et les éventuels avoirs ;
 - lire les articles, tailles et coloris à préparer ;
 - télécharger l'étiquette transporteur A4 ;
@@ -64,17 +66,37 @@ Cliquer sur `Voir le détail`, puis contrôler pour chaque ligne :
 
 Contrôler également le nom et l'adresse de destination avant de fermer le colis.
 
-### 4. Imprimer l'étiquette transporteur
+### 4. Recevoir et imprimer les documents d'expédition
 
 Pour les nouvelles commandes, le système crée automatiquement une seule
-expédition après le paiement. Quand la colonne livraison affiche
-`étiquette prête` :
+expédition après le paiement. Dès que le transporteur rend les documents
+disponibles, un seul e-mail est envoyé automatiquement à
+`jeremy@ajluxurystore.com` avec :
+
+- la confirmation que le paiement a été reçu ;
+- le numéro, les articles, coloris, tailles, quantités et montants de la commande ;
+- l'étiquette transporteur A4 en pièce jointe ;
+- pour une commande hors UE, le document douanier A4 dans le même e-mail.
+
+Le geste normal de Jérémy est donc d'ouvrir cet e-mail puis :
+
+1. vérifier le détail de préparation ;
+2. ouvrir le PDF de l'étiquette ;
+3. imprimer en A4, portrait, à 100 %, sans ajustement automatique ;
+4. pour le hors UE, imprimer également le document douanier et suivre les
+   consignes du transporteur ;
+5. vérifier que l'adresse et le code-barres sont nets ;
+6. coller l'étiquette à plat sur le colis, sans pli sur le code-barres.
+
+Si l'e-mail est introuvable alors que la colonne livraison affiche
+`étiquette prête`, l'Admin sert de secours :
 
 1. cliquer sur `Télécharger l'étiquette transporteur A4` ;
-2. ouvrir le PDF téléchargé ;
-3. imprimer en A4, portrait, à 100 %, sans ajustement automatique ;
-4. vérifier que l'adresse et le code-barres sont nets ;
-5. coller l'étiquette à plat sur le colis, sans pli sur le code-barres.
+2. pour le hors UE, télécharger aussi `Document douanier A4` ;
+3. réimprimer selon les règles ci-dessus.
+
+Un téléchargement ou une réimpression ne recrée jamais une expédition et ne
+rachète jamais une deuxième étiquette.
 
 L'étiquette sert au transport. La facture A4 est un document différent destiné
 au client et à la comptabilité.
@@ -165,3 +187,11 @@ Ce guide décrit la version candidate en cours de recette. Tant que son SHA exac
 n'a pas été approuvé par Adam puis Jérémy et que la santé publique n'affiche pas
 `mode=live` avec `publicCommerce=true`, il ne faut pas annoncer que la boutique
 est ouverte. Les tests automatisés n'achètent aucune étiquette réelle.
+
+## Périmètre international du candidat
+
+Le candidat couvre France/UE ainsi que Royaume-Uni, États-Unis, Canada,
+Émirats arabes unis, Qatar et Arabie saoudite. Pour le hors UE, la déclaration
+utilise l'origine Chine, le code douanier `61071200`, l'EORI `FR944996487` et la
+règle DAP. Ces pays ne doivent être annoncés disponibles qu'après preuve du
+health et d'une cotation réelle sur la version effectivement déployée.
