@@ -6,11 +6,13 @@ type ProductionHttpsRedirectEnv = Readonly<{
 const PERMANENT_REDIRECT_CACHE = "public, max-age=31536000";
 
 /**
- * Upgrade the public storefront before any commerce or asset handler runs.
+ * Canonicalize the public storefront before any commerce or asset handler runs.
  *
  * HSTS only protects a browser after a successful HTTPS visit. This explicit
- * 308 also protects a first visit made from an old `http://` bookmark while
- * preserving the request method, path and query string.
+ * 308 protects a first visit made from an old `http://` bookmark. The same
+ * redirect consolidates the legacy `www` hostname and removes the internal
+ * `release` cache-buster from any previously shared verification URL.
+ * Request method, path and every other query parameter are preserved.
  */
 export function productionHttpsRedirectResponse(
   request: Request,
@@ -19,7 +21,6 @@ export function productionHttpsRedirectResponse(
   if (env?.APP_ENV !== "production") return null;
 
   const incoming = new URL(request.url);
-  if (incoming.protocol !== "http:") return null;
 
   let canonical: URL;
   try {
@@ -40,7 +41,20 @@ export function productionHttpsRedirectResponse(
   ]);
   if (!allowedHosts.has(incoming.hostname)) return null;
 
-  const destination = new URL(`${incoming.pathname}${incoming.search}`, canonical.origin);
+  const isLegacyHostname = incoming.hostname === `www.${canonical.hostname}`;
+  const hasReleaseMarker = incoming.searchParams.has("release");
+  if (
+    incoming.protocol === "https:" &&
+    !isLegacyHostname &&
+    !hasReleaseMarker
+  ) return null;
+
+  incoming.searchParams.delete("release");
+
+  const destination = new URL(
+    `${incoming.pathname}${incoming.search}`,
+    canonical.origin,
+  );
   return new Response(null, {
     status: 308,
     headers: {

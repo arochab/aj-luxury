@@ -166,7 +166,7 @@
   "cart.syntheticQualifier": "fictif, non commercial",
   "cart.checkoutUnavailable": "Paiement non activé",
   "cart.continueToCheckout": "Continuer vers la livraison",
-  "cart.unavailableError": "Le panier est momentanément indisponible. Réessayez dans un instant.",
+  "cart.unavailableError": "Nous n’avons pas pu actualiser votre panier. Votre sélection reste conservée : actualisez la page ou revenez à la boutique.",
   "cart.outOfStockError": "La quantité demandée n’est plus disponible. Votre panier n’a pas été modifié.",
   "checkout.backToCart": "Retour au panier",
   "checkout.demoLabel": "Paiement · aperçu",

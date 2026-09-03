@@ -1,5 +1,6 @@
 /* eslint-disable @next/next/no-img-element -- client-owned assets are already web-optimized */
 
+import type { Metadata } from "next";
 import Link from "next/link";
 import ClientCopyText from "./components/ClientCopyText";
 import DeferredMetallicField from "./components/DeferredMetallicField";
@@ -10,6 +11,12 @@ import StoreHeader from "./components/StoreHeader";
 import { T } from "../lib/i18n/TranslatedText";
 import { getProducts } from "../lib/products";
 import styles from "./components/ProductionHome.module.css";
+
+export const metadata: Metadata = {
+  alternates: {
+    canonical: "https://ajluxurystore.com/",
+  },
+};
 
 /*
  * The hero is the opening duo. The horizontal collection rail begins the

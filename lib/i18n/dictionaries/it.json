@@ -166,7 +166,7 @@
   "cart.syntheticQualifier": "fittizio, non commerciale",
   "cart.checkoutUnavailable": "Pagamento non attivato",
   "cart.continueToCheckout": "Continua alla spedizione",
-  "cart.unavailableError": "Il carrello non è temporaneamente disponibile. Riprova tra poco.",
+  "cart.unavailableError": "Non è stato possibile aggiornare il carrello. La selezione resta salvata: aggiorna la pagina o torna al negozio.",
   "cart.outOfStockError": "La quantità richiesta non è più disponibile. Il carrello non è stato modificato.",
   "checkout.backToCart": "Torna al carrello",
   "checkout.demoLabel": "Pagamento · anteprima",

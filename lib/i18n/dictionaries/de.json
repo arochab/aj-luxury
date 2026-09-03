@@ -166,7 +166,7 @@
   "cart.syntheticQualifier": "fiktiv, nicht kommerziell",
   "cart.checkoutUnavailable": "Zahlung nicht aktiviert",
   "cart.continueToCheckout": "Weiter zum Versand",
-  "cart.unavailableError": "Der Warenkorb ist vorübergehend nicht verfügbar. Bitte versuchen Sie es gleich erneut.",
+  "cart.unavailableError": "Der Warenkorb konnte nicht aktualisiert werden. Ihre Auswahl bleibt erhalten: Laden Sie die Seite neu oder kehren Sie zum Shop zurück.",
   "cart.outOfStockError": "Die gewünschte Menge ist nicht mehr verfügbar. Ihr Warenkorb wurde nicht geändert.",
   "checkout.backToCart": "Zurück zum Warenkorb",
   "checkout.demoLabel": "Checkout · Vorschau",

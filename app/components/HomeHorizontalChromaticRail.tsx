@@ -32,15 +32,15 @@ const CHAPTERS: readonly Chapter[] = [
       "/images/editorial/isabelle-apollon/apollon-pourpre-lyre-v1.webp",
     productAlt:
       "Apollon Pourpre Impérial en lévitation sur son décor de marbre",
-    // Identité et photographie reconfirmées par Adam : Alex est le modèle aux
-    // cheveux attachés et à la barbe pleine, seul sur le fond studio pourpre,
-    // avec l'arc doré visible derrière sa jambe à droite de l'image.
+    // Identité et photographie reconfirmées par Adam : Alex reste seul sur le
+    // fond studio pourpre continu. Aucun accessoire périphérique ne peut être
+    // coupé par le cadre.
     model:
-      "/images/client/apollon-world/apollon-pourpre-model-world-v1.webp",
+      "/images/client/apollon-world/apollon-pourpre-model-color-v2.webp",
     modelAlt: "Apollon Pourpre Impérial porté par Alex",
     modelWidth: 1731,
     modelHeight: 2600,
-    modelHasResponsiveVariants: false,
+    modelHasResponsiveVariants: true,
     accent: "#5b1233",
   },
   {

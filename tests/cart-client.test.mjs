@@ -120,6 +120,52 @@ test("the client rejects an internally inconsistent server total", async () => {
   }
 });
 
+test("cart reads absorb transient network and server failures before exposing an error", async () => {
+  const originalFetch = globalThis.fetch;
+  const responses = [
+    new TypeError("connection reset"),
+    Response.json(
+      { error: { code: "INTERNAL_ERROR" } },
+      { status: 503 },
+    ),
+    Response.json({ data: snapshot() }),
+  ];
+  let calls = 0;
+  globalThis.fetch = async () => {
+    const response = responses[calls];
+    calls += 1;
+    if (response instanceof Error) throw response;
+    return response;
+  };
+
+  try {
+    assert.deepEqual(await getCart(), snapshot());
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+  assert.equal(calls, 3);
+});
+
+test("cart reads never retry malformed successful responses", async () => {
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls += 1;
+    return Response.json({ data: { status: "empty" } });
+  };
+
+  try {
+    await assert.rejects(
+      () => getCart(),
+      (error) =>
+        error instanceof CartApiError && error.code === "MALFORMED_RESPONSE",
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+  assert.equal(calls, 1);
+});
+
 test("a composed pack keeps one size, repeated colours and its exact ordered payload", async () => {
   const originalFetch = globalThis.fetch;
   const calls = [];

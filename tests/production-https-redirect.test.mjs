@@ -42,7 +42,37 @@ test("the legacy www HTTP hostname canonicalizes to the secure apex", () => {
   assert.equal(response.headers.get("Location"), "https://ajluxurystore.com/cart");
 });
 
-test("HTTPS, non-production and internal hosts are untouched", () => {
+test("the legacy www HTTPS hostname canonicalizes to the secure apex", () => {
+  const response = productionHttpsRedirectResponse(
+    new Request("https://www.ajluxurystore.com/shop?utm_source=google"),
+    production,
+  );
+
+  assert.ok(response);
+  assert.equal(response.status, 308);
+  assert.equal(
+    response.headers.get("Location"),
+    "https://ajluxurystore.com/shop?utm_source=google",
+  );
+});
+
+test("internal release markers are removed without losing useful parameters", () => {
+  const response = productionHttpsRedirectResponse(
+    new Request(
+      "https://ajluxurystore.com/?release=94d4376&utm_source=call",
+    ),
+    production,
+  );
+
+  assert.ok(response);
+  assert.equal(response.status, 308);
+  assert.equal(
+    response.headers.get("Location"),
+    "https://ajluxurystore.com/?utm_source=call",
+  );
+});
+
+test("canonical HTTPS, non-production and internal hosts are untouched", () => {
   assert.equal(
     productionHttpsRedirectResponse(
       new Request("https://ajluxurystore.com/cart"),

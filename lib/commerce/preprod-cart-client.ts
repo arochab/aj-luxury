@@ -262,19 +262,25 @@ export async function getCart(
   mode: ActiveCommerceRuntimeMode = "preproduction",
 ): Promise<PublicCartSnapshot> {
   const path = cartApiPath(mode);
-  try {
-    return await cartRequest(path);
-  } catch (error) {
-    if (
-      error instanceof CartApiError &&
-      ["CART_SESSION_INVALID", "CART_CLOSED", "CART_EXPIRED"].includes(
-        error.code,
-      )
-    ) {
-      return cartRequest(path);
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await cartRequest(path);
+    } catch (error) {
+      if (!(error instanceof CartApiError)) throw error;
+
+      const recoverableSession =
+        attempt === 0 &&
+        ["CART_SESSION_INVALID", "CART_CLOSED", "CART_EXPIRED"].includes(
+          error.code,
+        );
+      const transientFailure =
+        attempt < 2 &&
+        (error.code === "NETWORK_UNAVAILABLE" || error.status >= 500);
+
+      if (!recoverableSession && !transientFailure) throw error;
     }
-    throw error;
   }
+  throw new CartApiError("CART_UNAVAILABLE");
 }
 
 export async function ensureOpenCart(

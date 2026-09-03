@@ -115,7 +115,7 @@ for (const viewport of [
   assert.equal(result.modelObjectFit, "contain");
   assert.match(
     result.modelSource ?? "",
-    /apollon-pourpre-model-world-v1/,
+    /apollon-pourpre-model-color-v2/,
   );
   assert(
     result.railScrollWidth >= result.railClientWidth * 3 &&
@@ -200,13 +200,15 @@ const story = await readyPage({ width: 1440, height: 900 }, false, "/notre-histo
 const storyHero = await story.page.locator("figure").first().evaluate((figure) => {
   const images = [...figure.querySelectorAll("img")];
   return {
+    backgroundColor: getComputedStyle(figure).backgroundColor,
     count: images.length,
     fits: images.map((image) => getComputedStyle(image).objectFit),
     ready: images.every((image) => image.complete && image.naturalWidth > 0),
   };
 });
-assert.deepEqual(storyHero.fits, ["cover", "contain"]);
-assert.equal(storyHero.count, 2, "story hero has backdrop and intact foreground");
+assert.deepEqual(storyHero.fits, ["contain"]);
+assert.equal(storyHero.count, 1, "story hero renders the intact campaign image once");
+assert.equal(storyHero.backgroundColor, "rgb(255, 255, 255)", "story hero has no dark side bands");
 assert.equal(storyHero.ready, true, "story hero images decode");
 assert.deepEqual(story.errors, [], "story has no browser errors");
 const storyScreenshot = fileURLToPath(new URL("story-desktop-1440.png", evidenceRoot));
@@ -217,14 +219,16 @@ const mobileStory = await readyPage({ width: 390, height: 844 }, true, "/notre-h
 const mobileStoryHero = await mobileStory.page.locator("figure").first().evaluate((figure) => {
   const images = [...figure.querySelectorAll("img")];
   return {
+    backgroundColor: getComputedStyle(figure).backgroundColor,
     count: images.length,
     fits: images.map((image) => getComputedStyle(image).objectFit),
     ready: images.every((image) => image.complete && image.naturalWidth > 0),
     overflow: document.documentElement.scrollWidth - innerWidth,
   };
 });
-assert.deepEqual(mobileStoryHero.fits, ["cover", "contain"]);
-assert.equal(mobileStoryHero.count, 2, "mobile story has backdrop and intact foreground");
+assert.deepEqual(mobileStoryHero.fits, ["contain"]);
+assert.equal(mobileStoryHero.count, 1, "mobile story renders the intact campaign image once");
+assert.equal(mobileStoryHero.backgroundColor, "rgb(255, 255, 255)", "mobile story has no dark side bands");
 assert.equal(mobileStoryHero.ready, true, "mobile story images decode");
 assert.equal(mobileStoryHero.overflow, 0, "mobile story does not overflow horizontally");
 assert.deepEqual(mobileStory.errors, [], "mobile story has no browser errors");

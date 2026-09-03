@@ -160,7 +160,8 @@ test("the hero hands its measured plum floor to the horizontal chromatic rail", 
   assert.doesNotMatch(rail, /stageFooter|01 \/ 03/);
   assert.doesNotMatch(rail, /styles\.modelFrame/);
   assert.doesNotMatch(css, /\.modelFrame::after/);
-  assert.match(rail, /apollon-pourpre-model-world-v1\.webp/);
+  assert.match(rail, /apollon-pourpre-model-color-v2\.webp/);
+  assert.doesNotMatch(rail, /apollon-pourpre-model-world-v1\.webp/);
   assert.match(rail, /Apollon Pourpre Impérial porté par Alex/);
   assert.doesNotMatch(rail, /Pourpre Impérial porté par Jérémy et Alex/);
   assert.match(
@@ -186,7 +187,9 @@ test("the hero hands its measured plum floor to the horizontal chromatic rail", 
     "public/images/editorial/isabelle-apollon/apollon-lilas-lyre-v1-720.webp",
     "public/images/editorial/isabelle-apollon/apollon-rose-lyre-v1-360.webp",
     "public/images/editorial/isabelle-apollon/apollon-rose-lyre-v1-720.webp",
-    "public/images/client/apollon-world/apollon-pourpre-model-world-v1.webp",
+    "public/images/client/apollon-world/apollon-pourpre-model-color-v2-360.webp",
+    "public/images/client/apollon-world/apollon-pourpre-model-color-v2-720.webp",
+    "public/images/client/apollon-world/apollon-pourpre-model-color-v2-1080.webp",
     "public/images/client/apollon-world/apollon-lilas-model-color-v2-360.webp",
     "public/images/client/apollon-world/apollon-lilas-model-color-v2-720.webp",
     "public/images/client/apollon-world/apollon-lilas-model-color-v2-1080.webp",

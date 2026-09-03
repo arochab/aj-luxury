@@ -188,10 +188,9 @@ const PLATEAUX: readonly Plateau[] = [
     numero: "03",
     nomKey: "sequence.color.purple",
     still: "/images/editorial/isabelle-apollon/apollon-pourpre-lyre-v1.webp",
-    /* Source exacte du master vidéo pourpre, recadrée sans génération : Alex
-       seul reste visible de la tête aux pieds. Conserver le cadre 2/3 et
-       `object-fit: contain` afin de ne jamais rogner sa silhouette. */
-    worn: "/images/client/apollon-world/apollon-pourpre-alex-video-full-v1.webp",
+    /* Variante client propre : fond pourpre continu, sans arc, laurier, lyre,
+       marbre ni autre décor susceptible d'être coupé par le cadre. */
+    worn: "/images/client/apollon-world/apollon-pourpre-model-color-v2.webp",
     mur: "var(--aj-mur-pourpre)",
     voile: "var(--aj-voile-pourpre)",
     phrase:

@@ -35,7 +35,7 @@ test("story sections expose headings without visible act numbers", () => {
   }
 });
 
-test("the story hero never crops the approved duo at any breakpoint", () => {
+test("the story hero never crops the approved duo or paints dark side bands", () => {
   assert.equal(
     (storyPage.match(/style=\{\{ objectFit: "contain", objectPosition: "center" \}\}/g) ?? []).length,
     3,
@@ -50,12 +50,13 @@ test("the story hero never crops the approved duo at any breakpoint", () => {
     /@media \(max-width:\s*760px\)[\s\S]*?\.heroImage\s*\{[^}]*aspect-ratio:\s*2\s*\/\s*3;/s,
   );
   assert.doesNotMatch(storyCss, /\.heroImage img\s*\{[^}]*object-fit:\s*cover/s);
-  assert.match(storyPage, /className=\{styles\.heroBackdrop\}/);
   assert.match(storyPage, /className=\{styles\.heroForeground\}/);
   assert.match(
     storyCss,
-    /\.heroBackdrop\s*\{[^}]*object-fit:\s*cover !important;[^}]*filter:\s*blur/s,
+    /\.heroImage\s*\{[^}]*background:\s*#fff;/s,
   );
+  assert.doesNotMatch(storyPage, /styles\.heroBackdrop/);
+  assert.doesNotMatch(storyCss, /\.heroBackdrop\b|filter:\s*blur\(/);
 });
 
 test("the public account bootstrap stays calm and exposes the protected admin entry", () => {

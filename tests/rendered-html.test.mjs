@@ -641,6 +641,10 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
   const html = await response.text();
   assert.match(html, /<html lang="fr">/i);
   assert.match(html, /<title>AJ Luxury \| Reveal Your Inner Beauty<\/title>/i);
+  assert.match(
+    html,
+    /<link rel="canonical" href="https:\/\/ajluxurystore\.com\/"\s*\/?>/i,
+  );
   assert.doesNotMatch(
     html,
     /\+33 6 88 42 40 62|tel:\+33688424062/,
@@ -674,7 +678,11 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
   assert.match(html, /aj-luxury-hero-openart-mobile-poster-540\.webp 540w/);
   assert.match(html, /aj-luxury-hero-openart-mobile-poster-1080\.webp 1080w/);
   assert.match(html, /apollon-pourpre-lyre-v1\.webp/);
-  assert.match(html, /apollon-pourpre-model-world-v1\.webp/);
+  assert.match(html, /apollon-pourpre-model-color-v2\.webp/);
+  assert.doesNotMatch(
+    html,
+    /apollon-pourpre-(?:model-world|alex-video-full)-v1\.webp/,
+  );
   assert.match(html, /Apollon Pourpre Impérial porté par Alex/);
   assert.doesNotMatch(html, /Pourpre Impérial porté par Jérémy et Alex/);
   assert.match(html, /apollon-lilas-lyre-v1\.webp/);
@@ -704,7 +712,7 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
     [
       "/images/client/aj-luxury-hero-openart-desktop-poster.webp",
       "/images/editorial/isabelle-apollon/apollon-pourpre-lyre-v1.webp",
-      "/images/client/apollon-world/apollon-pourpre-model-world-v1.webp",
+      "/images/client/apollon-world/apollon-pourpre-model-color-v2.webp",
       "/images/editorial/isabelle-apollon/apollon-lilas-lyre-v1.webp",
       "/images/client/apollon-world/apollon-lilas-model-color-v2.webp",
       "/images/editorial/isabelle-apollon/apollon-rose-lyre-v1.webp",
