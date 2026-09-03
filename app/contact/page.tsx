@@ -10,15 +10,7 @@ export default function ContactPage() {
     <InfoPage
       eyebrow="AJ Luxury"
       title={<T id="contact.title" />}
-      /*
-        `status` par défaut affichait « Contenu à valider avant mise en ligne »,
-        une consigne de production interne, rendue au visiteur juste sous la
-        seule information utile de la page. Sur une préversion montrée au
-        client, cela se lit comme un aveu d'inachèvement à l'endroit précis où
-        l'on demande à quelqu'un de nous écrire. L'état réel est dit plus bas,
-        avec le même vocabulaire que /cart et /checkout : une démonstration, pas
-        un chantier.
-      */
+      /* La page publique ne doit jamais exposer de consigne interne de recette. */
       status={null}
     >
       {/*
@@ -57,7 +49,7 @@ export default function ContactPage() {
       </p>
 
       <p>
-        <T id="contact.demoNotice" />
+        <T id="contact.storeStatus" />
       </p>
     </InfoPage>
   );

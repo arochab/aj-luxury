@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 function schemaRows(type, tableByName) {
@@ -983,6 +984,37 @@ test("contact publishes the business phone as an actionable link", async () => {
   assert.match(html, /tel:\+33688424062/);
   assert.match(html, /\+33 6 88 42 40 62/);
   assert.match(html, /mailto:contact@ajluxurystore\.com/);
+  assert.match(html, /La boutique en ligne est ouverte/);
+  assert.doesNotMatch(
+    html,
+    /vente en ligne n.est pas encore ouverte|site est une démonstration/i,
+  );
+});
+
+test("live customer dictionaries never present contact or account as a demo", () => {
+  const dictionaryUrls = [
+    "../lib/i18n/dictionaries/fr.json",
+    "../lib/i18n/dictionaries/en.json",
+    "../lib/i18n/dictionaries/es.json",
+    "../lib/i18n/dictionaries/de.json",
+    "../lib/i18n/dictionaries/it.json",
+    "../public/i18n/en.json",
+    "../public/i18n/es.json",
+    "../public/i18n/de.json",
+    "../public/i18n/it.json",
+  ];
+
+  for (const relativeUrl of dictionaryUrls) {
+    const dictionary = JSON.parse(
+      readFileSync(new URL(relativeUrl, import.meta.url), "utf8"),
+    );
+    assert.equal(typeof dictionary["contact.storeStatus"], "string");
+    assert.equal(dictionary["contact.demoNotice"], undefined);
+    assert.doesNotMatch(
+      `${dictionary["account.eyebrow"]} ${dictionary["account.error"]} ${dictionary["contact.storeStatus"]}`,
+      /démonstr|demonstr|demo customer|demo-kunden|dimostrativ/i,
+    );
+  }
 });
 
 test("legal notice publishes the sourced seller identity and never the closed establishment", async () => {
