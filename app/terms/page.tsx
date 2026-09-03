@@ -25,7 +25,7 @@ export default function TermsPage() {
         <p>
           <strong>Conditions de vente — version {LEGAL_VERSION_DISPLAY}.</strong>{" "}
           Ces conditions, les coordonnées de contact et le médiateur de la
-          consommation sont publiés avant l’ouverture des ventes.
+          consommation s’appliquent aux ventes réalisées sur la boutique.
         </p>
       </InfoNotice>
 
@@ -39,9 +39,7 @@ export default function TermsPage() {
         </p>
         <p>
           Le vendeur peut être joint à{" "}
-          <a href={`mailto:${LEGAL_CONTACT.email}`}>{LEGAL_CONTACT.email}</a> ou
-          au{" "}
-          <a href={`tel:${LEGAL_CONTACT.phoneHref}`}>{LEGAL_CONTACT.phone}</a>.
+          <a href={`mailto:${LEGAL_CONTACT.email}`}>{LEGAL_CONTACT.email}</a>.
         </p>
         <p>
           Le client déclare être majeur et disposer de la capacité juridique

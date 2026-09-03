@@ -66,12 +66,6 @@ export default function LegalNoticePage() {
               <a href={`mailto:${LEGAL_CONTACT.email}`}>{LEGAL_CONTACT.email}</a>
             </dd>
           </div>
-          <div>
-            <dt>Téléphone</dt>
-            <dd>
-              <a href={`tel:${LEGAL_CONTACT.phoneHref}`}>{LEGAL_CONTACT.phone}</a>
-            </dd>
-          </div>
         </dl>
       </section>
 

@@ -24,24 +24,14 @@ export default function ContactPage() {
         <T id="contact.writeToUs" />{" "}
         <a
           className={styles.actionMail}
-          href="mailto:contact@ajluxurystore.com"
+          href={`mailto:${LEGAL_CONTACT.email}`}
         >
-          contact@ajluxurystore.com
+          {LEGAL_CONTACT.email}
         </a>
       </p>
 
       <p>
         <T id="contact.responseTime" />
-      </p>
-
-      <p>
-        Téléphone :{" "}
-        <a
-          className={styles.actionMail}
-          href={`tel:${LEGAL_CONTACT.phoneHref}`}
-        >
-          {LEGAL_CONTACT.phone}
-        </a>
       </p>
 
       <p>

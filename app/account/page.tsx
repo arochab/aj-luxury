@@ -41,7 +41,7 @@ export function generateMetadata() {
       ? "Mon compte | AJ Luxury"
       : runtimeMode === "preproduction"
         ? "Espace client privé | AJ Luxury"
-        : "Espace client fermé | AJ Luxury",
+        : "Espace client temporairement indisponible | AJ Luxury",
     robots: { index: false, follow: false },
   };
 }
@@ -71,52 +71,12 @@ export default function AccountPage() {
             AJ Luxury · <T id="account.accessLabel" />
           </p>
           <h1 className={`${styles.compteTitre} aj-display`}>
-            Espace client fermé
+            Espace client temporairement indisponible
           </h1>
           <p className={styles.compteLead}>
-            Le commerce n’est pas disponible dans cet environnement.
+            Réessayez dans un instant ou contactez le service client si le
+            problème persiste.
           </p>
-
-          {/* Ce que cet espace portera quand il ouvrira. On l'annonce sans
-              le simuler : aucun formulaire de connexion, aucun champ, rien
-              qui laisse croire qu'une donnée est collectée ici. */}
-          <div className={styles.compteCartes}>
-            <div className={styles.compteCarte}>
-              <span className={styles.compteCarteLabel}>
-                <T id="account.ordersLabel" />
-              </span>
-              <h2>
-                <T id="account.ordersTitle" />
-              </h2>
-              <p>
-                <T id="account.ordersBody" />
-              </p>
-            </div>
-
-            <div className={styles.compteCarte}>
-              <span className={styles.compteCarteLabel}>
-                <T id="account.profileLabel" />
-              </span>
-              <h2>
-                <T id="account.profileTitle" />
-              </h2>
-              <p>
-                <T id="account.profileBody" />
-              </p>
-            </div>
-
-            <div className={styles.compteCarte}>
-              <span className={styles.compteCarteLabel}>
-                <T id="account.securityLabel" />
-              </span>
-              <h2>
-                <T id="account.securityTitle" />
-              </h2>
-              <p>
-                <T id="account.securityBody" />
-              </p>
-            </div>
-          </div>
 
           {/* Trois liens, pas un repère de navigation : le <nav> du site est
               déjà dans l'en-tête et dans le pied. En ajouter un troisième,
@@ -162,10 +122,6 @@ export default function AccountPage() {
               </span>
             </Link>
           </div>
-
-          <p className={styles.compteNote}>
-            <T id="account.demoNotice" />
-          </p>
         </div>
       )}
 

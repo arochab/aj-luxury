@@ -15,7 +15,7 @@ export function generateMetadata() {
       ? "Livraison et paiement | AJ Luxury"
       : runtimeMode === "preproduction"
         ? "Livraison préproduction | AJ Luxury"
-        : "Commerce fermé | AJ Luxury",
+        : "Paiement temporairement indisponible | AJ Luxury",
     robots: { index: false, follow: false },
   };
 }
@@ -82,7 +82,7 @@ export default function CheckoutPage() {
               ? <T id="checkout.preprodLabel" />
               : runtimeMode === "production"
                 ? "Paiement sécurisé"
-                : "Commerce fermé"}
+                : "Service indisponible"}
           </span>
         </div>
 
@@ -110,17 +110,16 @@ export default function CheckoutPage() {
           <section className={tunnel.scene} aria-labelledby="checkout-closed-title">
             <p className={tunnel.oeil}>Livraison et paiement</p>
             <h1 className={tunnel.geste} id="checkout-closed-title">
-              Le paiement n’est pas ouvert.
+              Le paiement est temporairement indisponible.
             </h1>
             <p className={tunnel.lede}>
-              La démonstration s’arrête ici, volontairement. Aucun prestataire de
-              paiement n’est branché, aucun montant ne peut être engagé, et aucun
-              numéro de carte ne peut être saisi sur ce site.
+              Réessayez dans un instant. Aucun montant ne peut être engagé et
+              aucun numéro de carte n’est collecté sur cet écran.
             </p>
             <ul className={`${tunnel.gages} ${tunnel.montee}`}>
               <li>
                 <span>Prestataire</span>
-                <strong>Non branché</strong>
+                <strong>Temporairement indisponible</strong>
               </li>
               <li>
                 <span>Montant engagé</span>

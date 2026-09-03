@@ -84,7 +84,7 @@ export default function CheckoutSuccessPage() {
             ) : runtimeMode === "production" ? (
               "Paiement sécurisé"
             ) : (
-              "Commerce fermé"
+              "Service indisponible"
             )}
           </span>
         </div>
@@ -110,8 +110,8 @@ export default function CheckoutSuccessPage() {
             </h1>
             <p className={tunnel.lede}>
               Cette page est le point de retour du prestataire de paiement. La
-              boutique étant fermée, aucun paiement n’a pu être initié : il n’y
-              a donc pas de commande à confirmer, et rien n’a été débité.
+              confirmation demandée n’est pas disponible : vérifiez votre espace
+              client ou contactez le service client. Aucun statut n’est inventé.
             </p>
             <ul className={`${tunnel.gages} ${tunnel.montee}`}>
               <li>

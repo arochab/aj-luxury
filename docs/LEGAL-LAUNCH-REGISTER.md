@@ -64,7 +64,7 @@ un health check sans blocker.
 
 | Priorité | Information ou action requise | Responsable | Preuve attendue |
 |---|---|---|---|
-| Passé le 01/09/2026 | Téléphone professionnel publié uniquement sur Contact, Mentions légales et CGV | Adam | `+33 6 88 42 40 62` ; aucun usage dans le footer, le checkout ou les données transporteur |
+| Formalité post-lancement — échéance 03/10/2026 | Publier une coordonnée téléphonique professionnelle validée ; le numéro personnel de Jérémy reste absent | AJ Luxury + Adam | Autorisation de l’avocat rapportée par Adam le 03/09/2026 : ouverture immédiate admise avec intégration sous 30 jours ; `contact@ajluxurystore.com` reste le contact public entre-temps |
 | Passé le 01/09/2026 | Médiateur de la consommation conventionné | AJ Luxury | Source interne hashée ; coordonnées publiques intégrées |
 | Passé | France/UE, transporteurs, tarifs et délais | AJ Luxury + Adam | Matrice et providers testés ; les zones hors UE non prouvées restent fermées sans affecter l’ouverture France/UE |
 | Passé | Compte Stripe, paiement et webhook | AJ Luxury + Adam | Première commande payante et effets D1 prouvés |

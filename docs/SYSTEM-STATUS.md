@@ -67,10 +67,11 @@ production décrit dans le tableau ci-dessus.
 | Cause opératoire | téléphone destinataire absent du snapshot historique |
 | Correction déployée | saisie du téléphone au format international par Jérémy, autorisation utilisable une seule fois, sans créer un second colis |
 
-Repères à ne jamais mélanger :
+Repère à ne jamais mélanger :
 
-- téléphone public AJ Luxury / Jérémy : `+33 6 88 42 40 62` (`+33688424062`) ;
-- téléphone acheteur/destinataire d’Adam pour cette commande uniquement :
+- aucun numéro personnel de Jérémy n’est publié sur le site ; une coordonnée
+  professionnelle validée doit être intégrée au plus tard le 3 octobre 2026 ;
+- le téléphone acheteur/destinataire d’Adam pour cette commande uniquement est
   `06 59 00 60 25` (`+33659006025`).
 
 Le numéro de Jérémy ne doit jamais remplacer le numéro du destinataire sur
@@ -130,8 +131,8 @@ n’achètent aucune étiquette. La preuve terrain reste donc distincte.
 3. pendant l'appel, Jérémy crée et confirme son compte avec l'une des deux
    adresses prévues, puis ouvre `/admin` ;
 4. il ouvre `AJ-41B58D96CCAAE37F00B8`, vérifie la commande et saisit une seule
-   fois le téléphone de l’acheteur/destinataire Adam `+33659006025` ; ce n’est
-   pas son propre numéro professionnel `+33688424062` ;
+   fois le téléphone de l’acheteur/destinataire Adam `+33659006025` ; aucun
+   numéro du vendeur ne doit lui être substitué ;
 5. Jérémy déclenche l’unique relance, télécharge l’étiquette et l’imprime en A4 ;
 6. après dépôt physique, il conserve la preuve et confirme la remise dans Admin ;
 7. il vérifie ensuite le premier scan et le suivi transporteur.

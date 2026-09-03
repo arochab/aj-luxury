@@ -977,13 +977,12 @@ test("shipping and terms publish the exact active international scope and DAP al
   }
 });
 
-test("contact publishes the business phone as an actionable link", async () => {
+test("contact publishes the service email and no personal seller phone", async () => {
   const response = await render("/contact");
   assert.equal(response.status, 200);
   const html = await response.text();
-  assert.match(html, /tel:\+33688424062/);
-  assert.match(html, /\+33 6 88 42 40 62/);
   assert.match(html, /mailto:contact@ajluxurystore\.com/);
+  assert.doesNotMatch(html, /tel:\+33688424062|\+33 6 88 42 40 62/);
   assert.match(html, /La boutique en ligne est ouverte/);
   assert.doesNotMatch(
     html,
@@ -991,7 +990,7 @@ test("contact publishes the business phone as an actionable link", async () => {
   );
 });
 
-test("live customer dictionaries never present contact or account as a demo", () => {
+test("live customer dictionaries never present the storefront as a demo or unopened shop", () => {
   const dictionaryUrls = [
     "../lib/i18n/dictionaries/fr.json",
     "../lib/i18n/dictionaries/en.json",
@@ -1010,9 +1009,26 @@ test("live customer dictionaries never present contact or account as a demo", ()
     );
     assert.equal(typeof dictionary["contact.storeStatus"], "string");
     assert.equal(dictionary["contact.demoNotice"], undefined);
+    const liveOrFailClosedCopy = [
+      "account.eyebrow",
+      "account.error",
+      "account.demoNotice",
+      "contact.storeStatus",
+      "shop.saleNotice",
+      "product.priceLabel",
+      "product.openingSoon",
+      "product.paymentDisabled",
+      "product.cartSecureNotice",
+      "product.cartClosed",
+      "cart.demoNotice",
+    ]
+      .map((key) => dictionary[key])
+      .filter(Boolean)
+      .join(" ");
+
     assert.doesNotMatch(
-      `${dictionary["account.eyebrow"]} ${dictionary["account.error"]} ${dictionary["contact.storeStatus"]}`,
-      /démonstr|demonstr|demo customer|demo-kunden|dimostrativ/i,
+      liveOrFailClosedCopy,
+      /démonstr|demonstr|private demo|demo-kunden|dimostrativ|opening soon|ouverture prochaine|sales? not open|vente non encore ouverte|prossima apertura|próxima apertura|eröffnung in kürze|preproduction privée|private preproduction|private vorproduktion|preproducción privada|preproduzione privata/i,
     );
   }
 });
@@ -1052,22 +1068,20 @@ test("legal notice publishes the sourced seller identity and never the closed es
   assert.doesNotMatch(html, /\bTTC\b/);
   assert.match(html, /TVA non applicable, art\. 293 B/);
 
-  /* Le numéro professionnel confirmé doit apparaître comme coordonnée de
-     l'éditeur sans texte d'attente. */
+  /* L'e-mail est le contact vendeur public pendant le délai validé. */
   assert.doesNotMatch(html, /À compléter/);
   assert.doesNotMatch(html, /Aucun numéro de téléphone|ligne professionnelle/i);
   assert.match(html, /Informations juridiques applicables à la boutique en ligne/i);
   assert.doesNotMatch(html, /vente en ligne activée après|avant l’ouverture/i);
 
-  /* Deux lignes et seulement deux : vendeur puis hébergeur. */
+  /* Une seule ligne téléphone : celle de l'hébergeur, pas celle du vendeur. */
   const lignesTelephone = html.match(/<dt[^>]*>Téléphone<\/dt>/g) ?? [];
   assert.equal(
     lignesTelephone.length,
-    2,
-    "le vendeur et l’hébergeur doivent chacun porter leur téléphone",
+    1,
+    "seul l’hébergeur doit porter un téléphone pendant le délai validé",
   );
-  assert.match(html, /tel:\+33688424062/);
-  assert.match(html, /\+33 6 88 42 40 62/);
+  assert.doesNotMatch(html, /tel:\+33688424062|\+33 6 88 42 40 62/);
   assert.match(html, /\+33 1 73 01 52 44/);
 });
 
@@ -1081,8 +1095,8 @@ test("terms cover the 2026 consumer baseline without a blanket underwear exclusi
   assert.match(html, /renouvelée pour deux ans/i);
   assert.match(html, /modèle ci-dessous/);
   assert.match(html, /mailto:contact@ajluxurystore\.com/);
-  assert.match(html, /tel:\+33688424062/);
-  assert.match(html, /\+33 6 88 42 40 62/);
+  assert.doesNotMatch(html, /tel:\+33688424062|\+33 6 88 42 40 62/);
+  assert.doesNotMatch(html, /avant l’ouverture des ventes/i);
   assert.doesNotMatch(html, /accéder au formulaire de rétractation/);
   assert.match(html, /accusé de réception/i);
   assert.match(html, /n’exclut pas le droit de rétractation au seul motif que le\s+produit est un sous-vêtement/i);

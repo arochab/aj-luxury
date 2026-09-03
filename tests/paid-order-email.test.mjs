@@ -32,6 +32,22 @@ test("the previous contractual snapshot remains immutable and replayable", async
   assert.equal(legacy.sha256, "f36436387b875dfeee3e538cf9b51005e04bbea5bbb7e809e870e52c81e4ea82");
 });
 
+test("the 2026-09-03-r3 snapshot remains immutable after removing the seller phone", async () => {
+  const legacy = durableTermsSnapshotFor("2026-09-03-r3");
+  assert.ok(legacy);
+  const digest = new Uint8Array(await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(legacy.text),
+  ));
+  assert.equal(
+    Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join(""),
+    legacy.sha256,
+  );
+  assert.equal(legacy.sha256, "3c821d4cd4022185d8e53d7467f6918c685d0addb1a39be49de18224ec2ee816");
+  assert.match(legacy.text, /\+33 6 88 42 40 62/);
+  assert.doesNotMatch(DURABLE_TERMS_TEXT, /\+33 6 88 42 40 62/);
+});
+
 test("the first 2026-09-01 contractual snapshot remains immutable after r2", async () => {
   const legacy = durableTermsSnapshotFor("2026-09-01");
   assert.ok(legacy);

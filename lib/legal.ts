@@ -1,4 +1,4 @@
-export const LEGAL_VERSION = "2026-09-03-r3";
+export const LEGAL_VERSION = "2026-09-03-r4";
 
 /*
   La même date, mais avec des traits d'union INSÉCABLES (U+2011) pour
@@ -13,15 +13,13 @@ export const LEGAL_VERSION = "2026-09-03-r3";
 export const LEGAL_VERSION_DISPLAY = LEGAL_VERSION.replace(/-/g, "‑");
 
 
-/* Numéro professionnel communiqué par Adam le 01/09/2026. Il est publié sur
-   les surfaces où un consommateur cherche réellement à joindre le vendeur :
-   contact, mentions légales et CGV. Il ne doit pas être injecté dans le footer,
-   le compte client, le checkout ou les données destinées au transporteur. */
+/* Adam rapporte le 03/09/2026 que l'avocat autorise l'ouverture immédiate sans
+   téléphone public, sous réserve de l'intégrer dans un délai maximal de 30
+   jours. Jusqu'à cette échéance, l'e-mail reste le point de contact public
+   unique. Le téléphone personnel de Jérémy ne doit être publié nulle part. */
 export const LEGAL_CONTACT = {
   brand: "AJ Luxury",
   email: "contact@ajluxurystore.com",
-  phone: "+33 6 88 42 40 62",
-  phoneHref: "+33688424062",
 } as const;
 
 /* ==========================================================================
@@ -118,4 +116,5 @@ export const PRELAUNCH_BLOCKERS = [] as const;
 
 export const POSTLAUNCH_FORMALITIES = [
   "déclarer l’ajout de l’activité de vente en ligne au guichet unique dans le mois suivant son démarrage",
+  "publier une coordonnée téléphonique professionnelle validée au plus tard le 3 octobre 2026, sans utiliser le numéro personnel de Jérémy",
 ] as const;

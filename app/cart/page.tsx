@@ -90,25 +90,25 @@ export default function CartPage() {
           <section className={tunnel.scene} aria-labelledby="cart-closed-title">
             <p className={tunnel.oeil}>Panier</p>
             <h1 className={tunnel.geste} id="cart-closed-title">
-              {reviewMode ? "Le panier est prêt pour la recette." : "La collection avant le panier."}
+              {reviewMode ? "Le panier est prêt pour la recette." : "Panier temporairement indisponible."}
             </h1>
             <p className={tunnel.lede}>
               {reviewMode
                 ? "Les 726 pièces vendables, les tailles et les packs sont préparés. Cette adresse publique reste volontairement verrouillée : aucun débit et aucune donnée bancaire."
-                : "La vente en ligne n’est pas encore ouverte : ce site est une démonstration. Rien n’est enregistré, rien n’est débité, et aucune donnée bancaire n’est collectée."}
+                : "Réessayez dans un instant. Rien n’est enregistré, rien n’est débité et aucune donnée bancaire n’est collectée sur cet écran."}
             </p>
             <ul className={`${tunnel.gages} ${tunnel.montee}`}>
               <li>
                 <span>Paiement</span>
-                <strong>{reviewMode ? "Recette privée" : "Fermé"}</strong>
+                <strong>{reviewMode ? "Recette privée" : "Indisponible"}</strong>
               </li>
               <li>
                 <span>{reviewMode ? "Stock" : "Données bancaires"}</span>
                 <strong>{reviewMode ? "726 vendables" : "Aucune collecte"}</strong>
               </li>
               <li>
-                <span>{reviewMode ? "Packs" : "Ce site"}</span>
-                <strong>{reviewMode ? "2 ou 3, stock réel" : "Démonstration privée"}</strong>
+                <span>{reviewMode ? "Packs" : "Assistance"}</span>
+                <strong>{reviewMode ? "2 ou 3, stock réel" : "contact@ajluxurystore.com"}</strong>
               </li>
             </ul>
             <div className={tunnel.actions}>

@@ -111,9 +111,8 @@ obligatoire au checkout. Elle peut donc afficher
 `échec transporteur — intervention requise`.
 
 Pour cette commande précise, le téléphone destinataire est celui d’Adam :
-`06 59 00 60 25`, à saisir au format `+33659006025`. Le numéro public
-AJ Luxury / Jérémy est `06 88 42 40 62` (`+33688424062`) et ne doit pas être
-substitué au téléphone du destinataire sur l’étiquette.
+`06 59 00 60 25`, à saisir au format `+33659006025`. Aucun numéro personnel du
+vendeur ne doit être substitué au téléphone du destinataire sur l’étiquette.
 
 Le tableau de bord présente alors une seule action contrôlée :
 
