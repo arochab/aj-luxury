@@ -46,6 +46,20 @@ test("the first 2026-09-01 contractual snapshot remains immutable after r2", asy
   assert.equal(legacy.sha256, "f90633c3c43de0fbb7b43d55723243b482e574f870824d8942aae0cdfcb9bb85");
 });
 
+test("the 2026-09-01-r2 contractual snapshot remains immutable after international launch", async () => {
+  const legacy = durableTermsSnapshotFor("2026-09-01-r2");
+  assert.ok(legacy);
+  const digest = new Uint8Array(await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(legacy.text),
+  ));
+  assert.equal(
+    Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join(""),
+    legacy.sha256,
+  );
+  assert.equal(legacy.sha256, "adceef68a1e5ba6d1453f73e0c67273a0efff9458cfb584b08032c371911bd96");
+});
+
 test("order confirmation embeds line, delivery, zero VAT and the immutable terms snapshot", () => {
   const email = buildPaidOrderEmail("order-confirmation", {
     orderNumber: "AJ-2026-0042",

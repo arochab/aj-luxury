@@ -6,7 +6,7 @@ import {
 } from "@/lib/legal";
 import { T } from "@/lib/i18n/TranslatedText";
 
-export const metadata = { title: "Livraison en Union européenne et retours | AJ Luxury" };
+export const metadata = { title: "Livraison internationale et retours | AJ Luxury" };
 
 export default function ShippingReturnsPage() {
   return (
@@ -27,10 +27,13 @@ export default function ShippingReturnsPage() {
       <section>
         <h2>Livraison</h2>
         <p>
-          Au lancement, AJ Luxury livre en France métropolitaine, Corse comprise,
-          et dans les autres pays de l’Union européenne. Les territoires
-          ultramarins et les destinations hors Union européenne ne sont pas
-          encore desservis.
+          AJ Luxury livre en France métropolitaine, Corse comprise, dans les
+          autres pays de l’Union européenne et, hors Union européenne, au
+          Royaume-Uni, aux États-Unis, au Canada, aux Émirats arabes unis, au
+          Qatar et en Arabie saoudite. Une destination n’est commandable que si
+          une offre transporteur réelle s’affiche avant le paiement. Les autres
+          destinations et les territoires spéciaux restent fermés tant qu’aucune
+          offre complète n’est disponible.
         </p>
         <p>
           Selon le pays, l’adresse et la disponibilité du transporteur, une
@@ -41,10 +44,14 @@ export default function ShippingReturnsPage() {
           qui engage AJ Luxury.
         </p>
         <p>
-          Le numéro EORI du vendeur est valide. L’ouverture hors Union
-          européenne reste néanmoins séparée jusqu’à validation des
-          transporteurs, déclarations douanières, droits, taxes et retours pour
-          chaque destination.
+          Pour une livraison hors Union européenne, l’expédition est proposée
+          selon l’Incoterm DAP : AJ Luxury prend en charge le transport et les
+          formalités d’exportation jusqu’à la destination convenue ; les droits,
+          taxes et frais d’importation éventuellement exigés dans le pays de
+          destination restent à la charge du destinataire. Ils peuvent être
+          demandés par le transporteur ou les douanes avant la remise du colis.
+          Le numéro EORI du vendeur et les données douanières nécessaires sont
+          transmis au transporteur lors de la création de l’expédition.
         </p>
       </section>
 

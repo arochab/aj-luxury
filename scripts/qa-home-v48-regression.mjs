@@ -90,8 +90,9 @@ const mobileHero = await mobile.page.evaluate(() => {
   };
 });
 assert.equal(mobileHero.bodyOverflow, 0, "mobile page must not overflow horizontally");
-assert.equal(mobileHero.objectFit, "contain", "mobile hero must preserve both models");
-assert(mobileHero.stage?.width >= 525, "mobile film must be enlarged beyond the viewport");
+assert.equal(mobileHero.objectFit, "cover", "the approved 9:16 mobile film must fill the hero");
+assert.equal(mobileHero.objectPosition, "50% 50%", "the mobile film must stay centred");
+assert.equal(mobileHero.stage?.width, 390, "the mobile film must match the viewport without overflow");
 assert(mobileHero.video?.started && mobileHero.video.currentTime > 0, "mobile hero video must autoplay");
 
 const rail = mobile.page.locator('[data-home-horizontal-rail="v48"]');
@@ -109,6 +110,8 @@ const railInitial = await rail.evaluate((node) => {
   const panels = [...node.querySelectorAll("article")];
   const images = [...node.querySelectorAll("img")];
   const style = getComputedStyle(node);
+  const track = viewport?.firstElementChild;
+  const trackGap = track ? Number.parseFloat(getComputedStyle(track).columnGap) : 0;
   const stage = node.firstElementChild?.getBoundingClientRect();
   return {
     borderTopWidth: style.borderTopWidth,
@@ -117,14 +120,19 @@ const railInitial = await rail.evaluate((node) => {
     scrollLeft: viewport?.scrollLeft ?? -1,
     scrollWidth: viewport?.scrollWidth ?? -1,
     stageHeight: stage?.height ?? -1,
+    trackGap,
     viewportWidth: viewport?.clientWidth ?? -1,
   };
 });
 assert.equal(railInitial.panelCount, 3, "the mobile rail must expose exactly three slides");
-assert.equal(railInitial.borderTopWidth, "10px", "the mobile delimiter must be clearly visible");
+assert.equal(railInitial.borderTopWidth, "0px", "the mobile rail must not expose a white separator");
 assert.equal(railInitial.imageFailures, 0, "all six rail images must be decoded");
 assert(railInitial.stageHeight <= 760, "mobile rail must not create a deep empty shelf");
-assert.equal(railInitial.scrollWidth, railInitial.viewportWidth * 3, "mobile rail must span three exact viewports");
+assert.equal(
+  railInitial.scrollWidth,
+  railInitial.viewportWidth * 3 + Math.round(railInitial.trackGap * 2),
+  "mobile rail must span three exact panels and their two intentional gaps",
+);
 
 await swipeRail(mobile.page);
 const afterFirstSwipe = await rail.locator('[aria-label="Collection Apollon, trois coloris"]').evaluate((node) => node.scrollLeft);
@@ -162,9 +170,10 @@ const desktopState = await desktopRail.evaluate((node) => ({
   borderTopWidth: getComputedStyle(node).borderTopWidth,
   panelCount: node.querySelectorAll("article").length,
 }));
-assert(
-  Number.parseFloat(desktopState.borderTopWidth) >= 9,
-  "desktop delimiter must resolve to a clearly visible white band",
+assert.equal(
+  desktopState.borderTopWidth,
+  "0px",
+  "the desktop rail must not expose a white separator",
 );
 assert.equal(desktopState.panelCount, 3, "desktop rail must retain three panels");
 assert.deepEqual(desktop.errors, [], `desktop console errors: ${desktop.errors.join(" | ")}`);

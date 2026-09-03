@@ -188,38 +188,10 @@ const PLATEAUX: readonly Plateau[] = [
     numero: "03",
     nomKey: "sequence.color.purple",
     still: "/images/editorial/isabelle-apollon/apollon-pourpre-lyre-v1.webp",
-    /* `-model-color-v2` depuis le 18/08. Adam demande que les décors générés
-       disparaissent du fond des trois photos portées : plus de lyre, plus de
-       laurier, plus de carquois, plus de sol de marbre. Le mur nu vient du même
-       shooting, même pose, même 1731x2600.
-
-       Ce qui est abandonné, sciemment : le raccord d'horizon mesuré au banc
-       `_design-reference/mesure-horizon.py` (mur/marbre à 69,3 % des deux côtés
-       de la couture) n'existe plus, puisqu'il n'y a plus de sol. Le diptyque
-       n'imite plus un panorama continu ; il pose côte à côte un plateau et un
-       homme. C'est la lecture que le jury du 18/08 recommandait déjà en B3.
-
-       Les `v2` sont dérivées des `-model-color-v1` : branche dorée retirée du
-       pourpre par reconstruction du mur, et 105 lignes de socle coupées en bas
-       des trois, rendues en haut par réflexion du mur nu — donc format et
-       ratio 1731x2600 strictement inchangés, ce dont dépendent les
-       `aspect-ratio: 2 / 3` posés sur toutes les vignettes.
-
-       PRÉCISION DU 19/08, à ne pas perdre : cette réflexion est un MIROIR
-       EXACT, pas une extension de mur. Les lignes 0 à 104 sont les lignes 105
-       à 209 retournées (écart moyen mesuré 0,08 sur le rose, 0,12 sur le
-       lilas, 0,90 sur le pourpre, contre 11,09 / 2,57 / 6,49 sur la bande de
-       contrôle suivante). Elle est invisible parce qu'elle ne couvre que du
-       mur nu — mais sur le Rose la chevelure commence à y≈220, soit 10 px
-       seulement sous la limite de la bande. Conséquences opposables :
-         • ne JAMAIS poser d'`object-position` vers le haut sur ces trois
-           vignettes, ni de cadre moins vertical que 2/3 — un crâne dupliqué à
-           l'envers apparaîtrait en haut du cadre ;
-         • `.prise` est en `object-fit: contain` : la source est rendue à
-           100 %, c'est ce qui rend la marge de 10 px acceptable aujourd'hui ;
-         • si de nouvelles sources doivent être fabriquées ainsi, générer le
-           haut par EXTENSION de mur, pas par miroir. */
-    worn: "/images/client/apollon-world/apollon-pourpre-model-color-v1.webp",
+    /* Source exacte du master vidéo pourpre, recadrée sans génération : Alex
+       seul reste visible de la tête aux pieds. Conserver le cadre 2/3 et
+       `object-fit: contain` afin de ne jamais rogner sa silhouette. */
+    worn: "/images/client/apollon-world/apollon-pourpre-alex-video-full-v1.webp",
     mur: "var(--aj-mur-pourpre)",
     voile: "var(--aj-voile-pourpre)",
     phrase:

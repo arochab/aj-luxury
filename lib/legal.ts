@@ -1,4 +1,4 @@
-export const LEGAL_VERSION = "2026-09-01-r2";
+export const LEGAL_VERSION = "2026-09-03-r3";
 
 /*
   La même date, mais avec des traits d'union INSÉCABLES (U+2011) pour

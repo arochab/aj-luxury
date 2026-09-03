@@ -86,7 +86,10 @@ for (const viewport of [
   );
   assert.equal(result.modelAlt, "Apollon Pourpre Impérial porté par Alex");
   assert.equal(result.modelObjectFit, "contain");
-  assert.match(result.modelSource ?? "", /apollon-pourpre-model-color-v1/);
+  assert.match(
+    result.modelSource ?? "",
+    /apollon-pourpre-alex-video-full-v1/,
+  );
   assert(
     result.railScrollWidth >= result.railClientWidth * 3 &&
       result.railScrollWidth <= result.railClientWidth * 3 + 120,

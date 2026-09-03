@@ -5,7 +5,7 @@ import { LEGAL_VERSION } from "./legal.ts";
  * Keep the version and SHA in sync whenever this contractual text changes.
  */
 export const DURABLE_TERMS_VERSION = LEGAL_VERSION;
-export const DURABLE_TERMS_SHA256 = "adceef68a1e5ba6d1453f73e0c67273a0efff9458cfb584b08032c371911bd96";
+export const DURABLE_TERMS_SHA256 = "3c821d4cd4022185d8e53d7467f6918c685d0addb1a39be49de18224ec2ee816";
 
 export const DURABLE_TERMS_TEXT = `CONDITIONS GÉNÉRALES DE VENTE AJ LUXURY
 Version ${DURABLE_TERMS_VERSION}
@@ -26,7 +26,7 @@ Le client sélectionne le produit, le coloris et la taille, vérifie et corrige 
 Les moyens de paiement disponibles sont affichés lors de la commande. Le débit intervient selon les modalités du prestataire sélectionné. AJ Luxury ne conserve pas le cryptogramme de la carte. Les produits demeurent la propriété du vendeur jusqu'au paiement intégral, sans préjudice du transfert des risques prévu ci-dessous.
 
 6. Livraison
-Le lancement couvre la France métropolitaine, Corse comprise, et les pays de l'Union européenne pour lesquels un tarif réel est retourné avant paiement. Les destinations hors Union européenne et les territoires spéciaux restent fermés. Le transporteur, le mode, le tarif et le délai estimé sont présentés avant paiement. À défaut de délai convenu, la livraison intervient au plus tard trente jours après la commande. Le risque de perte ou d'endommagement est transféré lorsque le client prend physiquement possession du colis, sauf transporteur choisi par lui et non proposé par AJ Luxury. Un colis endommagé ou incomplet doit être signalé rapidement, sans limitation des garanties légales.
+AJ Luxury livre en France métropolitaine, Corse comprise, dans les autres pays de l'Union européenne et, hors Union européenne, au Royaume-Uni, aux États-Unis, au Canada, aux Émirats arabes unis, au Qatar et en Arabie saoudite, uniquement lorsqu'un tarif transporteur réel est retourné avant paiement. Les autres destinations et les territoires spéciaux restent fermés tant qu'aucune offre complète n'est disponible. Le transporteur, le mode, le tarif et le délai estimé sont présentés avant paiement. À défaut de délai convenu, la livraison intervient au plus tard trente jours après la commande. Hors Union européenne, l'expédition est proposée selon l'Incoterm DAP : AJ Luxury prend en charge le transport et les formalités d'exportation jusqu'à la destination convenue ; les droits, taxes et frais d'importation éventuellement exigés dans le pays de destination restent à la charge du destinataire et peuvent être demandés avant la remise du colis. Le risque de perte ou d'endommagement est transféré lorsque le client prend physiquement possession du colis, sauf transporteur choisi par lui et non proposé par AJ Luxury. Un colis endommagé ou incomplet doit être signalé rapidement, sans limitation des garanties légales.
 
 7. Droit de rétractation et retours
 Le client dispose de quatorze jours calendaires à compter de la réception pour notifier sa décision sans justification à contact@ajluxurystore.com. Un accusé de réception lui est adressé sur un support durable. Le produit doit être renvoyé au plus tard quatorze jours après la notification. Les frais directs de retour sont à la charge du client, sauf erreur d'AJ Luxury, défaut ou non-conformité. Adresse de retour : AJ Luxury — Jérémy Scheppler EI, 3 A rue Principale, 67130 Belmont, France. AJ Luxury rembourse les sommes reçues, y compris les frais de livraison standard initiaux, dans les quatorze jours suivant la notification. Le remboursement peut être différé jusqu'à la récupération du produit ou la réception d'une preuve d'expédition, la première date étant retenue.
@@ -52,10 +52,17 @@ Toute réclamation doit d'abord être adressée à contact@ajluxurystore.com. Ap
 /* Une confirmation ou un renvoi Stripe peut être rejoué longtemps après la
    commande. Le snapshot accepté à l'époque doit donc rester disponible même
    après une nouvelle version des CGV. Ces remplacements reconstruisent
-   exactement les versions 2026-09-01 et 2026-08-26 ; leurs hashes historiques
+   exactement les versions 2026-09-01-r2, 2026-09-01 et 2026-08-26 ; leurs hashes historiques
    verrouillent le résultat dans les tests et empêchent toute modification
    rétroactive silencieuse. */
-const LEGACY_DURABLE_TERMS_TEXT_2026_09_01 = DURABLE_TERMS_TEXT
+const LEGACY_DURABLE_TERMS_TEXT_2026_09_01_R2 = DURABLE_TERMS_TEXT
+  .replace("Version 2026-09-03-r3", "Version 2026-09-01-r2")
+  .replace(
+    "AJ Luxury livre en France métropolitaine, Corse comprise, dans les autres pays de l'Union européenne et, hors Union européenne, au Royaume-Uni, aux États-Unis, au Canada, aux Émirats arabes unis, au Qatar et en Arabie saoudite, uniquement lorsqu'un tarif transporteur réel est retourné avant paiement. Les autres destinations et les territoires spéciaux restent fermés tant qu'aucune offre complète n'est disponible. Le transporteur, le mode, le tarif et le délai estimé sont présentés avant paiement. À défaut de délai convenu, la livraison intervient au plus tard trente jours après la commande. Hors Union européenne, l'expédition est proposée selon l'Incoterm DAP : AJ Luxury prend en charge le transport et les formalités d'exportation jusqu'à la destination convenue ; les droits, taxes et frais d'importation éventuellement exigés dans le pays de destination restent à la charge du destinataire et peuvent être demandés avant la remise du colis. Le risque de perte ou d'endommagement est transféré lorsque le client prend physiquement possession du colis, sauf transporteur choisi par lui et non proposé par AJ Luxury. Un colis endommagé ou incomplet doit être signalé rapidement, sans limitation des garanties légales.",
+    "Le lancement couvre la France métropolitaine, Corse comprise, et les pays de l'Union européenne pour lesquels un tarif réel est retourné avant paiement. Les destinations hors Union européenne et les territoires spéciaux restent fermés. Le transporteur, le mode, le tarif et le délai estimé sont présentés avant paiement. À défaut de délai convenu, la livraison intervient au plus tard trente jours après la commande. Le risque de perte ou d'endommagement est transféré lorsque le client prend physiquement possession du colis, sauf transporteur choisi par lui et non proposé par AJ Luxury. Un colis endommagé ou incomplet doit être signalé rapidement, sans limitation des garanties légales.",
+  );
+
+const LEGACY_DURABLE_TERMS_TEXT_2026_09_01 = LEGACY_DURABLE_TERMS_TEXT_2026_09_01_R2
   .replace("Version 2026-09-01-r2", "Version 2026-09-01")
   .replace(
     "Le client sélectionne le produit, le coloris et la taille, vérifie et corrige son panier, puis saisit son nom et son adresse de livraison. Ces mêmes coordonnées sont reprises comme adresse de facturation et cette règle est annoncée avant la commande. Le client choisit ensuite la livraison et le paiement, accepte les présentes CGV puis valide avec obligation de paiement.",
@@ -79,6 +86,11 @@ const LEGACY_DURABLE_TERMS_TEXT_2026_08_26 =
     );
 
 const DURABLE_TERMS_BY_VERSION = Object.freeze({
+  "2026-09-01-r2": Object.freeze({
+    version: "2026-09-01-r2",
+    sha256: "adceef68a1e5ba6d1453f73e0c67273a0efff9458cfb584b08032c371911bd96",
+    text: LEGACY_DURABLE_TERMS_TEXT_2026_09_01_R2,
+  }),
   "2026-09-01": Object.freeze({
     version: "2026-09-01",
     sha256: "f90633c3c43de0fbb7b43d55723243b482e574f870824d8942aae0cdfcb9bb85",

@@ -1,9 +1,8 @@
 .sequence {
-  --rail-divider-size: clamp(14px, 1.25vw, 20px);
   position: relative;
   min-width: 0;
   overflow: clip;
-  border-top: var(--rail-divider-size) solid #f6f3ef;
+  border-top: 0;
   background: var(--hero-rail-seam, #261019);
   color: #f7f5f2;
   isolation: isolate;
@@ -316,10 +315,6 @@
    panels, while vertical page panning is still available from the same
    gesture surface. */
 @media (max-width: 900px) {
-  .sequence {
-    --rail-divider-size: 16px;
-  }
-
   .motionReady .trackViewport {
     overflow-x: auto;
     overflow-y: hidden;

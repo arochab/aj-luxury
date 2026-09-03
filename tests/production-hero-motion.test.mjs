@@ -140,9 +140,8 @@ test("the hero hands its measured plum floor to the horizontal chromatic rail", 
   assert.match(homeCss, /var\(--hero-rail-seam\) 100%/);
   assert.match(css, /background:\s*var\(--hero-rail-seam, #261019\)/);
   assert.match(css, /\.track::after\s*\{[\s\S]*var\(--hero-rail-seam, #261019\) 0%[\s\S]*transparent 100%/);
-  assert.match(css, /--rail-divider-size:\s*clamp\(14px, 1\.25vw, 20px\)/);
-  assert.match(css, /\.sequence\s*\{[\s\S]*border-top:\s*var\(--rail-divider-size\) solid #f6f3ef/);
-  assert.match(css, /@media \(max-width: 900px\)[\s\S]*--rail-divider-size:\s*16px/);
+  assert.match(css, /\.sequence\s*\{[\s\S]*border-top:\s*0/);
+  assert.doesNotMatch(css, /--rail-divider-size/);
   assert.match(css, /\.trackViewport\s*\{/);
   assert.match(css, /@media \(max-width: 900px\)[\s\S]*overflow-x:\s*auto[\s\S]*scroll-snap-type:\s*x mandatory/);
   assert.match(css, /touch-action:\s*pan-x pan-y/);
@@ -161,7 +160,7 @@ test("the hero hands its measured plum floor to the horizontal chromatic rail", 
   assert.doesNotMatch(rail, /stageFooter|01 \/ 03/);
   assert.doesNotMatch(rail, /styles\.modelFrame/);
   assert.doesNotMatch(css, /\.modelFrame::after/);
-  assert.match(rail, /apollon-pourpre-model-color-v1\.webp/);
+  assert.match(rail, /apollon-pourpre-alex-video-full-v1\.webp/);
   assert.match(rail, /Apollon Pourpre Impérial porté par Alex/);
   assert.doesNotMatch(rail, /Pourpre Impérial porté par Jérémy et Alex/);
   assert.match(
@@ -187,9 +186,9 @@ test("the hero hands its measured plum floor to the horizontal chromatic rail", 
     "public/images/editorial/isabelle-apollon/apollon-lilas-lyre-v1-720.webp",
     "public/images/editorial/isabelle-apollon/apollon-rose-lyre-v1-360.webp",
     "public/images/editorial/isabelle-apollon/apollon-rose-lyre-v1-720.webp",
-    "public/images/client/apollon-world/apollon-pourpre-model-color-v1-360.webp",
-    "public/images/client/apollon-world/apollon-pourpre-model-color-v1-720.webp",
-    "public/images/client/apollon-world/apollon-pourpre-model-color-v1-1080.webp",
+    "public/images/client/apollon-world/apollon-pourpre-alex-video-full-v1-360.webp",
+    "public/images/client/apollon-world/apollon-pourpre-alex-video-full-v1-720.webp",
+    "public/images/client/apollon-world/apollon-pourpre-alex-video-full-v1-1080.webp",
     "public/images/client/apollon-world/apollon-lilas-model-color-v2-360.webp",
     "public/images/client/apollon-world/apollon-lilas-model-color-v2-720.webp",
     "public/images/client/apollon-world/apollon-lilas-model-color-v2-1080.webp",

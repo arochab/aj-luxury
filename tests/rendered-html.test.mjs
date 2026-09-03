@@ -673,7 +673,7 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
   assert.match(html, /aj-luxury-hero-openart-mobile-poster-540\.webp 540w/);
   assert.match(html, /aj-luxury-hero-openart-mobile-poster-1080\.webp 1080w/);
   assert.match(html, /apollon-pourpre-lyre-v1\.webp/);
-  assert.match(html, /apollon-pourpre-model-color-v1\.webp/);
+  assert.match(html, /apollon-pourpre-alex-video-full-v1\.webp/);
   assert.match(html, /Apollon Pourpre Impérial porté par Alex/);
   assert.doesNotMatch(html, /Pourpre Impérial porté par Jérémy et Alex/);
   assert.match(html, /apollon-lilas-lyre-v1\.webp/);
@@ -703,7 +703,7 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
     [
       "/images/client/aj-luxury-hero-openart-desktop-poster.webp",
       "/images/editorial/isabelle-apollon/apollon-pourpre-lyre-v1.webp",
-      "/images/client/apollon-world/apollon-pourpre-model-color-v1.webp",
+      "/images/client/apollon-world/apollon-pourpre-alex-video-full-v1.webp",
       "/images/editorial/isabelle-apollon/apollon-lilas-lyre-v1.webp",
       "/images/client/apollon-world/apollon-lilas-model-color-v2.webp",
       "/images/editorial/isabelle-apollon/apollon-rose-lyre-v1.webp",
@@ -941,7 +941,7 @@ test("server-renders the complete AJ Luxury story", async () => {
 });
 
 const informationCases = [
-  ["/shipping-returns", /Livraison en Union européenne et retours/],
+  ["/shipping-returns", /Livraison internationale et retours/],
   ["/privacy", /Politique de confidentialité/],
   ["/terms", /Conditions générales de vente/],
   ["/contact", /Nous contacter/],
@@ -958,6 +958,23 @@ for (const [pathname, marker] of informationCases) {
     assert.match(html, marker);
   });
 }
+
+test("shipping and terms publish the exact active international scope and DAP allocation", async () => {
+  for (const pathname of ["/shipping-returns", "/terms"]) {
+    const response = await render(pathname);
+    assert.equal(response.status, 200);
+    const html = await response.text();
+    assert.match(html, /Royaume-Uni/);
+    assert.match(html, /États-Unis/);
+    assert.match(html, /Canada/);
+    assert.match(html, /Émirats arabes unis/);
+    assert.match(html, /Qatar/);
+    assert.match(html, /Arabie saoudite/);
+    assert.match(html, /Incoterm DAP/);
+    assert.match(html, /droits, taxes et frais d.importation/);
+    assert.doesNotMatch(html, /destinations hors Union européenne[^.]*restent fermées/i);
+  }
+});
 
 test("contact publishes the business phone as an actionable link", async () => {
   const response = await render("/contact");

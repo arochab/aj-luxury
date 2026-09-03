@@ -136,13 +136,24 @@ export default function TermsPage() {
       <section>
         <h2>6. Livraison</h2>
         <p>
-          Le lancement couvre la France métropolitaine, Corse comprise, et les
-          autres pays de l’Union européenne pour lesquels un tarif réel est
-          retourné avant paiement. Les destinations hors Union européenne et
-          les territoires spéciaux restent fermés. Le transporteur, le tarif et
-          le délai estimé sont présentés avant paiement. À défaut de date ou de
-          délai convenu, la livraison intervient au plus tard trente jours après
-          la commande.
+          AJ Luxury livre en France métropolitaine, Corse comprise, dans les
+          autres pays de l’Union européenne et, hors Union européenne, au
+          Royaume-Uni, aux États-Unis, au Canada, aux Émirats arabes unis, au
+          Qatar et en Arabie saoudite, uniquement lorsqu’un tarif transporteur
+          réel est retourné avant paiement. Les autres destinations et les
+          territoires spéciaux restent fermés tant qu’aucune offre complète
+          n’est disponible. Le transporteur, le mode, le tarif et le délai
+          estimé sont présentés avant paiement. À défaut de date ou de délai
+          convenu, la livraison intervient au plus tard trente jours après la
+          commande.
+        </p>
+        <p>
+          Hors Union européenne, l’expédition est proposée selon l’Incoterm DAP.
+          AJ Luxury prend en charge le transport et les formalités d’exportation
+          jusqu’à la destination convenue. Les droits, taxes et frais
+          d’importation éventuellement exigés dans le pays de destination
+          restent à la charge du destinataire et peuvent être demandés avant la
+          remise du colis.
         </p>
         <p>
           Le risque de perte ou d’endommagement est transféré au client lorsqu’il
