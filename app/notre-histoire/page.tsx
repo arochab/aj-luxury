@@ -3,6 +3,7 @@ import Image from "next/image";
 import StoreFooter from "../components/StoreFooter";
 import StoreHeader from "../components/StoreHeader";
 import { T } from "../../lib/i18n/TranslatedText";
+import StoryHeroMedia from "./StoryHeroMedia";
 import styles from "./Story.module.css";
 
 export const metadata: Metadata = {
@@ -16,7 +17,7 @@ export default function NotreHistoirePage() {
     <main className={styles.page}>
       <section className={styles.hero} aria-labelledby="story-title">
         <div className={styles.heroTop}>
-          <StoreHeader variant="light" />
+          <StoreHeader />
         </div>
 
         <div className={styles.heroBody}>
@@ -30,18 +31,7 @@ export default function NotreHistoirePage() {
             </blockquote>
           </div>
 
-          <figure className={styles.heroImage}>
-            <Image
-              unoptimized
-              priority
-              src="/images/client/campaign-duo-lilas-seated.webp"
-              alt="AJ Luxury — Alex et Jérémy — collection Apollon"
-              fill
-              sizes="(max-width: 760px) 100vw, 62vw"
-              className={styles.heroForeground}
-              style={{ objectFit: "contain", objectPosition: "center" }}
-            />
-          </figure>
+          <StoryHeroMedia />
         </div>
       </section>
 

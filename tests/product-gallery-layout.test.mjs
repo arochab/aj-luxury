@@ -136,8 +136,12 @@ test("the validated body-waist guide covers only the four sold sizes", () => {
   assert.match(purchase, /product\.oneSizeForPack/);
 });
 
-test("the mobile story removes the empty definition visual spacer", () => {
+test("the mobile story keeps the final visual compact instead of leaving an empty spacer", () => {
   assert.match(
+    storyStyles,
+    /@media \(max-width: 760px\)[\s\S]*?\.definitionVisual\s*\{[^}]*min-height:\s*min\(120vw, 34rem\);/s,
+  );
+  assert.doesNotMatch(
     storyStyles,
     /@media \(max-width: 760px\)[\s\S]*?\.definitionVisual\s*\{[^}]*display:\s*none;/s,
   );

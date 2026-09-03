@@ -5,6 +5,7 @@ import { readFile, stat } from "node:fs/promises";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import sharp from "sharp";
 
 const projectFile = (path) => new URL(`../${path}`, import.meta.url);
 const execFileAsync = promisify(execFile);
@@ -160,7 +161,7 @@ test("the hero hands its measured plum floor to the horizontal chromatic rail", 
   assert.doesNotMatch(rail, /stageFooter|01 \/ 03/);
   assert.doesNotMatch(rail, /styles\.modelFrame/);
   assert.doesNotMatch(css, /\.modelFrame::after/);
-  assert.match(rail, /apollon-pourpre-model-color-v2\.webp/);
+  assert.match(rail, /apollon-pourpre-model-color-v3\.webp/);
   assert.doesNotMatch(rail, /apollon-pourpre-model-world-v1\.webp/);
   assert.match(rail, /Apollon Pourpre Impérial porté par Alex/);
   assert.doesNotMatch(rail, /Pourpre Impérial porté par Jérémy et Alex/);
@@ -187,9 +188,9 @@ test("the hero hands its measured plum floor to the horizontal chromatic rail", 
     "public/images/editorial/isabelle-apollon/apollon-lilas-lyre-v1-720.webp",
     "public/images/editorial/isabelle-apollon/apollon-rose-lyre-v1-360.webp",
     "public/images/editorial/isabelle-apollon/apollon-rose-lyre-v1-720.webp",
-    "public/images/client/apollon-world/apollon-pourpre-model-color-v2-360.webp",
-    "public/images/client/apollon-world/apollon-pourpre-model-color-v2-720.webp",
-    "public/images/client/apollon-world/apollon-pourpre-model-color-v2-1080.webp",
+    "public/images/client/apollon-world/apollon-pourpre-model-color-v3-360.webp",
+    "public/images/client/apollon-world/apollon-pourpre-model-color-v3-720.webp",
+    "public/images/client/apollon-world/apollon-pourpre-model-color-v3-1080.webp",
     "public/images/client/apollon-world/apollon-lilas-model-color-v2-360.webp",
     "public/images/client/apollon-world/apollon-lilas-model-color-v2-720.webp",
     "public/images/client/apollon-world/apollon-lilas-model-color-v2-1080.webp",
@@ -205,6 +206,41 @@ test("the hero hands its measured plum floor to the horizontal chromatic rail", 
   ]) {
     assert.ok((await stat(projectFile(path))).size > 0, `${path} is empty`);
   }
+});
+
+test("the Pourpre portrait keeps the approved master canvas at every responsive size", async () => {
+  const sourcePath = fileURLToPath(projectFile(
+    "public/images/client/hero-pourpre-model.webp",
+  ));
+  const fullPath = fileURLToPath(projectFile(
+    "public/images/client/apollon-world/apollon-pourpre-model-color-v3.webp",
+  ));
+  const script = await readFile(
+    projectFile("scripts/build_pourpre_model_background.py"),
+    "utf8",
+  );
+  const [source, full, small, medium, large] = await Promise.all([
+    sharp(sourcePath).metadata(),
+    sharp(fullPath).metadata(),
+    sharp(fileURLToPath(projectFile(
+      "public/images/client/apollon-world/apollon-pourpre-model-color-v3-360.webp",
+    ))).metadata(),
+    sharp(fileURLToPath(projectFile(
+      "public/images/client/apollon-world/apollon-pourpre-model-color-v3-720.webp",
+    ))).metadata(),
+    sharp(fileURLToPath(projectFile(
+      "public/images/client/apollon-world/apollon-pourpre-model-color-v3-1080.webp",
+    ))).metadata(),
+  ]);
+
+  assert.deepEqual([source.width, source.height], [1731, 2600]);
+  assert.deepEqual([full.width, full.height], [1731, 2600]);
+  assert.deepEqual([small.width, small.height], [360, 541]);
+  assert.deepEqual([medium.width, medium.height], [720, 1081]);
+  assert.deepEqual([large.width, large.height], [1080, 1622]);
+  assert.match(script, /MASTER = ROOT \/ "public" \/ "images" \/ "client" \/ "hero-pourpre-model\.webp"/);
+  assert.match(script, /composite = foreground \* alpha/);
+  assert.doesNotMatch(script, /\.crop\(|105 lignes|\[105:/);
 });
 
 test("the Apollon collection serves responsive deterministic image derivatives", async () => {

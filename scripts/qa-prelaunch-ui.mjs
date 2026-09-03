@@ -18,12 +18,18 @@ const browser = await chromium.launch({
   headless: true,
 });
 
-async function readyPage(viewport, hasTouch = false, pathname = "/") {
+async function readyPage(
+  viewport,
+  hasTouch = false,
+  pathname = "/",
+  reducedMotion = "no-preference",
+) {
   const context = await browser.newContext({
     viewport,
     hasTouch,
     isMobile: hasTouch,
     locale: "fr-FR",
+    reducedMotion,
   });
   const page = await context.newPage();
   const errors = [];
@@ -115,7 +121,7 @@ for (const viewport of [
   assert.equal(result.modelObjectFit, "contain");
   assert.match(
     result.modelSource ?? "",
-    /apollon-pourpre-model-color-v2/,
+    /apollon-pourpre-model-color-v3/,
   );
   assert(
     result.railScrollWidth >= result.railClientWidth * 3 &&
@@ -201,18 +207,28 @@ const storyHero = await story.page.locator("figure").first().evaluate((figure) =
   const images = [...figure.querySelectorAll("img")];
   return {
     backgroundColor: getComputedStyle(figure).backgroundColor,
+    borderWidth: getComputedStyle(figure).borderWidth,
     count: images.length,
     fits: images.map((image) => getComputedStyle(image).objectFit),
+    naturalRatio: images[0]?.naturalWidth / images[0]?.naturalHeight,
     ready: images.every((image) => image.complete && image.naturalWidth > 0),
   };
 });
-assert.deepEqual(storyHero.fits, ["contain"]);
+assert.deepEqual(storyHero.fits, ["cover"]);
 assert.equal(storyHero.count, 1, "story hero renders the intact campaign image once");
-assert.equal(storyHero.backgroundColor, "rgb(255, 255, 255)", "story hero has no dark side bands");
+assert.equal(storyHero.backgroundColor, "rgb(37, 37, 46)", "story hero frame matches the dark canvas");
+assert.equal(storyHero.borderWidth, "1px", "story hero keeps its fine white frame");
+assert(Math.abs(storyHero.naturalRatio - 2 / 3) < 0.002, "story hero frame matches the source ratio");
 assert.equal(storyHero.ready, true, "story hero images decode");
-assert.deepEqual(story.errors, [], "story has no browser errors");
 const storyScreenshot = fileURLToPath(new URL("story-desktop-1440.png", evidenceRoot));
 await story.page.screenshot({ path: storyScreenshot });
+await story.page.evaluate(() => window.scrollTo({ top: 520, behavior: "auto" }));
+await story.page.waitForTimeout(350);
+const storyTransform = await story.page.locator('[data-story-scroll-zoom="subtle"] img').evaluate(
+  (image) => getComputedStyle(image).transform,
+);
+assert.notEqual(storyTransform, "none", "story hero zoom follows the page scroll");
+assert.deepEqual(story.errors, [], "story has no browser errors");
 await story.context.close();
 
 const mobileStory = await readyPage({ width: 390, height: 844 }, true, "/notre-histoire");
@@ -220,15 +236,19 @@ const mobileStoryHero = await mobileStory.page.locator("figure").first().evaluat
   const images = [...figure.querySelectorAll("img")];
   return {
     backgroundColor: getComputedStyle(figure).backgroundColor,
+    borderWidth: getComputedStyle(figure).borderWidth,
     count: images.length,
     fits: images.map((image) => getComputedStyle(image).objectFit),
+    naturalRatio: images[0]?.naturalWidth / images[0]?.naturalHeight,
     ready: images.every((image) => image.complete && image.naturalWidth > 0),
     overflow: document.documentElement.scrollWidth - innerWidth,
   };
 });
-assert.deepEqual(mobileStoryHero.fits, ["contain"]);
+assert.deepEqual(mobileStoryHero.fits, ["cover"]);
 assert.equal(mobileStoryHero.count, 1, "mobile story renders the intact campaign image once");
-assert.equal(mobileStoryHero.backgroundColor, "rgb(255, 255, 255)", "mobile story has no dark side bands");
+assert.equal(mobileStoryHero.backgroundColor, "rgb(37, 37, 46)", "mobile story frame matches the dark canvas");
+assert.equal(mobileStoryHero.borderWidth, "1px", "mobile story keeps its fine white frame");
+assert(Math.abs(mobileStoryHero.naturalRatio - 2 / 3) < 0.002, "mobile story frame matches the source ratio");
 assert.equal(mobileStoryHero.ready, true, "mobile story images decode");
 assert.equal(mobileStoryHero.overflow, 0, "mobile story does not overflow horizontally");
 assert.deepEqual(mobileStory.errors, [], "mobile story has no browser errors");
@@ -236,18 +256,46 @@ const mobileStoryScreenshot = fileURLToPath(new URL("story-mobile-390.png", evid
 await mobileStory.page.screenshot({ path: mobileStoryScreenshot });
 await mobileStory.context.close();
 
+const reducedStory = await readyPage(
+  { width: 390, height: 844 },
+  true,
+  "/notre-histoire",
+  "reduce",
+);
+await reducedStory.page.evaluate(() => window.scrollTo({ top: 520, behavior: "auto" }));
+await reducedStory.page.waitForTimeout(350);
+const reducedTransform = await reducedStory.page
+  .locator('[data-story-scroll-zoom="subtle"] img')
+  .evaluate((image) => getComputedStyle(image).transform);
+assert(
+  reducedTransform === "none" || reducedTransform === "matrix(1, 0, 0, 1, 0, 0)",
+  "reduced-motion keeps the story image static",
+);
+assert.deepEqual(reducedStory.errors, [], "reduced-motion story has no browser errors");
+await reducedStory.context.close();
+
 const account = await readyPage({ width: 1440, height: 900 }, false, "/account");
 await account.page.waitForTimeout(700);
 const accountState = {
   alerts: await account.page.locator('[role="alert"]').count(),
   adminHref: await account.page
     .getByRole("link", { name: "Ouvrir l’administration" })
-    .getAttribute("href"),
+    .getAttribute("href", { timeout: isBindinglessLocalQa ? 500 : 30_000 })
+    .catch(() => null),
   heading: await account.page.locator("h1").first().textContent(),
 };
-assert.equal(accountState.alerts, 0, "account bootstrap shows no false outage alert");
-assert.equal(accountState.adminHref, "/admin", "account exposes the protected admin entry");
-assert.match(accountState.heading ?? "", /Se connecter|Mon compte/);
+if (isBindinglessLocalQa) {
+  assert.equal(accountState.adminHref, null, "bindingless local QA cannot expose an admin entry");
+  assert.match(
+    accountState.heading ?? "",
+    /Espace client temporairement indisponible/,
+    "bindingless local QA fails closed without pretending that commerce is bound",
+  );
+} else {
+  assert.equal(accountState.alerts, 0, "account bootstrap shows no false outage alert");
+  assert.equal(accountState.adminHref, "/admin", "account exposes the protected admin entry");
+  assert.match(accountState.heading ?? "", /Se connecter|Mon compte/);
+}
 assert(
   account.errors.every(
     (message) => isBindinglessLocalQa && message.includes("404"),

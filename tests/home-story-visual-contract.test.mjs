@@ -3,12 +3,16 @@ import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const [homeCss, storyPage, storyCss] = await Promise.all([
+const [homeCss, storyPage, storyMedia, storyCss] = await Promise.all([
   readFile(
     new URL("../app/components/ProductionHome.module.css", import.meta.url),
     "utf8",
   ),
   readFile(new URL("../app/notre-histoire/page.tsx", import.meta.url), "utf8"),
+  readFile(
+    new URL("../app/notre-histoire/StoryHeroMedia.tsx", import.meta.url),
+    "utf8",
+  ),
   readFile(
     new URL("../app/notre-histoire/Story.module.css", import.meta.url),
     "utf8",
@@ -35,26 +39,34 @@ test("story sections expose headings without visible act numbers", () => {
   }
 });
 
-test("the story hero never crops the approved duo or paints dark side bands", () => {
+test("the story hero uses a native-ratio bordered frame on the dark editorial canvas", () => {
   assert.equal(
     (storyPage.match(/style=\{\{ objectFit: "contain", objectPosition: "center" \}\}/g) ?? []).length,
-    3,
-    "the hero and both founder portraits override the fill-image cover default",
+    2,
+    "both founder portraits preserve their complete source canvases",
   );
   assert.match(
     storyCss,
-    /\.heroImage img\s*\{[^}]*object-fit:\s*contain;[^}]*object-position:\s*center;/s,
+    /\.heroImage\s*\{[^}]*aspect-ratio:\s*2\s*\/\s*3;[^}]*border:\s*1px solid var\(--story-line-strong\);/s,
   );
   assert.match(
     storyCss,
     /@media \(max-width:\s*760px\)[\s\S]*?\.heroImage\s*\{[^}]*aspect-ratio:\s*2\s*\/\s*3;/s,
   );
-  assert.doesNotMatch(storyCss, /\.heroImage img\s*\{[^}]*object-fit:\s*cover/s);
-  assert.match(storyPage, /className=\{styles\.heroForeground\}/);
+  assert.match(storyMedia, /className=\{styles\.heroForeground\}/);
+  assert.match(storyMedia, /data-story-scroll-zoom="subtle"/);
+  assert.match(storyMedia, /prefers-reduced-motion: no-preference/);
+  assert.match(storyMedia, /scale: compact \? 1\.018 : 1\.028/);
+  assert.match(storyMedia, /scrub: 0\.18/);
+  assert.match(storyCss, /\.heroForeground\s*\{[^}]*object-fit:\s*cover !important;/s);
+  assert.match(storyCss, /--story-ink:\s*#0b0b0d/);
+  assert.match(storyCss, /--story-panel:\s*#121216/);
+  assert.match(storyCss, /\.portrait\s*\{[^}]*border:\s*1px solid var\(--story-line-strong\);/s);
   assert.match(
     storyCss,
-    /\.heroImage\s*\{[^}]*background:\s*#fff;/s,
+    /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.heroForeground\s*\{[^}]*transform:\s*none !important;/s,
   );
+  assert.doesNotMatch(storyCss, /transition:\s*all|will-change\s*:/);
   assert.doesNotMatch(storyPage, /styles\.heroBackdrop/);
   assert.doesNotMatch(storyCss, /\.heroBackdrop\b|filter:\s*blur\(/);
 });

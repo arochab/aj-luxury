@@ -188,9 +188,10 @@ const PLATEAUX: readonly Plateau[] = [
     numero: "03",
     nomKey: "sequence.color.purple",
     still: "/images/editorial/isabelle-apollon/apollon-pourpre-lyre-v1.webp",
-    /* Variante client propre : fond pourpre continu, sans arc, laurier, lyre,
-       marbre ni autre décor susceptible d'être coupé par le cadre. */
-    worn: "/images/client/apollon-world/apollon-pourpre-model-color-v2.webp",
+    /* Même traitement que les portraits Lilas et Rose : Alex vient du master
+       client, reste à ses coordonnées d'origine et seul le mur devient
+       pourpre. La v3 n'applique plus la coupe verticale de 105 px de la v2. */
+    worn: "/images/client/apollon-world/apollon-pourpre-model-color-v3.webp",
     mur: "var(--aj-mur-pourpre)",
     voile: "var(--aj-voile-pourpre)",
     phrase:
