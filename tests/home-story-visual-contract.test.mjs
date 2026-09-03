@@ -97,7 +97,7 @@ test("story sections expose headings without visible act numbers", () => {
   }
 });
 
-test("the story hero uses a prominent native-ratio frame on one seamless charcoal-lilac canvas", () => {
+test("the story hero uses a prominent native-ratio frame on the brighter charcoal-lilac canvas", () => {
   assert.equal(
     (storyPage.match(/style=\{\{ objectFit: "contain", objectPosition: "center" \}\}/g) ?? []).length,
     2,
@@ -117,14 +117,9 @@ test("the story hero uses a prominent native-ratio frame on one seamless charcoa
   assert.match(storyMedia, /scale: compact \? 1\.018 : 1\.028/);
   assert.match(storyMedia, /scrub: 0\.18/);
   assert.match(storyCss, /\.heroForeground\s*\{[^}]*object-fit:\s*cover !important;/s);
-  assert.match(storyCss, /--story-surface:\s*#2d2733/);
-  for (const section of ["hero", "origin", "people", "definition"]) {
-    assert.match(
-      storyCss,
-      new RegExp(`\\.${section}\\s*\\{[^}]*background:\\s*var\\(--story-surface\\);`, "s"),
-      `${section} uses the shared seamless story surface`,
-    );
-  }
+  assert.match(storyCss, /--story-ink:\s*#17141c/);
+  assert.match(storyCss, /--story-panel:\s*#292330/);
+  assert.match(storyCss, /--story-panel-soft:\s*#37303f/);
   assert.match(
     storyCss,
     /\.heroBody\s*\{[^}]*width:\s*min\(1580px,[^}]*grid-template-columns:\s*minmax\(17rem, 0\.45fr\) minmax\(0, 1\.55fr\);[^}]*gap:\s*clamp\(1\.75rem, 3vw, 4rem\);[^}]*padding:\s*clamp\(0\.75rem, 1\.5vh, 1rem\) 0;/s,
