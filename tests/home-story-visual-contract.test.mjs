@@ -46,7 +46,7 @@ test("desktop hero is a full-bleed canvas without a visible media rectangle", ()
   );
   assert.match(
     desktopRules,
-    /\.home :global\(\.aj-film__hero-poster img\),\s*\.home :global\(\.aj-film__hero-video\)\s*\{[^}]*object-fit:\s*cover;[^}]*object-position:\s*center top;[^}]*mask-image:\s*none;/s,
+    /\.home :global\(\.aj-film__hero-poster img\),\s*\.home :global\(\.aj-film__hero-video\)\s*\{[^}]*object-fit:\s*cover;[^}]*object-position:\s*center 18%;[^}]*mask-image:\s*none;/s,
   );
   assert.match(
     desktopRules,
@@ -55,6 +55,10 @@ test("desktop hero is a full-bleed canvas without a visible media rectangle", ()
   assert.match(
     homeCss,
     /\.home :global\(\.aj-film__signature\)\s*\{[^}]*background:\s*transparent;/s,
+  );
+  assert.match(
+    homeCss,
+    /\.home :global\(\.aj-film\)\s*\{[^}]*border-bottom:\s*clamp\(8px, 0\.7vw, 12px\) solid #f3f2ef;/s,
   );
 });
 

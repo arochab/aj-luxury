@@ -9,6 +9,7 @@
 .home :global(.aj-film) {
   min-height: calc(100svh - var(--aj-tete-h));
   margin-top: 0;
+  border-bottom: clamp(8px, 0.7vw, 12px) solid #f3f2ef;
 }
 
 .home :global(.aj-film__hero-poster img),
@@ -432,7 +433,7 @@
   .home :global(.aj-film__hero-poster img),
   .home :global(.aj-film__hero-video) {
     object-fit: cover;
-    object-position: center top;
+    object-position: center 18%;
     -webkit-mask-image: none;
     mask-image: none;
   }

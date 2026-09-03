@@ -88,6 +88,22 @@ test("the retired private launch page permanently redirects to the public home",
   );
 });
 
+test("the retired Cloudflare operations bookmark redirects to native admin login", () => {
+  const response = productionHttpsRedirectResponse(
+    new Request(
+      "https://ajluxurystore.com/operations?source=old-bookmark",
+    ),
+    production,
+  );
+
+  assert.ok(response);
+  assert.equal(response.status, 308);
+  assert.equal(
+    response.headers.get("Location"),
+    "https://ajluxurystore.com/admin?source=old-bookmark",
+  );
+});
+
 test("canonical HTTPS, non-production and internal hosts are untouched", () => {
   assert.equal(
     productionHttpsRedirectResponse(

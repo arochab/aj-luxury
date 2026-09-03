@@ -4,7 +4,10 @@ type ProductionHttpsRedirectEnv = Readonly<{
 }>;
 
 const PERMANENT_REDIRECT_CACHE = "public, max-age=31536000";
-const RETIRED_PUBLIC_PATHS = new Set(["/preouverture"]);
+const RETIRED_PUBLIC_PATHS = new Map([
+  ["/preouverture", "/"],
+  ["/operations", "/admin"],
+]);
 
 /**
  * Canonicalize the public storefront before any commerce or asset handler runs.
@@ -45,18 +48,18 @@ export function productionHttpsRedirectResponse(
 
   const isLegacyHostname = incoming.hostname === `www.${canonical.hostname}`;
   const hasReleaseMarker = incoming.searchParams.has("release");
-  const hasRetiredPublicPath = RETIRED_PUBLIC_PATHS.has(incoming.pathname);
+  const retiredDestination = RETIRED_PUBLIC_PATHS.get(incoming.pathname);
   if (
     incoming.protocol === "https:" &&
     !isLegacyHostname &&
     !hasReleaseMarker &&
-    !hasRetiredPublicPath
+    retiredDestination === undefined
   ) return null;
 
   incoming.searchParams.delete("release");
 
   const destination = new URL(
-    `${hasRetiredPublicPath ? "/" : incoming.pathname}${incoming.search}`,
+    `${retiredDestination ?? incoming.pathname}${incoming.search}`,
     canonical.origin,
   );
   return new Response(null, {

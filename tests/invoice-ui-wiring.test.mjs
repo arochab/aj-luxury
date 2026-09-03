@@ -29,4 +29,6 @@ test("operator console keeps invoices and shipping labels explicitly separate", 
   assert.match(source, /Télécharger l’étiquette transporteur A4/);
   assert.match(source, /Ce n’est pas une facture/);
   assert.match(source, /l’avoir correspondant est ajouté automatiquement/);
+  assert.match(source, /Mot de passe oublié/);
+  assert.match(source, /\/account\?view=forgot&returnTo=\/admin&email=/);
 });

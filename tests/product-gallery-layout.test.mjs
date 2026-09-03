@@ -156,6 +156,19 @@ test("shop cards keep the live desktop and mobile crops", () => {
     shopStyles,
     /@media \(max-width:\s*860px\)[\s\S]*?\.productVisual img\s*\{[^}]*object-position:\s*50% 16%;/s,
   );
+  assert.match(
+    shopStyles,
+    /\.productGrid\s*\{[^}]*gap:\s*0;[^}]*border:\s*0;[^}]*background:\s*transparent;/s,
+  );
+  assert.match(shopStyles, /\.collection\s*\{[^}]*padding:\s*0;/s);
+  assert.match(
+    shopStyles,
+    /\.productVisual\s*\{[^}]*aspect-ratio:\s*1731\s*\/\s*2600;[^}]*background:\s*transparent;/s,
+  );
+  assert.match(
+    shopStyles,
+    /\.productVisual img\s*\{[^}]*object-fit:\s*cover;/s,
+  );
 });
 
 test("shop mobile cards use their native portrait ratio without grey gutters", () => {

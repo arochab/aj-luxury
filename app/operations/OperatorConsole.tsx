@@ -574,6 +574,12 @@ export default function OperatorConsole() {
               <button type="submit" disabled={loginBusy}>
                 {loginBusy ? "Connexion…" : "Ouvrir le tableau de bord"}
               </button>
+              <a
+                className={styles.recoveryLink}
+                href={`/account?view=forgot&returnTo=/admin&email=${encodeURIComponent(loginEmail.trim())}`}
+              >
+                Mot de passe oublié
+              </a>
             </form>
             {state.message ? <p className={styles.loginError} role="alert">{state.message}</p> : null}
             <p className={styles.loginHelp}>

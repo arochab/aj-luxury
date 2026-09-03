@@ -125,7 +125,20 @@
 
 .loginForm button:disabled { cursor: wait; opacity: .65; }
 .loginForm input:focus-visible,
-.loginForm button:focus-visible { outline: 2px solid #a78eea; outline-offset: 3px; }
+.loginForm button:focus-visible,
+.recoveryLink:focus-visible { outline: 2px solid #a78eea; outline-offset: 3px; }
+.recoveryLink {
+  min-height: 50px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #070707;
+  color: #070707;
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-decoration: none;
+  text-transform: uppercase;
+}
 .loginError { color: #8c1f1f; }
 .loginHelp { margin-bottom: 0; font-size: .9rem; }
 .loginHelp a { color: inherit; text-underline-offset: .2em; }

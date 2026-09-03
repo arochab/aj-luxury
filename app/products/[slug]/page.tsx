@@ -151,6 +151,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
                     {item.name}
                   </span>
                   <span className={styles.otherColorPrice}>
+                    {"\u00A0"}
                     <LocalizedPrice amountCents={item.priceCents} />
                   </span>
                 </span>
