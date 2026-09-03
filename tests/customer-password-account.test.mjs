@@ -88,6 +88,43 @@ test("passwords use the governed slow one-way format", async () => {
   assert.doesNotMatch(JSON.stringify(stored), /Satin-Pourpre/);
 });
 
+test("a historical buyer can attach credentials without duplicating the paid customer", async () => {
+  const { sqlite, store } = fixture();
+  const email = "adam.chabbi94@gmail.com";
+  sqlite.prepare(`INSERT INTO customers (
+    id, email, first_name, last_name, accepts_marketing,
+    marketing_consent_at, created_at, updated_at, deleted_at, account_enabled_at
+  ) VALUES (
+    'customer_historical_adam', ?, 'Adam', 'Chabbi', 0,
+    NULL, '2026-08-28T19:20:00.000Z', '2026-08-28T19:20:00.000Z', NULL, NULL
+  )`).run(email);
+
+  const registration = await store.register({
+    email,
+    password: "Satin-Pourpre-2026!",
+    acceptsMarketing: false,
+    source: "account_registration",
+    privacyVersion: "2026-08-26",
+    now: "2026-09-03T09:00:00.000Z",
+  });
+
+  assert.equal(registration.accepted, true);
+  assert.ok(registration.emailDelivery);
+  assert.equal(sqlite.prepare("SELECT COUNT(*) AS count FROM customers").get().count, 1);
+  assert.equal(sqlite.prepare(
+    "SELECT customer_id FROM customer_password_credentials",
+  ).get().customer_id, "customer_historical_adam");
+  const verified = await store.verifyEmail(
+    registration.emailDelivery.rawToken,
+    "2026-09-03T09:01:00.000Z",
+  );
+  assert.ok(verified);
+  assert.equal((await store.currentAccount(
+    verified.token,
+    "2026-09-03T09:02:00.000Z",
+  )).email, email);
+});
+
 test("registration, verification, sessions, consent and recovery form one traceable account", async () => {
   const { sqlite, store } = fixture();
   const email = "adam@example.com";

@@ -2,7 +2,7 @@
 
 Statut : `SOURCE DE RÉACTION COURANTE`
 
-Dernière mise à jour : 1er septembre 2026
+Dernière mise à jour : 3 septembre 2026
 
 Principe : protéger l’argent, le client et l’unicité des objets avant de chercher
 à aller vite. Conserver le numéro de commande, l’heure et le message exact ; ne
@@ -69,10 +69,13 @@ Résultat sain : stock global et somme des douze variantes réconciliés.
 ## L’accès Admin échoue
 
 1. Vérifier que l’adresse utilisée figure exactement dans l’allowlist courante.
-2. Refaire l’authentification Cloudflare Access.
-3. Vérifier ensuite la session applicative ; ne jamais contourner Access par une
-   route alternative ou un secret partagé.
-4. Si l’anonyme accède à `/operations` ou à une API Admin, incident critique :
+2. Vérifier que le compte AJ Luxury a bien été confirmé par e-mail.
+3. Réessayer une seule fois le mot de passe. Après cinq erreurs, attendre quinze
+   minutes ou utiliser la procédure `Mot de passe oublié`.
+4. Ouvrir `https://ajluxurystore.com/admin`. Aucun MFA, clé physique ou écran
+   Cloudflare ne fait partie du parcours normal.
+5. Si une personne non autorisée accède aux données de `/admin` ou à une API
+   Admin, incident critique :
    repasser ou rester en mode contrôlé et corriger avant toute exploitation.
 
 ## La santé commerce n’est plus `ready`

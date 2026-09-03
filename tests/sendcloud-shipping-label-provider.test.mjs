@@ -466,7 +466,7 @@ test("controlled label route passes public-only legal gates but still requires a
   assert.equal((await response.json()).error.code, "OWNER_SESSION_REQUIRED");
 });
 
-test("public live label route passes resolved legal gates but still requires signed owner access", async () => {
+test("public live label route requires the durable AJ Luxury owner session", async () => {
   const DB = {
     prepare() { throw new Error("D1 must not be touched before owner authentication"); },
     batch() { throw new Error("D1 must not be touched before owner authentication"); },
@@ -487,7 +487,7 @@ test("public live label route passes resolved legal gates but still requires sig
     },
   );
   assert.equal(response.status, 403);
-  assert.equal((await response.json()).error.code, "CONTROLLED_ACCESS_REQUIRED");
+  assert.equal((await response.json()).error.code, "OWNER_SESSION_REQUIRED");
 });
 
 async function adminRequest(
@@ -539,7 +539,7 @@ test("platform owner headers alone cannot bypass the durable owner session and C
   assert.equal((await response.json()).error.code, "OWNER_SESSION_REQUIRED");
 });
 
-test("a Cloudflare Access owner plus the durable AAL2 session can recover the unique A4 label without legacy oai headers", async () => {
+test("a native durable AJ Luxury admin session can recover the unique A4 label", async () => {
   const DB = new Database(null, []);
   DB.existing = {
     id: "shipment_test_1",
@@ -566,10 +566,10 @@ test("a Cloudflare Access owner plus the durable AAL2 session can recover the un
   );
   const response = await productionShippingLabelAdminReleaseCoreResponse(
     request,
-    { ...adminEnv, DB },
+    { ...adminEnv, COMMERCE_MODE: "live", DB },
     "https://ajluxurystore.com",
     {
-      authorizeControlledOwner: async () => true,
+      authorizeControlledOwner: async () => { throw new Error("live mode must not use controlled authentication"); },
       authorizeOwner: async () => ({ administratorId: "admin_access_1", sessionId: "session_access_1" }),
       shippingDocuments: {
         async document() {
@@ -590,7 +590,7 @@ test("a Cloudflare Access owner plus the durable AAL2 session can recover the un
   assert.equal(DB.auditLog.size, 1);
 });
 
-test("labels do not require forced MFA but still require Access and a durable owner session", async () => {
+test("labels do not require forced MFA but still require a durable owner session", async () => {
   const DB = { prepare() { throw new Error("D1 must not be touched without cookies"); }, batch() { throw new Error("D1 must not be touched"); } };
   const controlled = await productionShippingLabelAdminReleaseCoreResponse(
     await adminRequest(),
@@ -606,10 +606,10 @@ test("labels do not require forced MFA but still require Access and a durable ow
     "https://ajluxurystore.com",
   );
   assert.equal(live.status, 403);
-  assert.equal((await live.json()).error.code, "CONTROLLED_ACCESS_REQUIRED");
+  assert.equal((await live.json()).error.code, "OWNER_SESSION_REQUIRED");
 });
 
-test("live label actions require a signed Access identity and reject the legacy controlled HMAC", async () => {
+test("live label actions reject legacy controlled HMAC as a substitute for the durable session", async () => {
   const DB = {
     prepare() { throw new Error("D1 must not be touched without Access"); },
     batch() { throw new Error("D1 must not be touched without Access"); },
@@ -627,7 +627,7 @@ test("live label actions require a signed Access identity and reject the legacy 
     "https://ajluxurystore.com",
   );
   assert.equal(response.status, 403);
-  assert.equal((await response.json()).error.code, "CONTROLLED_ACCESS_REQUIRED");
+  assert.equal((await response.json()).error.code, "OWNER_SESSION_REQUIRED");
 });
 
 test("release health and the operator route share the exact outbound enablement flag", async () => {

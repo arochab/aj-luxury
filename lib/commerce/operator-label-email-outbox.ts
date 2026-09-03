@@ -146,7 +146,7 @@ function emailText(
     ] : []),
     "",
     "En cas de besoin, les mêmes documents restent disponibles dans l’espace Admin :",
-    "https://ajluxurystore.com/operations",
+    "https://ajluxurystore.com/admin",
     "",
     "Sécurité anti-doublon : le site conserve une seule expédition et une seule étiquette par commande. Un nouveau téléchargement ou un nouvel e-mail ne crée pas un second colis.",
     "",

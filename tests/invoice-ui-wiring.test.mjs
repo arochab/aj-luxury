@@ -24,7 +24,7 @@ test("operator console keeps invoices and shipping labels explicitly separate", 
   );
 
   assert.match(source, /\["paid", "preparing", "shipped", "refunded"\]/);
-  assert.match(source, /\/api\/commerce\/admin\/orders\/\$\{encodeURIComponent\(order\.orderId\)\}\/invoice/);
+  assert.match(source, /\$\{ADMIN_API\}\/orders\/\$\{encodeURIComponent\(order\.orderId\)\}\/invoice/);
   assert.match(source, /Ouvrir facture et avoirs A4/);
   assert.match(source, /Télécharger l’étiquette transporteur A4/);
   assert.match(source, /Ce n’est pas une facture/);

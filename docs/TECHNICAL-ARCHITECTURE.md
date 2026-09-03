@@ -2,7 +2,7 @@
 
 Statut : `SOURCE TECHNIQUE COURANTE`
 
-Dernière mise à jour : 1er septembre 2026
+Dernière mise à jour : 3 septembre 2026
 
 ## Vue d’ensemble
 
@@ -16,7 +16,7 @@ navigateur client
        └─ Sendcloud : transport, étiquette A4 et suivi
 
 navigateur administrateur
-  └─ Cloudflare Access → /operations → session Admin D1 + CSRF
+  └─ compte AJ confirmé + liste fermée → /admin → session Admin D1 + CSRF
 ```
 
 Cloudflare héberge le frontend et le Worker. D1 est la source interne des états
@@ -37,7 +37,7 @@ la livraison des e-mails.
 | E-mails | Outbox idempotente et preuve fournisseur | D1 + Resend |
 | Livraison | Shipment unique, étiquette A4, tracking et remise | D1 + Sendcloud |
 | Promotions | Règle, période, plafond, réservation et consommation | D1 |
-| Administration | Commandes, stock, promos, factures et étiquettes | `/operations` + API Admin |
+| Administration | Commandes, stock, promos, factures et étiquettes | `/admin` + API Admin |
 
 ## États essentiels
 
@@ -98,19 +98,21 @@ expire ou échoue. Le snapshot de remise d’une commande payée devient immuabl
 
 | Route | Usage |
 |---|---|
-| `/operations` | interface de Jérémy |
-| `/api/commerce/admin/session` | session applicative nominative |
-| `/api/commerce/admin/orders` | liste et état des commandes |
-| `/api/commerce/admin/inventory` | stock global et par référence |
-| `/api/commerce/admin/promotions` | liste et création des codes promo |
-| `/api/commerce/admin/orders/{id}/invoice` | facture A4 |
-| `/api/commerce/admin/orders/{id}/credit-notes/{number}` | avoir A4 |
-| `/api/commerce/admin/orders/{id}/shipping-label` | étiquette transporteur A4 |
-| `/api/commerce/admin/shipments/{id}/handover` | confirmation de remise physique |
+| `/admin` | interface d'Adam et Jérémy |
+| `/api/commerce/management/session` | connexion et session nominative |
+| `/api/commerce/management/orders` | liste et état des commandes |
+| `/api/commerce/management/inventory` | stock global et par référence |
+| `/api/commerce/management/promotions` | liste et création des codes promo |
+| `/api/commerce/management/orders/{id}/invoice` | facture A4 |
+| `/api/commerce/management/orders/{id}/credit-notes/{number}` | avoir A4 |
+| `/api/commerce/management/orders/{id}/shipping-label` | étiquette transporteur A4 |
+| `/api/commerce/management/shipments/{id}/handover` | confirmation de remise physique |
 
-Toutes les mutations Admin exigent simultanément une identité Cloudflare Access
-autorisée, une session Admin courte, un contrôle d’origine, un jeton CSRF et une
-clé d’idempotence lorsque l’action peut être rejouée.
+La connexion exige un compte AJ Luxury dont l'e-mail est confirmé, son mot de
+passe et l'appartenance à la liste fermée. Toutes les mutations Admin exigent
+ensuite une session courte, un contrôle d'origine, un jeton CSRF et une clé
+d'idempotence lorsque l'action peut être rejouée. Cloudflare Access n'intervient
+plus dans le parcours humain.
 
 ## Accès autorisés
 
@@ -131,6 +133,7 @@ Le candidat courant attend les migrations additives jusqu’à :
 - `0029` : factures ;
 - `0030` : avoirs ;
 - `0031` : relance unique de l’expédition historique.
+- `0032` : e-mail opérateur avec documents et activation internationale.
 
 Une migration additive reste en place lors d’un rollback applicatif. Le rollback
 standard restaure d’abord le Worker puis les Assets. Une restauration D1 Time

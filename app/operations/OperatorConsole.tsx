@@ -1,7 +1,9 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useState } from "react";
+import { Fragment, type FormEvent, useCallback, useEffect, useState } from "react";
 import styles from "./operations.module.css";
+
+const ADMIN_API = "/api/commerce/management";
 
 type Order = Readonly<{
   orderId: string;
@@ -103,6 +105,7 @@ type Inventory = Readonly<{
 
 type ConsoleState =
   | Readonly<{ kind: "loading" }>
+  | Readonly<{ kind: "unauthenticated"; message: string | null }>
   | Readonly<{
     kind: "ready";
     orders: readonly Order[];
@@ -130,11 +133,8 @@ async function parseError(response: Response): Promise<string> {
 }
 
 function operatorMessage(code: string): string {
-  if (code === "FRESH_ACCESS_REQUIRED") {
-    return "Votre connexion administrateur n’est plus assez récente. Reconnectez-vous via Cloudflare Access.";
-  }
-  if (["CLOUDFLARE_ACCESS_REQUIRED", "OWNER_SESSION_REQUIRED"].includes(code)) {
-    return "Accès opérateur requis. Ouvrez cette page après votre authentification Cloudflare Access.";
+  if (["INVALID_ADMIN_CREDENTIALS", "OWNER_SESSION_REQUIRED"].includes(code)) {
+    return "Adresse ou mot de passe incorrect, compte non confirmé, ou adresse non autorisée.";
   }
   if (code === "OPERATOR_CONSOLE_CLOSED") {
     return "La console est fermée tant que sa recette de sécurité n’est pas validée.";
@@ -201,6 +201,9 @@ function amount(order: Pick<Order, "currency" | "totalCents">): string {
 
 export default function OperatorConsole() {
   const [state, setState] = useState<ConsoleState>({ kind: "loading" });
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loginBusy, setLoginBusy] = useState(false);
   const [busyOrder, setBusyOrder] = useState<string | null>(null);
   const [busyHandover, setBusyHandover] = useState<string | null>(null);
   const [busyDetail, setBusyDetail] = useState<string | null>(null);
@@ -219,29 +222,19 @@ export default function OperatorConsole() {
 
   const load = useCallback(async () => {
     setState({ kind: "loading" });
-    let response = await fetch("/api/commerce/admin/orders", {
+    const response = await fetch(`${ADMIN_API}/orders`, {
       credentials: "same-origin",
       cache: "no-store",
     });
     if (response.status === 403) {
-      const session = await fetch("/api/commerce/admin/session", {
-        method: "POST",
-        credentials: "same-origin",
-      });
-      if (!session.ok) {
-        setState({ kind: "error", message: operatorMessage(await parseError(session)) });
-        return;
-      }
-      response = await fetch("/api/commerce/admin/orders", {
-        credentials: "same-origin",
-        cache: "no-store",
-      });
+      setState({ kind: "unauthenticated", message: null });
+      return;
     }
     if (!response.ok) {
       setState({ kind: "error", message: operatorMessage(await parseError(response)) });
       return;
     }
-    const promotionsResponse = await fetch("/api/commerce/admin/promotions", {
+    const promotionsResponse = await fetch(`${ADMIN_API}/promotions`, {
       credentials: "same-origin",
       cache: "no-store",
     });
@@ -249,7 +242,7 @@ export default function OperatorConsole() {
       setState({ kind: "error", message: operatorMessage(await parseError(promotionsResponse)) });
       return;
     }
-    const inventoryResponse = await fetch("/api/commerce/admin/inventory", {
+    const inventoryResponse = await fetch(`${ADMIN_API}/inventory`, {
       credentials: "same-origin",
       cache: "no-store",
     });
@@ -274,6 +267,37 @@ export default function OperatorConsole() {
     });
   }, []);
 
+  async function login(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (loginBusy) return;
+    setLoginBusy(true);
+    setState({ kind: "unauthenticated", message: null });
+    try {
+      const response = await fetch(`${ADMIN_API}/session`, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: loginEmail, password: loginPassword }),
+      });
+      if (!response.ok) {
+        setState({
+          kind: "unauthenticated",
+          message: operatorMessage(await parseError(response)),
+        });
+        return;
+      }
+      setLoginPassword("");
+      await load();
+    } catch {
+      setState({
+        kind: "unauthenticated",
+        message: "Connexion momentanément indisponible. Aucune donnée n’a été modifiée.",
+      });
+    } finally {
+      setLoginBusy(false);
+    }
+  }
+
   useEffect(() => {
     const task = window.setTimeout(() => { void load(); }, 0);
     return () => window.clearTimeout(task);
@@ -296,7 +320,7 @@ export default function OperatorConsole() {
     setActionError(null);
     try {
       const response = await fetch(
-        `/api/commerce/admin/orders/${encodeURIComponent(order.orderId)}/${
+        `${ADMIN_API}/orders/${encodeURIComponent(order.orderId)}/${
           documentKind === "label" ? "shipping-label" : "customs-document"
         }`,
         {
@@ -347,7 +371,7 @@ export default function OperatorConsole() {
     setActionError(null);
     try {
       const response = await fetch(
-        `/api/commerce/admin/orders/${encodeURIComponent(order.orderId)}`,
+        `${ADMIN_API}/orders/${encodeURIComponent(order.orderId)}`,
         { credentials: "same-origin", cache: "no-store" },
       );
       if (!response.ok) throw new Error(await parseError(response));
@@ -371,7 +395,7 @@ export default function OperatorConsole() {
     try {
       const eventId = `handover_${crypto.randomUUID().replaceAll("-", "")}`;
       const response = await fetch(
-        `/api/commerce/admin/shipments/${encodeURIComponent(order.shipment.id)}/handover`,
+        `${ADMIN_API}/shipments/${encodeURIComponent(order.shipment.id)}/handover`,
         {
           method: "POST",
           credentials: "same-origin",
@@ -423,7 +447,7 @@ export default function OperatorConsole() {
     setPromotionBusy(true);
     setActionError(null);
     try {
-      const response = await fetch("/api/commerce/admin/promotions", {
+      const response = await fetch(`${ADMIN_API}/promotions`, {
         method: "POST",
         credentials: "same-origin",
         headers: {
@@ -467,7 +491,7 @@ export default function OperatorConsole() {
     setActionError(null);
     try {
       const response = await fetch(
-        `/api/commerce/admin/promotions/${encodeURIComponent(promotion.id)}/status`,
+        `${ADMIN_API}/promotions/${encodeURIComponent(promotion.id)}/status`,
         {
           method: "PUT",
           credentials: "same-origin",
@@ -489,12 +513,12 @@ export default function OperatorConsole() {
 
   async function signOut() {
     if (state.kind !== "ready") return;
-    await fetch("/api/commerce/admin/session", {
+    await fetch(`${ADMIN_API}/session`, {
       method: "DELETE",
       credentials: "same-origin",
       headers: { "X-CSRF-Token": state.csrfToken },
     }).catch(() => null);
-    window.location.assign("/cdn-cgi/access/logout");
+    window.location.assign("/admin");
   }
 
   const orders = state.kind === "ready" ? state.orders : [];
@@ -507,20 +531,63 @@ export default function OperatorConsole() {
       <header className={styles.header}>
         <span className={styles.brand}>AJ LUXURY</span>
         <nav aria-label="Navigation opérateur" className={styles.nav}>
-          <span aria-current="page">Opérations</span>
-          <button type="button" onClick={() => void signOut()}>Déconnexion</button>
+          <span aria-current="page">Administration</span>
+          {state.kind === "ready"
+            ? <button type="button" onClick={() => void signOut()}>Déconnexion</button>
+            : null}
         </nav>
       </header>
 
       <section className={styles.content}>
-        <h1>Commandes et expéditions</h1>
-        <p className={styles.summary}>
+        <h1>Administration AJ Luxury</h1>
+        {state.kind === "unauthenticated" ? (
+          <section className={styles.loginCard} aria-labelledby="admin-login-title">
+            <p className={styles.loginEyebrow}>Accès réservé</p>
+            <h2 id="admin-login-title">Se connecter</h2>
+            <p>
+              Utilisez votre compte AJ Luxury confirmé avec l’adresse administrateur autorisée.
+              Aucune double authentification ni clé physique n’est demandée.
+            </p>
+            <form className={styles.loginForm} onSubmit={(event) => void login(event)}>
+              <label>
+                Adresse e-mail
+                <input
+                  type="email"
+                  required
+                  autoComplete="username"
+                  value={loginEmail}
+                  onChange={(event) => setLoginEmail(event.currentTarget.value)}
+                />
+              </label>
+              <label>
+                Mot de passe
+                <input
+                  type="password"
+                  required
+                  minLength={12}
+                  maxLength={128}
+                  autoComplete="current-password"
+                  value={loginPassword}
+                  onChange={(event) => setLoginPassword(event.currentTarget.value)}
+                />
+              </label>
+              <button type="submit" disabled={loginBusy}>
+                {loginBusy ? "Connexion…" : "Ouvrir le tableau de bord"}
+              </button>
+            </form>
+            {state.message ? <p className={styles.loginError} role="alert">{state.message}</p> : null}
+            <p className={styles.loginHelp}>
+              Première connexion ? <a href="/account?view=register&amp;returnTo=/admin">Créer et confirmer le compte</a>.
+            </p>
+          </section>
+        ) : null}
+        {state.kind === "ready" ? <p className={styles.summary}>
           {actionableOrders.length} commande(s) à préparer sur {orders.length} commande(s) suivie(s).<br />
           Pour chaque commande, l’étiquette A4 est envoyée automatiquement à jeremy@ajluxurystore.com. Hors UE, le document douanier A4 est joint au même e-mail.<br />
           Les mêmes documents restent téléchargeables ici, sans créer un deuxième colis. Vérifiez les articles, imprimez les documents requis, puis confirmez la remise physique au transporteur.
-        </p>
+        </p> : null}
 
-        <aside className={styles.documentGuide} aria-labelledby="document-guide-title">
+        {state.kind === "ready" ? <aside className={styles.documentGuide} aria-labelledby="document-guide-title">
           <h2 id="document-guide-title">Facturation et expédition&nbsp;: 2 usages distincts</h2>
           <dl>
             <div>
@@ -539,7 +606,7 @@ export default function OperatorConsole() {
               </dd>
             </div>
           </dl>
-        </aside>
+        </aside> : null}
 
         {state.kind === "loading" ? <p className={styles.notice}>Chargement sécurisé…</p> : null}
         {state.kind === "error" ? (
@@ -583,7 +650,7 @@ export default function OperatorConsole() {
                       {invoiceAvailable(order) ? (
                         <a
                           className={styles.documentLink}
-                          href={`/api/commerce/admin/orders/${encodeURIComponent(order.orderId)}/invoice`}
+                          href={`${ADMIN_API}/orders/${encodeURIComponent(order.orderId)}/invoice`}
                           target="_blank"
                           rel="noopener noreferrer"
                           aria-label={`Ouvrir la facture et les éventuels avoirs A4 de la commande ${order.orderNumber} dans un nouvel onglet`}

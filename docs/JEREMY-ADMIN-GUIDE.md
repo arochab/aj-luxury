@@ -2,14 +2,14 @@
 
 Statut : `SOURCE OPÉRATEUR COURANTE — CANDIDAT NON ENCORE DÉPLOYÉ`
 
-Dernière mise à jour : 1er septembre 2026
+Dernière mise à jour : 3 septembre 2026
 
 Ce guide explique uniquement le travail quotidien de Jérémy. La procédure
 technique de déploiement et de preuve reste dans `docs/RELEASE-RUNBOOK.md`.
 
 ## Le résultat attendu
 
-Depuis `https://ajluxurystore.com/operations`, Jérémy doit pouvoir :
+Depuis `https://ajluxurystore.com/admin`, Jérémy doit pouvoir :
 
 - voir les commandes payées et leur montant ;
 - vérifier les deux e-mails de confirmation ;
@@ -27,16 +27,19 @@ uniquement en cas d'incident technique ou de nouveau déploiement.
 
 ## Accès
 
-1. Ouvrir `https://ajluxurystore.com/operations`.
-2. S'identifier avec une adresse explicitement autorisée dans Cloudflare Access.
-3. La page crée ensuite une session administrateur courte et protégée. Aucun
-   mot de passe client, cookie ou jeton ne doit être copié ou transmis.
-4. Si la page demande de se reconnecter, refaire simplement l'étape 2.
+1. Ouvrir `https://ajluxurystore.com/account` et cliquer sur `Créer un compte`.
+2. Utiliser `jeremy@ajluxurystore.com` ou `jeremyajluxurystore@gmail.com`, puis
+   choisir un mot de passe d'au moins 12 caractères.
+3. Cliquer sur le lien reçu par e-mail pour confirmer l'adresse.
+4. Ouvrir `https://ajluxurystore.com/admin`.
+5. Se connecter avec la même adresse et le même mot de passe.
 
-L'espace Admin et ses API sont bloqués avant même d'atteindre le site pour toute
-personne non autorisée. La décision actuelle ne rajoute pas de MFA applicatif
-supplémentaire ; la session nominative et la protection anti-falsification restent
-obligatoires.
+Il n'y a ni double authentification, ni clé physique, ni écran Cloudflare dans ce parcours. Le
+serveur vérifie néanmoins à chaque connexion que l'adresse est confirmée et
+fait partie de la liste fermée des trois administrateurs. Après cinq erreurs de
+mot de passe, le compte est temporairement verrouillé pendant quinze minutes.
+La session Admin expire après quinze minutes d'inactivité ou huit heures au
+maximum.
 
 ## Traiter une commande, de bout en bout
 

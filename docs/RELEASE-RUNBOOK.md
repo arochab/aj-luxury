@@ -20,8 +20,8 @@ Le blocage documentaire « médiateur non contracté » est **résolu depuis le
 l'ouverture publique n'est toutefois pas déclarée acquise avant déploiement et
 preuve sur le runtime exact. Un déploiement strictement
 `controlled` peut être instruit séparément, mais il doit rester fermé par
-l'authentification applicative même si Cloudflare Access est mal configuré ou
-indisponible. La session Wrangler a de nouveau accès à D1 en lecture/écriture et
+l'authentification propre au site, sans écran Cloudflare pour Adam ou Jérémy.
+La session Wrangler a de nouveau accès à D1 en lecture/écriture et
 le bookmark Time Travel a pu être lu le 1er septembre 2026 ; les migrations
 jusqu'à `0032` ne sont néanmoins pas présentées comme exécutées tant que leur
 reçu distant n'existe pas. La commande payée `AJ-41B58D96CCAAE37F00B8` prouve le
@@ -41,15 +41,15 @@ e-mail, l'étiquette A4 imprimée, la remise physique au transporteur ni le suiv
 | Front Sites | OUVERT après Worker | Adam | Déployer le build du même SHA sans ouvrir `live` | Sites ID, marqueur release et recette desktop/mobile | Régression : restaurer le Sites ID précédent sans toucher au Worker |
 | Validation fonctionnelle visible | OUVERT après Sites | Jérémy / Adam témoin | Sur l'URL contrôlée : accueil, compte, panier, livraison, paiement et compte client ; cocher la checklist | Validation datée de la version visible (SHA + Worker ID + Sites ID), distincte de l'autorisation de mutation | Un écart : corriger sous un nouveau SHA ; les accords précédents deviennent caducs |
 | Webhook Sendcloud | OUVERT TERRAIN | Adam | Sendcloud intégration `612109` : test signé vers `/api/commerce/webhooks/sendcloud`; conserver un fixture expurgé ne contenant que IDs internes, statut et horodatages, puis rejouer exactement ses octets et sa signature dans la fenêtre valide | 1er appel `applied`; retry différé `duplicate`; statut inconnu signé = 503 retryable | Signature/route inconnue : désactiver le webhook et garder la commande `preparing` |
-| Confirmation commande | BLOQUÉ PREUVE | Adam | Resend > Emails : retrouver le message « Commande reçue » pour `AJ-41B58D96CCAAE37F00B8`; appeler `POST /api/commerce/admin/email-outbox/{outboxId}/reconcile` avec son provider ID, session owner nominative, CSRF et clé `email-reconcile:{sha256(outboxId\0providerId)}` | Evidence ID immuable propre à `order_confirmation`, événement `delivered/opened/clicked`; aucun renvoi | Aucun provider ID exact ou contenu divergent : ne pas rejouer ni modifier l'historique |
+| Confirmation commande | BLOQUÉ PREUVE | Adam | Resend > Emails : retrouver le message « Commande reçue » pour `AJ-41B58D96CCAAE37F00B8`; rapprocher ce message depuis l'Admin avec son identifiant Resend. L'appel technique correspondant passe par `POST /api/commerce/management/email-outbox/{outboxId}/reconcile` et exige la session administrateur, la protection d'origine et la protection contre un double envoi | Evidence ID immuable propre à `order_confirmation`, événement `delivered/opened/clicked`; aucun renvoi | Aucun provider ID exact ou contenu divergent : ne pas rejouer ni modifier l'historique |
 | Confirmation paiement | BLOQUÉ PREUVE | Adam | Même route owner-only, avec l'outbox `payment_confirmation` et son propre provider ID Resend | Evidence ID immuable propre au paiement ; elle ne vaut jamais pour la confirmation commande | ID absent/divergent : ne pas modifier l'outbox historique |
 | Facture commerciale A4 | OUVERT PRODUIT/RUNTIME | Adam (implémentation et preuve) / Jérémy (validation métier) | Après signal Stripe confirmé, attribuer une seule facture à la commande payée, avec numéro continu `AJL-YYYY-NNNNNN`; exposer le même document au client dans son compte et à l'administrateur dans la commande | Numéro unique et chronologique, date, vendeur, acheteur, lignes, remise, livraison, total, statut payé, mention fiscale et médiateur ; téléchargement/impression A4 identiques côté client et admin | Une confirmation e-mail, un récapitulatif de commande ou une étiquette transporteur ne remplace jamais la facture ; résultat ambigu ou doublon = STOP et revue manuelle |
 | Avoir commercial A4 | OUVERT PRODUIT/RUNTIME | Adam (implémentation et preuve) / Jérémy (validation métier) | Après remboursement Stripe confirmé, générer atomiquement un avoir unique `AJL-AV-YYYY-NNNNNN`, lié à la facture d'origine, puis l'ajouter au même espace facturation côté client et admin | Un avoir par remboursement réussi, numéro continu, facture d'origine, montant crédité, solde restant, snapshots légaux immuables et rendu A4 identique côté client/admin | Aucun avoir sur remboursement non confirmé ; si la génération échoue, la transition backend s'arrête et part en revue manuelle, sans numéro consommé ni faux statut réussi |
 | Paiement + détail + étiquette par e-mail | OUVERT PRODUIT, PREUVE PRODUCTION REQUISE | Jérémy / Adam | Après paiement et disponibilité des documents, envoyer une seule fois à `jeremy@ajluxurystore.com` un message contenant le paiement reçu, les lignes à préparer, les montants et l'étiquette A4 ; joindre aussi le document douanier A4 hors UE | Reçu Resend, contenu exact, 1 PDF UE ou 2 PDF hors UE, hash et idempotence par shipment ; l'Admin reste un secours de réimpression | Aucun document disponible ou issue ambiguë : ne pas affirmer l'envoi, ne pas créer un second shipment et conserver l'item en reprise bornée |
-| Étiquette A4 et colis réel | BLOQUÉ TERRAIN | Jérémy | Après paiement, le Worker crée automatiquement l'unique shipment. Jérémy reçoit le mail opérationnel, vérifie le contenu et imprime l'étiquette A4 à 100 %. `/operations` permet le suivi et la réimpression de secours. Le seul ordre historique sans téléphone dispose d'une relance owner-only, consommable une fois, qui ne modifie que le téléphone transporteur | PDF dont chaque `MediaBox` est A4, hash, impression lisible, scan du code-barres et audit ; une relance historique prouve une autorisation consommée exactement une fois | Outcome fournisseur inconnu : aucune seconde création ; le bouton disparaît et impose le rapprochement de l'unique shipment par commande |
-| Remise transporteur et suivi | BLOQUÉ TERRAIN | Jérémy | Jérémy remet le colis, conserve le reçu puis clique `Confirmer la remise` dans `/operations`. Le premier scan signé prend ensuite le relais | Premier état attendu `in_transit`; commande `shipped`; exactement un mail expédition | Pas de dépôt physique ou pas de reçu : conserver `preparing` et ne pas confirmer la remise |
+| Étiquette A4 et colis réel | BLOQUÉ TERRAIN | Jérémy | Après paiement, le site crée automatiquement l'unique expédition. Jérémy reçoit le mail opérationnel, vérifie le contenu et imprime l'étiquette A4 à 100 %. `/admin` permet le suivi et la réimpression de secours. Le seul ordre historique sans téléphone dispose d'une relance administrateur, consommable une fois, qui ne modifie que le téléphone transporteur | PDF A4, empreinte du fichier, impression lisible, scan du code-barres et historique ; une relance historique prouve une autorisation consommée exactement une fois | Réponse fournisseur inconnue : aucune seconde création ; le bouton disparaît et impose de vérifier l'unique expédition associée à la commande |
+| Remise transporteur et suivi | BLOQUÉ TERRAIN | Jérémy | Jérémy remet le colis, conserve le reçu puis clique `Confirmer la remise` dans `/admin`. Le premier scan signé prend ensuite le relais | Premier état attendu `in_transit`; commande `shipped`; exactement un mail expédition | Pas de dépôt physique ou pas de reçu : conserver `preparing` et ne pas confirmer la remise |
 | Retour, réception et remboursement | BLOQUÉ TERRAIN | Jérémy (réception/inspection) / Adam (actions protégées) | Client : `/shipping-returns` puis `POST /api/commerce/returns`; Adam : approve/inspect owner-only ; créer l'étiquette retour via Sendcloud, tracer la remise/retour reçu, calculer articles reçus + règle de frais, puis rembourser une fois via Stripe sous 14 jours | IDs demande/étiquette/scan/réception/refund, montant calculé, stock et mail cohérents | Étiquette retour ou remboursement non câblé : gate reste NO-GO public ; aucune reprise aveugle |
-| Allowlist admin et console | OUVERT PRODUIT/RUNTIME | Adam | Cloudflare Zero Trust > Access : la même application et le même AUD protègent explicitement `/operations*` **et** `/api/commerce/admin/*` ; l'allowlist contient exactement les trois comptes nommés au § « Controlled runtime matrix » ; la session D1 courte et le CSRF restent obligatoires. La décision du 01/09/2026 n'impose pas de MFA supplémentaire à ce stade | Pour chacun des deux chemins : anonyme bloqué à l'edge, chacune des trois identités owner admise, toute autre identité refusée, puis session D1/CSRF encore exigée ; capture expurgée de policy et audit `identity_admin_session_started`, sans valeur de cookie/JWT | Une allowlist de 2, 4 ou davantage d'identités, un chemin hors Access ou un contrôle D1 absent garde console et `live` fermés |
+| Comptes administrateurs | OUVERT PRODUIT/RUNTIME | Adam | `/admin` accepte uniquement les trois adresses nommées au § « Controlled runtime matrix ». Chaque personne crée d'abord son compte AJ Luxury, confirme son adresse par e-mail, puis se connecte avec son mot de passe. Aucun MFA, aucune clé physique et aucun écran Cloudflare | Les trois adresses autorisées peuvent ouvrir l'Admin ; toute autre adresse est refusée ; chaque ouverture de session est inscrite dans l'historique sans enregistrer le mot de passe | Une liste différente de ces trois adresses, un compte non confirmé ou un contrôle absent garde l'Admin fermé |
 | Monitoring | REPORTÉ PAR DÉCISION D’OUVERTURE | Adam (principal) / Jérémy (suppléant seulement après accord direct) | Alertes : health non-ready 2 min, taux 5xx >1 %/5 min, webhook 4xx/5xx >=1, cron absent >5 min ; canal e-mail Adam + copie Jérémy après son accord ; injecter pour chaque règle un signal synthétique non transactionnel | Pour chaque alerte : rule ID Cloudflare + signal injecté + événement créé par cette règle + livraison + acquittement + evidence ID ; alors `MONITORING_ALERTS_APPROVED=true`. L’ouverture anticipée utilise à la place un `COMMERCE_PUBLIC_LAUNCH_RISK_ACCEPTANCE_ID` explicite et traçable, sans prétendre que la recette a eu lieu. | Toute alerte reste à traiter après ouverture ; ne jamais convertir l’exception en faux PASS monitoring |
 | Médiateur consommation | PREUVE CONTRACTUELLE PASSÉE — RUNTIME À PROUVER | Jérémy (adhésion) / Adam (intégration et preuve) | Preuve payée reçue le 01/09/2026, hashée et conservée ; intégrer le nom, l'adresse, le site et le lien de saisine exacts dans les pages prévues | Source et SHA-256 de `docs/legal/mediation/README.md`, puis pages publiques cohérentes liées au SHA et aux IDs Worker/Sites | La preuve contractuelle clôt l'ancien blocage « médiateur absent », mais aucune promotion `live` avant preuve des coordonnées sur le runtime exact |
 | Hors UE — UK/US/CA/GCC | INCLUS DANS LE CANDIDAT, PREUVE PRODUCTION REQUISE | Jérémy / Adam | Activer uniquement GB, US, CA, AE, QA et SA avec origine `CN`, HS `61071200`, EORI `FR944996487`, DAP, tarif Sendcloud réel, étiquette et douane A4 | Health exact sur zones `UK`,`US`,`CA`,`GCC`, cotation réelle par pays, un shipment unique et les deux PDF reçus ensemble par e-mail | Toute zone, donnée douanière, devise ou cotation divergente bloque le checkout international ; ne jamais présenter le code local comme une ouverture réelle |
@@ -78,10 +78,11 @@ Une capture, un test local ou un accord générique ne remplace jamais ce reçu.
 5. Déployer d'abord le Worker en `controlled`, puis Sites depuis le même SHA.
    Laisser `COMMERCE_CONTROLLED_EDGE_ACCESS_ENFORCED` absent ou faux : cette
    variable historique ne constitue jamais une autorisation et toute valeur
-   `true` invalide le candidat. Configurer la même application Access sur
-   `/operations*` et `/api/commerce/admin/*`, avec le même AUD, l'allowlist exacte
-   des trois admins, sans exigence MFA additionnelle à ce stade. Exécuter les preuves
-   anonymes du § « Vérification fail-closed et auto-étiquette sans dépense », puis
+   `true` invalide le candidat. Configurer la liste exacte des trois adresses
+   administratrices. Leur parcours humain reste uniquement : création du compte
+   AJ Luxury, confirmation par e-mail, puis connexion à `/admin`, sans MFA, clé
+   physique ni écran Cloudflare. Exécuter les preuves anonymes du §
+   « Vérification fail-closed et auto-étiquette sans dépense », puis
    les quatre tests monitoring et figer les Worker/Sites IDs finaux. Toute
    nouvelle version après cette étape impose une nouvelle preuve.
 6. Vérifier la santé puis faire valider par Jérémy la version visible — accueil,
@@ -331,27 +332,21 @@ approved owner identity. The Sites bridge and Worker share the proxy and
 controlled-HMAC secrets through their secret stores. No secret is copied into a
 config file, release note or evidence bundle.
 
-The production operator console is a separate owner-only surface. One
-Cloudflare Access application with one exact AUD must cover both `/operations*`
-and `/api/commerce/admin/*`. Access is the perimeter, not the application
-authorization: every mutation still requires the D1 owner session, same-origin
-CSRF and its operation-specific idempotency key.
+The production operator console is a separate administrator-only surface at
+`/admin`. Human access uses the AJ Luxury account itself: a confirmed e-mail and
+password create a short D1 administrator session. `/api/commerce/management/*`
+is the public browser path and is internally mapped to the existing
+rate-limited admin handlers. Every sensitive mutation still requires the short
+session, same-origin request protection and an operation-specific replay guard.
+Cloudflare Access remains an infrastructure rollback option only; it is not part
+of Adam's or Jeremy's login journey and no MFA or physical key is required.
 
-Sur le Worker storefront/bridge, la policy Access protège les deux chemins et
-le bridge ne transmet `Cf-Access-Jwt-Assertion` que vers
-`/api/commerce/admin/*`. Sur le Worker commerce backend, la console exige les
-valeurs exactes suivantes : `CLOUDFLARE_ACCESS_TEAM_DOMAIN`,
-`CLOUDFLARE_ACCESS_AUD`, `COMMERCE_CONTROLLED_OWNER_EMAIL` et
-`OPERATOR_CONSOLE_ENABLED=true`. Aucun challenge MFA additionnel n'est exigé à
-ce stade : l'allowlist nominative Access, la session D1 courte, le CSRF et
-l'idempotence restent obligatoires.
 `COMMERCE_ADMIN_ALLOWED_EMAILS_JSON` contient exactement trois identités
 distinctes après normalisation en minuscules : `adam.chabbi94@gmail.com`,
 `jeremy@ajluxurystore.com` et `jeremyajluxurystore@gmail.com`. Deux, quatre,
-un doublon ou une adresse supplémentaire ferment la console. La policy Access
-reprend exactement cette liste ; aucune adresse n'est admise par domaine entier.
-Les valeurs non secrètes sont enregistrées dans la preuve de configuration ;
-le JWT, les cookies et les secrets du bridge ne le sont jamais.
+un doublon ou une adresse supplémentaire ferment la console. Aucune adresse
+n'est admise par domaine entier. Les valeurs non secrètes sont enregistrées dans
+la preuve de configuration ; les cookies et mots de passe ne le sont jamais.
 
 Before the controlled order, the release owner records and verifies these
 runtime-only groups against the exact release SHA and Worker version:
@@ -394,8 +389,8 @@ ni clé fournisseur. Enregistrer seulement le code HTTP et l'horodatage UTC :
 ```powershell
 $proof = [DateTimeOffset]::UtcNow.ToString('yyyyMMddTHHmmssZ')
 curl.exe -sS -o NUL -w "commerce-anonyme=%{http_code}`n" "https://ajluxurystore.com/api/commerce/cart?proof=$proof"
-curl.exe -sS -o NUL -w "operations-anonyme=%{http_code}`n" "https://ajluxurystore.com/operations?proof=$proof"
-curl.exe -sS -o NUL -w "admin-api-anonyme=%{http_code}`n" "https://ajluxurystore.com/api/commerce/admin/orders?proof=$proof"
+curl.exe -sS -o NUL -w "admin-page-anonyme=%{http_code}`n" "https://ajluxurystore.com/admin?proof=$proof"
+curl.exe -sS -o NUL -w "admin-api-anonyme=%{http_code}`n" "https://ajluxurystore.com/api/commerce/management/orders?proof=$proof"
 npm run test:last-mile
 ```
 
@@ -403,9 +398,8 @@ Résultats obligatoires :
 
 - `commerce-anonyme` retourne `401` ou `403` applicatif, jamais `200` ; une
   redirection Access ne suffit pas à prouver le fail-closed applicatif ;
-- `operations-anonyme` et `admin-api-anonyme` retournent un refus Access à
-  l'edge (`302` vers le login ou `403` selon la policy), jamais un `200` ni un
-  `404` produit par l'application ;
+- `admin-page-anonyme` peut afficher l'écran de connexion AJ Luxury, mais aucune
+  donnée de commande ; `admin-api-anonyme` refuse l'accès avec `401` ou `403` ;
 - les tests prouvent localement, avec fournisseur simulé, que les deux flags
   d'étiquette sont nécessaires, qu'un seul shipment/idempotency key est créé et
   qu'un résultat fournisseur ambigu s'arrête en revue manuelle ;
@@ -511,10 +505,10 @@ npx wrangler deployments list --name aj-luxury-production --config cloudflare.pr
 - `COMMERCE_CONTROLLED_EDGE_ACCESS_ENFORCED` est absent ou faux ; la requête
   commerce anonyme du test fail-closed retourne `401`/`403` et aucune route
   mutante contrôlée ne repose uniquement sur Access ;
-- `/operations*` et `/api/commerce/admin/*` sont couverts par la même application
-  Access et le même AUD : l'anonyme est bloqué à l'edge, les trois identités de
-  l'allowlist exacte passent, toute autre identité échoue, puis les
-  verrous session D1/CSRF/idempotence restent actifs ;
+- `/admin` n'affiche aucune donnée sans connexion ; les trois adresses exactes
+  passent après création et confirmation de leur compte AJ Luxury, toute autre
+  adresse échoue, puis les protections de session, d'origine et contre les
+  doubles clics restent actives ;
 - la préparation auto-étiquette possède les deux flags vrais et sa preuve locale
   sans dépense ; cette preuve ne vaut pas création, impression ni scan d'un colis ;
 - après promotion seulement, le même endpoint retourne exactement

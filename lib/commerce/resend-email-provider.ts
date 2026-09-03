@@ -65,7 +65,7 @@ function escapeHtml(value: string): string {
 
 function brandedHtml(content: EmailContent): string {
   const title = escapeHtml(content.subject);
-  const trustedAjLuxuryUrl = /https:\/\/ajluxurystore\.com\/(?:account|operations|terms\?version=[A-Za-z0-9._%+-]{1,80})/g;
+  const trustedAjLuxuryUrl = /https:\/\/ajluxurystore\.com\/(?:account|admin|operations|terms\?version=[A-Za-z0-9._%+-]{1,80})/g;
   let cursor = 0;
   const linked: string[] = [];
   for (const match of content.text.matchAll(trustedAjLuxuryUrl)) {

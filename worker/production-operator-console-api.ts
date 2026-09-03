@@ -1,4 +1,5 @@
 import { isCanonicalUtcTimestamp } from "../lib/commerce/account-security.ts";
+import { D1CustomerPasswordAccountStore } from "../lib/commerce/customer-password-account-store.ts";
 import { resolveD1MutationActor } from "../lib/commerce/d1-actor-authorization.ts";
 import type { CommerceD1Database } from "../lib/commerce/d1-port.ts";
 import { D1IdentityAccessStore } from "../lib/commerce/identity-access-store.ts";
@@ -14,6 +15,7 @@ import {
   type CloudflareAccessOwnerEnvironment,
   type CloudflareAccessOwnerIdentity,
 } from "./cloudflare-access-owner.ts";
+import { adminEmailAllowed, configuredAdminEmails } from "./admin-email-allowlist.ts";
 import { normalizePromotionCode, PromotionCodeError } from "../lib/commerce/promotion-code.ts";
 import {
   administratorOrderCreditNote,
@@ -36,7 +38,17 @@ const ORDER_CREDIT_NOTE_ROUTE =
 const PROMOTION_STATUS_ROUTE = /^\/api\/commerce\/admin\/promotions\/([^/]+)\/status$/;
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,191}$/;
 const ACCESS_SESSION_ATTESTATION = "cloudflare-access:allowlisted-email";
+const NATIVE_SESSION_ATTESTATION = "aj-luxury:verified-email-password-allowlist";
 const MAX_FRESH_AUTH_MS = 5 * 60_000;
+
+type AdminAuthenticationIdentity = Readonly<{
+  issuer: string;
+  subject: string;
+  email: string;
+  authenticatedAt: string;
+  assertion: string;
+  attestation: string;
+}>;
 
 export type ProductionOperatorConsoleEnvironment = CloudflareAccessOwnerEnvironment & Readonly<{
   APP_ENV?: string;
@@ -233,6 +245,7 @@ function configured(
     ["controlled", "live"].includes(env.COMMERCE_MODE ?? "") &&
     env.COMMERCE_ORIGIN === url.origin &&
     env.OPERATOR_CONSOLE_ENABLED === "true" &&
+    configuredAdminEmails(env) !== null &&
     env.DB,
   );
 }
@@ -281,15 +294,11 @@ async function accessIdentity(
   return await (dependencies.accessIdentity ?? cloudflareAccessOwnerIdentity)(request, env);
 }
 
-async function createSession(
-  request: Request,
+async function persistAdminSession(
   env: ProductionOperatorConsoleEnvironment & { DB: CommerceD1Database },
-  identity: CloudflareAccessOwnerIdentity,
+  identity: AdminAuthenticationIdentity,
   now: string,
 ): Promise<Response> {
-  if (!sameOriginMutation(request, env.COMMERCE_ORIGIN!) || !(await emptyBody(request))) {
-    return fail("INVALID_REQUEST", 400);
-  }
   const authenticatedAt = identity.authenticatedAt;
   if (!isCanonicalUtcTimestamp(authenticatedAt) || authenticatedAt > now ||
     Date.parse(now) - Date.parse(authenticatedAt) > MAX_FRESH_AUTH_MS) {
@@ -299,7 +308,7 @@ async function createSession(
     `ajl-access-subject-v1\0${identity.issuer}\0${identity.subject}`,
   );
   const evidenceHash = await sha256(
-    `ajl-access-session-v1\0${identity.assertion}\0${ACCESS_SESSION_ATTESTATION}`,
+    `ajl-admin-session-v2\0${identity.assertion}\0${identity.attestation}`,
   );
   const administratorId = `admin_${externalSubjectHash.slice(0, 48)}`;
   try {
@@ -314,9 +323,8 @@ async function createSession(
       externalMfa: {
         async verify(assertion) {
           return assertion === identity.assertion
-            // The application session is still bound to a fresh, signed
-            // Cloudflare Access assertion and the exact e-mail allowlist.
-            // No user-facing second-factor challenge is required.
+            // The short-lived admin session remains bound to the successful
+            // authentication proof and to the exact three-address allowlist.
             ? { externalSubjectHash, evidenceHash, aal: 2, authenticatedAt }
             : null;
         },
@@ -347,6 +355,65 @@ async function createSession(
     }, 201, headers);
   } catch {
     return fail("OWNER_SESSION_UNAVAILABLE", 503);
+  }
+}
+
+async function createAccessSession(
+  request: Request,
+  env: ProductionOperatorConsoleEnvironment & { DB: CommerceD1Database },
+  identity: CloudflareAccessOwnerIdentity,
+  now: string,
+): Promise<Response> {
+  if (!sameOriginMutation(request, env.COMMERCE_ORIGIN!) || !(await emptyBody(request))) {
+    return fail("INVALID_REQUEST", 400);
+  }
+  return persistAdminSession(env, {
+    ...identity,
+    attestation: ACCESS_SESSION_ATTESTATION,
+  }, now);
+}
+
+async function createNativeSession(
+  request: Request,
+  env: ProductionOperatorConsoleEnvironment & { DB: CommerceD1Database },
+  now: string,
+): Promise<Response> {
+  if (!sameOriginMutation(request, env.COMMERCE_ORIGIN!)) {
+    return fail("INVALID_ADMIN_CREDENTIALS", 401);
+  }
+  const parsed = await jsonBody(request);
+  if (!parsed || !exact(parsed, ["email", "password"]) ||
+    typeof parsed.email !== "string" || typeof parsed.password !== "string" ||
+    parsed.email.length > 320 || parsed.password.length < 12 || parsed.password.length > 128) {
+    return fail("INVALID_ADMIN_CREDENTIALS", 401);
+  }
+  const store = new D1CustomerPasswordAccountStore(env.DB);
+  let customerSession: Awaited<ReturnType<typeof store.login>> = null;
+  try {
+    customerSession = await store.login({
+      email: parsed.email,
+      password: parsed.password,
+      now,
+    });
+    if (!customerSession) return fail("INVALID_ADMIN_CREDENTIALS", 401);
+    const account = await store.currentAccount(customerSession.token, now);
+    if (!account || !adminEmailAllowed(account.email, env)) {
+      return fail("INVALID_ADMIN_CREDENTIALS", 401);
+    }
+    return await persistAdminSession(env, {
+      issuer: `${env.COMMERCE_ORIGIN}/native-admin`,
+      subject: account.customerId,
+      email: account.email,
+      authenticatedAt: now,
+      assertion: customerSession.token,
+      attestation: NATIVE_SESSION_ATTESTATION,
+    }, now);
+  } catch {
+    return fail("INVALID_ADMIN_CREDENTIALS", 401);
+  } finally {
+    if (customerSession) {
+      await store.logout(customerSession.token, now).catch(() => undefined);
+    }
   }
 }
 
@@ -883,8 +950,6 @@ export async function productionOperatorConsoleApiResponse(
   if (!configured(env, url)) return fail("OPERATOR_CONSOLE_CLOSED", 503);
   const now = dependencies.now?.() ?? new Date().toISOString();
   if (!isCanonicalUtcTimestamp(now)) return fail("CLOCK_UNAVAILABLE", 503);
-  const identity = await accessIdentity(request, env, dependencies);
-  if (!identity) return fail("CLOUDFLARE_ACCESS_REQUIRED", 403);
   if (url.pathname === ORDERS_ROUTE) {
     if (request.method !== "GET") return fail("METHOD_NOT_ALLOWED", 405);
     return listOrders(request, env.DB, now);
@@ -924,7 +989,14 @@ export async function productionOperatorConsoleApiResponse(
     if (!orderId) return fail("INVALID_ORDER", 400);
     return orderDetail(request, env.DB, now, orderId);
   }
-  if (request.method === "POST") return createSession(request, env, identity, now);
+  if (request.method === "POST") {
+    if (/^application\/json(?:\s*;|$)/i.test(request.headers.get("Content-Type") ?? "")) {
+      return createNativeSession(request, env, now);
+    }
+    const identity = await accessIdentity(request, env, dependencies);
+    if (!identity) return fail("CLOUDFLARE_ACCESS_REQUIRED", 403);
+    return createAccessSession(request, env, identity, now);
+  }
   if (request.method === "DELETE") return logout(request, env, now);
   return fail("METHOD_NOT_ALLOWED", 405);
 }

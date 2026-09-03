@@ -64,6 +64,72 @@
   text-transform: uppercase;
 }
 
+.loginCard {
+  width: min(100%, 680px);
+  margin: clamp(2rem, 5vh, 3.6rem) 0;
+  padding: clamp(1.4rem, 3vw, 2.4rem);
+  border: 1px solid #b6b6b6;
+  background: #f4f3f1;
+}
+
+.loginEyebrow {
+  margin: 0 0 .75rem;
+  color: #666;
+  font-size: .7rem;
+  font-weight: 700;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+}
+
+.loginCard h2 { margin: 0 0 .75rem; font-size: 2rem; font-weight: 400; }
+.loginCard > p { line-height: 1.5; }
+
+.loginForm {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.loginForm label {
+  display: grid;
+  gap: .45rem;
+  font-size: .75rem;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.loginForm input {
+  min-height: 52px;
+  border: 1px solid #777;
+  border-radius: 0;
+  background: #fff;
+  padding: .75rem;
+  color: #0b0b0b;
+  font: 1rem Arial, Helvetica, sans-serif;
+}
+
+.loginForm button {
+  min-height: 54px;
+  border: 1px solid #070707;
+  border-radius: 0;
+  background: #070707;
+  color: #fff;
+  padding: .85rem 1rem;
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.loginForm button:disabled { cursor: wait; opacity: .65; }
+.loginForm input:focus-visible,
+.loginForm button:focus-visible { outline: 2px solid #a78eea; outline-offset: 3px; }
+.loginError { color: #8c1f1f; }
+.loginHelp { margin-bottom: 0; font-size: .9rem; }
+.loginHelp a { color: inherit; text-underline-offset: .2em; }
+
 .summary {
   margin: clamp(2rem, 5vh, 3.6rem) 0;
   font-size: clamp(1.05rem, 1.45vw, 1.4rem);

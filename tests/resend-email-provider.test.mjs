@@ -72,7 +72,7 @@ test("Resend receives one bounded PDF attachment for the operator label email", 
   });
   const payload = delivery({
     subject: "AJ Luxury — étiquette A4 prête — AJ-TEST",
-    text: "Étiquette jointe. https://ajluxurystore.com/operations",
+    text: "Étiquette jointe. https://ajluxurystore.com/admin",
   });
   await adapter.deliver({
     ...payload,
@@ -86,7 +86,7 @@ test("Resend receives one bounded PDF attachment for the operator label email", 
     filename: "AJL-AJ-TEST-A4.pdf",
     content: Buffer.from("%PDF-1.7\n%%EOF").toString("base64"),
   }]);
-  assert.match(body.html, /href="https:\/\/ajluxurystore\.com\/operations"/);
+  assert.match(body.html, /href="https:\/\/ajluxurystore\.com\/admin"/);
   assert.equal(body.tags[0].value, "operator_label_ready");
 });
 

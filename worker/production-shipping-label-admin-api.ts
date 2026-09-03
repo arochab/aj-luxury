@@ -11,7 +11,6 @@ import {
 import { createSendcloudShippingLabelProvider } from "../lib/commerce/sendcloud-shipping-label-provider.ts";
 import { createSendcloudProviderPorts } from "../lib/commerce/sendcloud-provider.ts";
 import { controlledOwnerRequestAuthenticated } from "./production-commerce-api.ts";
-import { cloudflareAccessOwnerRequestAuthenticated } from "./cloudflare-access-owner.ts";
 import { productionOutboundShippingRuntimeConfigured } from "./production-shipping-runtime.ts";
 
 const ROUTE = /^\/api\/commerce\/admin\/orders\/([^/]+)\/(shipping-label|customs-document)$/;
@@ -419,17 +418,13 @@ export async function productionShippingLabelAdminReleaseCoreResponse(
 ): Promise<Response> {
   const match = ROUTE.exec(new URL(request.url).pathname);
   if (!match || request.method !== "POST") return fail("NOT_FOUND", 404);
-  // Cloudflare Access is the production console identity. The legacy
-  // controlled HMAC remains accepted only through this same verifier for the
-  // private controlled-order rehearsal. Requiring the old platform-specific
-  // `oai-*` headers in addition would make a correctly authenticated Access
-  // session unable to retrieve its label.
-  const releaseOwnerAuthenticated = dependencies.authorizeControlledOwner ?? (
-    env.COMMERCE_MODE === "live"
-      ? cloudflareAccessOwnerRequestAuthenticated
-      : controlledOwnerRequestAuthenticated
-  );
-  if (!await releaseOwnerAuthenticated(request, env)) {
+  // Controlled rehearsals retain their signed release proof. In live mode,
+  // the durable AJ Luxury admin session and CSRF validation below are the
+  // complete owner boundary; the browser never depends on a second identity
+  // product or on MFA.
+  const releaseOwnerAuthenticated = dependencies.authorizeControlledOwner ??
+    controlledOwnerRequestAuthenticated;
+  if (env.COMMERCE_MODE !== "live" && !await releaseOwnerAuthenticated(request, env)) {
     return fail("CONTROLLED_ACCESS_REQUIRED", 403);
   }
   if (env.OUTBOUND_SHIPMENT_CREATION_ENABLED !== "true") {

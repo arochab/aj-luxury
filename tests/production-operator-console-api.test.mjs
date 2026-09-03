@@ -5,6 +5,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { productionOperatorConsoleApiResponse } from "../worker/production-operator-console-api.ts";
+import { D1CustomerPasswordAccountStore } from "../lib/commerce/customer-password-account-store.ts";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const plan = JSON.parse(readFileSync(`${root}drizzle/production-migrations.json`, "utf8"));
@@ -67,6 +68,11 @@ function context() {
     CLOUDFLARE_ACCESS_TEAM_DOMAIN: "https://aj-luxury.cloudflareaccess.com",
     CLOUDFLARE_ACCESS_AUD: "accessAudience_1234567890",
     COMMERCE_CONTROLLED_OWNER_EMAIL: "adam@example.com",
+    COMMERCE_ADMIN_ALLOWED_EMAILS_JSON: JSON.stringify([
+      "adam.chabbi94@gmail.com",
+      "jeremy@ajluxurystore.com",
+      "jeremyajluxurystore@gmail.com",
+    ]),
     DB: database,
   };
   return { sqlite, env };
@@ -79,6 +85,138 @@ const identity = Object.freeze({
   email: "adam@example.com",
   authenticatedAt: "2026-09-01T08:59:00.000Z",
   assertion: "signed-access-jwt-fixture",
+});
+
+test("native AJ Luxury credentials create an owner session without Access or MFA", async () => {
+  const { sqlite, env } = context();
+  try {
+    const store = new D1CustomerPasswordAccountStore(env.DB);
+    const registration = await store.register({
+      email: "adam.chabbi94@gmail.com",
+      password: "Satin-Pourpre-2026!",
+      acceptsMarketing: false,
+      source: "account_registration",
+      privacyVersion: "2026-08-26",
+      now: "2026-09-01T08:50:00.000Z",
+    });
+    await store.verifyEmail(
+      registration.emailDelivery.rawToken,
+      "2026-09-01T08:55:00.000Z",
+    );
+    const session = await productionOperatorConsoleApiResponse(new Request(
+      "https://ajluxurystore.com/api/commerce/admin/session",
+      {
+        method: "POST",
+        headers: {
+          Origin: "https://ajluxurystore.com",
+          "Sec-Fetch-Site": "same-origin",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: "adam.chabbi94@gmail.com",
+          password: "Satin-Pourpre-2026!",
+        }),
+      },
+    ), env, { now: () => now });
+    assert.equal(session.status, 201);
+    assert.equal(sqlite.prepare("SELECT COUNT(*) AS count FROM administrators").get().count, 1);
+    assert.equal(sqlite.prepare("SELECT aal FROM admin_sessions").get().aal, 2);
+    assert.equal(sqlite.prepare(
+      "SELECT COUNT(*) AS count FROM customer_sessions WHERE revoked_at IS NULL",
+    ).get().count, 1);
+
+    const orders = await productionOperatorConsoleApiResponse(new Request(
+      "https://ajluxurystore.com/api/commerce/admin/orders",
+      { headers: { Cookie: cookies(session) } },
+    ), env, { now: () => now });
+    assert.equal(orders.status, 200);
+
+    const rejected = await productionOperatorConsoleApiResponse(new Request(
+      "https://ajluxurystore.com/api/commerce/admin/session",
+      {
+        method: "POST",
+        headers: {
+          Origin: "https://ajluxurystore.com",
+          "Sec-Fetch-Site": "same-origin",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: "intruder@example.com",
+          password: "Satin-Pourpre-2026!",
+        }),
+      },
+    ), env, { now: () => now });
+    assert.equal(rejected.status, 401);
+    assert.equal((await rejected.json()).error.code, "INVALID_ADMIN_CREDENTIALS");
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("all three named administrators are accepted and a confirmed customer outside the list is refused", async () => {
+  const { sqlite, env } = context();
+  const password = "Satin-Pourpre-2026!";
+  const allowedEmails = [
+    "adam.chabbi94@gmail.com",
+    "jeremy@ajluxurystore.com",
+    "jeremyajluxurystore@gmail.com",
+  ];
+  try {
+    const store = new D1CustomerPasswordAccountStore(env.DB);
+    for (const [index, email] of allowedEmails.entries()) {
+      const registration = await store.register({
+        email,
+        password,
+        acceptsMarketing: false,
+        source: "account_registration",
+        privacyVersion: "2026-08-26",
+        now: `2026-09-01T08:${40 + index}:00.000Z`,
+      });
+      await store.verifyEmail(
+        registration.emailDelivery.rawToken,
+        `2026-09-01T08:${50 + index}:00.000Z`,
+      );
+      const response = await productionOperatorConsoleApiResponse(new Request(
+        "https://ajluxurystore.com/api/commerce/admin/session",
+        {
+          method: "POST",
+          headers: {
+            Origin: "https://ajluxurystore.com",
+            "Sec-Fetch-Site": "same-origin",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ email, password }),
+        },
+      ), env, { now: () => now });
+      assert.equal(response.status, 201, `${email} should be admitted`);
+    }
+
+    const outsider = await store.register({
+      email: "confirmed.customer@example.com",
+      password,
+      acceptsMarketing: false,
+      source: "account_registration",
+      privacyVersion: "2026-08-26",
+      now: "2026-09-01T08:45:00.000Z",
+    });
+    await store.verifyEmail(outsider.emailDelivery.rawToken, "2026-09-01T08:55:00.000Z");
+    const refused = await productionOperatorConsoleApiResponse(new Request(
+      "https://ajluxurystore.com/api/commerce/admin/session",
+      {
+        method: "POST",
+        headers: {
+          Origin: "https://ajluxurystore.com",
+          "Sec-Fetch-Site": "same-origin",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email: "confirmed.customer@example.com", password }),
+      },
+    ), env, { now: () => now });
+    assert.equal(refused.status, 401);
+    assert.equal((await refused.json()).error.code, "INVALID_ADMIN_CREDENTIALS");
+  } finally {
+    sqlite.close();
+  }
 });
 
 function cookies(response) {

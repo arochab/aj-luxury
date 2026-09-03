@@ -82,6 +82,13 @@ type CredentialRow = Readonly<{
   locked_until: string | null;
 }>;
 
+type CustomerRow = Readonly<{
+  customer_id: string;
+  email: string;
+  account_enabled_at: string | null;
+  accepts_marketing: number;
+}>;
+
 type SessionCustomerRow = Readonly<{
   session_id: string;
   customer_id: string;
@@ -155,6 +162,15 @@ export class D1CustomerPasswordAccountStore {
     ).bind(email).first<CredentialRow>();
   }
 
+  async #customerByEmail(email: string): Promise<CustomerRow | null> {
+    return this.#database.prepare(
+      `SELECT id AS customer_id, email, account_enabled_at, accepts_marketing
+      FROM customers
+      WHERE lower(email) = ? AND deleted_at IS NULL
+      LIMIT 1`,
+    ).bind(email).first<CustomerRow>();
+  }
+
   async register(input: Readonly<{
     email: unknown;
     password: unknown;
@@ -169,7 +185,10 @@ export class D1CustomerPasswordAccountStore {
       !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}$/.test(input.privacyVersion)) {
       throw new CustomerAccountError("INVALID_INPUT", "Registration input is invalid.");
     }
-    const existing = await this.#credentialByEmail(email);
+    const [existing, existingCustomer] = await Promise.all([
+      this.#credentialByEmail(email),
+      this.#customerByEmail(email),
+    ]);
     let customerId: string;
     if (existing) {
       const matches = await verifyCustomerPassword(input.password, credentialShape(existing));
@@ -177,6 +196,8 @@ export class D1CustomerPasswordAccountStore {
         return Object.freeze({ accepted: true, checkoutToken: null, emailDelivery: null });
       }
       customerId = existing.customer_id;
+    } else if (existingCustomer) {
+      customerId = existingCustomer.customer_id;
     } else {
       customerId = internalId("customer");
     }
@@ -191,7 +212,7 @@ export class D1CustomerPasswordAccountStore {
     const verificationExpiresAt = after(input.now, VERIFICATION_TTL_MS);
     const checkoutExpiresAt = after(input.now, CHECKOUT_LINK_TTL_MS);
     const statements = [];
-    if (!existing && passwordHash) {
+    if (!existing && !existingCustomer && passwordHash) {
       statements.push(
         this.#database.prepare(
           `INSERT INTO customers (
@@ -222,6 +243,33 @@ export class D1CustomerPasswordAccountStore {
           input.now,
           input.now,
         ),
+      );
+    } else if (!existing && existingCustomer && passwordHash) {
+      statements.push(
+        this.#database.prepare(
+          `INSERT INTO customer_password_credentials (
+            customer_id, algorithm, iterations, salt_base64url, hash_base64url,
+            failed_attempts, locked_until, password_changed_at, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, 0, NULL, ?, ?, ?)`,
+        ).bind(
+          customerId,
+          passwordHash.algorithm,
+          passwordHash.iterations,
+          passwordHash.salt,
+          passwordHash.hash,
+          input.now,
+          input.now,
+          input.now,
+        ),
+        this.#database.prepare(
+          `UPDATE customer_account_challenges SET revoked_at = ?
+          WHERE customer_id = ? AND purpose = 'email_verification'
+            AND consumed_at IS NULL AND revoked_at IS NULL`,
+        ).bind(input.now, customerId),
+        this.#database.prepare(
+          `UPDATE customer_checkout_links SET revoked_at = ?
+          WHERE customer_id = ? AND revoked_at IS NULL`,
+        ).bind(input.now, customerId),
       );
     } else {
       statements.push(
@@ -255,7 +303,9 @@ export class D1CustomerPasswordAccountStore {
         ) VALUES (?, ?, ?, ?, NULL, ?)`,
       ).bind(checkoutId, customerId, checkout.tokenHash, checkoutExpiresAt, input.now),
     );
-    if (input.acceptsMarketing && (!existing || existing.accepts_marketing !== 1)) {
+    const currentlyAcceptsMarketing = existing?.accepts_marketing ??
+      existingCustomer?.accepts_marketing ?? 0;
+    if (input.acceptsMarketing && currentlyAcceptsMarketing !== 1) {
       statements.push(
         this.#database.prepare(
           `UPDATE customers SET accepts_marketing = 1, marketing_consent_at = ?, updated_at = ?

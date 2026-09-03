@@ -618,7 +618,8 @@ export async function productionOperationsApiResponse(
     return fail("OPERATIONS_NOT_ACTIVATED", 503);
   }
   if (
-    !isCustomerReturn && !await controlledOwnerRequestAuthenticated(request, env)
+    !isCustomerReturn && configuration.mode !== "live" &&
+    !await controlledOwnerRequestAuthenticated(request, env)
   ) return fail("OWNER_ACCESS_REQUIRED", 403);
   if (
     isCustomerReturn && ["sandbox", "controlled"].includes(configuration.mode) &&

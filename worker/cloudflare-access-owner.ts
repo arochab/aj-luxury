@@ -1,3 +1,7 @@
+import {
+  configuredAdminEmails,
+} from "./admin-email-allowlist.ts";
+
 export type CloudflareAccessOwnerEnvironment = Readonly<{
   CLOUDFLARE_ACCESS_TEAM_DOMAIN?: string;
   CLOUDFLARE_ACCESS_AUD?: string;
@@ -19,12 +23,6 @@ const JWT_SEGMENT = /^[A-Za-z0-9_-]+$/;
 const MAX_JWT_BYTES = 16 * 1024;
 const MAX_CERTS_BYTES = 128 * 1024;
 const CLOCK_SKEW_SECONDS = 30;
-const REQUIRED_ADMIN_EMAILS = Object.freeze([
-  "adam.chabbi94@gmail.com",
-  "jeremy@ajluxurystore.com",
-  "jeremyajluxurystore@gmail.com",
-] as const);
-
 function ownedArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   const owned = new Uint8Array(bytes.byteLength);
   owned.set(bytes);
@@ -36,32 +34,6 @@ type AccessConfiguration = Readonly<{
   audience: string;
   allowedEmails: readonly string[];
 }>;
-
-const EMAIL = /^[^@\s]+@[^@\s]+$/;
-
-function allowedEmails(env: CloudflareAccessOwnerEnvironment): readonly string[] | null {
-  const raw = env.COMMERCE_ADMIN_ALLOWED_EMAILS_JSON?.trim() ?? "";
-  if (!raw) return null;
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed) || parsed.length !== REQUIRED_ADMIN_EMAILS.length) return null;
-    const values: string[] = [];
-    for (const value of parsed) {
-      if (typeof value !== "string") return null;
-      values.push(value.trim().toLowerCase());
-    }
-    const unique = [...new Set(values)];
-    if (unique.length !== REQUIRED_ADMIN_EMAILS.length ||
-      !unique.every((email) => email.length <= 320 && EMAIL.test(email))) return null;
-    const actual = [...unique].sort();
-    const expected = [...REQUIRED_ADMIN_EMAILS].sort();
-    return actual.every((email, index) => exactText(email, expected[index]))
-      ? REQUIRED_ADMIN_EMAILS
-      : null;
-  } catch {
-    return null;
-  }
-}
 
 function exactText(left: string, right: string): boolean {
   if (left.length !== right.length) return false;
@@ -77,7 +49,7 @@ function readConfiguration(
 ): AccessConfiguration | null {
   const rawDomain = env.CLOUDFLARE_ACCESS_TEAM_DOMAIN?.trim() ?? "";
   const audience = env.CLOUDFLARE_ACCESS_AUD?.trim() ?? "";
-  const emails = allowedEmails(env);
+  const emails = configuredAdminEmails(env);
   try {
     const domain = new URL(rawDomain);
     if (domain.protocol !== "https:" || domain.origin !== rawDomain ||

@@ -78,6 +78,7 @@ import {
 import { productionShippingLabelAdminResponse } from "./production-shipping-label-admin-api.ts";
 import { productionOperatorConsoleApiResponse } from "./production-operator-console-api.ts";
 import { cloudflareAccessOwnerRequestAuthenticated } from "./cloudflare-access-owner.ts";
+import { normalizeAdminRoute } from "./admin-route-alias.ts";
 import { productionCommerceRateLimitResponse } from "./production-rate-limit.ts";
 import { productionHttpsRedirectResponse } from "./production-https-redirect.ts";
 import { legacyPreviewRedirectResponse } from "./legacy-preview-redirect.ts";
@@ -3012,7 +3013,8 @@ const worker = {
       );
     }
 
-    const ingress = prepareBackendOnlyCommerceRequest(request, env);
+    const normalizedRequest = normalizeAdminRoute(request);
+    const ingress = prepareBackendOnlyCommerceRequest(normalizedRequest, env);
     if (ingress.response) {
       return withSecurityHeaders(
         ingress.response,

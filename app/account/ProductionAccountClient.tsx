@@ -148,7 +148,7 @@ export default function ProductionAccountClient() {
       if (view === "login") {
         await loginCustomerAccount(email, password);
         const returnTo = new URLSearchParams(window.location.search).get("returnTo");
-        if (returnTo === "/checkout") {
+        if (returnTo === "/checkout" || returnTo === "/admin") {
           window.location.assign(returnTo);
           return;
         }
