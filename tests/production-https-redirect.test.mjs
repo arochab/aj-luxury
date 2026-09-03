@@ -72,6 +72,22 @@ test("internal release markers are removed without losing useful parameters", ()
   );
 });
 
+test("the retired private launch page permanently redirects to the public home", () => {
+  const response = productionHttpsRedirectResponse(
+    new Request(
+      "https://ajluxurystore.com/preouverture?utm_source=old-bookmark",
+    ),
+    production,
+  );
+
+  assert.ok(response);
+  assert.equal(response.status, 308);
+  assert.equal(
+    response.headers.get("Location"),
+    "https://ajluxurystore.com/?utm_source=old-bookmark",
+  );
+});
+
 test("canonical HTTPS, non-production and internal hosts are untouched", () => {
   assert.equal(
     productionHttpsRedirectResponse(
