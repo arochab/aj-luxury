@@ -77,12 +77,7 @@
 }
 
 .home :global(.aj-film__signature) {
-  background: linear-gradient(
-    180deg,
-    rgba(38, 16, 25, 0.08),
-    rgba(38, 16, 25, 0.74) 56%,
-    var(--hero-rail-seam) 100%
-  );
+  background: transparent;
 }
 
 .home :global(.aj-moodboard__item img) {
@@ -407,6 +402,40 @@
     gap: 16px;
   }
 
+}
+
+/* Desktop is one uninterrupted photographic canvas. The former contained
+   foreground, blurred duplicate and feather masks exposed the native 16:9
+   rectangle whenever the viewport ratio changed. Cover the stage itself and
+   remove those fallback layers: the crop is vertical at the supported desktop
+   sizes, so both faces and the lateral safety margins remain intact. */
+@media (min-width: 901px) {
+  .home :global(.aj-film__hero-media),
+  .home :global(.aj-film__hero-stage),
+  .home :global(.aj-film__hero-poster) {
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .home :global(.aj-film__hero-backdrop) {
+    display: none;
+    opacity: 0;
+  }
+
+  .home :global(.aj-film__hero-stage) {
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+
+  .home :global(.aj-film__hero-poster img),
+  .home :global(.aj-film__hero-video) {
+    object-fit: cover;
+    object-position: center top;
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

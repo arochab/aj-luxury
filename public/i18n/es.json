@@ -166,7 +166,7 @@
   "cart.syntheticQualifier": "ficticio, no comercial",
   "cart.checkoutUnavailable": "Pago no activado",
   "cart.continueToCheckout": "Continuar al envío",
-  "cart.unavailableError": "La cesta no está disponible temporalmente. Vuelve a intentarlo en breve.",
+  "cart.unavailableError": "No hemos podido actualizar tu cesta. Tu selección se conserva: actualiza la página o vuelve a la tienda.",
   "cart.outOfStockError": "La cantidad solicitada ya no está disponible. Tu cesta no se ha modificado.",
   "checkout.backToCart": "Volver a la cesta",
   "checkout.demoLabel": "Pago · vista previa",

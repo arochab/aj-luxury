@@ -32,11 +32,11 @@ const CHAPTERS: readonly Chapter[] = [
       "/images/editorial/isabelle-apollon/apollon-pourpre-lyre-v1.webp",
     productAlt:
       "Apollon Pourpre Impérial en lévitation sur son décor de marbre",
-    // La v4 reprend le portrait solo de la boutique sans modifier ni déplacer
-    // Alex. Comme pour les portraits Lilas et Rose, seul le mur du studio est
-    // recomposé dans la couleur du boxer : aucun accessoire ni coupe ajoutée.
+    // La v5 conserve le portrait solo de la boutique sans modifier ni déplacer
+    // Alex. Seul le mur du studio est recomposé dans la couleur du boxer ; le
+    // support noir original reste sous sa main afin de préserver la pose.
     model:
-      "/images/client/apollon-world/apollon-pourpre-model-color-v4.webp",
+      "/images/client/apollon-world/apollon-pourpre-model-color-v5.webp",
     modelAlt: "Apollon Pourpre Impérial porté par Alex",
     modelWidth: 1731,
     modelHeight: 2600,

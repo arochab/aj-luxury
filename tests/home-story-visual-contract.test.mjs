@@ -31,6 +31,64 @@ test("phone hero fills the viewport with the approved native vertical film", () 
   );
 });
 
+test("desktop hero is a full-bleed canvas without a visible media rectangle", () => {
+  const desktopRules = homeCss.slice(
+    homeCss.lastIndexOf("@media (min-width: 901px)"),
+  );
+
+  assert.match(
+    desktopRules,
+    /\.home :global\(\.aj-film__hero-backdrop\)\s*\{[^}]*display:\s*none;[^}]*opacity:\s*0;/s,
+  );
+  assert.match(
+    desktopRules,
+    /\.home :global\(\.aj-film__hero-stage\)\s*\{[^}]*inset:\s*0;[^}]*width:\s*100%;[^}]*height:\s*100%;/s,
+  );
+  assert.match(
+    desktopRules,
+    /\.home :global\(\.aj-film__hero-poster img\),\s*\.home :global\(\.aj-film__hero-video\)\s*\{[^}]*object-fit:\s*cover;[^}]*object-position:\s*center top;[^}]*mask-image:\s*none;/s,
+  );
+  assert.match(
+    desktopRules,
+    /\.home :global\(\.aj-film__hero-media\),[\s\S]*?border:\s*0;[\s\S]*?border-radius:\s*0;[\s\S]*?box-shadow:\s*none;/,
+  );
+  assert.match(
+    homeCss,
+    /\.home :global\(\.aj-film__signature\)\s*\{[^}]*background:\s*transparent;/s,
+  );
+});
+
+test("desktop cover geometry preserves the film's full horizontal subject field", () => {
+  const source = { width: 1920, height: 1080 };
+  const desktopHeaderHeight = 110.4;
+  const viewports = [
+    { width: 1920, height: 1080 },
+    { width: 1440, height: 900 },
+    { width: 1280, height: 800 },
+  ];
+
+  for (const viewport of viewports) {
+    const stageHeight = viewport.height - desktopHeaderHeight;
+    const scale = Math.max(
+      viewport.width / source.width,
+      stageHeight / source.height,
+    );
+    const renderedWidth = source.width * scale;
+    const renderedHeight = source.height * scale;
+
+    assert.equal(
+      renderedWidth,
+      viewport.width,
+      `${viewport.width}x${viewport.height} must not crop either model laterally`,
+    );
+    assert.ok(renderedHeight >= stageHeight);
+    assert.ok(
+      renderedHeight - stageHeight < 112,
+      `${viewport.width}x${viewport.height} keeps the crop on the lower scenery`,
+    );
+  }
+});
+
 test("story sections expose headings without visible act numbers", () => {
   assert.doesNotMatch(storyPage, /styles\.actIndex|>\s*0[123]\s*</);
   assert.doesNotMatch(storyCss, /\.actIndex\b/);
@@ -39,7 +97,7 @@ test("story sections expose headings without visible act numbers", () => {
   }
 });
 
-test("the story hero uses a native-ratio bordered frame on the dark editorial canvas", () => {
+test("the story hero uses a prominent native-ratio frame on the brighter charcoal-lilac canvas", () => {
   assert.equal(
     (storyPage.match(/style=\{\{ objectFit: "contain", objectPosition: "center" \}\}/g) ?? []).length,
     2,
@@ -59,8 +117,21 @@ test("the story hero uses a native-ratio bordered frame on the dark editorial ca
   assert.match(storyMedia, /scale: compact \? 1\.018 : 1\.028/);
   assert.match(storyMedia, /scrub: 0\.18/);
   assert.match(storyCss, /\.heroForeground\s*\{[^}]*object-fit:\s*cover !important;/s);
-  assert.match(storyCss, /--story-ink:\s*#0b0b0d/);
-  assert.match(storyCss, /--story-panel:\s*#121216/);
+  assert.match(storyCss, /--story-ink:\s*#17141c/);
+  assert.match(storyCss, /--story-panel:\s*#292330/);
+  assert.match(storyCss, /--story-panel-soft:\s*#37303f/);
+  assert.match(
+    storyCss,
+    /\.heroBody\s*\{[^}]*width:\s*min\(1580px,[^}]*grid-template-columns:\s*minmax\(17rem, 0\.45fr\) minmax\(0, 1\.55fr\);[^}]*gap:\s*clamp\(1\.75rem, 3vw, 4rem\);[^}]*padding:\s*clamp\(0\.75rem, 1\.5vh, 1rem\) 0;/s,
+  );
+  assert.match(
+    storyCss,
+    /\.heroImage\s*\{[^}]*width:\s*min\(100%, calc\(\(100svh - 7\.25rem\) \* 2 \/ 3\), 44rem\);[^}]*justify-self:\s*center;/s,
+  );
+  assert.match(
+    storyCss,
+    /@media \(max-width:\s*760px\)[\s\S]*?\.heroImage\s*\{[^}]*width:\s*calc\(100% - 1\.5rem\);[^}]*max-width:\s*34rem;/s,
+  );
   assert.match(storyCss, /\.portrait\s*\{[^}]*border:\s*1px solid var\(--story-line-strong\);/s);
   assert.match(
     storyCss,

@@ -216,7 +216,7 @@ const storyHero = await story.page.locator("figure").first().evaluate((figure) =
 });
 assert.deepEqual(storyHero.fits, ["cover"]);
 assert.equal(storyHero.count, 1, "story hero renders the intact campaign image once");
-assert.equal(storyHero.backgroundColor, "rgb(37, 37, 46)", "story hero frame matches the dark canvas");
+assert.equal(storyHero.backgroundColor, "rgb(58, 51, 68)", "story hero frame matches the charcoal-lilac canvas");
 assert.equal(storyHero.borderWidth, "1px", "story hero keeps its fine white frame");
 assert(Math.abs(storyHero.naturalRatio - 2 / 3) < 0.002, "story hero frame matches the source ratio");
 assert.equal(storyHero.ready, true, "story hero images decode");
@@ -246,7 +246,7 @@ const mobileStoryHero = await mobileStory.page.locator("figure").first().evaluat
 });
 assert.deepEqual(mobileStoryHero.fits, ["cover"]);
 assert.equal(mobileStoryHero.count, 1, "mobile story renders the intact campaign image once");
-assert.equal(mobileStoryHero.backgroundColor, "rgb(37, 37, 46)", "mobile story frame matches the dark canvas");
+assert.equal(mobileStoryHero.backgroundColor, "rgb(58, 51, 68)", "mobile story frame matches the charcoal-lilac canvas");
 assert.equal(mobileStoryHero.borderWidth, "1px", "mobile story keeps its fine white frame");
 assert(Math.abs(mobileStoryHero.naturalRatio - 2 / 3) < 0.002, "mobile story frame matches the source ratio");
 assert.equal(mobileStoryHero.ready, true, "mobile story images decode");

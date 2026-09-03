@@ -166,7 +166,7 @@
   "cart.syntheticQualifier": "fictitious, non-commercial",
   "cart.checkoutUnavailable": "Payment not enabled",
   "cart.continueToCheckout": "Continue to shipping",
-  "cart.unavailableError": "The cart is temporarily unavailable. Please try again shortly.",
+  "cart.unavailableError": "We could not refresh your cart. Your selection is preserved: refresh the page or return to the shop.",
   "cart.outOfStockError": "The requested quantity is no longer available. Your cart was not changed.",
   "checkout.backToCart": "Back to cart",
   "checkout.demoLabel": "Checkout · preview",

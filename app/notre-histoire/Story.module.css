@@ -1,7 +1,7 @@
 .page {
-  --story-ink: #0b0b0d;
-  --story-panel: #121216;
-  --story-panel-soft: #18181d;
+  --story-ink: #17141c;
+  --story-panel: #292330;
+  --story-panel-soft: #37303f;
   --story-paper: #f5f5f2;
   --story-muted: #b9bbc2;
   --story-line: rgba(255, 255, 255, 0.2);
@@ -15,8 +15,8 @@
 
 .hero {
   background:
-    radial-gradient(circle at 18% 32%, rgba(111, 66, 104, 0.14), transparent 32rem),
-    var(--story-ink);
+    radial-gradient(circle at 70% 42%, rgba(156, 119, 170, 0.22), transparent 42rem),
+    linear-gradient(122deg, #17141c 0%, #201a25 54%, #29212f 100%);
   color: var(--story-paper);
 }
 
@@ -27,13 +27,13 @@
 
 .heroBody {
   display: grid;
-  width: min(1640px, calc(100% - clamp(2.5rem, 6vw, 7rem)));
+  width: min(1580px, calc(100% - clamp(2rem, 4vw, 5rem)));
   min-height: calc(100svh - 5.75rem);
   margin: 0 auto;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(17rem, 0.45fr) minmax(0, 1.55fr);
   align-items: center;
-  gap: clamp(2.5rem, 6vw, 7rem);
-  padding: clamp(2rem, 4vh, 4rem) 0;
+  gap: clamp(1.75rem, 3vw, 4rem);
+  padding: clamp(0.75rem, 1.5vh, 1rem) 0;
 }
 
 .heroCopy {
@@ -78,14 +78,14 @@
 
 .heroImage {
   position: relative;
-  width: min(100%, calc((100svh - 9.75rem) * 2 / 3));
+  width: min(100%, calc((100svh - 7.25rem) * 2 / 3), 44rem);
   min-width: 0;
   aspect-ratio: 2 / 3;
-  justify-self: end;
+  justify-self: center;
   margin: 0;
   overflow: hidden;
   border: 1px solid var(--story-line-strong);
-  background: #25252e;
+  background: #3a3344;
   box-shadow: 0 2rem 6rem rgba(0, 0, 0, 0.34);
 }
 
@@ -103,7 +103,9 @@
   padding: clamp(4rem, 7vw, 7.5rem) clamp(1.25rem, 5vw, 6rem);
   border-top: 1px solid var(--story-line);
   border-bottom: 1px solid var(--story-line);
-  background: var(--story-panel);
+  background:
+    radial-gradient(circle at 88% 18%, rgba(161, 130, 176, 0.13), transparent 34rem),
+    linear-gradient(138deg, #25202b 0%, var(--story-panel) 100%);
 }
 
 .actHeading {
@@ -144,8 +146,8 @@
 .people {
   padding: clamp(4rem, 6.5vw, 7rem) clamp(1.25rem, 4vw, 4.5rem);
   background:
-    radial-gradient(circle at 84% 16%, rgba(105, 80, 126, 0.12), transparent 30rem),
-    var(--story-ink);
+    radial-gradient(circle at 82% 14%, rgba(184, 143, 198, 0.16), transparent 34rem),
+    linear-gradient(145deg, #2d2635 0%, #342a3c 100%);
   color: var(--story-paper);
 }
 
@@ -180,7 +182,7 @@
   margin: 0;
   overflow: hidden;
   border: 1px solid var(--story-line-strong);
-  background: #262631;
+  background: #40374a;
 }
 
 .portrait img {
@@ -218,7 +220,9 @@
   grid-template-columns: minmax(0, 0.58fr) minmax(20rem, 0.42fr);
   border-top: 1px solid var(--story-line);
   border-bottom: 1px solid var(--story-line);
-  background: var(--story-panel-soft);
+  background:
+    radial-gradient(circle at 18% 78%, rgba(177, 145, 190, 0.12), transparent 36rem),
+    linear-gradient(128deg, #332c3b 0%, var(--story-panel-soft) 100%);
 }
 
 .definitionCopy {
@@ -259,7 +263,7 @@
   margin: 0;
   overflow: hidden;
   border-left: 1px solid var(--story-line-strong);
-  background: #292934;
+  background: #443a4f;
 }
 
 .definitionVisual img {
@@ -269,8 +273,8 @@
 
 @media (max-width: 1080px) {
   .heroBody {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: clamp(2rem, 4vw, 4rem);
+    grid-template-columns: minmax(17rem, 0.45fr) minmax(0, 1.55fr);
+    gap: clamp(1.75rem, 3vw, 3rem);
   }
 
   .definition {
@@ -290,8 +294,8 @@
 
   .heroImage {
     order: 1;
-    width: calc(100% - 2.5rem);
-    max-width: 31rem;
+    width: calc(100% - 1.5rem);
+    max-width: 34rem;
     aspect-ratio: 2 / 3;
     align-self: center;
     margin: 0 auto;

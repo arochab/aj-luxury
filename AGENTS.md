@@ -41,6 +41,17 @@ Ces règles s’appliquent à toute évolution visuelle du projet, quel que soit
 - Contrôler visuellement les trois coloris, pas seulement une route représentative.
 - Avant toute proposition de promotion : aucun bloqueur, aucune bande vide accidentelle, aucune coupe de visage et validation finale par un regard design, un regard responsive/accessibilité et un regard client.
 
+## Retouches média ciblées — boucle courte obligatoire
+
+- Une remarque limitée à une ou plusieurs photos, illustrations, vidéos, couleurs de fond ou règles de cadrage ouvre une **boucle de retouche média**, pas une nouvelle release. Elle n’autorise ni build complet, ni recette e-commerce globale, ni upload Cloudflare, ni déploiement contrôlé ou public.
+- Pendant cette boucle, travailler uniquement sur une copie candidate locale des médias concernés et, si nécessaire, sur le composant qui les affiche. Ne toucher ni au backend, ni aux bindings, ni aux migrations, ni aux secrets, ni aux réglages de production.
+- Produire d’abord une prévisualisation ciblée et légère : intégrité et dimensions du fichier, contrôle du recadrage, puis capture du seul écran concerné en mobile et desktop. Étendre les viewports ou les routes uniquement si la remarque les concerne réellement.
+- Présenter les variantes à Adam avant de les intégrer définitivement. Tant qu’Adam continue à donner des retours photo, cumuler les corrections dans **un seul lot média non déployé** ; ne pas créer successivement plusieurs candidats Cloudflare.
+- Pour une retouche média isolée, la vérification intermédiaire se limite au média et à la route impactée : chargement sans erreur, absence de déformation, visage et produit préservés, absence de débordement et cohérence mobile/desktop. La suite complète `lint + build + tests + recette e-commerce` n’est exécutée qu’une fois, quand le lot visuel est déclaré final.
+- Les mots « corrige », « retravaille », « remplace l’image » ou « montre-moi » ne signifient jamais « déploie ». Un déploiement ne commence qu’après une instruction explicite de déployer le lot final et reste soumis aux validations exactes prévues ci-dessous.
+- Avant la release finale, figer la liste des médias retenus, leurs emplacements et leurs empreintes ; regrouper toutes les retouches approuvées dans un seul commit, un seul SHA candidat, une seule recette proportionnée puis, si autorisé, un seul cycle de déploiement.
+- Décision explicite d’Adam du 3 septembre 2026 : un lot strictement graphique (médias, fonds, cadrages et CSS de présentation, sans changement fonctionnel, commercial, de données, de sécurité, d’infrastructure, de binding ou de configuration) peut être déployé après sa recette proportionnée sans recueillir à nouveau les doubles approbations de release. Cette exception n’autorise jamais plusieurs mises en production successives pour une même boucle : cumuler les retours, puis effectuer un seul déploiement final. Toute modification qui sort de ce périmètre reste soumise aux validations de production ordinaires ci-dessous.
+
 ## Environnements et production
 
 - La production est une référence en lecture seule. Ne jamais y développer, y tester ni y appliquer directement une modification.

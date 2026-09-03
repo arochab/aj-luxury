@@ -161,7 +161,7 @@ test("the hero hands its measured plum floor to the horizontal chromatic rail", 
   assert.doesNotMatch(rail, /stageFooter|01 \/ 03/);
   assert.doesNotMatch(rail, /styles\.modelFrame/);
   assert.doesNotMatch(css, /\.modelFrame::after/);
-  assert.match(rail, /apollon-pourpre-model-color-v4\.webp/);
+  assert.match(rail, /apollon-pourpre-model-color-v5\.webp/);
   assert.doesNotMatch(rail, /apollon-pourpre-model-world-v1\.webp/);
   assert.match(rail, /Apollon Pourpre Impérial porté par Alex/);
   assert.doesNotMatch(rail, /Pourpre Impérial porté par Jérémy et Alex/);
@@ -188,9 +188,9 @@ test("the hero hands its measured plum floor to the horizontal chromatic rail", 
     "public/images/editorial/isabelle-apollon/apollon-lilas-lyre-v1-720.webp",
     "public/images/editorial/isabelle-apollon/apollon-rose-lyre-v1-360.webp",
     "public/images/editorial/isabelle-apollon/apollon-rose-lyre-v1-720.webp",
-    "public/images/client/apollon-world/apollon-pourpre-model-color-v4-360.webp",
-    "public/images/client/apollon-world/apollon-pourpre-model-color-v4-720.webp",
-    "public/images/client/apollon-world/apollon-pourpre-model-color-v4-1080.webp",
+    "public/images/client/apollon-world/apollon-pourpre-model-color-v5-360.webp",
+    "public/images/client/apollon-world/apollon-pourpre-model-color-v5-720.webp",
+    "public/images/client/apollon-world/apollon-pourpre-model-color-v5-1080.webp",
     "public/images/client/apollon-world/apollon-lilas-model-color-v2-360.webp",
     "public/images/client/apollon-world/apollon-lilas-model-color-v2-720.webp",
     "public/images/client/apollon-world/apollon-lilas-model-color-v2-1080.webp",
@@ -199,8 +199,8 @@ test("the hero hands its measured plum floor to the horizontal chromatic rail", 
     "public/images/client/apollon-world/apollon-rose-model-color-v2-1080.webp",
     "public/images/client/raw/product-card-pourpre-480.webp",
     "public/images/client/raw/product-card-pourpre-960.webp",
-    "public/images/client/raw/product-pourpre-back-480.webp",
-    "public/images/client/raw/product-pourpre-back-960.webp",
+    "public/images/client/raw/product-pourpre-detail-480.webp",
+    "public/images/client/raw/product-pourpre-detail-960.webp",
     "public/images/client/raw/product-rose-profile-480.webp",
     "public/images/client/raw/product-rose-profile-960.webp",
     "public/images/client/raw/product-lilas-model-480.webp",
@@ -215,23 +215,23 @@ test("the Pourpre portrait keeps the approved master canvas at every responsive 
     "public/images/client/raw/product-card-pourpre.webp",
   ));
   const fullPath = fileURLToPath(projectFile(
-    "public/images/client/apollon-world/apollon-pourpre-model-color-v4.webp",
+    "public/images/client/apollon-world/apollon-pourpre-model-color-v5.webp",
   ));
   const script = await readFile(
-    projectFile("scripts/build_pourpre_model_background.py"),
+    projectFile("scripts/compose-pourpre-support-v5.mjs"),
     "utf8",
   );
   const [source, full, small, medium, large] = await Promise.all([
     sharp(sourcePath).metadata(),
     sharp(fullPath).metadata(),
     sharp(fileURLToPath(projectFile(
-      "public/images/client/apollon-world/apollon-pourpre-model-color-v4-360.webp",
+      "public/images/client/apollon-world/apollon-pourpre-model-color-v5-360.webp",
     ))).metadata(),
     sharp(fileURLToPath(projectFile(
-      "public/images/client/apollon-world/apollon-pourpre-model-color-v4-720.webp",
+      "public/images/client/apollon-world/apollon-pourpre-model-color-v5-720.webp",
     ))).metadata(),
     sharp(fileURLToPath(projectFile(
-      "public/images/client/apollon-world/apollon-pourpre-model-color-v4-1080.webp",
+      "public/images/client/apollon-world/apollon-pourpre-model-color-v5-1080.webp",
     ))).metadata(),
   ]);
 
@@ -242,9 +242,13 @@ test("the Pourpre portrait keeps the approved master canvas at every responsive 
   assert.deepEqual([large.width, large.height], [1080, 1622]);
   assert.match(
     script,
-    /MASTER = \([\s\S]*\/ "raw"[\s\S]*\/ "product-card-pourpre\.webp"/,
+    /product-card-pourpre\.webp/,
   );
-  assert.match(script, /composite = foreground \* alpha/);
+  assert.match(script, /apollon-pourpre-model-color-v4\.webp/);
+  assert.match(script, /Flood-fill from several known black-fabric seeds/);
+  assert.match(script, /blueCast < 9\.5 \|\| luminance < 16/);
+  assert.match(script, /\.blur\(1\.15\)/);
+  assert.match(script, /apollon-pourpre-model-color-v5\.webp/);
   assert.doesNotMatch(script, /\.crop\(|105 lignes|\[105:/);
 });
 
