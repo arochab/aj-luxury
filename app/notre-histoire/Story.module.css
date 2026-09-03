@@ -79,15 +79,33 @@
 
 .heroImage {
   position: relative;
+  isolation: isolate;
   min-width: 0;
   margin: 0;
   overflow: hidden;
-  background: #292934;
+  background: #15151b;
 }
 
 .heroImage img {
   object-fit: contain;
   object-position: center;
+}
+
+/* The campaign master is portrait while the desktop story stage is wider.
+   A second, deliberately soft rendering of the very same photograph extends
+   its light to the sides. The sharp foreground remains fully contained, so no
+   head, garment or limb is ever sacrificed to remove letterboxing. */
+.heroBackdrop {
+  z-index: 0;
+  object-fit: cover !important;
+  filter: blur(clamp(24px, 3vw, 46px)) saturate(0.92) brightness(0.6);
+  transform: scale(1.12);
+}
+
+.heroForeground {
+  z-index: 1;
+  object-fit: contain !important;
+  object-position: center !important;
 }
 
 .origin {

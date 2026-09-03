@@ -19,6 +19,7 @@ type Chapter = {
   modelAlt: string;
   modelWidth: 1731;
   modelHeight: 2600;
+  modelHasResponsiveVariants?: boolean;
   accent: string;
 };
 
@@ -31,15 +32,15 @@ const CHAPTERS: readonly Chapter[] = [
       "/images/editorial/isabelle-apollon/apollon-pourpre-lyre-v1.webp",
     productAlt:
       "Apollon Pourpre Impérial en lévitation sur son décor de marbre",
-    // Identité confirmée par Adam : Alex est le modèle aux cheveux attachés et
-    // à la barbe pleine. Cette image est extraite du master vidéo pourpre : elle
-    // ne contient que lui, de la tête aux pieds, et reste rendue en entier
-    // (`contain`) sans recadrage.
+    // Identité et photographie reconfirmées par Adam : Alex est le modèle aux
+    // cheveux attachés et à la barbe pleine, seul sur le fond studio pourpre,
+    // avec l'arc doré visible derrière sa jambe à droite de l'image.
     model:
-      "/images/client/apollon-world/apollon-pourpre-alex-video-full-v1.webp",
+      "/images/client/apollon-world/apollon-pourpre-model-world-v1.webp",
     modelAlt: "Apollon Pourpre Impérial porté par Alex",
     modelWidth: 1731,
     modelHeight: 2600,
+    modelHasResponsiveVariants: false,
     accent: "#5b1233",
   },
   {
@@ -401,10 +402,9 @@ export default function HomeHorizontalChromaticRail() {
                       <figure className={styles.frame}>
                         <img
                           src={chapter.model}
-                          srcSet={responsiveSrcSet(
-                            chapter.model,
-                            chapter.modelWidth,
-                          )}
+                          srcSet={chapter.modelHasResponsiveVariants === false
+                            ? undefined
+                            : responsiveSrcSet(chapter.model, chapter.modelWidth)}
                           sizes={RAIL_IMAGE_SIZES}
                           alt={chapter.modelAlt}
                           width={chapter.modelWidth}

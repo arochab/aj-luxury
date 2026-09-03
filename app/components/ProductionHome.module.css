@@ -64,6 +64,18 @@
   background: transparent;
 }
 
+/* On desktop the supplied 16:9 film places Alex close to its right source
+   boundary. A small optical safety inset keeps his complete arm inside the
+   stage at every common wide ratio. The existing same-image backdrop fills
+   the inset, so the correction creates neither a hard edge nor a grey band. */
+@media (min-width: 901px) and (min-aspect-ratio: 801 / 1000) {
+  .home :global(.aj-film__hero-stage) {
+    inset: clamp(10px, 1.25vw, 24px);
+    width: auto;
+    height: auto;
+  }
+}
+
 .home :global(.aj-film__signature) {
   background: linear-gradient(
     180deg,

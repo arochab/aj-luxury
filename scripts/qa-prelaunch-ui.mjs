@@ -4,6 +4,9 @@ import { fileURLToPath } from "node:url";
 import { chromium } from "playwright-core";
 
 const baseUrl = process.env.AJ_QA_URL ?? "http://127.0.0.1:3035/";
+const isBindinglessLocalQa = ["127.0.0.1", "localhost"].includes(
+  new URL(baseUrl).hostname,
+);
 const evidenceRoot = new URL(
   "../docs/internal/evidence/prelaunch-2026-09-03/",
   import.meta.url,
@@ -15,7 +18,7 @@ const browser = await chromium.launch({
   headless: true,
 });
 
-async function readyPage(viewport, hasTouch = false) {
+async function readyPage(viewport, hasTouch = false, pathname = "/") {
   const context = await browser.newContext({
     viewport,
     hasTouch,
@@ -28,7 +31,10 @@ async function readyPage(viewport, hasTouch = false) {
     if (message.type() === "error") errors.push(message.text());
   });
   page.on("pageerror", (error) => errors.push(error.message));
-  await page.goto(baseUrl, { waitUntil: "domcontentloaded", timeout: 30_000 });
+  await page.goto(new URL(pathname, baseUrl).href, {
+    waitUntil: "domcontentloaded",
+    timeout: 30_000,
+  });
   await page.evaluate(() => Promise.race([
     document.fonts.ready,
     new Promise((resolve) => window.setTimeout(resolve, 4_000)),
@@ -44,6 +50,27 @@ for (const viewport of [
   { width: 430, height: 932 },
 ]) {
   const run = await readyPage(viewport, true);
+  const mobileHero = await run.page.locator(".aj-film__hero-stage").evaluate((stage) => {
+    const rect = stage.getBoundingClientRect();
+    const poster = stage.querySelector(".aj-film__hero-poster img");
+    return {
+      left: rect.left,
+      right: innerWidth - rect.right,
+      objectFit: poster ? getComputedStyle(poster).objectFit : null,
+      imageReady: Boolean(poster?.complete && poster.naturalWidth > 0),
+    };
+  });
+  assert(mobileHero.left >= -1 && mobileHero.right >= -1, `${viewport.width}px: hero stays inside viewport`);
+  assert.equal(
+    mobileHero.objectFit,
+    "cover",
+    `${viewport.width}px: approved portrait master fills the mobile hero`,
+  );
+  assert.equal(mobileHero.imageReady, true, `${viewport.width}px: hero poster decodes`);
+  const heroScreenshot = fileURLToPath(
+    new URL(`mobile-${viewport.width}-hero.png`, evidenceRoot),
+  );
+  await run.page.screenshot({ path: heroScreenshot });
   const rail = run.page.locator('[data-home-horizontal-rail="v48"]');
   await rail.scrollIntoViewIfNeeded();
   await run.page.waitForTimeout(250);
@@ -88,7 +115,7 @@ for (const viewport of [
   assert.equal(result.modelObjectFit, "contain");
   assert.match(
     result.modelSource ?? "",
-    /apollon-pourpre-alex-video-full-v1/,
+    /apollon-pourpre-model-world-v1/,
   );
   assert(
     result.railScrollWidth >= result.railClientWidth * 3 &&
@@ -96,14 +123,36 @@ for (const viewport of [
     `${viewport.width}px: three full panels plus the two designed transitions`,
   );
 
-  const screenshot = fileURLToPath(new URL(`mobile-${viewport.width}.png`, evidenceRoot));
-  await run.page.screenshot({ path: screenshot });
-  mobileResults.push({ viewport, ...result, screenshot });
+  const railScreenshot = fileURLToPath(new URL(`mobile-${viewport.width}.png`, evidenceRoot));
+  await run.page.screenshot({ path: railScreenshot });
+  mobileResults.push({
+    viewport,
+    hero: mobileHero,
+    ...result,
+    screenshots: { hero: heroScreenshot, rail: railScreenshot },
+  });
   assert.deepEqual(run.errors, [], `${viewport.width}px console errors`);
   await run.context.close();
 }
 
 const desktop = await readyPage({ width: 1440, height: 900 });
+const heroSafety = await desktop.page.locator(".aj-film__hero-stage").evaluate((stage) => {
+  const rect = stage.getBoundingClientRect();
+  const poster = stage.querySelector(".aj-film__hero-poster img");
+  return {
+    left: rect.left,
+    right: innerWidth - rect.right,
+    top: rect.top,
+    objectFit: poster ? getComputedStyle(poster).objectFit : null,
+    imageReady: Boolean(poster?.complete && poster.naturalWidth > 0),
+  };
+});
+assert(heroSafety.left >= 10, "desktop hero keeps a left optical safety inset");
+assert(heroSafety.right >= 10, "desktop hero keeps Alex inside the right source edge");
+assert.equal(heroSafety.objectFit, "contain", "desktop hero never crops the film");
+assert.equal(heroSafety.imageReady, true, "desktop hero poster decodes");
+const heroScreenshot = fileURLToPath(new URL("desktop-hero-1440.png", evidenceRoot));
+await desktop.page.screenshot({ path: heroScreenshot });
 const desktopRail = desktop.page.locator('[data-home-horizontal-rail="v48"]');
 await desktopRail.evaluate((node) => {
   window.scrollTo({ top: node.offsetTop + 2, behavior: "auto" });
@@ -146,13 +195,104 @@ assert.deepEqual(desktop.errors, [], "desktop console errors");
 const desktopScreenshot = fileURLToPath(new URL("desktop-1440.png", evidenceRoot));
 await desktop.page.screenshot({ path: desktopScreenshot });
 await desktop.context.close();
+
+const story = await readyPage({ width: 1440, height: 900 }, false, "/notre-histoire");
+const storyHero = await story.page.locator("figure").first().evaluate((figure) => {
+  const images = [...figure.querySelectorAll("img")];
+  return {
+    count: images.length,
+    fits: images.map((image) => getComputedStyle(image).objectFit),
+    ready: images.every((image) => image.complete && image.naturalWidth > 0),
+  };
+});
+assert.deepEqual(storyHero.fits, ["cover", "contain"]);
+assert.equal(storyHero.count, 2, "story hero has backdrop and intact foreground");
+assert.equal(storyHero.ready, true, "story hero images decode");
+assert.deepEqual(story.errors, [], "story has no browser errors");
+const storyScreenshot = fileURLToPath(new URL("story-desktop-1440.png", evidenceRoot));
+await story.page.screenshot({ path: storyScreenshot });
+await story.context.close();
+
+const mobileStory = await readyPage({ width: 390, height: 844 }, true, "/notre-histoire");
+const mobileStoryHero = await mobileStory.page.locator("figure").first().evaluate((figure) => {
+  const images = [...figure.querySelectorAll("img")];
+  return {
+    count: images.length,
+    fits: images.map((image) => getComputedStyle(image).objectFit),
+    ready: images.every((image) => image.complete && image.naturalWidth > 0),
+    overflow: document.documentElement.scrollWidth - innerWidth,
+  };
+});
+assert.deepEqual(mobileStoryHero.fits, ["cover", "contain"]);
+assert.equal(mobileStoryHero.count, 2, "mobile story has backdrop and intact foreground");
+assert.equal(mobileStoryHero.ready, true, "mobile story images decode");
+assert.equal(mobileStoryHero.overflow, 0, "mobile story does not overflow horizontally");
+assert.deepEqual(mobileStory.errors, [], "mobile story has no browser errors");
+const mobileStoryScreenshot = fileURLToPath(new URL("story-mobile-390.png", evidenceRoot));
+await mobileStory.page.screenshot({ path: mobileStoryScreenshot });
+await mobileStory.context.close();
+
+const account = await readyPage({ width: 1440, height: 900 }, false, "/account");
+await account.page.waitForTimeout(700);
+const accountState = {
+  alerts: await account.page.locator('[role="alert"]').count(),
+  adminHref: await account.page
+    .getByRole("link", { name: "Ouvrir l’administration" })
+    .getAttribute("href"),
+  heading: await account.page.locator("h1").first().textContent(),
+};
+assert.equal(accountState.alerts, 0, "account bootstrap shows no false outage alert");
+assert.equal(accountState.adminHref, "/admin", "account exposes the protected admin entry");
+assert.match(accountState.heading ?? "", /Se connecter|Mon compte/);
+assert(
+  account.errors.every(
+    (message) => isBindinglessLocalQa && message.includes("404"),
+  ),
+  "account has no unexpected browser errors",
+);
+const accountScreenshot = fileURLToPath(new URL("account-desktop-1440.png", evidenceRoot));
+await account.page.screenshot({ path: accountScreenshot });
+await account.context.close();
+
+const admin = await readyPage({ width: 1440, height: 900 }, false, "/admin");
+const adminState = {
+  heading: await admin.page.locator("h1").textContent(),
+  signIn: await admin.page.getByRole("heading", { name: "Se connecter" }).count(),
+  dashboard: await admin.page
+    .getByRole("table", { name: "Commandes payées et expéditions" })
+    .count(),
+};
+assert.equal(adminState.heading, "Administration AJ Luxury");
+assert.equal(adminState.dashboard, 0, "anonymous admin route never exposes the dashboard");
+if (isBindinglessLocalQa) {
+  assert.equal(adminState.dashboard, 0, "local admin route remains closed without Cloudflare bindings");
+} else {
+  assert.equal(adminState.signIn, 1, "anonymous admin route stays behind sign-in");
+  assert.deepEqual(admin.errors, [], "admin sign-in has no browser errors");
+}
+const adminScreenshot = fileURLToPath(new URL("admin-desktop-1440.png", evidenceRoot));
+await admin.page.screenshot({ path: adminScreenshot });
+await admin.context.close();
 await browser.close();
 
 const evidence = {
   baseUrl,
   generatedAt: new Date().toISOString(),
   mobile: mobileResults,
-  desktop: { beforeWheel, wheelPrevented, afterWheel, screenshot: desktopScreenshot },
+  desktop: {
+    heroSafety,
+    beforeWheel,
+    wheelPrevented,
+    afterWheel,
+    screenshots: {
+      hero: heroScreenshot,
+      rail: desktopScreenshot,
+      story: storyScreenshot,
+      mobileStory: mobileStoryScreenshot,
+      account: accountScreenshot,
+      admin: adminScreenshot,
+    },
+  },
 };
 await writeFile(
   new URL("ui-verification.json", evidenceRoot),

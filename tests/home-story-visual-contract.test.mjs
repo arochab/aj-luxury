@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
@@ -49,6 +50,24 @@ test("the story hero never crops the approved duo at any breakpoint", () => {
     /@media \(max-width:\s*760px\)[\s\S]*?\.heroImage\s*\{[^}]*aspect-ratio:\s*2\s*\/\s*3;/s,
   );
   assert.doesNotMatch(storyCss, /\.heroImage img\s*\{[^}]*object-fit:\s*cover/s);
+  assert.match(storyPage, /className=\{styles\.heroBackdrop\}/);
+  assert.match(storyPage, /className=\{styles\.heroForeground\}/);
+  assert.match(
+    storyCss,
+    /\.heroBackdrop\s*\{[^}]*object-fit:\s*cover !important;[^}]*filter:\s*blur/s,
+  );
+});
+
+test("the public account bootstrap stays calm and exposes the protected admin entry", () => {
+  const account = readFileSync(
+    new URL("../app/account/ProductionAccountClient.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(account, /void load\(false\)/);
+  assert.match(account, /if \(reportFailure\) setError\(errorMessage\(cause\)\)/);
+  assert.match(account, /Accès administrateur/);
+  assert.match(account, /href="\/admin"/);
+  assert.match(account, /Réservé aux administrateurs AJ Luxury autorisés/);
 });
 
 test("the story page delegates its only closing collection CTA to the shared footer", () => {

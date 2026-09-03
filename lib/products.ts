@@ -43,6 +43,8 @@ export const wearerByAsset: Readonly<Record<string, Wearer | "duo">> =
     "apollon-world/apollon-lilas-model-color-v2.webp": "alex",
     // Identité confirmée par Adam le 31/08/2026 : cheveux attachés + barbe.
     "apollon-world/apollon-pourpre-model-color-v2.webp": "alex",
+    "apollon-world/apollon-pourpre-model-color-v1.webp": "alex",
+    "apollon-world/apollon-pourpre-model-world-v1.webp": "alex",
     "apollon-world/apollon-pourpre-alex-video-full-v1.webp": "alex",
     // Adam a corrigé l'identité le 01/09/2026 : cette prise sombre montre
     // Jérémy. Elle ne doit plus servir de portrait d'Alex dans le rail.

@@ -1187,6 +1187,24 @@ button.button {
   outline-offset: 3px;
 }
 
+.accountAdminAccess {
+  margin-top: 26px;
+  padding-top: 24px;
+  border-top: 1px solid rgba(9, 9, 9, 0.18);
+}
+
+.accountAdminAccess .eyebrow {
+  margin-bottom: 10px;
+}
+
+.accountAdminAccess .secondaryButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 16px;
+  text-align: center;
+}
+
 @media print {
   .shell > :not(.accountMain),
   .accountMain > section,

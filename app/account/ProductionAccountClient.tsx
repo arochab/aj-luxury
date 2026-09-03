@@ -91,15 +91,18 @@ export default function ProductionAccountClient() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (reportFailure = true) => {
     setLoading(true);
-    setError(null);
     try {
       const current = await getCustomerAccount();
       setAccount(current);
       if (current) setAcceptsMarketing(current.acceptsMarketing);
     } catch (cause) {
-      setError(errorMessage(cause));
+      /* A public visitor has no account session yet. A transient bootstrap
+         failure must not paint the sign-in page as broken: every explicit
+         action below still reports its real, actionable error. */
+      setAccount(null);
+      if (reportFailure) setError(errorMessage(cause));
     } finally {
       setLoading(false);
     }
@@ -125,7 +128,7 @@ export default function ProductionAccountClient() {
       } else if (params.get("verification") === "invalid") {
         setError("Ce lien de vérification n’est plus valide.");
       }
-      void load();
+      void load(false);
     }, 0);
     return () => window.clearTimeout(id);
   }, [load]);
@@ -393,6 +396,11 @@ export default function ProductionAccountClient() {
         {view !== "login" && <button className={styles.secondaryButton} type="button" onClick={() => prepare("login")}>J’ai déjà un compte</button>}
         {view !== "forgot" && view !== "reset" && <button className={styles.secondaryButton} type="button" onClick={() => prepare("forgot")}>Mot de passe oublié</button>}
         <p className={styles.muted}>Le compte peut aussi être créé pendant votre commande. Votre paiement reste sécurisé par Stripe.</p>
+        <div className={styles.accountAdminAccess}>
+          <p className={styles.eyebrow}>Accès administrateur</p>
+          <p className={styles.muted}>Réservé aux administrateurs AJ Luxury autorisés disposant d’un compte confirmé.</p>
+          <Link className={styles.secondaryButton} href="/admin">Ouvrir l’administration</Link>
+        </div>
       </aside>
     </div>
   );

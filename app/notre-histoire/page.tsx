@@ -33,11 +33,21 @@ export default function NotreHistoirePage() {
           <figure className={styles.heroImage}>
             <Image
               unoptimized
+              aria-hidden="true"
+              src="/images/client/campaign-duo-lilas-seated.webp"
+              alt=""
+              fill
+              sizes="(max-width: 760px) 100vw, 62vw"
+              className={styles.heroBackdrop}
+            />
+            <Image
+              unoptimized
               priority
               src="/images/client/campaign-duo-lilas-seated.webp"
               alt="AJ Luxury — Alex et Jérémy — collection Apollon"
               fill
               sizes="(max-width: 760px) 100vw, 62vw"
+              className={styles.heroForeground}
               style={{ objectFit: "contain", objectPosition: "center" }}
             />
           </figure>
