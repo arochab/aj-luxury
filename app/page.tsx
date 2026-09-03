@@ -26,8 +26,8 @@ export const metadata: Metadata = {
 const productPresentation = [
   {
     slug: "pourpre",
-    image: "/images/client/raw/product-card-pourpre.webp",
-    alt: "AJ Luxury — Alex — Apollon Pourpre Impérial",
+    image: "/images/client/raw/product-pourpre-back.webp",
+    alt: "AJ Luxury — détail dos — Apollon Pourpre Impérial",
   },
   {
     slug: "rose-pale",

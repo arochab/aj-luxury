@@ -121,7 +121,7 @@ for (const viewport of [
   assert.equal(result.modelObjectFit, "contain");
   assert.match(
     result.modelSource ?? "",
-    /apollon-pourpre-model-color-v3/,
+    /apollon-pourpre-model-color-v4/,
   );
   assert(
     result.railScrollWidth >= result.railClientWidth * 3 &&

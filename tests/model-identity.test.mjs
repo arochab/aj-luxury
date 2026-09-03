@@ -184,14 +184,14 @@ test("les cartes de /shop alternent", () => {
   exigerAlternance(suite, "cartes de /shop");
 });
 
-test("les neuf images portées de l'accueil composé alternent sans rupture", () => {
+test("les huit images portées de l'accueil composé alternent sans rupture", () => {
   // Le rail est un composant importé avant les deux séquences restées dans
   // app/page.tsx. Les sources sont donc concaténées dans l'ordre réellement
   // rencontré au scroll, au lieu de sous-compter les médias du composant.
   const suite = personnes(`${railAccueil}\n${accueil}`);
   assert.deepEqual(
     suite.map((entree) => entree.qui),
-    ["alex", "alex", "jeremy", "alex", "jeremy", "alex", "jeremy", "duo", "alex"],
+    ["alex", "alex", "jeremy", "jeremy", "alex", "jeremy", "duo", "alex"],
   );
 
   /* Dans le rail chromatique, chaque portrait est séparé du suivant par une

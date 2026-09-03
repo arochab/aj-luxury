@@ -23,7 +23,14 @@ from PIL import Image, ImageFilter
 
 
 ROOT = Path(__file__).resolve().parent.parent
-MASTER = ROOT / "public" / "images" / "client" / "hero-pourpre-model.webp"
+MASTER = (
+    ROOT
+    / "public"
+    / "images"
+    / "client"
+    / "raw"
+    / "product-card-pourpre.webp"
+)
 PALETTE = (
     ROOT
     / "public"
@@ -38,7 +45,7 @@ OUTPUT = (
     / "images"
     / "client"
     / "apollon-world"
-    / "apollon-pourpre-model-color-v3.webp"
+    / "apollon-pourpre-model-color-v4.webp"
 )
 MODEL = "birefnet-general-lite"
 ALPHA_BACKGROUND = 0.02
@@ -57,7 +64,10 @@ def subject_alpha(source: Image.Image) -> np.ndarray:
     solid = (alpha > 0.55).astype(np.uint8) * 255
     solid = cv2.morphologyEx(solid, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
     softened = Image.fromarray(solid).filter(ImageFilter.GaussianBlur(0.65))
-    return np.maximum(alpha, np.asarray(softened).astype(np.float32) / 255.0)
+    return np.maximum(
+        alpha,
+        np.asarray(softened).astype(np.float32) / 255.0,
+    )
 
 
 def decontaminate(rgb: np.ndarray, alpha: np.ndarray) -> np.ndarray:

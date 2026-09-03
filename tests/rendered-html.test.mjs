@@ -678,7 +678,8 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
   assert.match(html, /aj-luxury-hero-openart-mobile-poster-540\.webp 540w/);
   assert.match(html, /aj-luxury-hero-openart-mobile-poster-1080\.webp 1080w/);
   assert.match(html, /apollon-pourpre-lyre-v1\.webp/);
-  assert.match(html, /apollon-pourpre-model-color-v3\.webp/);
+  assert.match(html, /apollon-pourpre-model-color-v4\.webp/);
+  assert.doesNotMatch(html, /\/images\/client\/raw\/product-card-pourpre\.webp/);
   assert.doesNotMatch(
     html,
     /apollon-pourpre-(?:model-world|alex-video-full)-v1\.webp/,
@@ -695,7 +696,7 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
   assert.equal((html.match(/class="aj-product-card"/g) ?? []).length, 3);
   assert.match(html, /product-rose-profile\.webp"[^>]*loading="lazy"[^>]*fetchPriority="low"/);
   assert.match(html, /product-lilas-model\.webp"[^>]*loading="lazy"[^>]*fetchPriority="low"/);
-  assert.match(html, /product-card-pourpre\.webp"[^>]*loading="lazy"[^>]*fetchPriority="low"/);
+  assert.match(html, /product-pourpre-back\.webp"[^>]*loading="lazy"[^>]*fetchPriority="low"/);
   assert.match(html, /href="#apollon"[^>]*>[\s\S]*Découvrir/);
   assert.match(html, /href="\/products\/rose-pale"/);
   assert.match(html, /href="\/products\/lilas-bleu-clair"/);
@@ -705,19 +706,19 @@ test("server-renders the real AJ Luxury launch homepage", async () => {
   assert.match(html, /Pourpre Impérial/);
   assert.match(
     html,
-    /product-card-pourpre\.webp[\s\S]*product-rose-profile\.webp[\s\S]*product-lilas-model\.webp/,
+    /product-pourpre-back\.webp[\s\S]*product-rose-profile\.webp[\s\S]*product-lilas-model\.webp/,
   );
   assertDomAssetOrder(
     html,
     [
       "/images/client/aj-luxury-hero-openart-desktop-poster.webp",
       "/images/editorial/isabelle-apollon/apollon-pourpre-lyre-v1.webp",
-      "/images/client/apollon-world/apollon-pourpre-model-color-v3.webp",
+      "/images/client/apollon-world/apollon-pourpre-model-color-v4.webp",
       "/images/editorial/isabelle-apollon/apollon-lilas-lyre-v1.webp",
       "/images/client/apollon-world/apollon-lilas-model-color-v2.webp",
       "/images/editorial/isabelle-apollon/apollon-rose-lyre-v1.webp",
       "/images/client/apollon-world/apollon-rose-model-color-v2.webp",
-      "/images/client/raw/product-card-pourpre.webp",
+      "/images/client/raw/product-pourpre-back.webp",
       "/images/client/raw/product-rose-profile.webp",
       "/images/client/raw/product-lilas-model.webp",
       "/images/client/editorial-pourpre-chair.webp",

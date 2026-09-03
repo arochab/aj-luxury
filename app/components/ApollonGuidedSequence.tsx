@@ -190,8 +190,9 @@ const PLATEAUX: readonly Plateau[] = [
     still: "/images/editorial/isabelle-apollon/apollon-pourpre-lyre-v1.webp",
     /* Même traitement que les portraits Lilas et Rose : Alex vient du master
        client, reste à ses coordonnées d'origine et seul le mur devient
-       pourpre. La v3 n'applique plus la coupe verticale de 105 px de la v2. */
-    worn: "/images/client/apollon-world/apollon-pourpre-model-color-v3.webp",
+       pourpre. La v4 reprend le portrait solo de la boutique et n'applique
+       aucune coupe verticale. */
+    worn: "/images/client/apollon-world/apollon-pourpre-model-color-v4.webp",
     mur: "var(--aj-mur-pourpre)",
     voile: "var(--aj-voile-pourpre)",
     phrase:
