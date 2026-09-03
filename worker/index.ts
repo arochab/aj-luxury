@@ -79,6 +79,8 @@ import { productionShippingLabelAdminResponse } from "./production-shipping-labe
 import { productionOperatorConsoleApiResponse } from "./production-operator-console-api.ts";
 import { cloudflareAccessOwnerRequestAuthenticated } from "./cloudflare-access-owner.ts";
 import { productionCommerceRateLimitResponse } from "./production-rate-limit.ts";
+import { productionHttpsRedirectResponse } from "./production-https-redirect.ts";
+import { legacyPreviewRedirectResponse } from "./legacy-preview-redirect.ts";
 
 interface Fetcher {
   fetch(request: Request): Promise<Response>;
@@ -160,7 +162,7 @@ const CACHEABLE_HTML_ROUTES = new Set([
 ]);
 // Bump this namespace whenever cacheable server-rendered content changes so a
 // deployment never inherits HTML written by an older Worker version.
-const HTML_CACHE_VERSION = "2026-08-21-hero-v6";
+const HTML_CACHE_VERSION = "2026-09-03-prelaunch-hardening-v1";
 const PREPROD_API_PREFIX = "/api/preprod/";
 const PREPROD_CART_PATH = `${PREPROD_API_PREFIX}cart`;
 const PREPROD_CART_PACK_PATH = `${PREPROD_CART_PATH}/packs`;
@@ -2992,6 +2994,24 @@ const worker = {
     env: RuntimeEnv,
     ctx: ExecutionContext,
   ): Promise<Response> {
+    const legacyPreviewRedirect = legacyPreviewRedirectResponse(request, env);
+    if (legacyPreviewRedirect) {
+      return withSecurityHeaders(
+        legacyPreviewRedirect,
+        new URL(request.url).pathname,
+        env?.APP_ENV,
+      );
+    }
+
+    const httpsRedirect = productionHttpsRedirectResponse(request, env);
+    if (httpsRedirect) {
+      return withSecurityHeaders(
+        httpsRedirect,
+        new URL(request.url).pathname,
+        env?.APP_ENV,
+      );
+    }
+
     const ingress = prepareBackendOnlyCommerceRequest(request, env);
     if (ingress.response) {
       return withSecurityHeaders(

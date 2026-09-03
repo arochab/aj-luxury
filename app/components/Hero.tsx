@@ -84,6 +84,15 @@ export default function Hero() {
     const metal = q(`.${styles.metal}`)[0];
     const volet = q(`.${styles.volet}`)[0];
     if (!plans.length || !scenes.length || !mot || !eclat || !figures) return;
+    const scenePrincipale = scenes[0];
+    if (!(scenePrincipale instanceof Element) || !(eclat instanceof Element)) {
+      return;
+    }
+    /* GSAP's selector union and the DOM library currently resolve through
+       distinct Element declarations during the root typecheck. The runtime
+       guards above establish the actual IntersectionObserver contract. */
+    const sceneObservee = scenePrincipale as unknown as Element;
+    const eclatObserve = eclat as unknown as Element;
 
     mm.add(
       {
@@ -266,7 +275,7 @@ export default function Hero() {
         let arretDerive: (() => void) | undefined;
         arrivee.eventCallback("onComplete", () => {
           derive.play();
-          arretDerive = veillerSurAnimation(scenes[0], derive);
+          arretDerive = veillerSurAnimation(sceneObservee, derive);
         });
 
         /* ── LA CAMÉRA CONTINUE AU DÉFILEMENT ───────────────────────────
@@ -492,7 +501,7 @@ export default function Hero() {
 
         // Ni la dérive ni la brillance n'ont de raison de tourner hors champ :
         // le budget de composition revient aux écrans qui sont à l'image.
-        const arretBrillance = veillerSurAnimation(eclat, brillance);
+        const arretBrillance = veillerSurAnimation(eclatObserve, brillance);
         return () => {
           arretDerive?.();
           arretBrillance();

@@ -469,7 +469,7 @@ test("public HTML advertises shared caching without using the forbidden Cache AP
     );
     assert.match(
       publicResponse.headers.get("cache-tag") ?? "",
-      /aj-luxury-html-2026-08-21-hero-v6/,
+      /aj-luxury-html-2026-09-03-prelaunch-hardening-v1/,
     );
     await publicResponse.text();
 

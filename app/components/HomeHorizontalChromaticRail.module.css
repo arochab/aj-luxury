@@ -363,7 +363,10 @@
   .panelInner {
     width: min(calc(100vw - 12px), 440px);
     gap: clamp(14px, 2.3vh, 20px);
-    padding: clamp(222px, 31svh, 242px) 0 24px;
+    /* Reserve the maximum two-line title block before the photographs. The
+       former fixed 222px offset let “Pourpre Impérial” collide with the media
+       pair on short/narrow phones. */
+    padding: clamp(278px, 38svh, 304px) 0 24px;
     transform: none;
   }
 
@@ -392,7 +395,7 @@
   .compactCopy h2 {
     min-width: 0;
     margin: 0;
-    font-size: clamp(2.2rem, 10vw, 3rem);
+    font-size: clamp(2rem, 9.2vw, 2.8rem);
     font-weight: 300;
     letter-spacing: var(--aj-ls-titre);
     line-height: 0.88;
@@ -414,9 +417,19 @@
     letter-spacing: var(--aj-ls-nav);
     line-height: 1.4;
     text-transform: uppercase;
+    white-space: nowrap;
   }
 
   .mediaPair {
+    /* The stage is capped at 620px on tall phones. Size the pair against that
+       real cap (not the full viewport), otherwise 430px-wide phones crop the
+       bottom of the photographs after the larger title clearance above. */
+    width: min(
+      100%,
+      calc(
+        (min(100svh, 620px) - clamp(278px, 38svh, 304px) - 24px) * 4 / 3
+      )
+    );
     gap: 6px;
   }
 
