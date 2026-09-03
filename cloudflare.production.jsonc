@@ -151,15 +151,10 @@
   "assets": {
     "binding": "ASSETS",
     "directory": "./dist/client",
-    "run_worker_first": [
-      "/api/*",
-      "/assets/*",
-      "/fonts/*",
-      "/media/*",
-      "/i18n/*",
-      "/images/*",
-      "/videos/*"
-    ]
+    // Every public request reaches the Worker first so the canonical HTTPS
+    // redirect and the shared security headers also protect HTML pages. The
+    // Worker delegates the final static response to the ASSETS binding.
+    "run_worker_first": ["/*"]
   },
   "rules": [
     {

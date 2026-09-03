@@ -1,10 +1,19 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
+import JSON5 from "json5";
 import { productionHttpsRedirectResponse } from "../worker/production-https-redirect.ts";
 
+const projectRoot = new URL("../", import.meta.url);
 const production = Object.freeze({
   APP_ENV: "production",
   COMMERCE_ORIGIN: "https://ajluxurystore.com",
+});
+
+test("every production page reaches the Worker before static assets are served", async () => {
+  const source = await readFile(new URL("cloudflare.production.jsonc", projectRoot), "utf8");
+  const config = JSON5.parse(source);
+  assert.deepEqual(config.assets.run_worker_first, ["/*"]);
 });
 
 test("production HTTP storefront upgrades permanently before commerce handling", () => {
