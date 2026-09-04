@@ -121,12 +121,13 @@ async function normalizeProductionLaunchAddress(
 }
 
 function routingProof(zone: "EU" | "UK" | "US" | "CA" | "GCC"): string {
+  const internationalPhoneProof = "+10000000000";
   switch (zone) {
     case "EU": return JSON.stringify({ countryCode: "FR", postalCode: "00000", regionCode: null });
-    case "UK": return JSON.stringify({ countryCode: "GB", postalCode: "AA0", regionCode: null });
-    case "US": return JSON.stringify({ countryCode: "US", postalCode: "00000", regionCode: "NY" });
-    case "CA": return JSON.stringify({ countryCode: "CA", postalCode: "A0A", regionCode: null });
-    case "GCC": return JSON.stringify({ countryCode: "AE", postalCode: "00000", regionCode: null });
+    case "UK": return JSON.stringify({ countryCode: "GB", postalCode: "AA0", regionCode: null, phone: internationalPhoneProof });
+    case "US": return JSON.stringify({ countryCode: "US", postalCode: "00000", regionCode: "NY", phone: internationalPhoneProof });
+    case "CA": return JSON.stringify({ countryCode: "CA", postalCode: "A0A", regionCode: null, phone: internationalPhoneProof });
+    case "GCC": return JSON.stringify({ countryCode: "AE", postalCode: "00000", regionCode: null, phone: internationalPhoneProof });
   }
 }
 

@@ -18,7 +18,7 @@ import {
 
 const directory = fileURLToPath(new URL("../drizzle/", import.meta.url));
 const migrations = readdirSync(directory)
-  .filter((name) => /^(?:000[0-7]|0009|001[0-9]|002[0138])_.+\.sql$/.test(name))
+  .filter((name) => /^(?:000[0-7]|0009|001[0-9]|002[01368])_.+\.sql$/.test(name))
   .sort();
 class Statement {
   constructor(database, query, values = []) { this.database = database; this.query = query; this.values = values; }
@@ -54,17 +54,26 @@ async function fixture(
   quantity = 1,
   destination = { postalCode: "75001", city: "Paris", countryCode: "FR" },
   promotionCode = null,
+  internationalShippingEnabled = false,
 ) {
   const sqlite = new DatabaseSync(":memory:"); sqlite.exec("PRAGMA foreign_keys=ON");
   for (const name of migrations) for (const sql of readFileSync(`${directory}${name}`, "utf8").split("--> statement-breakpoint")) if (sql.trim()) sqlite.exec(sql);
   const base = Date.now() - 60_000; const d1 = new D1(sqlite); const commerce = new D1CommerceStore(d1);
   await commerce.seedLaunchCatalog(iso(base, 0)); sqlite.exec("UPDATE inventory SET reserves_validated=1");
+  const zone = destination.countryCode === "GB" ? "UK" :
+    destination.countryCode === "US" ? "US" :
+    destination.countryCode === "CA" ? "CA" :
+    ["AE", "QA", "SA"].includes(destination.countryCode) ? "GCC" : "EU";
+  const dutiesTerms = zone === "EU" ? "EU_INCLUDED" : "DAP";
+  const originCountryCode = zone === "EU" ? "FR" : "CN";
+  const customsHsCode = zone === "EU" ? "610711" : "61071200";
   sqlite.prepare(`INSERT INTO shipping_zone_configurations (id,zone,version,status,created_at,updated_at)
-    VALUES ('config_prod','EU',1,'draft',?,?)`).run(iso(base, 10), iso(base, 10));
+    VALUES ('config_prod',?,1,'draft',?,?)`).run(zone, iso(base, 10), iso(base, 10));
   sqlite.prepare(`UPDATE shipping_zone_configurations SET status='active',service_code='provider',price_cents=700,
-    estimated_days_min=2,estimated_days_max=5,duties_terms='EU_INCLUDED',parcel_code='fixture',parcel_weight_grams=150,
-    parcel_length_mm=400,parcel_width_mm=320,parcel_height_mm=40,origin_country_code='FR',customs_hs_code='610711',
-    activated_at=?,updated_at=? WHERE id='config_prod'`).run(iso(base, 20), iso(base, 20));
+    estimated_days_min=2,estimated_days_max=5,duties_terms=?,parcel_code='fixture',parcel_weight_grams=150,
+    parcel_length_mm=400,parcel_width_mm=320,parcel_height_mm=40,origin_country_code=?,customs_hs_code=?,
+    activated_at=?,updated_at=? WHERE id='config_prod'`)
+    .run(dutiesTerms, originCountryCode, customsHsCode, iso(base, 20), iso(base, 20));
   await commerce.createCart({ id: "cart_prod", expiresAt: iso(base, 3_600_000), now: iso(base, 30) });
   await commerce.setCartLineQuantity({ cartId: "cart_prod", variantId: "variant_boxer_pourpre_m", quantity, now: iso(base, 40) });
   const address = {
@@ -74,7 +83,7 @@ async function fixture(
     ...destination,
   };
   const expiry = iso(base, 900_000);
-  const delivery = new D1ProductionDeliveryActivationStore(d1, { quotes: { async quote() { return [{ providerCode: "sendcloud", providerQuoteReference: "provider-ref-home", carrierCode: "colissimo", serviceCode: "home", displayName: "Livraison domicile", deliveryMode: "home", amountCents: 900, currency: "EUR", estimatedDaysMin: 2, estimatedDaysMax: 5, dutiesTerms: "EU_INCLUDED", expiresAt: expiry, responseFingerprint: "c".repeat(64) }]; } }, servicePoints: { async servicePoints() { return []; } }, documents: { async document() { throw new Error("closed"); } }, returns: { async validate() { throw new Error("closed"); }, async create() { throw new Error("closed"); } } }, new DeliveryReferenceVault({ encryptionKeyBase64: Buffer.alloc(32, 7).toString("base64"), keyVersion: 1 }));
+  const delivery = new D1ProductionDeliveryActivationStore(d1, { quotes: { async quote() { return [{ providerCode: "sendcloud", providerQuoteReference: "provider-ref-home", carrierCode: "colissimo", serviceCode: "home", displayName: "Livraison domicile", deliveryMode: "home", amountCents: 900, currency: "EUR", estimatedDaysMin: 2, estimatedDaysMax: 5, dutiesTerms, expiresAt: expiry, responseFingerprint: "c".repeat(64) }]; } }, servicePoints: { async servicePoints() { return []; } }, documents: { async document() { throw new Error("closed"); } }, returns: { async validate() { throw new Error("closed"); }, async create() { throw new Error("closed"); } } }, new DeliveryReferenceVault({ encryptionKeyBase64: Buffer.alloc(32, 7).toString("base64"), keyVersion: 1 }), internationalShippingEnabled);
   const [option] = await delivery.quoteOptions({ cartId: "cart_prod", address, idempotencyKey: "delivery-idem-0001", now: iso(base, 50) });
   if (promotionCode) {
     sqlite.prepare(`INSERT INTO promotion_codes (
@@ -84,7 +93,7 @@ async function fixture(
     ) VALUES ('promotion_fixture',?,'percentage',1000,NULL,0,NULL,10,1,?,NULL,'admin_fixture',?,?)`)
       .run(promotionCode, iso(base, 0), iso(base, 0), iso(base, 0));
   }
-  const checkout = new D1ProductionCheckoutStore(d1);
+  const checkout = new D1ProductionCheckoutStore(d1, internationalShippingEnabled);
   const orderInput = { cartId: "cart_prod", quoteId: option.quoteId, optionId: option.optionId, address, email: "ada@example.com", promotionCode, idempotencyKey: "order-idem-0001", termsVersion: "2026-08-26", privacyVersion: "2026-07-30", commerceReleaseSha: "a".repeat(40), commerceWorkerVersionId: "018f47ce-24bd-7b16-a1ea-4b3fc2d66b75", commerceMode: livemode ? "controlled" : "sandbox", settlementMode: livemode ? "live" : "test", now: iso(base, 60) };
   await checkout.createOrder(orderInput);
   const request = await checkout.prepareCheckoutSession({ cartId: "cart_prod", idempotencyKey: "payment-idem-0001", origin: "https://ajluxurystore.com", locale: "fr", now: iso(base, 70) });
@@ -124,6 +133,27 @@ test("production delivery rejects a carrier quote before payment when the mobile
     }),
     (error) => error?.name === "ProductionDeliveryError" && error.code === "INVALID_INPUT",
   );
+});
+
+test("provider-priced US delivery persists its non-PII routing proof under the international trigger", async () => {
+  const context = await fixture(null, true, 1, {
+    postalCode: "10001",
+    city: "New York",
+    countryCode: "US",
+    regionCode: "NY",
+    phone: "+12125550123",
+  }, null, true);
+  const proof = JSON.parse(context.sqlite.prepare(
+    "SELECT shipping_address_json FROM shipping_quotes WHERE cart_id='cart_prod'",
+  ).get().shipping_address_json);
+  assert.deepEqual(proof, {
+    countryCode: "US",
+    postalCode: "00000",
+    regionCode: "NY",
+    phone: "+10000000000",
+  });
+  assert.notEqual(proof.phone, "+12125550123");
+  context.sqlite.close();
 });
 
 test("same-colour pack two charges 49.99 before delivery without pack stock", async () => {
