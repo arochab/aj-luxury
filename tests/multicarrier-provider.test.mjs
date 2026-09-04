@@ -97,6 +97,46 @@ function shippingProduct({
   };
 }
 
+function standaloneShippingOption({
+  code = "colissimo:international/home_delivery,signature",
+  carrierCode = "colissimo",
+  carrierName = "Colissimo",
+  price = "18.42",
+  leadTime = 120,
+} = {}) {
+  return {
+    code,
+    name: `${carrierName} international`,
+    carrier: { code: carrierCode, name: carrierName },
+    product: { code: `${carrierCode}:international`, name: `${carrierName} international` },
+    functionalities: { last_mile: "home_delivery" },
+    contract: { id: 60, client_id: "", carrier_code: carrierCode, name: "Sendcloud" },
+    weight: {
+      min: { value: "0.001", unit: "kg" },
+      max: { value: "30.000", unit: "kg" },
+    },
+    max_dimensions: { length: "100.00", width: "70.00", height: "58.00", unit: "cm" },
+    billed_weight: { unit: "kg", value: "0.250", volumetric: false },
+    requirements: { fields: [], export_documents: true, is_service_point_required: false },
+    charging_type: "label_creation",
+    quotes: [{
+      weight: {
+        min: { value: "0.001", unit: "kg" },
+        max: { value: "30.000", unit: "kg" },
+      },
+      price: {
+        breakdown: [{
+          type: "price_without_insurance",
+          label: "Label",
+          price: { value: price, currency: "EUR" },
+        }],
+        total: { value: price, currency: "EUR" },
+      },
+      lead_time: leadTime,
+    }],
+  };
+}
+
 function quoteRequest(overrides = {}) {
   return {
     requestId: "quote-attempt-eu-fallback",
@@ -672,6 +712,161 @@ test("Sendcloud resolves null EU V3 rates from exact V2 products and EUR prices"
     assert.equal(url.searchParams.get("weight"), "250");
     assert.equal(url.searchParams.get("weight_unit"), "gram");
   }
+});
+
+test("Sendcloud maps Belgium's live Mondial Relay V3 code to its exact international V2 product", async () => {
+  const ports = createSendcloudProviderPorts(
+    { publicKey: "public_key", secretKey: "x".repeat(32) },
+    async (input) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/api/v3/checkout/delivery-options") {
+        return Response.json({
+          configuration_id: "configuration_be",
+          delivery_options: [nullRateOffer({
+            id: "mondial-point-be",
+            carrierCode: "mondial_relay",
+            carrierName: "Mondial Relay",
+            shippingOptionCode: "mondial_relay:locker_delivery,dualapi",
+            deliveryMethodType: "service_point_delivery",
+          })],
+        });
+      }
+      if (url.pathname === "/api/v2/shipping-products") {
+        return Response.json([shippingProduct({
+          carrier: "mondial_relay",
+          code: "mondial_relay:service_point,international_dualapi",
+          lastMile: "service_point",
+          methodIds: [27726],
+          maxDimensions: { length: 120, width: 0, height: 0, unit: "centimeter" },
+        })]);
+      }
+      if (url.pathname === "/api/v2/shipping-price") {
+        return Response.json([{
+          price: "5.33", currency: "EUR", to_country: "BE", breakdown: [],
+        }]);
+      }
+      return Response.json({}, { status: 404 });
+    },
+  );
+  const quotes = await ports.quotes.quote(quoteRequest({
+    destination: { countryCode: "BE", postalCode: "1000", city: "Bruxelles" },
+  }));
+  assert.deepEqual(quotes.map((quote) => ({
+    amountCents: quote.amountCents,
+    carrierCode: quote.carrierCode,
+    deliveryMode: quote.deliveryMode,
+    serviceCode: quote.serviceCode,
+  })), [{
+    amountCents: 533,
+    carrierCode: "mondial_relay",
+    deliveryMode: "service_point",
+    serviceCode: "mondial_relay:locker_delivery,dualapi",
+  }]);
+});
+
+test("Sendcloud resolves an empty non-EU checkout configuration through exact V3 shipping options", async () => {
+  const calls = [];
+  const ports = createSendcloudProviderPorts(
+    {
+      publicKey: "public_key",
+      secretKey: "x".repeat(32),
+      senderAddressId: "12345",
+      senderAddressAttestation: "3 A rue Principale|67130|Belmont|FR",
+    },
+    async (input, init) => {
+      const url = new URL(String(input));
+      calls.push({ url, init });
+      if (url.pathname === "/api/v3/checkout/delivery-options") {
+        return Response.json({ configuration_id: "configuration_us", delivery_options: [] });
+      }
+      if (url.pathname === "/api/v3/shipping-options") {
+        return Response.json({
+          data: [
+            standaloneShippingOption(),
+            standaloneShippingOption({
+              code: "ups:standard",
+              carrierCode: "ups",
+              carrierName: "UPS",
+              price: "12.00",
+            }),
+          ],
+          message: null,
+        });
+      }
+      return Response.json({}, { status: 404 });
+    },
+  );
+  const quotes = await ports.quotes.quote(quoteRequest({
+    requestId: "quote-us-standalone",
+    dutiesTerms: "DAP",
+    destination: { countryCode: "US", postalCode: "10001", city: "New York" },
+  }));
+  assert.equal(calls.length, 2);
+  assert.equal(calls[1].url.pathname, "/api/v3/shipping-options");
+  assert.equal(calls[1].init.method, "POST");
+  assert.deepEqual(JSON.parse(calls[1].init.body), {
+    from_address: { country_code: "FR", postal_code: "67130", city: "Belmont" },
+    to_address: { country_code: "US", postal_code: "10001", city: "New York" },
+    parcels: [{
+      dimensions: { length: "40.00", width: "32.00", height: "4.00", unit: "cm" },
+      weight: { value: "0.250", unit: "kg" },
+    }],
+    functionalities: { last_mile: "home_delivery" },
+    calculate_quotes: true,
+  });
+  assert.deepEqual(quotes.map((quote) => ({
+    amountCents: quote.amountCents,
+    carrierCode: quote.carrierCode,
+    deliveryMode: quote.deliveryMode,
+    dutiesTerms: quote.dutiesTerms,
+    estimatedDaysMin: quote.estimatedDaysMin,
+    estimatedDaysMax: quote.estimatedDaysMax,
+  })), [{
+    amountCents: 1842,
+    carrierCode: "colissimo",
+    deliveryMode: "home",
+    dutiesTerms: "DAP",
+    estimatedDaysMin: 5,
+    estimatedDaysMax: 5,
+  }]);
+  assert.deepEqual(JSON.parse(quotes[0].providerQuoteReference), [
+    "shipping-options-v3",
+    "colissimo:international/home_delivery,signature",
+    "colissimo",
+    "colissimo:international/home_delivery,signature",
+  ]);
+  assert.match(quotes[0].responseFingerprint, /^[0-9a-f]{64}$/);
+});
+
+test("Sendcloud standalone fallback stays closed on duplicate or unpriced shipping codes", async () => {
+  const option = standaloneShippingOption();
+  const ports = createSendcloudProviderPorts(
+    {
+      publicKey: "public_key",
+      secretKey: "x".repeat(32),
+      senderAddressId: "12345",
+      senderAddressAttestation: "3 A rue Principale|67130|Belmont|FR",
+    },
+    async (input) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/api/v3/checkout/delivery-options") {
+        return Response.json({ configuration_id: "configuration_us", delivery_options: [] });
+      }
+      return Response.json({
+        data: [option, { ...option }, standaloneShippingOption({
+          code: "chronopost:unpriced",
+          carrierCode: "chronopost",
+          carrierName: "Chronopost",
+          price: "0.00",
+        })],
+        message: null,
+      });
+    },
+  );
+  assert.deepEqual(await ports.quotes.quote(quoteRequest({
+    dutiesTerms: "DAP",
+    destination: { countryCode: "US", postalCode: "10001", city: "New York" },
+  })), []);
 });
 
 test("Sendcloud preserves all four published France carrier and delivery-mode combinations", async () => {

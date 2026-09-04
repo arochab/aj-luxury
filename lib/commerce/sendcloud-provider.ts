@@ -23,6 +23,7 @@ const REQUEST_TIMEOUT_MS = 8_000;
 const MAX_READ_ATTEMPTS = 2;
 const READ_RETRY_BACKOFF_MS = 80;
 const MAX_FALLBACK_PRICE_CONCURRENCY = 4;
+const NON_EU_HOME_CARRIERS = Object.freeze(["colissimo", "fedex", "chronopost"] as const);
 const SAFE_CODE = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/;
 const SAFE_SHIPPING_OPTION_CODE = /^[A-Za-z0-9][A-Za-z0-9_.:,\/-]{0,159}$/;
 const SAFE_PARCEL_ID = /^[1-9]\d{0,18}$/;
@@ -352,6 +353,11 @@ function exactProductCodeMatch(option: SendcloudUnpricedOption, productCode: str
   if (option.carrierCode === "mondial_relay" &&
     option.shippingOptionCode === "mondial_relay:locker_delivery,dualapi" &&
     productCode === "mondial_relay:service_point,dualapi") return true;
+  // The international Point Relais product has a second exact V2 name. This
+  // mapping is intentionally one-way and does not admit the distinct QR flow.
+  if (option.carrierCode === "mondial_relay" &&
+    option.shippingOptionCode === "mondial_relay:locker_delivery,dualapi" &&
+    productCode === "mondial_relay:service_point,international_dualapi") return true;
   // Sendcloud V3 currently appends this account-specific Mondial Relay suffix,
   // while the V2 product endpoint exposes the underlying product code. No other
   // prefix/suffix or fuzzy matching is permitted.
@@ -522,6 +528,19 @@ function validFallbackRequest(request: DeliveryQuoteRequest): boolean {
     Number.isSafeInteger(request.parcel.heightMm) && request.parcel.heightMm > 0;
 }
 
+function validStandaloneRequest(request: DeliveryQuoteRequest): boolean {
+  return /^[A-Z]{2}$/.test(request.originCountryCode) &&
+    /^[A-Z]{2}$/.test(request.destination.countryCode) &&
+    (safeString(request.destination.postalCode, 12) ||
+      (request.destination.postalCode === "" &&
+        ["AE", "QA"].includes(request.destination.countryCode))) &&
+    safeString(request.destination.city, 120) &&
+    Number.isSafeInteger(request.parcel.weightGrams) && request.parcel.weightGrams > 0 &&
+    Number.isSafeInteger(request.parcel.lengthMm) && request.parcel.lengthMm > 0 &&
+    Number.isSafeInteger(request.parcel.widthMm) && request.parcel.widthMm > 0 &&
+    Number.isSafeInteger(request.parcel.heightMm) && request.parcel.heightMm > 0;
+}
+
 async function resolveV2FallbackPrice(
   fetchImpl: FetchLike,
   auth: Readonly<{ publicKey: string; secretKey: string }>,
@@ -647,6 +666,134 @@ async function resolveV2FallbackPrice(
       productCode: option.shippingOptionCode,
     })),
   });
+}
+
+async function parseSendcloudStandaloneHomeOptions(
+  value: unknown,
+  request: DeliveryQuoteRequest,
+): Promise<readonly DeliveryQuoteOffer[]> {
+  if (!record(value) || !Object.prototype.hasOwnProperty.call(value, "data") ||
+    Object.keys(value).some((key) => key !== "data" && key !== "message") ||
+    !(value.message === undefined || value.message === null || safeString(value.message, 500)) ||
+    !(value.data === null || Array.isArray(value.data)) ||
+    (Array.isArray(value.data) && value.data.length > 100)) {
+    throw new DeliveryProviderError("MALFORMED_RESPONSE", "Shipping options response is invalid.");
+  }
+  if (value.data === null) return Object.freeze([]);
+  const candidates: Array<DeliveryQuoteOffer> = [];
+  const seenCodes = new Set<string>();
+  const ambiguousCodes = new Set<string>();
+  const expiresAt = internalExpiry(request.now, request.ttlSeconds);
+  for (const option of value.data) {
+    if (!record(option) || !record(option.carrier) ||
+      !safeString(option.carrier.code, 80) || !SAFE_CODE.test(option.carrier.code)) {
+      throw new DeliveryProviderError("MALFORMED_RESPONSE", "Shipping option is invalid.");
+    }
+    if (!NON_EU_HOME_CARRIERS.includes(
+      option.carrier.code as typeof NON_EU_HOME_CARRIERS[number],
+    )) continue;
+    if (!safeString(option.code, 80) || !SAFE_SHIPPING_OPTION_CODE.test(option.code) ||
+      !safeString(option.carrier.name) || !record(option.functionalities) ||
+      !record(option.requirements) ||
+      !Array.isArray(option.requirements.fields) || option.requirements.fields.length > 32 ||
+      !option.requirements.fields.every((field) => safeString(field, 120)) ||
+      typeof option.requirements.is_service_point_required !== "boolean" ||
+      !Array.isArray(option.quotes) || option.quotes.length > 4) {
+      throw new DeliveryProviderError("MALFORMED_RESPONSE", "Shipping option is invalid.");
+    }
+    if (option.functionalities.last_mile !== "home_delivery" ||
+      option.requirements.is_service_point_required ||
+      option.charging_type !== "label_creation" || option.quotes.length !== 1) continue;
+    const quote = option.quotes[0];
+    if (!record(quote) || !record(quote.price) || !record(quote.price.total) ||
+      !Array.isArray(quote.price.breakdown) || quote.price.breakdown.length > 100) {
+      throw new DeliveryProviderError("MALFORMED_RESPONSE", "Shipping quote is invalid.");
+    }
+    if (quote.price.total.value === null && quote.price.total.currency === null) continue;
+    if (quote.price.total.currency !== "EUR" || !Number.isSafeInteger(quote.lead_time) ||
+      Number(quote.lead_time) < 0 || Number(quote.lead_time) > 365 * 24) continue;
+    const amountCents = centsFromDecimal(quote.price.total.value);
+    if (amountCents <= 0) continue;
+    const code = String(option.code);
+    if (seenCodes.has(code)) {
+      ambiguousCodes.add(code);
+      continue;
+    }
+    seenCodes.add(code);
+    const leadTimeHours = Number(quote.lead_time);
+    const canonical = JSON.stringify({
+      amountCents,
+      carrierCode: option.carrier.code,
+      code,
+      dutiesTerms: request.dutiesTerms,
+      leadTimeHours,
+      priceBreakdown: quote.price.breakdown,
+    });
+    candidates.push(Object.freeze({
+      providerCode: "sendcloud",
+      providerQuoteReference: JSON.stringify([
+        "shipping-options-v3", code, option.carrier.code, code,
+      ]),
+      carrierCode: option.carrier.code,
+      serviceCode: code,
+      displayName: option.carrier.name,
+      deliveryMode: "home",
+      amountCents,
+      currency: "EUR",
+      estimatedDaysMin: Math.max(1, Math.ceil(leadTimeHours / 24)),
+      estimatedDaysMax: Math.max(1, Math.ceil(leadTimeHours / 24)),
+      dutiesTerms: request.dutiesTerms,
+      expiresAt,
+      responseFingerprint: await sha256Hex(canonical),
+    }));
+  }
+  return Object.freeze(candidates.filter(({ serviceCode }) => !ambiguousCodes.has(serviceCode)));
+}
+
+async function resolveStandaloneNonEuHomeOptions(
+  fetchImpl: FetchLike,
+  auth: Readonly<{ publicKey: string; secretKey: string }>,
+  request: DeliveryQuoteRequest,
+  origin: SendcloudQuoteOrigin | null,
+): Promise<readonly DeliveryQuoteOffer[]> {
+  if (!origin || request.originCountryCode !== "FR" || request.dutiesTerms !== "DAP" ||
+    !validStandaloneRequest(request)) return Object.freeze([]);
+  const response = await providerJson(
+    fetchImpl,
+    auth,
+    `${PANEL_ORIGIN}/api/v3/shipping-options`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        from_address: {
+          country_code: origin.countryCode,
+          postal_code: origin.postalCode,
+          city: origin.city,
+        },
+        to_address: {
+          country_code: request.destination.countryCode,
+          postal_code: request.destination.postalCode,
+          city: request.destination.city,
+        },
+        parcels: [{
+          dimensions: {
+            length: (request.parcel.lengthMm / 10).toFixed(2),
+            width: (request.parcel.widthMm / 10).toFixed(2),
+            height: (request.parcel.heightMm / 10).toFixed(2),
+            unit: "cm",
+          },
+          weight: {
+            value: (request.parcel.weightGrams / 1_000).toFixed(3),
+            unit: "kg",
+          },
+        }],
+        functionalities: { last_mile: "home_delivery" },
+        calculate_quotes: true,
+      }),
+    },
+  );
+  return parseSendcloudStandaloneHomeOptions(response, request);
 }
 
 const WEEKDAYS = Object.freeze([
@@ -1044,7 +1191,7 @@ export function createSendcloudProviderPorts(
           optionCount: optionShapes.length,
           options: optionShapes,
         }));
-        return parseSendcloudDeliveryOptions(response, {
+        const dynamicOptions = await parseSendcloudDeliveryOptions(response, {
           now: request.now,
           ttlSeconds: request.ttlSeconds,
           dutiesTerms: request.dutiesTerms,
@@ -1061,6 +1208,14 @@ export function createSendcloudProviderPorts(
             }
             : {}),
         });
+        const dynamicEnvelopeIsEmpty = record(response) &&
+          Array.isArray(response.delivery_options) && response.delivery_options.length === 0;
+        if (!dynamicEnvelopeIsEmpty || request.dutiesTerms !== "DAP") return dynamicOptions;
+        // Dynamic Checkout only returns methods published in that checkout
+        // configuration. For an otherwise supported non-EU route with no
+        // published method, ask Sendcloud's current Shipping Options API for
+        // exact account-enabled home services and provider-calculated quotes.
+        return resolveStandaloneNonEuHomeOptions(fetchImpl, auth, request, quoteOrigin);
       },
     }),
     servicePoints: Object.freeze({
