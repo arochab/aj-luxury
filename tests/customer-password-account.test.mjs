@@ -63,6 +63,22 @@ class DatabasePort {
   }
 }
 
+class D1TriggerAwareDatabasePort extends DatabasePort {
+  async #inflate(result) {
+    const resolved = await result;
+    return resolved.map((entry) => ({
+      ...entry,
+      meta: {
+        ...entry.meta,
+        // Cloudflare D1 reports the password audit trigger as an additional
+        // change even though the requested UPDATE succeeded exactly once.
+        changes: Number(entry.meta?.changes ?? 0) === 1 ? 2 : Number(entry.meta?.changes ?? 0),
+      },
+    }));
+  }
+  batch(statements) { return this.#inflate(super.batch(statements)); }
+}
+
 function apply(database, name) {
   for (const statement of readFileSync(`${drizzle}${name}`, "utf8").split("--> statement-breakpoint")) {
     if (statement.trim()) database.exec(statement.trim());
@@ -227,4 +243,76 @@ test("registration, verification, sessions, consent and recovery form one tracea
         AND challenge.consumed_at IS NOT NULL`).get().count,
     2,
   );
+});
+
+test("password reset trusts persisted invariants when D1 counts audit-trigger changes", async () => {
+  const sqlite = new DatabaseSync(":memory:");
+  sqlite.exec("PRAGMA foreign_keys = ON");
+  for (const migration of migrations) apply(sqlite, migration);
+  const store = new D1CustomerPasswordAccountStore(new D1TriggerAwareDatabasePort(sqlite));
+  const email = "admin@example.com";
+  const originalPassword = "Satin-Pourpre-2026!";
+  const newPassword = "Chrome-Lilas-2026!";
+  const registration = await store.register({
+    email,
+    password: originalPassword,
+    acceptsMarketing: false,
+    source: "account_registration",
+    privacyVersion: "2026-08-26",
+    now: "2026-09-04T01:00:00.000Z",
+  });
+  const verified = await store.verifyEmail(
+    registration.emailDelivery.rawToken,
+    "2026-09-04T01:01:00.000Z",
+  );
+  assert.ok(verified);
+  const reset = await store.requestPasswordReset({
+    email,
+    now: "2026-09-04T01:02:00.000Z",
+  });
+  const resetSession = await store.resetPassword({
+    rawToken: reset.rawToken,
+    password: newPassword,
+    now: "2026-09-04T01:03:00.000Z",
+  });
+  assert.ok(resetSession);
+  assert.ok(await store.login({
+    email,
+    password: newPassword,
+    now: "2026-09-04T01:04:00.000Z",
+  }));
+});
+
+test("concurrent password reset replay has one winner and cannot revoke its new session", async () => {
+  const { sqlite, store } = fixture();
+  const email = "owner@example.com";
+  const registration = await store.register({
+    email,
+    password: "Original-Pourpre-2026!",
+    acceptsMarketing: false,
+    source: "account_registration",
+    privacyVersion: "2026-08-26",
+    now: "2026-09-04T02:00:00.000Z",
+  });
+  assert.ok(await store.verifyEmail(
+    registration.emailDelivery.rawToken,
+    "2026-09-04T02:01:00.000Z",
+  ));
+  const reset = await store.requestPasswordReset({
+    email,
+    now: "2026-09-04T02:02:00.000Z",
+  });
+  const candidates = ["Winner-A-Pourpre-2026!", "Winner-B-Pourpre-2026!"];
+  const attempts = await Promise.all(candidates.map((password, index) => store.resetPassword({
+    rawToken: reset.rawToken,
+    password,
+    now: `2026-09-04T02:03:0${index}.000Z`,
+  })));
+  assert.equal(attempts.filter(Boolean).length, 1);
+  assert.equal(sqlite.prepare(`SELECT COUNT(*) AS count FROM customer_sessions
+    WHERE revoked_at IS NULL`).get().count, 1);
+  const winner = candidates[attempts.findIndex(Boolean)];
+  const loser = candidates[attempts.findIndex((attempt) => !attempt)];
+  assert.ok(await store.login({ email, password: winner, now: "2026-09-04T02:04:00.000Z" }));
+  assert.equal(await store.login({ email, password: loser, now: "2026-09-04T02:05:00.000Z" }), null);
 });

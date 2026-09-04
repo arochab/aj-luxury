@@ -549,26 +549,72 @@ export class D1CustomerPasswordAccountStore {
         AND customer.deleted_at IS NULL LIMIT 1`,
     ).bind(tokenHash, input.now).first<{ id: string; customer_id: string }>();
     if (!challenge) return null;
-    const results = await this.#database.batch([
-      this.#database.prepare(
-        `UPDATE customer_account_challenges SET consumed_at = ?
-        WHERE id = ? AND consumed_at IS NULL AND revoked_at IS NULL AND expires_at > ?`,
-      ).bind(input.now, challenge.id, input.now),
+    await this.#database.batch([
       this.#database.prepare(
         `UPDATE customer_password_credentials SET algorithm = ?, iterations = ?,
           salt_base64url = ?, hash_base64url = ?, failed_attempts = 0,
           locked_until = NULL, password_changed_at = ?, updated_at = ?
-        WHERE customer_id = ?`,
+        WHERE customer_id = ? AND EXISTS (
+          SELECT 1 FROM customer_account_challenges AS challenge
+          WHERE challenge.id = ? AND challenge.customer_id = ?
+            AND challenge.purpose = 'password_reset'
+            AND challenge.consumed_at IS NULL AND challenge.revoked_at IS NULL
+            AND challenge.expires_at > ?
+        )`,
       ).bind(
         passwordHash.algorithm, passwordHash.iterations, passwordHash.salt,
         passwordHash.hash, input.now, input.now, challenge.customer_id,
+        challenge.id, challenge.customer_id, input.now,
       ),
       this.#database.prepare(
         `UPDATE customer_sessions SET revoked_at = ?
-        WHERE customer_id = ? AND revoked_at IS NULL`,
-      ).bind(input.now, challenge.customer_id),
+        WHERE customer_id = ? AND revoked_at IS NULL AND EXISTS (
+          SELECT 1 FROM customer_account_challenges AS challenge
+          WHERE challenge.id = ? AND challenge.customer_id = ?
+            AND challenge.purpose = 'password_reset'
+            AND challenge.consumed_at IS NULL AND challenge.revoked_at IS NULL
+            AND challenge.expires_at > ?
+        )`,
+      ).bind(
+        input.now, challenge.customer_id,
+        challenge.id, challenge.customer_id, input.now,
+      ),
+      // Keep this last: D1 batches are atomic and serialized, so every earlier
+      // mutation is conditional on owning the still-active one-time challenge.
+      this.#database.prepare(
+        `UPDATE customer_account_challenges SET consumed_at = ?
+        WHERE id = ? AND consumed_at IS NULL AND revoked_at IS NULL AND expires_at > ?`,
+      ).bind(input.now, challenge.id, input.now),
     ]);
-    if (changed(results[0]) !== 1 || changed(results[1]) !== 1) return null;
+    // D1 can include AFTER-trigger side effects in `meta.changes`. The
+    // password audit trigger therefore makes a successful credential update
+    // look like two changes and previously caused the API to return
+    // INVALID_TOKEN after it had already changed the password. Verify the
+    // persisted security invariants instead of trusting driver bookkeeping.
+    const persisted = await this.#database.prepare(
+      `SELECT 1 AS ready
+      FROM customer_account_challenges AS challenge
+      INNER JOIN customer_password_credentials AS credential
+        ON credential.customer_id = challenge.customer_id
+      WHERE challenge.id = ? AND challenge.customer_id = ?
+        AND challenge.purpose = 'password_reset'
+        AND challenge.consumed_at = ? AND challenge.revoked_at IS NULL
+        AND credential.algorithm = ? AND credential.iterations = ?
+        AND credential.salt_base64url = ? AND credential.hash_base64url = ?
+        AND credential.failed_attempts = 0 AND credential.locked_until IS NULL
+        AND credential.password_changed_at = ?
+        AND NOT EXISTS (
+          SELECT 1 FROM customer_sessions AS session
+          WHERE session.customer_id = challenge.customer_id
+            AND session.revoked_at IS NULL
+        )
+      LIMIT 1`,
+    ).bind(
+      challenge.id, challenge.customer_id, input.now,
+      passwordHash.algorithm, passwordHash.iterations,
+      passwordHash.salt, passwordHash.hash, input.now,
+    ).first<{ ready: number }>();
+    if (persisted?.ready !== 1) return null;
     return this.#createSession(challenge.customer_id, input.now);
   }
 
