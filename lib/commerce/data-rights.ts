@@ -211,7 +211,7 @@ export class D1DataRightsStore {
       persisted.requested_fields_json !== JSON.stringify(requestedFields)) {
       throw new DataRightsError("PERSISTENCE_FAILURE", "Idempotency collision.");
     }
-    return Object.freeze({ id: persisted.id, created: changed(insert) === 1 });
+    return Object.freeze({ id: persisted.id, created: changed(insert) > 0 });
   }
 
   private async getAuthorizedRequest(
@@ -493,7 +493,7 @@ export class D1DataRightsStore {
       )
       .bind(input.now, input.now, request.id);
     const results = await this.database.batch([updateProfile, complete]);
-    if (changed(results[0]) !== 1 || changed(results[1]) !== 1) {
+    if (changed(results[0]) < 1 || changed(results[1]) < 1) {
       throw new DataRightsError("PERSISTENCE_FAILURE", "Rectification was rolled back.");
     }
   }
@@ -550,7 +550,7 @@ export class D1DataRightsStore {
         request.id,
       )
       .run();
-    if (changed(update) !== 1) {
+    if (changed(update) < 1) {
       throw new DataRightsError("PERSISTENCE_FAILURE", "Erasure decision was not recorded.");
     }
     return Object.freeze({ decision });
@@ -606,7 +606,7 @@ export class D1DataRightsStore {
       )
       .bind(input.now, input.now, request.id);
     const results = await this.database.batch([anonymize, revokeSessions, complete]);
-    if (changed(results[0]) !== 1 || changed(results[2]) !== 1) {
+    if (changed(results[0]) < 1 || changed(results[2]) < 1) {
       throw new DataRightsError("PERSISTENCE_FAILURE", "Anonymization was rolled back.");
     }
     return Object.freeze({ applied: true });

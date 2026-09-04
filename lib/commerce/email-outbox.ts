@@ -335,7 +335,7 @@ export class D1EmailOutbox {
         "A durable email key was already used for another intent or payload.",
       );
     }
-    return Object.freeze({ id: persisted.id, created: changed(insert) === 1 });
+    return Object.freeze({ id: persisted.id, created: changed(insert) > 0 });
   }
 
   async claimNext(input: Readonly<{
@@ -383,7 +383,7 @@ export class D1EmailOutbox {
       )
       .bind(input.leaseTokenHash);
     const results = await this.database.batch([update, select]);
-    if (changed(results[0]) !== 1) return null;
+    if (changed(results[0]) < 1) return null;
     const row = resultRows<ClaimRow>(results[1])[0];
     if (!row) {
       throw new EmailOutboxError("PERSISTENCE_FAILURE", "Claim was not readable.");
@@ -449,7 +449,7 @@ export class D1EmailOutbox {
       )
       .bind(input.leaseTokenHash, input.orderId);
     const results = await this.database.batch([update, select]);
-    if (changed(results[0]) !== 1) return null;
+    if (changed(results[0]) < 1) return null;
     const row = resultRows<ClaimRow>(results[1])[0];
     if (!row) {
       throw new EmailOutboxError("PERSISTENCE_FAILURE", "Paid-order claim was not readable.");
@@ -475,7 +475,7 @@ export class D1EmailOutbox {
       )
       .bind(now, now, providerMessageId, now, claim.id, claim.leaseTokenHash)
       .run();
-    if (changed(result) !== 1) {
+    if (changed(result) < 1) {
       throw new EmailOutboxError("LEASE_LOST", "Email lease is no longer current.");
     }
   }
@@ -515,7 +515,7 @@ export class D1EmailOutbox {
         claim.leaseTokenHash,
       )
       .run();
-    if (changed(result) !== 1) {
+    if (changed(result) < 1) {
       throw new EmailOutboxError("LEASE_LOST", "Email lease is no longer current.");
     }
     return terminal ? "failed" : "retry";
@@ -564,7 +564,7 @@ export class D1EmailOutbox {
         now,
       )
       .run();
-    if (changed(result) !== 1) return null;
+    if (changed(result) < 1) return null;
     return terminal ? "failed" : "retry";
   }
 

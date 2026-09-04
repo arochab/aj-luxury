@@ -6,28 +6,44 @@ import test from "node:test";
 import { D1OperatorLabelEmailDispatcher } from "../lib/commerce/operator-label-email-outbox.ts";
 
 class Statement {
-  constructor(database, query, values = []) {
+  constructor(database, query, values = [], inflateAuditChanges = false) {
     this.database = database;
     this.query = query;
     this.values = values;
+    this.inflateAuditChanges = inflateAuditChanges;
   }
-  bind(...values) { return new Statement(this.database, this.query, values); }
+  bind(...values) {
+    return new Statement(this.database, this.query, values, this.inflateAuditChanges);
+  }
   async first() { return this.database.prepare(this.query).get(...this.values) ?? null; }
   async all() {
     return { results: this.database.prepare(this.query).all(...this.values), meta: { changes: 0 } };
   }
   async run() {
     const result = this.database.prepare(this.query).run(...this.values);
-    return { meta: { changes: Number(result.changes) }, results: [] };
+    const auditedTerminalUpdate = /UPDATE\s+operator_label_email_outbox\s+SET[\s\S]*status\s*=\s*(?:'sent'|'failed'|\?)/i.test(this.query);
+    return {
+      meta: {
+        changes: Number(result.changes) + (
+          this.inflateAuditChanges && Number(result.changes) > 0 && auditedTerminalUpdate ? 1 : 0
+        ),
+      },
+      results: [],
+    };
   }
 }
 
 class D1 {
-  constructor(database) { this.database = database; }
-  prepare(query) { return new Statement(this.database, query); }
+  constructor(database, inflateAuditChanges = false) {
+    this.database = database;
+    this.inflateAuditChanges = inflateAuditChanges;
+  }
+  prepare(query) {
+    return new Statement(this.database, query, [], this.inflateAuditChanges);
+  }
 }
 
-function fixture(zone = "EU") {
+function fixture(zone = "EU", options = {}) {
   const sqlite = new DatabaseSync(":memory:");
   sqlite.exec(`
     CREATE TABLE orders (
@@ -95,11 +111,15 @@ function fixture(zone = "EU") {
     "operator_label_email_shipment_1", "shipment_1", "order_1",
     "jeremy@ajluxurystore.com", now, "operator_label_ready:shipment_1", now, now,
   );
-  return { sqlite, database: new D1(sqlite), now };
+  return {
+    sqlite,
+    database: new D1(sqlite, options.inflateAuditChanges ?? false),
+    now,
+  };
 }
 
 test("one ready shipment sends one A4 PDF to Jérémy and never creates a duplicate", async () => {
-  const context = fixture();
+  const context = fixture("EU", { inflateAuditChanges: true });
   const pdf = new TextEncoder().encode("%PDF-1.7\n1 0 obj<</Type/Catalog>>endobj\n%%EOF");
   const sha = createHash("sha256").update(pdf).digest("hex");
   const calls = [];

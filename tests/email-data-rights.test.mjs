@@ -19,19 +19,37 @@ const migrations = readdirSync(drizzleDirectory)
   .map((name) => `${drizzleDirectory}${name}`);
 
 class SQLiteD1Statement {
-  constructor(database, query, values = []) {
+  constructor(database, query, values = [], inflateAuditChanges = false) {
     this.database = database;
     this.query = query;
     this.values = values;
+    this.inflateAuditChanges = inflateAuditChanges;
   }
-  bind(...values) { return new SQLiteD1Statement(this.database, this.query, values); }
+  bind(...values) {
+    return new SQLiteD1Statement(
+      this.database,
+      this.query,
+      values,
+      this.inflateAuditChanges,
+    );
+  }
   async first() { return this.database.prepare(this.query).get(...this.values) ?? null; }
   async all() {
     return { success: true, results: this.database.prepare(this.query).all(...this.values), meta: { changes: 0 } };
   }
   async run() {
     const result = this.database.prepare(this.query).run(...this.values);
-    return { success: true, results: [], meta: { changes: Number(result.changes), last_row_id: Number(result.lastInsertRowid) } };
+    const hasAuditedMutation = /(?:INSERT(?:\s+OR\s+IGNORE)?\s+INTO\s+(?:email_outbox|data_retention_rules|data_rights_requests)|UPDATE\s+(?:email_outbox|data_retention_rules|data_rights_requests|customer_sessions)\s+SET)/i.test(this.query);
+    return {
+      success: true,
+      results: [],
+      meta: {
+        changes: Number(result.changes) + (
+          this.inflateAuditChanges && Number(result.changes) > 0 && hasAuditedMutation ? 1 : 0
+        ),
+        last_row_id: Number(result.lastInsertRowid),
+      },
+    };
   }
   async executeForBatch() {
     if (/^\s*(?:SELECT|PRAGMA|WITH\b)/i.test(this.query)) return this.all();
@@ -41,8 +59,18 @@ class SQLiteD1Statement {
 
 class SQLiteD1Database {
   #tail = Promise.resolve();
-  constructor(database) { this.database = database; }
-  prepare(query) { return new SQLiteD1Statement(this.database, query); }
+  constructor(database, inflateAuditChanges = false) {
+    this.database = database;
+    this.inflateAuditChanges = inflateAuditChanges;
+  }
+  prepare(query) {
+    return new SQLiteD1Statement(
+      this.database,
+      query,
+      [],
+      this.inflateAuditChanges,
+    );
+  }
   batch(statements) {
     const execute = () => this.#runBatch(statements);
     const result = this.#tail.then(execute, execute);
@@ -75,7 +103,7 @@ function fixture(options = {}) {
   const database = new DatabaseSync(":memory:");
   database.exec("PRAGMA foreign_keys = ON");
   applyMigrations(database);
-  const d1 = new SQLiteD1Database(database);
+  const d1 = new SQLiteD1Database(database, options.inflateAuditChanges ?? false);
   const deliveries = [];
   const backgroundTasks = [];
   let utcNow = options.utcNow ?? "2026-08-11T12:00:00.000Z";
@@ -755,5 +783,94 @@ test("anonymization is transactional and audit rows never contain contact, token
     available: false,
     reason: "transactional-email-provider-not-configured",
   });
+  context.database.close();
+});
+
+test("audited D1 mutations trust successful writes when trigger changes are included", async () => {
+  const evidence = {
+    externalSubjectHash: "a".repeat(64),
+    evidenceHash: "b".repeat(64),
+    aal: 2,
+    authenticatedAt: "2026-08-11T12:00:00.000Z",
+  };
+  const context = fixture({ inflateAuditChanges: true, mfaEvidence: evidence });
+  const now = "2026-08-11T12:02:00.000Z";
+  insertOrder(context.database, {
+    id: "order_trigger_counts",
+    number: "AJ-TRIGGER-COUNTS",
+    email: "trigger-counts@example.com",
+    now,
+  });
+  const deliveries = [];
+  const outbox = new D1EmailOutbox(context.d1, {
+    async deliver(delivery) {
+      deliveries.push(delivery);
+      return {
+        idempotencyKey: delivery.idempotencyKey,
+        providerMessageId: "email_trigger_counts_1",
+      };
+    },
+  });
+  assert.deepEqual(await outbox.enqueue({
+    id: "email_trigger_counts",
+    kind: "withdrawal_acknowledgement",
+    sourceEventId: "withdrawal_trigger_counts",
+    recipientEmail: "trigger-counts@example.com",
+    orderId: "order_trigger_counts",
+    locale: "fr",
+    templateVersion: "withdrawal-v1",
+    subject: "Rétractation enregistrée",
+    text: "Votre demande a bien été enregistrée.",
+    idempotencyKey: "email:withdrawal:trigger_counts",
+    createdAt: "2026-08-11T12:02:01.000Z",
+  }), { id: "email_trigger_counts", created: true });
+  const claim = await outbox.claimNext({
+    leaseTokenHash: "9".repeat(64),
+    now: "2026-08-11T12:02:02.000Z",
+    leaseExpiresAt: "2026-08-11T12:02:32.000Z",
+  });
+  assert.ok(claim);
+  assert.equal(await outbox.deliverClaim(
+    claim,
+    "2026-08-11T12:02:03.000Z",
+  ), "sent");
+  assert.equal(deliveries.length, 1);
+  assert.equal(context.database.prepare(
+    "SELECT status FROM email_outbox WHERE id = 'email_trigger_counts'",
+  ).get().status, "sent");
+
+  const ownerActor = await createOwnerActor(context, evidence.externalSubjectHash);
+  await new D1RetentionPolicyStore(context.d1).activate({
+    id: "rule_trigger_counts",
+    recordClass: "customer_profile",
+    policyVersion: "profile-trigger-v1",
+    retentionSeconds: 0,
+    effectiveAt: now,
+    actor: ownerActor,
+    now,
+  });
+  const customerActor = await createCustomerActor(
+    context,
+    "customer_trigger_rights",
+    "trigger-rights@example.com",
+  );
+  const rights = new D1DataRightsStore(context.d1);
+  assert.deepEqual(await rights.createRequest({
+    id: "request_trigger_rectification",
+    kind: "rectification",
+    actor: customerActor,
+    rectificationFields: ["firstName"],
+    idempotencyKey: "rights:trigger:rectification",
+    now,
+  }), { id: "request_trigger_rectification", created: true });
+  await rights.applyProfileRectification({
+    requestId: "request_trigger_rectification",
+    actor: customerActor,
+    now,
+    changes: { firstName: "Adam" },
+  });
+  assert.deepEqual({ ...context.database.prepare(
+    "SELECT first_name FROM customers WHERE id = 'customer_trigger_rights'",
+  ).get() }, { first_name: "Adam" });
   context.database.close();
 });

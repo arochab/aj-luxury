@@ -48,7 +48,21 @@ class D1 {
   }
 }
 
-function context() {
+class TriggerAwareStatement extends Statement {
+  bind(...values) { return new TriggerAwareStatement(this.database, this.query, values); }
+  async run() {
+    const result = await super.run();
+    return /^\s*INSERT INTO admin_sessions\b/i.test(this.query) && result.meta.changes === 1
+      ? { ...result, meta: { ...result.meta, changes: 2 } }
+      : result;
+  }
+}
+
+class TriggerAwareD1 extends D1 {
+  prepare(query) { return new TriggerAwareStatement(this.database, query); }
+}
+
+function context(DatabasePort = D1) {
   const sqlite = new DatabaseSync(":memory:");
   sqlite.exec("PRAGMA foreign_keys=ON");
   for (const name of plan.ordered) {
@@ -57,7 +71,7 @@ function context() {
       if (statement.trim()) sqlite.exec(statement.trim());
     }
   }
-  const database = new D1(sqlite);
+  const database = new DatabasePort(sqlite);
   const env = {
     APP_ENV: "production",
     COMMERCE_MODE: "controlled",
@@ -148,6 +162,45 @@ test("native AJ Luxury credentials create an owner session without Access or MFA
     ), env, { now: () => now });
     assert.equal(rejected.status, 401);
     assert.equal((await rejected.json()).error.code, "INVALID_ADMIN_CREDENTIALS");
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("native admin login trusts the persisted session when D1 counts its audit trigger", async () => {
+  const { sqlite, env } = context(TriggerAwareD1);
+  try {
+    const store = new D1CustomerPasswordAccountStore(env.DB);
+    const registration = await store.register({
+      email: "adam.chabbi94@gmail.com",
+      password: "Satin-Pourpre-2026!",
+      acceptsMarketing: false,
+      source: "account_registration",
+      privacyVersion: "2026-08-26",
+      now: "2026-09-01T08:50:00.000Z",
+    });
+    await store.verifyEmail(
+      registration.emailDelivery.rawToken,
+      "2026-09-01T08:55:00.000Z",
+    );
+    const session = await productionOperatorConsoleApiResponse(new Request(
+      "https://ajluxurystore.com/api/commerce/admin/session",
+      {
+        method: "POST",
+        headers: {
+          Origin: "https://ajluxurystore.com",
+          "Sec-Fetch-Site": "same-origin",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: "adam.chabbi94@gmail.com",
+          password: "Satin-Pourpre-2026!",
+        }),
+      },
+    ), env, { now: () => now });
+    assert.equal(session.status, 201);
+    assert.equal(sqlite.prepare("SELECT COUNT(*) AS count FROM admin_sessions").get().count, 1);
+    assert.equal(session.headers.getSetCookie().length, 2);
   } finally {
     sqlite.close();
   }

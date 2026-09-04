@@ -554,11 +554,56 @@ export class D1IdentityAccessStore {
 
     try {
       const result = await create.run();
-      if (changed(result) !== 1) return null;
+      if (result === null) return null;
     } catch (error) {
       if (isExpectedContention(error)) return null;
       throw error;
     }
+
+    const persisted = kind === "customer"
+      ? await this.database.prepare(
+        `SELECT 1 AS ready
+        FROM customer_sessions AS session
+        INNER JOIN access_challenges AS challenge
+          ON challenge.id = session.issued_by_challenge_id
+        WHERE session.id = ? AND session.token_hash = ?
+          AND session.csrf_token_hash = ? AND session.session_family_id = ?
+          AND session.authentication_source = 'challenge'
+          AND session.rotated_from_session_id IS NULL
+          AND session.expires_at = ? AND session.idle_expires_at = ?
+          AND session.last_seen_at IS NULL AND session.revoked_at IS NULL
+          AND session.created_at = ? AND challenge.token_hash = ?
+          AND challenge.purpose = 'customer_sign_in'
+          AND challenge.customer_id IS NOT NULL
+          AND challenge.dispatched_at IS NOT NULL
+          AND challenge.consumed_at IS NOT NULL
+          AND challenge.revoked_at IS NULL
+        LIMIT 1`,
+      ).bind(
+        input.sessionId, session.tokenHash, csrf.tokenHash, input.sessionId,
+        expiresAt, idleExpiresAt, input.now, challengeHash,
+      ).first<{ ready: number }>()
+      : await this.database.prepare(
+        `SELECT 1 AS ready
+        FROM guest_order_sessions AS session
+        INNER JOIN access_challenges AS challenge
+          ON challenge.id = session.issued_by_challenge_id
+        WHERE session.id = ? AND session.token_hash = ?
+          AND session.csrf_token_hash = ?
+          AND session.expires_at = ? AND session.idle_expires_at = ?
+          AND session.last_seen_at IS NULL AND session.revoked_at IS NULL
+          AND session.created_at = ? AND challenge.token_hash = ?
+          AND challenge.purpose = 'guest_order_access'
+          AND challenge.order_id IS NOT NULL
+          AND challenge.dispatched_at IS NOT NULL
+          AND challenge.consumed_at IS NOT NULL
+          AND challenge.revoked_at IS NULL
+        LIMIT 1`,
+      ).bind(
+        input.sessionId, session.tokenHash, csrf.tokenHash,
+        expiresAt, idleExpiresAt, input.now, challengeHash,
+      ).first<{ ready: number }>();
+    if (persisted?.ready !== 1) return null;
 
     return Object.freeze({
       token: session.token,
@@ -631,12 +676,38 @@ export class D1IdentityAccessStore {
       );
 
     try {
-      const results = await this.database.batch([revoke, create]);
-      if (changed(results[0]) !== 1 || changed(results[1]) !== 1) return null;
+      await this.database.batch([revoke, create]);
     } catch (error) {
       if (isExpectedContention(error)) return null;
       throw error;
     }
+
+    const persisted = await this.database.prepare(
+      `SELECT 1 AS ready
+      FROM customer_sessions AS replacement
+      INNER JOIN customer_sessions AS previous
+        ON previous.id = replacement.rotated_from_session_id
+      WHERE replacement.id = ? AND replacement.token_hash = ?
+        AND replacement.csrf_token_hash = ?
+        AND replacement.authentication_source = 'rotation'
+        AND replacement.expires_at = ? AND replacement.idle_expires_at = ?
+        AND replacement.last_seen_at IS NULL AND replacement.revoked_at IS NULL
+        AND replacement.created_at = ?
+        AND previous.token_hash = ? AND previous.revoked_at = ?
+        AND replacement.customer_id = previous.customer_id
+        AND replacement.session_family_id = previous.session_family_id
+      LIMIT 1`,
+    ).bind(
+      input.newSessionId,
+      replacement.tokenHash,
+      csrf.tokenHash,
+      current.expires_at,
+      idleExpiresAt,
+      input.now,
+      oldHash,
+      input.now,
+    ).first<{ ready: number }>();
+    if (persisted?.ready !== 1) return null;
 
     return Object.freeze({
       token: replacement.token,
@@ -731,7 +802,37 @@ export class D1IdentityAccessStore {
         if (isExpectedContention(error)) return null;
         throw error;
       });
-    if (result === null || changed(result) !== 1) return null;
+    if (result === null) return null;
+    // Cloudflare D1 may include AFTER-trigger writes in `meta.changes`. The
+    // admin-session audit trigger can therefore report 2 even though exactly
+    // one session was created. Trust the persisted security invariants rather
+    // than driver bookkeeping, while still failing closed on any mismatch.
+    const persisted = await this.database
+      .prepare(
+        `SELECT 1 AS ready FROM admin_sessions
+        WHERE id = ? AND administrator_id = ?
+          AND token_hash = ? AND csrf_token_hash = ? AND evidence_hash = ?
+          AND authz_version = ? AND aal = ?
+          AND external_authenticated_at = ? AND expires_at = ?
+          AND idle_expires_at = ? AND last_seen_at IS NULL
+          AND revoked_at IS NULL AND created_at = ?
+        LIMIT 1`,
+      )
+      .bind(
+        input.sessionId,
+        administrator.id,
+        session.tokenHash,
+        csrf.tokenHash,
+        evidence.evidenceHash,
+        administrator.authz_version,
+        evidence.aal,
+        evidence.authenticatedAt,
+        expiresAt,
+        idleExpiresAt,
+        input.now,
+      )
+      .first<{ ready: number }>();
+    if (persisted?.ready !== 1) return null;
 
     return Object.freeze({
       token: session.token,
@@ -882,7 +983,10 @@ export class D1IdentityAccessStore {
       .prepare(updateSql)
       .bind(now, tokenHash)
       .run();
-    return changed(result) === 1;
+    // D1 can include the audit-trigger insert in `meta.changes`. A positive
+    // count is sufficient here because token_hash is unique and the guarded
+    // UPDATE can affect at most one session.
+    return changed(result) > 0;
   }
 
   async logoutAllCustomerSessions(

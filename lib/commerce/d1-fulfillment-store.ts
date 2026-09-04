@@ -1080,7 +1080,9 @@ export class D1FulfillmentStore {
       const customsAuditIndex = labelAuditIndex + 1;
       if (
         changed(results[2]) !== (transitionOrderToPreparing ? 1 : 0) ||
-        (operatorLabelRecipientEmail && changed(results[3]) !== 1) ||
+        // D1 can include the AFTER-audit trigger in meta.changes. The unique
+        // shipment outbox row is asserted by the completed shipment below.
+        (operatorLabelRecipientEmail && changed(results[3]) < 1) ||
         changed(results[labelAuditIndex]) !== 1 ||
         changed(results[1]) !== (international ? 1 : 0) ||
         changed(results[customsAuditIndex]) !== (international ? 1 : 0)
@@ -1384,7 +1386,13 @@ export class D1FulfillmentStore {
             input.now,
           ),
       ]);
-      if (results.some((result) => changed(result) !== 1)) {
+      if (
+        changed(results[0]) !== 1 ||
+        changed(results[1]) !== 1 ||
+        changed(results[2]) !== 1 ||
+        changed(results[3]) < 1 ||
+        changed(results[4]) !== 1
+      ) {
         throw new FulfillmentError(
           "PERSISTENCE_FAILURE",
           "The handover evidence was not written atomically.",
@@ -1622,7 +1630,7 @@ export class D1FulfillmentStore {
           "The tracking event conflicts with persisted evidence.",
         );
       }
-      return Object.freeze({ created: changed(results[1]) === 1 });
+      return Object.freeze({ created: changed(results[1]) > 0 });
     } catch (error) {
       mapDatabaseError(error);
     }
@@ -1781,7 +1789,13 @@ export class D1FulfillmentStore {
           input.event.receivedAt,
         ),
       ]);
-      if (results.some((result) => changed(result) !== 1)) {
+      if (
+        changed(results[0]) !== 1 ||
+        changed(results[1]) !== 1 ||
+        changed(results[2]) !== 1 ||
+        changed(results[3]) < 1 ||
+        changed(results[4]) !== 1
+      ) {
         throw new FulfillmentError(
           "PERSISTENCE_FAILURE",
           "The carrier-proven handover was not written atomically.",
@@ -2741,7 +2755,7 @@ export class D1FulfillmentStore {
         ![0, 1].includes(changed(results[1])) ||
         changed(results[2]) !== 1 ||
         changed(results[3]) !== 1 ||
-        changed(results[4]) !== 1 ||
+        changed(results[4]) < 1 ||
         changed(results[5]) !== 1
       ) {
         throw new FulfillmentError(

@@ -256,7 +256,7 @@ export class D1OperatorLabelEmailDispatcher {
     ).bind(
       leaseTokenHash, now, leaseExpiresAt, now, candidate.id, now,
     ).run();
-    if (changed(claimed) !== 1) return "retryScheduled";
+    if (changed(claimed) < 1) return "retryScheduled";
     const row = await this.#database.prepare(
       `SELECT message.id,message.shipment_id,message.order_id,
         message.recipient_email,message.attempts,message.max_attempts,
@@ -367,7 +367,7 @@ export class D1OperatorLabelEmailDispatcher {
         receipt.providerMessageId, attachmentSha256, totalByteLength, attachments.length,
         now, now, now, row.id, leaseTokenHash,
       ).run();
-      if (changed(completed) !== 1) {
+      if (changed(completed) < 1) {
         throw new TypeError("Operator label email lease was lost after delivery.");
       }
       return "sent";
@@ -400,7 +400,7 @@ export class D1OperatorLabelEmailDispatcher {
       id,
       leaseTokenHash,
     ).run();
-    if (changed(result) !== 1) throw new TypeError("Operator label email lease was lost.");
+    if (changed(result) < 1) throw new TypeError("Operator label email lease was lost.");
     return terminal ? "failed" : "retryScheduled";
   }
 }

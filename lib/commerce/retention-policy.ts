@@ -78,7 +78,7 @@ export class D1RetentionPolicyStore {
         input.now,
       );
     const results = await this.database.batch([disable, insert]);
-    if (Number(results[1].meta?.changes ?? 0) !== 1) {
+    if (Number(results[1].meta?.changes ?? 0) < 1) {
       throw new RetentionPolicyError("PERSISTENCE_FAILURE", "Retention rule was not activated.");
     }
   }

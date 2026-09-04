@@ -37,12 +37,15 @@ const liveIso = (offsetMilliseconds = 0) =>
   new Date(liveClockBase + offsetMilliseconds).toISOString();
 
 class SQLiteD1Statement {
-  constructor(database, query, values = []) {
+  constructor(database, query, values = [], options = {}) {
     this.database = database;
     this.query = query;
     this.values = values;
+    this.options = options;
   }
-  bind(...values) { return new SQLiteD1Statement(this.database, this.query, values); }
+  bind(...values) {
+    return new SQLiteD1Statement(this.database, this.query, values, this.options);
+  }
   async first() { return this.database.prepare(this.query).get(...this.values) ?? null; }
   async all() {
     return {
@@ -57,10 +60,20 @@ class SQLiteD1Statement {
       success: true,
       results: [],
       meta: {
-        changes: Number(result.changes),
+        changes: Number(result.changes) + this.#triggerChanges(),
         last_row_id: Number(result.lastInsertRowid),
       },
     };
+  }
+  #triggerChanges() {
+    if (!this.options.inflateAuditChanges || Number(this.database.prepare(
+      "SELECT changes() AS changes",
+    ).get().changes) < 1) return 0;
+    if (/INSERT\s+INTO\s+email_outbox/i.test(this.query)) return 1;
+    if (/INSERT\s+(?:OR\s+IGNORE\s+)?INTO\s+shipment_tracking_events[\s\S]*carrier_receipt_id/i.test(this.query)) {
+      return 1;
+    }
+    return 0;
   }
   async executeForBatch() {
     return /^\s*(?:SELECT|PRAGMA|WITH\b)/i.test(this.query)
@@ -71,8 +84,11 @@ class SQLiteD1Statement {
 
 class SQLiteD1Database {
   #tail = Promise.resolve();
-  constructor(database) { this.database = database; }
-  prepare(query) { return new SQLiteD1Statement(this.database, query); }
+  constructor(database, options = {}) {
+    this.database = database;
+    this.options = options;
+  }
+  prepare(query) { return new SQLiteD1Statement(this.database, query, [], this.options); }
   batch(statements) {
     const execute = () => this.#runBatch(statements);
     const result = this.#tail.then(execute, execute);
@@ -154,11 +170,11 @@ function parcelProfileForCart(context, cartId) {
   return profile;
 }
 
-function fixture(ports = {}) {
+function fixture(ports = {}, options = {}) {
   const database = new DatabaseSync(":memory:");
   database.exec("PRAGMA foreign_keys = ON");
   applyMigrations(database);
-  const d1 = new SQLiteD1Database(database);
+  const d1 = new SQLiteD1Database(database, options);
   const background = [];
   const deliveries = [];
   let clock = "2026-08-11T12:00:00.000Z";
@@ -1435,7 +1451,7 @@ test("the first signed Sendcloud possession scan proves handover exactly once", 
         return verifiedTrackingPort.verifyEvent(candidate);
       },
     },
-  });
+  }, { inflateAuditChanges: true });
   activateConfiguration(context, "EU", "schandover");
   const order = await createPaidOrder(context, {
     suffix: "schandover",
@@ -1691,7 +1707,7 @@ test("full fulfillment flow is leased, append-only, mixed-unit safe and keeps pa
       },
     },
   };
-  const context = fixture(ports);
+  const context = fixture(ports, { inflateAuditChanges: true });
   activateConfiguration(context, "US", "flow");
   const order = await createPaidOrder(context, {
     suffix: "flow",

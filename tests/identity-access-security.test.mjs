@@ -34,14 +34,20 @@ const migrationPaths = readdirSync(drizzleDirectory)
   .map((name) => `${drizzleDirectory}${name}`);
 
 class SQLiteD1Statement {
-  constructor(database, query, values = []) {
+  constructor(database, query, values = [], inflateAuditChanges = false) {
     this.database = database;
     this.query = query;
     this.values = values;
+    this.inflateAuditChanges = inflateAuditChanges;
   }
 
   bind(...values) {
-    return new SQLiteD1Statement(this.database, this.query, values);
+    return new SQLiteD1Statement(
+      this.database,
+      this.query,
+      values,
+      this.inflateAuditChanges,
+    );
   }
 
   async first() {
@@ -62,7 +68,12 @@ class SQLiteD1Statement {
       success: true,
       results: [],
       meta: {
-        changes: Number(result.changes),
+        changes: Number(result.changes) + (
+          this.inflateAuditChanges && Number(result.changes) > 0 &&
+          /(?:INSERT INTO (?:customer_sessions|guest_order_sessions|admin_sessions)|UPDATE (?:customer_sessions|guest_order_sessions|admin_sessions) SET revoked_at)/i.test(this.query)
+            ? 1
+            : 0
+        ),
         last_row_id: Number(result.lastInsertRowid),
       },
     };
@@ -72,12 +83,18 @@ class SQLiteD1Statement {
 class SQLiteD1Database {
   #tail = Promise.resolve();
 
-  constructor(database) {
+  constructor(database, inflateAuditChanges = false) {
     this.database = database;
+    this.inflateAuditChanges = inflateAuditChanges;
   }
 
   prepare(query) {
-    return new SQLiteD1Statement(this.database, query);
+    return new SQLiteD1Statement(
+      this.database,
+      query,
+      [],
+      this.inflateAuditChanges,
+    );
   }
 
   batch(statements) {
@@ -234,7 +251,10 @@ function createFixture(options = {}) {
     rateLimitInputs,
     setUtcClockFailure(value) { utcClockFailure = value; },
     setUtcNow(value) { utcNow = value; },
-    store: new D1IdentityAccessStore(new SQLiteD1Database(database), ports),
+    store: new D1IdentityAccessStore(
+      new SQLiteD1Database(database, options.inflateAuditChanges ?? false),
+      ports,
+    ),
   };
 }
 
@@ -837,6 +857,42 @@ test("customer challenge consumption and rotation each have exactly one concurre
       .get().count,
     3,
   );
+  database.close();
+});
+
+test("customer challenge consumption and rotation trust persisted state with D1 audit counts", async () => {
+  const { database, deliveries, flushBackground, store } = createFixture({
+    inflateAuditChanges: true,
+  });
+  const createdAt = "2026-08-11T12:00:00.000Z";
+  insertCustomer(database, "customer_trigger_counts", "trigger@example.com", createdAt);
+  await store.requestCustomerSignIn({
+    email: "trigger@example.com",
+    challengeId: "challenge_trigger_counts",
+    now: createdAt,
+  });
+  await flushBackground();
+  const session = await store.consumeCustomerChallenge({
+    rawChallengeToken: deliveries[0].rawToken,
+    sessionId: "session_trigger_counts",
+    now: "2026-08-11T12:01:00.000Z",
+  });
+  assert.ok(session);
+  const rotated = await store.rotateCustomerSession({
+    rawSessionToken: session.token,
+    newSessionId: "session_trigger_counts_rotated",
+    now: "2026-08-11T12:02:00.000Z",
+  });
+  assert.ok(rotated);
+  assert.equal(database.prepare(`SELECT COUNT(*) AS count FROM customer_sessions
+    WHERE revoked_at IS NULL`).get().count, 1);
+  assert.equal(await store.logout(
+    "customer",
+    rotated.token,
+    "2026-08-11T12:03:00.000Z",
+  ), true);
+  assert.equal(database.prepare(`SELECT COUNT(*) AS count FROM customer_sessions
+    WHERE revoked_at IS NULL`).get().count, 0);
   database.close();
 });
 
