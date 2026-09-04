@@ -774,11 +774,12 @@ const productCases = [
   [
     "/products/rose-pale",
     "Rose Velours",
-    4,
+    5,
     [
       "/images/client/raw/product-rose-profile.webp",
       "/images/client/raw/product-rose-profile-placeholder-v1.webp?v=v1",
       "/images/client/raw/product-card-rose-placeholder-v1.webp?v=v1",
+      "/images/client/editorial-rose-profile-placeholder-v1.webp?v=v1",
       "/images/client/raw/product-rose-front-placeholder-v1.webp?v=v1",
       "/images/client/raw/product-rose-detail-placeholder-v1.webp?v=v1",
       "/images/client/raw/product-card-pourpre.webp",

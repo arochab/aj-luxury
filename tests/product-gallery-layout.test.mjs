@@ -38,37 +38,31 @@ const shopStyles = await readFile(
   "utf8",
 );
 
-test("paired portrait media share one 2:3 frame", () => {
-  assert.match(css, /\.galleryPortrait\s*\{[^}]*aspect-ratio:\s*2\s*\/\s*3/s);
+test("all five media form one coherent 2:3 snap carousel", () => {
+  assert.match(css, /\.gallerySecondary\s*\{[^}]*display:\s*contents;/s);
+  assert.match(css, /\.gallery\s*\{[^}]*overflow-x:\s*auto;[^}]*scroll-snap-type:\s*x mandatory;/s);
+  assert.match(
+    css,
+    /\.galleryItem,[\s\S]*?\.galleryMain,[\s\S]*?\.galleryPortrait\s*\{[^}]*flex:\s*0 0 min\(88%, 52rem\);[^}]*aspect-ratio:\s*2\s*\/\s*3;[^}]*scroll-snap-align:\s*start;/s,
+  );
   assert.doesNotMatch(css, /galleryPortraitWide/);
 });
 
-test("landscape details retain a 3:2 frame on mobile", () => {
+test("landscape details remain fully visible inside the portrait carousel", () => {
   assert.match(
     css,
-    /\.galleryItem\.galleryLandscape\s*\{[^}]*aspect-ratio:\s*3\s*\/\s*2/s,
+    /\.galleryLandscape \.zoomTrigger img\s*\{[^}]*object-fit:\s*contain;/s,
   );
 });
 
-test("secondary media reflows from paired tablet rows to one mobile column", () => {
-  assert.match(
-    css,
-    /\.gallerySecondary\s*\{[^}]*grid-template-columns:\s*repeat\(2,/s,
-  );
-  assert.match(
-    css,
-    /@media \(max-width:\s*560px\)[\s\S]*?\.gallerySecondary\s*\{[^}]*grid-template-columns:\s*1fr/s,
-  );
-});
-
-/* Le live validé emploie un cadre carré sur desktop et 4:5 sur mobile. Le
-   point de fuite reste ancré à 30 % depuis le haut : les captures de recette
-   contrôlent en plus que le visage et le boxer restent tous deux visibles. */
+/* Le live validé emploie un cadre carré sur desktop. Sur mobile, les cinq
+   vues forment un seul rail 2:3 cohérent et glissable. Le point de fuite reste
+   ancré à 30 % depuis le haut sur la vue principale. */
 test("the lead media keeps the live frame at every breakpoint", () => {
   assert.match(css, /\.galleryMain\s*\{[^}]*aspect-ratio:\s*1\s*;/s);
   assert.match(
     css,
-    /@media \(max-width:\s*900px\)[\s\S]*?\.galleryMain\s*\{[^}]*aspect-ratio:\s*4\s*\/\s*5/s,
+    /@media \(max-width:\s*900px\)[\s\S]*?\.galleryItem,[\s\S]*?\.galleryMain,[\s\S]*?\.galleryPortrait\s*\{[^}]*aspect-ratio:\s*2\s*\/\s*3/s,
   );
   assert.match(
     css,

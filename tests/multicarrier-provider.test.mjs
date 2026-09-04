@@ -454,10 +454,128 @@ test("Sendcloud quote request matches the documented V3 request contract", async
     total_weight: { value: "250", unit: "g" },
     total_price: { value: "59.98" },
     from_address: { country_code: "FR" },
-    to_address: { country_code: "DE", postal_code: "10115" },
+    to_address: { country_code: "DE", postal_code: "10115", city: "Berlin" },
     parcel_dimensions: { length: "40", width: "32", height: "4", unit: "cm" },
   });
   assert.equal(call.init.headers["Idempotency-Key"], undefined);
+});
+
+test("Sendcloud uses the attested sender for precise Belgium and United States quotes", async (t) => {
+  const cases = [
+    {
+      name: "Belgium",
+      destination: { countryCode: "BE", postalCode: "1000", city: "Bruxelles" },
+      dutiesTerms: "EU_INCLUDED",
+      price: "7.42",
+    },
+    {
+      name: "United States",
+      destination: { countryCode: "US", postalCode: "94105", city: "San Francisco" },
+      dutiesTerms: "DAP",
+      price: "18.42",
+    },
+  ];
+  for (const scenario of cases) {
+    await t.test(scenario.name, async () => {
+      const calls = [];
+      const ports = createSendcloudProviderPorts(
+        {
+          publicKey: "public_key",
+          secretKey: "x".repeat(32),
+          senderAddressId: "12345",
+          senderAddressAttestation: "3 A rue Principale|67130|Belmont|FR",
+        },
+        async (input, init) => {
+          const url = new URL(String(input));
+          calls.push({ url, init });
+          if (url.pathname === "/api/v3/checkout/delivery-options") {
+            return Response.json({
+              configuration_id: `configuration_${scenario.destination.countryCode.toLowerCase()}`,
+              delivery_options: [nullRateOffer({
+                id: `colissimo-${scenario.destination.countryCode.toLowerCase()}-home`,
+                carrierCode: "colissimo",
+                carrierName: "Colissimo",
+                shippingOptionCode: "colissimo:international/home_delivery,signature",
+                deliveryMethodType: "standard_delivery",
+              })],
+            });
+          }
+          if (url.pathname === "/api/v2/shipping-products") {
+            return Response.json([shippingProduct({ methodIds: [7601] })]);
+          }
+          if (url.pathname === "/api/v2/shipping-price") {
+            return Response.json([{
+              price: scenario.price,
+              currency: "EUR",
+              to_country: scenario.destination.countryCode,
+              breakdown: [],
+            }]);
+          }
+          return Response.json({}, { status: 404 });
+        },
+      );
+
+      const quotes = await ports.quotes.quote(quoteRequest({
+        requestId: `quote-${scenario.destination.countryCode.toLowerCase()}-precise-origin`,
+        dutiesTerms: scenario.dutiesTerms,
+        destination: scenario.destination,
+      }));
+      assert.equal(quotes.length, 1);
+      assert.equal(quotes[0].carrierCode, "colissimo");
+      assert.equal(quotes[0].deliveryMode, "home");
+      assert.equal(quotes[0].dutiesTerms, scenario.dutiesTerms);
+      assert.equal(quotes[0].amountCents, Number(scenario.price.replace(".", "")));
+
+      const checkoutCall = calls.find(({ url }) =>
+        url.pathname === "/api/v3/checkout/delivery-options");
+      assert.deepEqual(JSON.parse(checkoutCall.init.body).from_address, {
+        sender_address_id: 12345,
+      });
+      assert.deepEqual(JSON.parse(checkoutCall.init.body).to_address, {
+        country_code: scenario.destination.countryCode,
+        postal_code: scenario.destination.postalCode,
+        city: scenario.destination.city,
+      });
+      for (const { url } of calls.filter(({ url }) =>
+        url.pathname === "/api/v2/shipping-products" ||
+        url.pathname === "/api/v2/shipping-price")) {
+        assert.equal(url.searchParams.get("from_country"), "FR");
+        assert.equal(url.searchParams.get("from_postal_code"), "67130");
+        assert.equal(url.searchParams.get("to_country"), scenario.destination.countryCode);
+        assert.equal(url.searchParams.get("to_postal_code"), scenario.destination.postalCode);
+      }
+    });
+  }
+});
+
+test("Sendcloud rejects a partial or country-mismatched sender configuration before quoting", async (t) => {
+  await t.test("partial attestation", () => {
+    assert.throws(
+      () => createSendcloudProviderPorts({
+        publicKey: "public_key",
+        secretKey: "x".repeat(32),
+        senderAddressId: "12345",
+      }),
+      (error) => error instanceof DeliveryProviderError && error.code === "NOT_CONFIGURED",
+    );
+  });
+  await t.test("country mismatch", async () => {
+    let calls = 0;
+    const ports = createSendcloudProviderPorts({
+      publicKey: "public_key",
+      secretKey: "x".repeat(32),
+      senderAddressId: "12345",
+      senderAddressAttestation: "1 Main Street|10001|New York|US",
+    }, async () => {
+      calls += 1;
+      return Response.json({ configuration_id: "unused", delivery_options: [] });
+    });
+    await assert.rejects(
+      () => ports.quotes.quote(quoteRequest()),
+      (error) => error instanceof DeliveryProviderError && error.code === "REJECTED",
+    );
+    assert.equal(calls, 0);
+  });
 });
 
 test("Sendcloud resolves null EU V3 rates from exact V2 products and EUR prices", async () => {

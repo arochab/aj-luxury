@@ -1802,7 +1802,12 @@ export async function productionCommerceApiResponse(
     if (blockers.includes("delivery-schema-0013-not-installed")) return fail("DELIVERY_SCHEMA_NOT_READY", 503);
     const parsed = await body(request); if (!parsed || !exact(parsed, ["address"])) return fail("INVALID_BODY", 400);
     try {
-      const provider = dependencies.deliveryProvider ?? createSendcloudProviderPorts({ publicKey: env.SENDCLOUD_PUBLIC_KEY, secretKey: env.SENDCLOUD_SECRET_KEY });
+      const provider = dependencies.deliveryProvider ?? createSendcloudProviderPorts({
+        publicKey: env.SENDCLOUD_PUBLIC_KEY,
+        secretKey: env.SENDCLOUD_SECRET_KEY,
+        senderAddressId: env.SENDCLOUD_SENDER_ADDRESS_ID,
+        senderAddressAttestation: env.SENDCLOUD_SENDER_ADDRESS_ATTESTATION,
+      });
       const vault = deliveryVault(env); if (!vault) return fail("DELIVERY_REFERENCE_VAULT_UNAVAILABLE", 503);
       return json({ data: await new D1ProductionDeliveryActivationStore(env.DB, provider, vault, internationalShippingConfigured(env)).quoteOptions({ cartId: current.cartId, address: parsed.address as never, idempotencyKey: key(request)!, now: now() }) });
     } catch (cause) {
@@ -1825,7 +1830,12 @@ export async function productionCommerceApiResponse(
     if (blockers.includes("delivery-schema-0013-not-installed")) return fail("DELIVERY_SCHEMA_NOT_READY", 503);
     const parsed = await body(request); if (!parsed || !exact(parsed, ["address", "optionId"]) || typeof parsed.optionId !== "string") return fail("INVALID_BODY", 400);
     try {
-      const provider = dependencies.deliveryProvider ?? createSendcloudProviderPorts({ publicKey: env.SENDCLOUD_PUBLIC_KEY, secretKey: env.SENDCLOUD_SECRET_KEY });
+      const provider = dependencies.deliveryProvider ?? createSendcloudProviderPorts({
+        publicKey: env.SENDCLOUD_PUBLIC_KEY,
+        secretKey: env.SENDCLOUD_SECRET_KEY,
+        senderAddressId: env.SENDCLOUD_SENDER_ADDRESS_ID,
+        senderAddressAttestation: env.SENDCLOUD_SENDER_ADDRESS_ATTESTATION,
+      });
       const vault = deliveryVault(env); if (!vault) return fail("DELIVERY_REFERENCE_VAULT_UNAVAILABLE", 503);
       return json({ data: await new D1ProductionDeliveryActivationStore(env.DB, provider, vault, internationalShippingConfigured(env)).servicePoints({ cartId: current.cartId, optionId: parsed.optionId, address: parsed.address as never, idempotencyKey: key(request)!, now: now() }) });
     } catch (cause) { return map(cause); }
@@ -1835,7 +1845,12 @@ export async function productionCommerceApiResponse(
     const parsed = await body(request); const wanted = parsed && Object.hasOwn(parsed, "servicePointId") ? ["address", "optionId", "servicePointId"] : ["address", "optionId"];
     if (!parsed || !exact(parsed, wanted) || typeof parsed.optionId !== "string" || (Object.hasOwn(parsed, "servicePointId") && typeof parsed.servicePointId !== "string")) return fail("INVALID_BODY", 400);
     try {
-      const provider = dependencies.deliveryProvider ?? createSendcloudProviderPorts({ publicKey: env.SENDCLOUD_PUBLIC_KEY, secretKey: env.SENDCLOUD_SECRET_KEY });
+      const provider = dependencies.deliveryProvider ?? createSendcloudProviderPorts({
+        publicKey: env.SENDCLOUD_PUBLIC_KEY,
+        secretKey: env.SENDCLOUD_SECRET_KEY,
+        senderAddressId: env.SENDCLOUD_SENDER_ADDRESS_ID,
+        senderAddressAttestation: env.SENDCLOUD_SENDER_ADDRESS_ATTESTATION,
+      });
       const vault = deliveryVault(env); if (!vault) return fail("DELIVERY_REFERENCE_VAULT_UNAVAILABLE", 503);
       return json({ data: await new D1ProductionDeliveryActivationStore(env.DB, provider, vault, internationalShippingConfigured(env)).selectOption({ cartId: current.cartId, optionId: parsed.optionId, servicePointId: typeof parsed.servicePointId === "string" ? parsed.servicePointId : null, address: parsed.address as never, now: now() }) });
     } catch (cause) { return map(cause); }

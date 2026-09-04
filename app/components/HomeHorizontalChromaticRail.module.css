@@ -2,7 +2,7 @@
   position: relative;
   min-width: 0;
   overflow: clip;
-  border-top: 0;
+  border-top: clamp(8px, 0.7vw, 12px) solid #f3f2ef;
   background: var(--hero-rail-seam, #261019);
   color: #f7f5f2;
   isolation: isolate;
@@ -348,11 +348,11 @@
   .motionReady .stage {
     /* Le rail restait artificiellement haut sur les grands téléphones : les
        masters s'arrêtaient vers 75 % de l'écran et laissaient une tablette
-       sombre vide sous les images. 620 px conserve l'en-tête, le titre et les
+       sombre vide sous les images. 540 px conserve l'en-tête, le titre et les
        deux cadres 2:3 sans chevauchement, tout en rendant la suite du récit
        immédiatement perceptible. Les petits écrans gardent leur hauteur utile. */
-    height: min(100svh, 620px);
-    min-height: min(100svh, 560px);
+    height: min(100svh, 540px);
+    min-height: min(100svh, 500px);
   }
 
   .panelInner {
@@ -361,7 +361,7 @@
     /* Reserve the maximum two-line title block before the photographs. The
        former fixed 222px offset let “Pourpre Impérial” collide with the media
        pair on short/narrow phones. */
-    padding: clamp(278px, 38svh, 304px) 0 24px;
+    padding: clamp(196px, 27svh, 214px) 0 18px;
     transform: none;
   }
 
@@ -372,7 +372,7 @@
   .compactCopy {
     position: absolute;
     z-index: 3;
-    top: clamp(150px, 20svh, 178px);
+    top: clamp(76px, 11svh, 92px);
     right: 15px;
     left: 15px;
     display: grid;
@@ -416,13 +416,13 @@
   }
 
   .mediaPair {
-    /* The stage is capped at 620px on tall phones. Size the pair against that
+    /* The stage is capped at 540px on tall phones. Size the pair against that
        real cap (not the full viewport), otherwise 430px-wide phones crop the
        bottom of the photographs after the larger title clearance above. */
     width: min(
       100%,
       calc(
-        (min(100svh, 620px) - clamp(278px, 38svh, 304px) - 24px) * 4 / 3
+        (min(100svh, 540px) - clamp(196px, 27svh, 214px) - 18px) * 4 / 3
       )
     );
     gap: 6px;

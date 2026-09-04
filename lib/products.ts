@@ -185,6 +185,7 @@ export const products: Product[] = deepFreeze([
         objectPosition: "center 30%",
       },
       { src: "/images/client/raw/product-card-rose.webp", frame: "portrait" },
+      { src: "/images/client/editorial-rose-profile.webp", frame: "portrait" },
       {
         src: "/images/client/raw/product-rose-front.webp",
         frame: "portrait",

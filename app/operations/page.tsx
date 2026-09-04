@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import OperatorConsole from "./OperatorConsole";
+import { permanentRedirect } from "next/navigation";
 
 export const metadata: Metadata = {
   title: "Opérations | AJ Luxury",
@@ -7,5 +7,5 @@ export const metadata: Metadata = {
 };
 
 export default function OperationsPage() {
-  return <OperatorConsole />;
+  permanentRedirect("/admin");
 }

@@ -115,6 +115,8 @@ type ConsoleState =
   }>
   | Readonly<{ kind: "error"; message: string }>;
 
+type AdminView = "overview" | "orders" | "inventory" | "promotions";
+
 function readCookie(name: string): string | null {
   const values = document.cookie.split(";").flatMap((part) => {
     const separator = part.indexOf("=");
@@ -133,8 +135,11 @@ async function parseError(response: Response): Promise<string> {
 }
 
 function operatorMessage(code: string): string {
-  if (["INVALID_ADMIN_CREDENTIALS", "OWNER_SESSION_REQUIRED"].includes(code)) {
-    return "Adresse ou mot de passe incorrect, compte non confirmé, ou adresse non autorisée.";
+  if (code === "INVALID_ADMIN_CREDENTIALS") {
+    return "Connexion refusée. Vérifiez l’adresse e-mail administrateur et le mot de passe. Si nécessaire, utilisez « Mot de passe oublié » ci-dessous.";
+  }
+  if (code === "OWNER_SESSION_REQUIRED") {
+    return "Votre session administrateur a expiré. Reconnectez-vous pour continuer.";
   }
   if (code === "OPERATOR_CONSOLE_CLOSED") {
     return "La console est fermée tant que sa recette de sécurité n’est pas validée.";
@@ -143,29 +148,29 @@ function operatorMessage(code: string): string {
 }
 
 function deliveryLabel(order: Order): string {
-  if (order.status === "refunded") return "commande remboursée — ne pas expédier";
-  if (!order.shipment) return "aucune étiquette créée";
-  if (order.shipment.status === "label_pending") return "création d’étiquette en cours";
+  if (order.status === "refunded") return "Commande remboursée. Ne préparez pas le colis.";
+  if (!order.shipment) return "Aucune étiquette disponible.";
+  if (order.shipment.status === "label_pending") return "Création de l’étiquette en cours. Ne relancez pas.";
   if (order.shipment.status === "label_ready") {
     if (order.shipment.labelEmailStatus === "sent") {
       return order.shipment.zone === "EU"
-        ? "étiquette A4 prête · envoyée par e-mail"
-        : "étiquette + douane A4 prêtes · envoyées par e-mail";
+        ? "Étiquette prête à imprimer et envoyée par e-mail."
+        : "Étiquette et document douanier prêts à imprimer et envoyés par e-mail.";
     }
     if (order.shipment.labelEmailStatus === "failed") {
-      return "étiquette prête · e-mail à vérifier";
+      return "Étiquette prête. Vérifiez l’envoi de l’e-mail.";
     }
-    return "étiquette prête · e-mail en cours";
+    return "Étiquette prête. Envoi de l’e-mail en cours.";
   }
   if (["handed_over", "in_transit"].includes(order.shipment.status ?? "")) {
-    return "remise transporteur confirmée";
+    return order.shipment.status === "in_transit" ? "Colis en transit." : "Colis remis au transporteur.";
   }
-  if (order.shipment.status === "delivered") return "livrée";
+  if (order.shipment.status === "delivered") return "Colis livré.";
   if (order.shipment.status === "label_claimed") {
-    return "vérification transporteur requise — ne pas recréer";
+    return "Contrôle Sendcloud requis. Ne créez pas une nouvelle étiquette.";
   }
-  if (order.shipment.status === "failed") return "échec transporteur — intervention requise";
-  return "contrôle manuel requis";
+  if (order.shipment.status === "failed") return "Échec transporteur. Vérifiez Sendcloud avant toute nouvelle action.";
+  return "Vérification manuelle requise avant toute action.";
 }
 
 function labelReadyForFulfillment(order: Order): boolean {
@@ -189,7 +194,7 @@ function paymentLabel(order: Order): string {
 function emailLabel(order: Order): string {
   const confirmed = [order.emails.orderConfirmation, order.emails.paymentConfirmation]
     .filter((value) => value === "sent" || value === "confirmed").length;
-  return `${confirmed}/2 confirmés`;
+  return confirmed === 1 ? "1 e-mail sur 2 envoyé" : `${confirmed} e-mails sur 2 envoyés`;
 }
 
 function amount(order: Pick<Order, "currency" | "totalCents">): string {
@@ -201,6 +206,8 @@ function amount(order: Pick<Order, "currency" | "totalCents">): string {
 
 export default function OperatorConsole() {
   const [state, setState] = useState<ConsoleState>({ kind: "loading" });
+  const [activeView, setActiveView] = useState<AdminView>("overview");
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [loginBusy, setLoginBusy] = useState(false);
@@ -222,49 +229,57 @@ export default function OperatorConsole() {
 
   const load = useCallback(async () => {
     setState({ kind: "loading" });
-    const response = await fetch(`${ADMIN_API}/orders`, {
-      credentials: "same-origin",
-      cache: "no-store",
-    });
-    if (response.status === 403) {
-      setState({ kind: "unauthenticated", message: null });
-      return;
+    try {
+      const response = await fetch(`${ADMIN_API}/orders`, {
+        credentials: "same-origin",
+        cache: "no-store",
+      });
+      if (response.status === 403) {
+        setState({ kind: "unauthenticated", message: null });
+        return;
+      }
+      if (!response.ok) {
+        setState({ kind: "error", message: operatorMessage(await parseError(response)) });
+        return;
+      }
+      const promotionsResponse = await fetch(`${ADMIN_API}/promotions`, {
+        credentials: "same-origin",
+        cache: "no-store",
+      });
+      if (!promotionsResponse.ok) {
+        setState({ kind: "error", message: operatorMessage(await parseError(promotionsResponse)) });
+        return;
+      }
+      const inventoryResponse = await fetch(`${ADMIN_API}/inventory`, {
+        credentials: "same-origin",
+        cache: "no-store",
+      });
+      if (!inventoryResponse.ok) {
+        setState({ kind: "error", message: operatorMessage(await parseError(inventoryResponse)) });
+        return;
+      }
+      const payload = await response.json() as { data: readonly Order[] };
+      const promotionsPayload = await promotionsResponse.json() as { data: readonly Promotion[] };
+      const inventoryPayload = await inventoryResponse.json() as { data: Inventory };
+      const csrfToken = readCookie("__Host-aj_admin_csrf");
+      if (!csrfToken) {
+        setState({ kind: "error", message: "La session opérateur est incomplète. Aucune action n’est possible." });
+        return;
+      }
+      setState({
+        kind: "ready",
+        orders: payload.data,
+        promotions: promotionsPayload.data,
+        inventory: inventoryPayload.data,
+        csrfToken,
+      });
+      setLastUpdatedAt(new Intl.DateTimeFormat("fr-FR", { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(new Date()));
+    } catch {
+      setState({
+        kind: "error",
+        message: "Connexion interrompue. Vérifiez votre réseau puis réessayez. Aucune commande ni étiquette n’a été modifiée.",
+      });
     }
-    if (!response.ok) {
-      setState({ kind: "error", message: operatorMessage(await parseError(response)) });
-      return;
-    }
-    const promotionsResponse = await fetch(`${ADMIN_API}/promotions`, {
-      credentials: "same-origin",
-      cache: "no-store",
-    });
-    if (!promotionsResponse.ok) {
-      setState({ kind: "error", message: operatorMessage(await parseError(promotionsResponse)) });
-      return;
-    }
-    const inventoryResponse = await fetch(`${ADMIN_API}/inventory`, {
-      credentials: "same-origin",
-      cache: "no-store",
-    });
-    if (!inventoryResponse.ok) {
-      setState({ kind: "error", message: operatorMessage(await parseError(inventoryResponse)) });
-      return;
-    }
-    const payload = await response.json() as { data: readonly Order[] };
-    const promotionsPayload = await promotionsResponse.json() as { data: readonly Promotion[] };
-    const inventoryPayload = await inventoryResponse.json() as { data: Inventory };
-    const csrfToken = readCookie("__Host-aj_admin_csrf");
-    if (!csrfToken) {
-      setState({ kind: "error", message: "La session opérateur est incomplète. Aucune action n’est possible." });
-      return;
-    }
-    setState({
-      kind: "ready",
-      orders: payload.data,
-      promotions: promotionsPayload.data,
-      inventory: inventoryPayload.data,
-      csrfToken,
-    });
   }, []);
 
   async function login(event: FormEvent<HTMLFormElement>) {
@@ -314,7 +329,7 @@ export default function OperatorConsole() {
     if (documentKind === "label" &&
       (retrying ? !order.shipment?.retryAllowed : !labelReadyForFulfillment(order))) return;
     if (retrying && !window.confirm(
-      `Créer une seule étiquette pour ${order.orderNumber} avec ce téléphone destinataire ? Cette action peut facturer l’affranchissement sélectionné par le client.`,
+      `Vous allez créer l’unique étiquette de la commande ${order.orderNumber}. Cette action peut facturer l’affranchissement. Vérifiez le téléphone et Sendcloud avant de continuer.`,
     )) return;
     setBusyOrder(order.orderId);
     setActionError(null);
@@ -525,6 +540,27 @@ export default function OperatorConsole() {
   const promotions = state.kind === "ready" ? state.promotions : [];
   const inventory = state.kind === "ready" ? state.inventory : null;
   const actionableOrders = orders.filter((order) => ["paid", "preparing"].includes(order.status));
+  const labelsReady = actionableOrders.filter(labelReadyForFulfillment).length;
+  const customsReady = actionableOrders.filter(customsReadyForFulfillment).length;
+
+  function selectView(view: AdminView) {
+    setActiveView(view);
+    const url = new URL(window.location.href);
+    url.searchParams.set("view", view);
+    window.history.pushState({}, "", url);
+  }
+
+  useEffect(() => {
+    const syncViewWithUrl = () => {
+      const requested = new URLSearchParams(window.location.search).get("view");
+      if (requested === "overview" || requested === "orders" || requested === "inventory" || requested === "promotions") {
+        setActiveView(requested);
+      }
+    };
+    syncViewWithUrl();
+    window.addEventListener("popstate", syncViewWithUrl);
+    return () => window.removeEventListener("popstate", syncViewWithUrl);
+  }, []);
 
   return (
     <main className={styles.shell}>
@@ -587,29 +623,89 @@ export default function OperatorConsole() {
             </p>
           </section>
         ) : null}
-        {state.kind === "ready" ? <p className={styles.summary}>
-          {actionableOrders.length} commande(s) à préparer sur {orders.length} commande(s) suivie(s).<br />
-          Pour chaque commande, l’étiquette A4 est envoyée automatiquement à jeremy@ajluxurystore.com. Hors UE, le document douanier A4 est joint au même e-mail.<br />
-          Les mêmes documents restent téléchargeables ici, sans créer un deuxième colis. Vérifiez les articles, imprimez les documents requis, puis confirmez la remise physique au transporteur.
-        </p> : null}
+        {state.kind === "ready" ? (
+          <nav className={styles.adminTabs} aria-label="Sections de l’administration">
+            {([
+              ["overview", "Vue du jour"],
+              ["orders", "Commandes et expéditions"],
+              ["inventory", "Stock"],
+              ["promotions", "Codes promo"],
+            ] as const).map(([view, label]) => (
+              <a
+                key={view}
+                href={`/admin?view=${view}`}
+                aria-current={activeView === view ? "page" : undefined}
+                onClick={(event) => {
+                  event.preventDefault();
+                  selectView(view);
+                }}
+              >
+                {label}
+              </a>
+            ))}
+          </nav>
+        ) : null}
 
-        {state.kind === "ready" ? <aside className={styles.documentGuide} aria-labelledby="document-guide-title">
-          <h2 id="document-guide-title">Facturation et expédition&nbsp;: 2 usages distincts</h2>
+        {state.kind === "ready" && activeView === "overview" ? (
+          <section id="admin-overview-panel" className={styles.overview}>
+            <div className={styles.sectionHeading}>
+              <div>
+                <p>Commencez ici</p>
+                <h2>À faire aujourd’hui</h2>
+              </div>
+              <span>{orders.length} {orders.length === 1 ? "commande suivie" : "commandes suivies"}</span>
+            </div>
+            <div className={styles.overviewMetrics}>
+              <button type="button" onClick={() => selectView("orders")}>
+                <span>À préparer</span><strong>{actionableOrders.length}</strong>
+                <small>Commandes payées qui demandent une action.</small>
+              </button>
+              <button type="button" onClick={() => selectView("orders")}>
+                <span>Étiquettes prêtes</span><strong>{labelsReady}</strong>
+                <small>Documents transporteur disponibles en A4.</small>
+              </button>
+              <button type="button" onClick={() => selectView("orders")}>
+                <span>Hors UE</span><strong>{customsReady}</strong>
+                <small>Colis avec document douanier A4 à imprimer.</small>
+              </button>
+              <button type="button" onClick={() => selectView("inventory")}>
+                <span>Vendables</span><strong>{inventory?.totals.availableQuantity ?? 0}</strong>
+                <small>Pièces actuellement disponibles à la vente.</small>
+              </button>
+            </div>
+            <div className={styles.workflow}>
+              <h3>Le parcours d’une commande, dans l’ordre</h3>
+              <ol>
+                <li><strong>Ouvrez la commande.</strong><span>Vérifiez l’article, le coloris, la taille et l’adresse.</span></li>
+                <li><strong>Contrôlez les statuts.</strong><span>« Réglé » confirme le paiement. « 2 e-mails sur 2 envoyés » confirme les deux messages au client.</span></li>
+                <li><strong>Imprimez les bons documents.</strong><span>Étiquette transporteur pour tous les colis ; document douanier en plus uniquement hors UE.</span></li>
+                <li><strong>Remettez le colis au transporteur.</strong><span>Cliquez sur « Confirmer la remise » seulement après le dépôt physique.</span></li>
+              </ol>
+            </div>
+          </section>
+        ) : null}
+
+        {state.kind === "ready" ? (
+          <div className={styles.dataStatus} aria-live="polite">
+            <span>Données actualisées {lastUpdatedAt ? `à ${lastUpdatedAt}` : "à l’instant"}</span>
+            <button type="button" onClick={() => void load()}>Actualiser les données</button>
+          </div>
+        ) : null}
+
+        {state.kind === "ready" && activeView === "orders" ? <aside className={styles.documentGuide} aria-labelledby="document-guide-title">
+          <h2 id="document-guide-title">Quel document utiliser ?</h2>
           <dl>
             <div>
               <dt>Facture et avoirs A4</dt>
-              <dd>
-                Justificatifs comptables du client. La facture apparaît après paiement et,
-                en cas de remboursement, l’avoir correspondant est ajouté automatiquement.
-              </dd>
+              <dd>Document comptable destiné au client. Il ne se colle jamais sur le colis ; en cas de remboursement, l’avoir correspondant est ajouté automatiquement.</dd>
             </div>
             <div>
-              <dt>Documents d’expédition A4</dt>
-              <dd>
-                L’étiquette transporteur est envoyée automatiquement par e-mail à Jérémy pour chaque commande.
-                Pour une destination hors UE, le document douanier est joint au même e-mail. Les documents restent ici
-                comme solution de secours : les retélécharger ne recrée jamais d’expédition. Ce n’est pas une facture.
-              </dd>
+              <dt>Étiquette transporteur A4</dt>
+              <dd>Document à imprimer puis à fixer sur le colis. Ce n’est pas une facture. « Télécharger » récupère l’étiquette existante sans créer une seconde expédition.</dd>
+            </div>
+            <div>
+              <dt>Document douanier A4</dt>
+              <dd>Document supplémentaire pour une adresse hors Union européenne. Il apparaît uniquement quand il est requis.</dd>
             </div>
           </dl>
         </aside> : null}
@@ -623,7 +719,13 @@ export default function OperatorConsole() {
         ) : null}
         {actionError ? <p className={styles.actionError} role="alert">{actionError}</p> : null}
 
-        {state.kind === "ready" ? (
+        {state.kind === "ready" && activeView === "orders" ? (
+          <section id="admin-orders-panel">
+            <div className={styles.sectionHeading}>
+              <div><p>Traitement quotidien</p><h2>Commandes et expéditions</h2></div>
+              <span>{actionableOrders.length} à préparer</span>
+            </div>
+            <p className={styles.sectionIntro}>Préparez uniquement les commandes marquées « réglé ». Ouvrez le détail avant d’imprimer, puis confirmez la remise seulement après avoir physiquement confié le colis au transporteur.</p>
           <div className={styles.table} role="table" aria-label="Commandes payées et expéditions">
             <div className={styles.tableHeader} role="row">
               <span role="columnheader">Commande</span>
@@ -651,7 +753,7 @@ export default function OperatorConsole() {
                       >
                         {busyDetail === order.orderId
                           ? "Chargement…"
-                          : expandedOrder === order.orderId ? "Masquer le détail" : "Voir le détail"}
+                          : expandedOrder === order.orderId ? "Masquer la commande" : "Afficher la commande"}
                       </button>
                       {invoiceAvailable(order) ? (
                         <a
@@ -685,7 +787,7 @@ export default function OperatorConsole() {
                             "customs",
                           )}
                         >
-                          {busyOrder === order.orderId ? "Récupération…" : "Télécharger le document douanier A4"}
+                          {busyOrder === order.orderId ? "Récupération…" : "Télécharger le document douanier existant (PDF A4)"}
                         </button>
                       ) : null}
                       {order.shipment?.retryAllowed ? (
@@ -719,7 +821,7 @@ export default function OperatorConsole() {
                           >
                             {busyOrder === order.orderId
                               ? "Création contrôlée…"
-                              : "Créer puis télécharger l’étiquette A4"}
+                              : "Créer l’unique étiquette après correction du téléphone"}
                           </button>
                           <small>Une seule relance est autorisée. En cas de doute transporteur, ne pas recliquer.</small>
                         </span>
@@ -731,11 +833,11 @@ export default function OperatorConsole() {
                           disabled={busyOrder !== null || busyHandover !== null}
                           onClick={() => void handoverShipment(order, state.csrfToken)}
                         >
-                          {busyHandover === order.orderId ? "Confirmation…" : "Confirmer la remise"}
+                          {busyHandover === order.orderId ? "Confirmation…" : "Confirmer que le colis a été remis au transporteur"}
                         </button>
                       ) : null}
                       {["handed_over", "in_transit", "delivered"].includes(order.shipment?.status ?? "")
-                        ? <span className={styles.complete}>suivi actif</span> : null}
+                        ? <span className={styles.complete}>Colis remis au transporteur · suivi activé</span> : null}
                     </span>
                   </span>
                 </article>
@@ -778,23 +880,25 @@ export default function OperatorConsole() {
             ))}
             {orders.length === 0 ? <p className={styles.empty}>Aucune commande payée à suivre.</p> : null}
           </div>
+          </section>
         ) : null}
 
-        {state.kind === "ready" ? (
-          <section className={styles.inventory} aria-labelledby="inventory-title">
+        {state.kind === "ready" && activeView === "inventory" ? (
+          <section id="admin-inventory-panel" className={styles.inventory} aria-labelledby="inventory-title">
             <div className={styles.sectionHeading}>
               <div>
-                <p>Disponibilité réelle</p>
+                <p>Quantités par coloris et taille</p>
                 <h2 id="inventory-title">Stock</h2>
               </div>
-              <span>{inventory?.totals.availableQuantity ?? 0} vendable(s)</span>
+              <span>{inventory?.totals.availableQuantity ?? 0} {(inventory?.totals.availableQuantity ?? 0) === 1 ? "pièce vendable" : "pièces vendables"}</span>
             </div>
             <div className={styles.inventoryTotals}>
-              <div><span>Physique</span><strong>{inventory?.totals.physicalQuantity ?? 0}</strong></div>
-              <div><span>Cadeaux</span><strong>{inventory?.totals.giftReserveQuantity ?? 0}</strong></div>
-              <div><span>Réservé panier</span><strong>{inventory?.totals.activeReservedQuantity ?? 0}</strong></div>
-              <div><span>Vendu</span><strong>{inventory?.totals.soldQuantity ?? 0}</strong></div>
-              <div><span>Disponible</span><strong>{inventory?.totals.availableQuantity ?? 0}</strong></div>
+              <div><span>Stock total reçu</span><strong>{inventory?.totals.physicalQuantity ?? 0}</strong></div>
+              <div><span>Réservé cadeaux</span><strong>{inventory?.totals.giftReserveQuantity ?? 0}</strong></div>
+              <div><span>Réservé temporairement</span><strong>{inventory?.totals.activeReservedQuantity ?? 0}</strong></div>
+              <div><span>Réserve de sécurité</span><strong>{inventory?.totals.safetyReserveQuantity ?? 0}</strong></div>
+              <div><span>Déjà vendu</span><strong>{inventory?.totals.soldQuantity ?? 0}</strong></div>
+              <div><span>Vendable maintenant</span><strong>{inventory?.totals.availableQuantity ?? 0}</strong></div>
             </div>
             <div className={styles.inventoryTable} role="table" aria-label="Stock par coloris et taille">
               <div className={styles.inventoryHeader} role="row">
@@ -817,20 +921,22 @@ export default function OperatorConsole() {
               ))}
             </div>
             <p className={styles.stockNote}>
-              Le paiement confirmé décrémente automatiquement la variante achetée. Les quantités internes ne sont jamais publiées côté client.
+              « Réservé temporairement » correspond aux paniers en cours de paiement. Vendable maintenant = stock total reçu − cadeaux − réserve de sécurité − paniers en cours − déjà vendu. Après confirmation du paiement, la bonne variante passe automatiquement dans « Déjà vendu ». Aucun chiffre interne n’est publié dans la boutique.
             </p>
           </section>
         ) : null}
 
-        {state.kind === "ready" ? (
-          <section className={styles.promotions} aria-labelledby="promotions-title">
+        {state.kind === "ready" && activeView === "promotions" ? (
+          <section id="admin-promotions-panel" className={styles.promotions} aria-labelledby="promotions-title">
             <div className={styles.sectionHeading}>
               <div>
                 <p>Vente</p>
                 <h2 id="promotions-title">Codes promo</h2>
               </div>
-              <span>{promotions.filter((promotion) => promotion.active).length} actif(s)</span>
+              <span>{promotions.filter((promotion) => promotion.active).length} {promotions.filter((promotion) => promotion.active).length === 1 ? "code actif" : "codes actifs"}</span>
             </div>
+
+            <p className={styles.sectionIntro}>Créez un code, fixez ses limites, puis activez-le ou désactivez-le. Un code désactivé ne peut plus être appliqué à un nouveau panier.</p>
 
             <form className={styles.promotionForm} onSubmit={(event) => {
               event.preventDefault();
@@ -840,9 +946,9 @@ export default function OperatorConsole() {
               <label>Type<select autoComplete="off" name="promotionKind" value={promotionKind} onChange={(event) => setPromotionKind(event.currentTarget.value as "percentage" | "fixed")}><option value="percentage">Pourcentage</option><option value="fixed">Montant fixe</option></select></label>
               <label>{promotionKind === "percentage" ? "Remise (%)" : "Remise (€)"}<input required autoComplete="off" inputMode="decimal" name="promotionValue" type="number" min="0.01" max={promotionKind === "percentage" ? "100" : "10000"} step="0.01" value={promotionValue} onChange={(event) => setPromotionValue(event.currentTarget.value)} /></label>
               <label>Panier minimum (€)<input required autoComplete="off" inputMode="decimal" name="promotionMinimum" type="number" min="0" max="10000" step="0.01" value={promotionMinimum} onChange={(event) => setPromotionMinimum(event.currentTarget.value)} /></label>
-              <label>Plafond remise (€)<input autoComplete="off" inputMode="decimal" name="promotionMaximumDiscount" type="number" min="0.01" max="10000" step="0.01" placeholder="Facultatif…" value={promotionMaximumDiscount} onChange={(event) => setPromotionMaximumDiscount(event.currentTarget.value)} /></label>
-              <label>Nombre d’utilisations<input autoComplete="off" inputMode="numeric" name="promotionMaximumRedemptions" type="number" min="1" max="1000000" step="1" placeholder="Illimité…" value={promotionMaximumRedemptions} onChange={(event) => setPromotionMaximumRedemptions(event.currentTarget.value)} /></label>
-              <label>Fin du code<input autoComplete="off" name="promotionEndsAt" type="datetime-local" value={promotionEndsAt} onChange={(event) => setPromotionEndsAt(event.currentTarget.value)} /></label>
+              <label>Remise maximale par commande (€)<input autoComplete="off" inputMode="decimal" name="promotionMaximumDiscount" type="number" min="0.01" max="10000" step="0.01" placeholder="Facultatif…" value={promotionMaximumDiscount} onChange={(event) => setPromotionMaximumDiscount(event.currentTarget.value)} /></label>
+              <label>Limite totale d’utilisation<input autoComplete="off" inputMode="numeric" name="promotionMaximumRedemptions" type="number" min="1" max="1000000" step="1" placeholder="Illimitée…" value={promotionMaximumRedemptions} onChange={(event) => setPromotionMaximumRedemptions(event.currentTarget.value)} /></label>
+              <label>Date et heure de fin<input autoComplete="off" name="promotionEndsAt" type="datetime-local" value={promotionEndsAt} onChange={(event) => setPromotionEndsAt(event.currentTarget.value)} /></label>
               <button className={styles.download} type="submit" disabled={promotionBusy}>{promotionBusy ? "Enregistrement…" : "Créer le code"}</button>
             </form>
 
@@ -856,7 +962,7 @@ export default function OperatorConsole() {
                       : amount({ currency: "EUR", totalCents: promotion.fixedDiscountCents ?? 0 })}</span>
                   </div>
                   <p>
-                    {promotion.redeemedCount} utilisée(s) · {promotion.reservedCount} réservée(s)
+                    {promotion.redeemedCount === 0 ? "Jamais utilisé" : promotion.redeemedCount === 1 ? "Utilisé 1 fois" : `Utilisé ${promotion.redeemedCount} fois`} · {promotion.reservedCount === 0 ? "aucune utilisation en cours" : promotion.reservedCount === 1 ? "1 panier en cours de paiement" : `${promotion.reservedCount} paniers en cours de paiement`}
                     {promotion.maximumRedemptions ? ` · limite ${promotion.maximumRedemptions}` : " · sans limite"}
                   </p>
                   <button className={styles.secondary} type="button" disabled={promotionBusy} onClick={() => void setPromotionActive(promotion)}>
@@ -869,15 +975,17 @@ export default function OperatorConsole() {
           </section>
         ) : null}
 
-        <p className={styles.reminder}>
-          Une étiquette n’est jamais recréée depuis cet écran. Si le transporteur répond de façon ambiguë, la commande est bloquée pour vérification manuelle.
-        </p>
+        {state.kind === "ready" && activeView === "orders" ? <>
+          <p className={styles.reminder}>
+            Règle de sécurité : le bouton « Télécharger » récupère toujours le document existant. Si l’écran indique une création en cours ou une vérification transporteur, ne cliquez pas une seconde fois.
+          </p>
 
-        <dl className={styles.key}>
-          <div><dt>création en cours</dt><dd>attendre sans relancer</dd></div>
-          <div><dt>étiquette prête</dt><dd>impression A4 puis remise</dd></div>
-          <div><dt>remise confirmée</dt><dd>suivi transporteur actif</dd></div>
-        </dl>
+          <dl className={styles.key}>
+            <div><dt>Création en cours</dt><dd>Attendre. Ne pas relancer.</dd></div>
+            <div><dt>Étiquette prête</dt><dd>Imprimer en A4 et fixer sur le colis.</dd></div>
+            <div><dt>Remise confirmée</dt><dd>Le suivi transporteur est actif.</dd></div>
+          </dl>
+        </> : null}
       </section>
     </main>
   );

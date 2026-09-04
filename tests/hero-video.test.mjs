@@ -178,8 +178,8 @@ test("product blur-up placeholders preserve continuity at a negligible byte cost
   const gallerySources = new Set(
     products.flatMap((product) => product.gallery.map((image) => image.src)),
   );
-  /* Le DOM live porte 14 sources distinctes : Rose 4, Lilas 5, Pourpre 5. */
-  assert.equal(gallerySources.size, 14);
+  /* Le DOM live porte 15 sources distinctes : cinq vues par coloris. */
+  assert.equal(gallerySources.size, 15);
 
   for (const src of gallerySources) {
     const placeholder = `${src.replace(/\.[^.]+$/, "-placeholder-v1.webp")}?v=v1`;

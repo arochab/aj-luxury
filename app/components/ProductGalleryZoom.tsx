@@ -587,13 +587,19 @@ export default function ProductGalleryZoom({
 
   return (
     <>
-      <div
-        className={styles.gallery}
-        aria-label={`${t("product.gallery")} ${color}`}
-      >
-        {images[0] ? renderFigure(images[0], 0) : null}
-        <div className={styles.gallerySecondary}>
-          {images.slice(1).map((image, index) => renderFigure(image, index + 1))}
+      <div className={styles.galleryShell}>
+        <p className={styles.galleryHint} aria-hidden="true">
+          <span>{images.length} photos</span>
+          <span>Glissez pour tout voir →</span>
+        </p>
+        <div
+          className={styles.gallery}
+          aria-label={`${t("product.gallery")} ${color}`}
+        >
+          {images[0] ? renderFigure(images[0], 0) : null}
+          <div className={styles.gallerySecondary}>
+            {images.slice(1).map((image, index) => renderFigure(image, index + 1))}
+          </div>
         </div>
       </div>
 

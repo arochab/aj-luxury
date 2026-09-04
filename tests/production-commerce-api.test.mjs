@@ -56,6 +56,7 @@ const controlled = Object.freeze({
   SENDCLOUD_SECRET_KEY: "secret-redacted-secret",
   SENDCLOUD_INTEGRATION_ID: "612109",
   SENDCLOUD_SENDER_ADDRESS_ID: "884432",
+  SENDCLOUD_SENDER_ADDRESS_ATTESTATION: "3 A rue Principale|67130|Belmont|FR",
   EMAIL_PROVIDER: "resend",
   RESEND_API_KEY: "re_redacted",
   RESEND_WEBHOOK_SECRET: "whsec_resend_redacted",

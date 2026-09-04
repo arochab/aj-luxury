@@ -89,18 +89,55 @@ test("the retired private launch page permanently redirects to the public home",
 });
 
 test("the retired Cloudflare operations bookmark redirects to native admin login", () => {
-  const response = productionHttpsRedirectResponse(
-    new Request(
-      "https://ajluxurystore.com/operations?source=old-bookmark",
-    ),
-    production,
-  );
+  for (const pathname of ["/operations", "/operations/"]) {
+    const response = productionHttpsRedirectResponse(
+      new Request(
+        `https://ajluxurystore.com${pathname}?source=old-bookmark`,
+      ),
+      production,
+    );
 
-  assert.ok(response);
-  assert.equal(response.status, 308);
+    assert.ok(response);
+    assert.equal(response.status, 308);
+    assert.equal(
+      response.headers.get("Location"),
+      "https://ajluxurystore.com/admin?source=old-bookmark",
+    );
+  }
+});
+
+test("the application fallback cannot expose a second operations console", async () => {
+  const source = await readFile(
+    new URL("app/operations/page.tsx", projectRoot),
+    "utf8",
+  );
+  assert.match(source, /permanentRedirect\("\/admin"\)/);
+  assert.doesNotMatch(source, /OperatorConsole/);
+});
+
+test("operations lookalikes never redirect to admin", () => {
+  for (const pathname of [
+    "/operations-evil",
+    "/operations-extra",
+    "/operations/private",
+  ]) {
+    assert.equal(
+      productionHttpsRedirectResponse(
+        new Request(`https://ajluxurystore.com${pathname}`),
+        production,
+      ),
+      null,
+    );
+  }
+});
+
+test("the canonical admin route and its view state remain untouched", () => {
   assert.equal(
-    response.headers.get("Location"),
-    "https://ajluxurystore.com/admin?source=old-bookmark",
+    productionHttpsRedirectResponse(
+      new Request("https://ajluxurystore.com/admin?view=orders"),
+      production,
+    ),
+    null,
   );
 });
 

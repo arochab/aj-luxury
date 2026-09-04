@@ -44,6 +44,15 @@ const DELIVERY_METHOD_TYPES = Object.freeze([
 type SendcloudConfiguration = Readonly<{
   publicKey?: string;
   secretKey?: string;
+  senderAddressId?: string;
+  senderAddressAttestation?: string;
+}>;
+
+type SendcloudQuoteOrigin = Readonly<{
+  senderAddressId: number;
+  postalCode: string;
+  city: string;
+  countryCode: string;
 }>;
 
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
@@ -70,6 +79,34 @@ function record(value: unknown): value is Record<string, unknown> {
 function safeString(value: unknown, maximum = 160): value is string {
   return typeof value === "string" && value.length > 0 &&
     value.length <= maximum && !/[\u0000-\u001f\u007f]/.test(value);
+}
+
+function configuredQuoteOrigin(
+  configuration: SendcloudConfiguration,
+): SendcloudQuoteOrigin | null {
+  const senderAddressId = configuration.senderAddressId?.trim() ?? "";
+  const attestation = configuration.senderAddressAttestation ?? "";
+  if (!senderAddressId && !attestation) return null;
+  if (!/^[1-9]\d{0,17}$/.test(senderAddressId) ||
+    !Number.isSafeInteger(Number(senderAddressId))) {
+    throw new DeliveryProviderError("NOT_CONFIGURED", "Sendcloud sender address is not configured.");
+  }
+  const parts = attestation.split("|");
+  if (parts.length !== 4) {
+    throw new DeliveryProviderError("NOT_CONFIGURED", "Sendcloud sender address is not configured.");
+  }
+  const [line1, postalCode, city, countryCode] = parts;
+  if (!safeString(line1, 160) || !safeString(postalCode, 12) ||
+    !/^[A-Za-z0-9]+(?:[ -][A-Za-z0-9]+)*$/.test(postalCode) ||
+    !safeString(city, 120) || !/^[A-Z]{2}$/.test(countryCode)) {
+    throw new DeliveryProviderError("NOT_CONFIGURED", "Sendcloud sender address is not configured.");
+  }
+  return Object.freeze({
+    senderAddressId: Number(senderAddressId),
+    postalCode,
+    city,
+    countryCode,
+  });
 }
 
 function exactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
@@ -490,12 +527,16 @@ async function resolveV2FallbackPrice(
   auth: Readonly<{ publicKey: string; secretKey: string }>,
   request: DeliveryQuoteRequest,
   option: SendcloudUnpricedOption,
+  origin: SendcloudQuoteOrigin | null,
 ): Promise<SendcloudFallbackPrice | null> {
   if (!validFallbackRequest(request)) {
     return null;
   }
   const productsUrl = new URL(`${PANEL_ORIGIN}/api/v2/shipping-products`);
   productsUrl.searchParams.set("from_country", request.originCountryCode);
+  if (origin?.countryCode === request.originCountryCode) {
+    productsUrl.searchParams.set("from_postal_code", origin.postalCode);
+  }
   productsUrl.searchParams.set("to_country", request.destination.countryCode);
   productsUrl.searchParams.set("carrier", option.carrierCode);
   productsUrl.searchParams.set("weight", String(request.parcel.weightGrams));
@@ -573,6 +614,9 @@ async function resolveV2FallbackPrice(
     const priceUrl = new URL(`${PANEL_ORIGIN}/api/v2/shipping-price`);
     priceUrl.searchParams.set("shipping_method_id", String(methodId));
     priceUrl.searchParams.set("from_country", request.originCountryCode);
+    if (origin?.countryCode === request.originCountryCode) {
+      priceUrl.searchParams.set("from_postal_code", origin.postalCode);
+    }
     priceUrl.searchParams.set("to_country", request.destination.countryCode);
     priceUrl.searchParams.set("weight", String(request.parcel.weightGrams));
     priceUrl.searchParams.set("weight_unit", "gram");
@@ -938,9 +982,13 @@ export function createSendcloudProviderPorts(
   fetchImpl: FetchLike = fetch,
 ): DeliveryProviderPorts {
   const auth = credentials(configuration);
+  const quoteOrigin = configuredQuoteOrigin(configuration);
   return Object.freeze({
     quotes: Object.freeze({
       async quote(request: DeliveryQuoteRequest) {
+        if (quoteOrigin && quoteOrigin.countryCode !== request.originCountryCode) {
+          throw new DeliveryProviderError("REJECTED", "Sendcloud sender country does not match the quote.");
+        }
         const response = await providerJson(
           fetchImpl,
           auth,
@@ -953,10 +1001,13 @@ export function createSendcloudProviderPorts(
             body: JSON.stringify({
               total_weight: { value: String(request.parcel.weightGrams), unit: "g" },
               total_price: { value: (request.subtotalCents / 100).toFixed(2) },
-              from_address: { country_code: request.originCountryCode },
+              from_address: quoteOrigin?.countryCode === request.originCountryCode
+                ? { sender_address_id: quoteOrigin.senderAddressId }
+                : { country_code: request.originCountryCode },
               to_address: {
                 country_code: request.destination.countryCode,
                 postal_code: request.destination.postalCode,
+                city: request.destination.city,
               },
               parcel_dimensions: {
                 length: String(request.parcel.lengthMm / 10),
@@ -1006,7 +1057,7 @@ export function createSendcloudProviderPorts(
             )
             ? {
               resolveFallbackPrice: (option: SendcloudUnpricedOption) =>
-                resolveV2FallbackPrice(fetchImpl, auth, request, option),
+                resolveV2FallbackPrice(fetchImpl, auth, request, option, quoteOrigin),
             }
             : {}),
         });

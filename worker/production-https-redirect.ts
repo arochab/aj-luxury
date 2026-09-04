@@ -7,6 +7,7 @@ const PERMANENT_REDIRECT_CACHE = "public, max-age=31536000";
 const RETIRED_PUBLIC_PATHS = new Map([
   ["/preouverture", "/"],
   ["/operations", "/admin"],
+  ["/operations/", "/admin"],
 ]);
 
 /**
