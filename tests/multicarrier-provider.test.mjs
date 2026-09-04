@@ -838,6 +838,63 @@ test("Sendcloud resolves an empty non-EU checkout configuration through exact V3
   assert.match(quotes[0].responseFingerprint, /^[0-9a-f]{64}$/);
 });
 
+test("Sendcloud adds an account-enabled home choice beside a published EU relay choice", async () => {
+  const ports = createSendcloudProviderPorts(
+    {
+      publicKey: "public_key",
+      secretKey: "x".repeat(32),
+      senderAddressId: "12345",
+      senderAddressAttestation: "3 A rue Principale|67130|Belmont|FR",
+    },
+    async (input) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/api/v3/checkout/delivery-options") {
+        return Response.json({
+          configuration_id: "configuration_fr_relay",
+          delivery_options: [offer({
+            id: "mondial-relay-fr",
+            carrier: {
+              code: "mondial_relay",
+              name: "Mondial Relay",
+              logo_url: "https://example.test/mondial-relay.svg",
+            },
+            checkout_identifier: {
+              type: "shipping_option_code",
+              value: "mondial_relay:locker_delivery,dualapi",
+            },
+            delivery_method_type: "service_point_delivery",
+            cut_off_time: null,
+            shipping_rate: { value: "3.44", currency: "EUR" },
+          })],
+        });
+      }
+      if (url.pathname === "/api/v3/shipping-options") {
+        return Response.json({
+          data: [standaloneShippingOption({
+            code: "colissimo:home/fr",
+            price: "6.61",
+            leadTime: 48,
+          })],
+          message: null,
+        });
+      }
+      return Response.json({}, { status: 404 });
+    },
+  );
+  const quotes = await ports.quotes.quote(quoteRequest({
+    requestId: "quote-fr-home-and-relay",
+    destination: { countryCode: "FR", postalCode: "75001", city: "Paris" },
+  }));
+  assert.deepEqual(quotes.map((quote) => ({
+    amountCents: quote.amountCents,
+    carrierCode: quote.carrierCode,
+    deliveryMode: quote.deliveryMode,
+  })), [
+    { amountCents: 344, carrierCode: "mondial_relay", deliveryMode: "service_point" },
+    { amountCents: 661, carrierCode: "colissimo", deliveryMode: "home" },
+  ]);
+});
+
 test("Sendcloud standalone fallback stays closed on duplicate or unpriced shipping codes", async () => {
   const option = standaloneShippingOption();
   const ports = createSendcloudProviderPorts(

@@ -84,9 +84,7 @@
   justify-self: center;
   margin: 0;
   overflow: hidden;
-  border: 1px solid var(--story-line-strong);
-  background: #3a3344;
-  box-shadow: 0 2rem 6rem rgba(0, 0, 0, 0.34);
+  background: transparent;
 }
 
 .heroForeground {
@@ -181,8 +179,7 @@
   aspect-ratio: 2 / 3;
   margin: 0;
   overflow: hidden;
-  border: 1px solid var(--story-line-strong);
-  background: #40374a;
+  background: transparent;
 }
 
 .portrait img {
@@ -262,8 +259,7 @@
   min-height: clamp(31rem, 52vw, 50rem);
   margin: 0;
   overflow: hidden;
-  border-left: 1px solid var(--story-line-strong);
-  background: #443a4f;
+  background: transparent;
 }
 
 .definitionVisual img {
@@ -382,8 +378,6 @@
 
   .definitionVisual {
     min-height: min(120vw, 34rem);
-    border-top: 1px solid var(--story-line-strong);
-    border-left: 0;
   }
 }
 

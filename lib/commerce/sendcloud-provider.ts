@@ -750,14 +750,16 @@ async function parseSendcloudStandaloneHomeOptions(
   return Object.freeze(candidates.filter(({ serviceCode }) => !ambiguousCodes.has(serviceCode)));
 }
 
-async function resolveStandaloneNonEuHomeOptions(
+async function resolveStandaloneHomeOptions(
   fetchImpl: FetchLike,
   auth: Readonly<{ publicKey: string; secretKey: string }>,
   request: DeliveryQuoteRequest,
   origin: SendcloudQuoteOrigin | null,
 ): Promise<readonly DeliveryQuoteOffer[]> {
-  if (!origin || request.originCountryCode !== "FR" || request.dutiesTerms !== "DAP" ||
-    !validStandaloneRequest(request)) return Object.freeze([]);
+  if (!origin || request.originCountryCode !== "FR" ||
+    !LAUNCH_COUNTRY_CODES.includes(
+      request.destination.countryCode as typeof LAUNCH_COUNTRY_CODES[number],
+    ) || !validStandaloneRequest(request)) return Object.freeze([]);
   const response = await providerJson(
     fetchImpl,
     auth,
@@ -1208,14 +1210,47 @@ export function createSendcloudProviderPorts(
             }
             : {}),
         });
-        const dynamicEnvelopeIsEmpty = record(response) &&
-          Array.isArray(response.delivery_options) && response.delivery_options.length === 0;
-        if (!dynamicEnvelopeIsEmpty || request.dutiesTerms !== "DAP") return dynamicOptions;
-        // Dynamic Checkout only returns methods published in that checkout
-        // configuration. For an otherwise supported non-EU route with no
-        // published method, ask Sendcloud's current Shipping Options API for
-        // exact account-enabled home services and provider-calculated quotes.
-        return resolveStandaloneNonEuHomeOptions(fetchImpl, auth, request, quoteOrigin);
+        let homeOptions: readonly DeliveryQuoteOffer[];
+        try {
+          // Dynamic Checkout only exposes methods published in that checkout
+          // configuration. Augment them with exact, account-enabled home services
+          // so a published relay method never hides an available home-delivery choice.
+          homeOptions = await resolveStandaloneHomeOptions(
+            fetchImpl,
+            auth,
+            request,
+            quoteOrigin,
+          );
+        } catch (error) {
+          // A secondary catalogue outage must not erase a valid Dynamic Checkout
+          // quote. When Dynamic Checkout itself is empty, keep failing closed.
+          if (dynamicOptions.length > 0) {
+            console.warn(JSON.stringify({
+              event: "sendcloud_home_option_augmentation_unavailable",
+              destinationCountryCode: request.destination.countryCode,
+            }));
+            return dynamicOptions;
+          }
+          throw error;
+        }
+        const seen = new Set(dynamicOptions.map((option) => JSON.stringify([
+          option.carrierCode,
+          option.serviceCode,
+          option.deliveryMode,
+        ])));
+        return Object.freeze([
+          ...dynamicOptions,
+          ...homeOptions.filter((option) => {
+            const key = JSON.stringify([
+              option.carrierCode,
+              option.serviceCode,
+              option.deliveryMode,
+            ]);
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          }),
+        ]);
       },
     }),
     servicePoints: Object.freeze({
