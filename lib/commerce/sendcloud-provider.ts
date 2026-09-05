@@ -23,7 +23,6 @@ const REQUEST_TIMEOUT_MS = 8_000;
 const MAX_READ_ATTEMPTS = 2;
 const READ_RETRY_BACKOFF_MS = 80;
 const MAX_FALLBACK_PRICE_CONCURRENCY = 4;
-const NON_EU_HOME_CARRIERS = Object.freeze(["colissimo", "fedex", "chronopost"] as const);
 const SAFE_CODE = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/;
 const SAFE_SHIPPING_OPTION_CODE = /^[A-Za-z0-9][A-Za-z0-9_.:,\/-]{0,159}$/;
 const SAFE_PARCEL_ID = /^[1-9]\d{0,18}$/;
@@ -668,7 +667,7 @@ async function resolveV2FallbackPrice(
   });
 }
 
-async function parseSendcloudStandaloneHomeOptions(
+async function parseSendcloudStandaloneOptions(
   value: unknown,
   request: DeliveryQuoteRequest,
 ): Promise<readonly DeliveryQuoteOffer[]> {
@@ -689,9 +688,6 @@ async function parseSendcloudStandaloneHomeOptions(
       !safeString(option.carrier.code, 80) || !SAFE_CODE.test(option.carrier.code)) {
       throw new DeliveryProviderError("MALFORMED_RESPONSE", "Shipping option is invalid.");
     }
-    if (!NON_EU_HOME_CARRIERS.includes(
-      option.carrier.code as typeof NON_EU_HOME_CARRIERS[number],
-    )) continue;
     if (!safeString(option.code, 80) || !SAFE_SHIPPING_OPTION_CODE.test(option.code) ||
       !safeString(option.carrier.name) || !record(option.functionalities) ||
       !record(option.requirements) ||
@@ -701,8 +697,14 @@ async function parseSendcloudStandaloneHomeOptions(
       !Array.isArray(option.quotes) || option.quotes.length > 4) {
       throw new DeliveryProviderError("MALFORMED_RESPONSE", "Shipping option is invalid.");
     }
-    if (option.functionalities.last_mile !== "home_delivery" ||
-      option.requirements.is_service_point_required ||
+    const lastMile = option.functionalities.last_mile;
+    const deliveryMode = lastMile === "home_delivery"
+      ? "home"
+      : lastMile === "service_point"
+        ? "service_point"
+        : null;
+    if (!deliveryMode ||
+      option.requirements.is_service_point_required !== (deliveryMode === "service_point") ||
       option.charging_type !== "label_creation" || option.quotes.length !== 1) continue;
     const quote = option.quotes[0];
     if (!record(quote) || !record(quote.price) || !record(quote.price.total) ||
@@ -737,7 +739,7 @@ async function parseSendcloudStandaloneHomeOptions(
       carrierCode: option.carrier.code,
       serviceCode: code,
       displayName: option.carrier.name,
-      deliveryMode: "home",
+      deliveryMode,
       amountCents,
       currency: "EUR",
       estimatedDaysMin: Math.max(1, Math.ceil(leadTimeHours / 24)),
@@ -750,7 +752,7 @@ async function parseSendcloudStandaloneHomeOptions(
   return Object.freeze(candidates.filter(({ serviceCode }) => !ambiguousCodes.has(serviceCode)));
 }
 
-async function resolveStandaloneHomeOptions(
+async function resolveStandaloneOptions(
   fetchImpl: FetchLike,
   auth: Readonly<{ publicKey: string; secretKey: string }>,
   request: DeliveryQuoteRequest,
@@ -790,12 +792,11 @@ async function resolveStandaloneHomeOptions(
             unit: "kg",
           },
         }],
-        functionalities: { last_mile: "home_delivery" },
         calculate_quotes: true,
       }),
     },
   );
-  return parseSendcloudStandaloneHomeOptions(response, request);
+  return parseSendcloudStandaloneOptions(response, request);
 }
 
 const WEEKDAYS = Object.freeze([
@@ -1210,12 +1211,12 @@ export function createSendcloudProviderPorts(
             }
             : {}),
         });
-        let homeOptions: readonly DeliveryQuoteOffer[];
+        let standaloneOptions: readonly DeliveryQuoteOffer[];
         try {
           // Dynamic Checkout only exposes methods published in that checkout
-          // configuration. Augment them with exact, account-enabled home services
-          // so a published relay method never hides an available home-delivery choice.
-          homeOptions = await resolveStandaloneHomeOptions(
+          // configuration. Augment them with every exact, account-enabled and
+          // provider-priced service so the buyer can compare all real choices.
+          standaloneOptions = await resolveStandaloneOptions(
             fetchImpl,
             auth,
             request,
@@ -1240,7 +1241,7 @@ export function createSendcloudProviderPorts(
         ])));
         return Object.freeze([
           ...dynamicOptions,
-          ...homeOptions.filter((option) => {
+          ...standaloneOptions.filter((option) => {
             const key = JSON.stringify([
               option.carrierCode,
               option.serviceCode,

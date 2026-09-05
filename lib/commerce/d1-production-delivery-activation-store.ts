@@ -269,20 +269,11 @@ export class D1ProductionDeliveryActivationStore {
       offer.currency === "EUR" && offer.dutiesTerms === expectedDuties &&
       offer.expiresAt > input.now && offer.expiresAt <= cart.expires_at
     ).slice(0, 20);
-    if (address.zone !== "EU") {
-      const allowedCarriers = new Set(["colissimo", "fedex", "chronopost"]);
-      const cheapestByCarrier = new Map<string, DeliveryQuoteOffer>();
-      for (const offer of acceptedOffers) {
-        const carrier = offer.carrierCode.toLowerCase();
-        if (offer.deliveryMode !== "home" || !allowedCarriers.has(carrier)) continue;
-        const current = cheapestByCarrier.get(carrier);
-        if (!current || offer.amountCents < current.amountCents) {
-          cheapestByCarrier.set(carrier, offer);
-        }
-      }
-      acceptedOffers = [...cheapestByCarrier.values()]
-        .sort((left, right) => left.amountCents - right.amountCents);
-    }
+    // Preserve every distinct provider-priced option. Sendcloud is the route
+    // authority; collapsing to one offer per carrier hid legitimate service
+    // levels and made international choice artificially narrower.
+    acceptedOffers = [...acceptedOffers]
+      .sort((left, right) => left.amountCents - right.amountCents);
     if (acceptedOffers.length < 1) {
       throw new ProductionDeliveryError("NO_HOME_OPTION", "No reviewed delivery option is available.");
     }

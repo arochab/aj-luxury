@@ -764,7 +764,7 @@ test("Sendcloud maps Belgium's live Mondial Relay V3 code to its exact internati
   }]);
 });
 
-test("Sendcloud resolves an empty non-EU checkout configuration through exact V3 shipping options", async () => {
+test("Sendcloud preserves four exact provider-priced non-EU choices", async () => {
   const calls = [];
   const ports = createSendcloudProviderPorts(
     {
@@ -789,6 +789,18 @@ test("Sendcloud resolves an empty non-EU checkout configuration through exact V3
               carrierName: "UPS",
               price: "12.00",
             }),
+            standaloneShippingOption({
+              code: "dhl:express",
+              carrierCode: "dhl",
+              carrierName: "DHL",
+              price: "24.50",
+            }),
+            standaloneShippingOption({
+              code: "fedex:international_priority",
+              carrierCode: "fedex",
+              carrierName: "FedEx",
+              price: "29.90",
+            }),
           ],
           message: null,
         });
@@ -811,7 +823,6 @@ test("Sendcloud resolves an empty non-EU checkout configuration through exact V3
       dimensions: { length: "40.00", width: "32.00", height: "4.00", unit: "cm" },
       weight: { value: "0.250", unit: "kg" },
     }],
-    functionalities: { last_mile: "home_delivery" },
     calculate_quotes: true,
   });
   assert.deepEqual(quotes.map((quote) => ({
@@ -821,14 +832,40 @@ test("Sendcloud resolves an empty non-EU checkout configuration through exact V3
     dutiesTerms: quote.dutiesTerms,
     estimatedDaysMin: quote.estimatedDaysMin,
     estimatedDaysMax: quote.estimatedDaysMax,
-  })), [{
-    amountCents: 1842,
-    carrierCode: "colissimo",
-    deliveryMode: "home",
-    dutiesTerms: "DAP",
-    estimatedDaysMin: 5,
-    estimatedDaysMax: 5,
-  }]);
+  })), [
+    {
+      amountCents: 1842,
+      carrierCode: "colissimo",
+      deliveryMode: "home",
+      dutiesTerms: "DAP",
+      estimatedDaysMin: 5,
+      estimatedDaysMax: 5,
+    },
+    {
+      amountCents: 1200,
+      carrierCode: "ups",
+      deliveryMode: "home",
+      dutiesTerms: "DAP",
+      estimatedDaysMin: 5,
+      estimatedDaysMax: 5,
+    },
+    {
+      amountCents: 2450,
+      carrierCode: "dhl",
+      deliveryMode: "home",
+      dutiesTerms: "DAP",
+      estimatedDaysMin: 5,
+      estimatedDaysMax: 5,
+    },
+    {
+      amountCents: 2990,
+      carrierCode: "fedex",
+      deliveryMode: "home",
+      dutiesTerms: "DAP",
+      estimatedDaysMin: 5,
+      estimatedDaysMax: 5,
+    },
+  ]);
   assert.deepEqual(JSON.parse(quotes[0].providerQuoteReference), [
     "shipping-options-v3",
     "colissimo:international/home_delivery,signature",
